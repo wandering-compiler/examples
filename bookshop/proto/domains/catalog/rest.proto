@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package examples_bookshop.catalog;
+
+import "w17/rest.proto";
+
+option (w17.rest_api) = {
+  name:        "public",
+  version:     "v1",
+  prefix:      "/api/v1",
+  description: "The bookshop catalog: authors and books. Sign up and sign in through the auth plugin's endpoints.",
+  include: [ { plugin: "auth" } ],
+  groups: [
+    {
+      prefix:      "/authors",
+      description: "Authors.",
+      endpoints: [
+        { ref: "books.BookMutation.CreateAuthor", method: POST, path: "", body: "*" }
+      ]
+    },
+    {
+      prefix:      "/books",
+      description: "Books.",
+      endpoints: [
+        { ref: "books.BookQuery.ListBooks",          method: GET,    path: "" },
+        { ref: "books.BookQuery.GetBook",            method: GET,    path: "/{book_id}" },
+        { ref: "books.BookMutation.CreateBook",      method: POST,   path: "", body: "*" },
+        { ref: "books.BookMutation.UpdateBookPrice", method: PATCH,  path: "/{book_id}/price", body: "*" },
+        { ref: "books.BookMutation.DeleteBook",      method: DELETE, path: "/{book_id}" }
+      ]
+    }
+  ]
+};

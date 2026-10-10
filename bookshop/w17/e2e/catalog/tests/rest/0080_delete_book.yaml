@@ -1,0 +1,6 @@
+method: books.BookMutation.DeleteBook
+pre: [fixtures/a_book.yaml]
+input:
+    book_id: ${book.id}
+expect: {}
+post: [checks/book_is_gone.yaml]

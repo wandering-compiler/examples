@@ -1,0 +1,8 @@
+method: books.BookQuery.GetBook
+pre: [fixtures/a_book.yaml]
+input:
+    book_id: ${book.id}
+expect:
+    id: {matcher: eq, value: "${book.id}"}
+    author_id: {matcher: eq, value: "${author.id}"}
+    price_cents: {matcher: eq, value: "1500"}

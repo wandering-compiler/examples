@@ -1,0 +1,14 @@
+method: books.BookMutation.CreateBook
+pre: [fixtures/an_author.yaml]
+input:
+    author_id: ${author.id}
+    title: The Left Hand of Darkness
+    isbn: "9780441478125"
+    price_cents: "1299"
+expect:
+    id: {capture: created_book.id, match: {matcher: not_empty}}
+    author_id: {matcher: eq, value: "${author.id}"}
+    title: {matcher: eq, value: The Left Hand of Darkness}
+    isbn: {matcher: eq, value: "9780441478125"}
+    price_cents: {matcher: eq, value: "1299"}
+    created_at: {matcher: not_empty}

@@ -1,0 +1,7 @@
+# After a delete the book is not found.
+method: books.BookQuery.GetBook
+pre: [auth/auth.yaml]
+input:
+    book_id: ${book.id}
+expect_error:
+    code: NOT_FOUND

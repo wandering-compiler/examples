@@ -1,0 +1,9 @@
+# Without a bearer token the catalog refuses to write.
+method: books.BookMutation.CreateBook
+input:
+    author_id: "1"
+    title: Signed out
+    isbn: "9780000000001"
+    price_cents: "100"
+expect_error:
+    code: UNAUTHENTICATED

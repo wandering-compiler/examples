@@ -1,0 +1,11 @@
+# The ISBN is unique: the same one twice is refused, by the database
+# constraint, as ALREADY_EXISTS.
+method: books.BookMutation.CreateBook
+pre: [fixtures/an_author.yaml]
+input:
+    author_id: ${author.id}
+    title: Another edition
+    isbn: "9780441478125"
+    price_cents: "999"
+expect_error:
+    code: ALREADY_EXISTS

@@ -1,0 +1,8 @@
+method: books.BookMutation.UpdateBookPrice
+pre: [fixtures/a_book.yaml]
+input:
+    book_id: ${book.id}
+    price_cents: "2499"
+expect:
+    id: {matcher: eq, value: "${book.id}"}
+    price_cents: {matcher: eq, value: "2499"}

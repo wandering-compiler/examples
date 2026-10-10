@@ -1,0 +1,17 @@
+# Local developer compose. Pulled in by `docker compose up`
+# by default (this file's filename is the Docker Compose
+# discovery default).
+#
+# This is YOUR file — edit freely. Add custom services, override
+# port mappings, swap images, attach debug containers. The tool
+# created this file ONCE during `w17ctl codegen`; it never
+# overwrites or regenerates it.
+#
+# The project's canonical service set lives in
+# `compose.w17.yaml` (tool-owned, regenerated on every codegen
+# run). This file `include:`s it via the live link below — when
+# the tool updates the canonical set, your stack picks up the
+# changes on the next `docker compose up`.
+
+include:
+  - compose.w17.yaml

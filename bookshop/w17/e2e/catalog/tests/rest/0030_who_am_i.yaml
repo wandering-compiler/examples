@@ -1,0 +1,10 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+method: auth.AuthService.WhoAmI
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    user_id: {matcher: not_empty}

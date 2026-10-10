@@ -1,0 +1,13 @@
+# An ISBN-13 is thirteen digits; anything else is refused before the
+# database is reached.
+method: books.BookMutation.CreateBook
+pre: [fixtures/an_author.yaml]
+input:
+    author_id: ${author.id}
+    title: Bad ISBN
+    isbn: "97804414781XX"
+    price_cents: "100"
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: isbn

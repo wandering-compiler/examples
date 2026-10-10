@@ -1,0 +1,11 @@
+# A book by a fresh author. The ISBN is built from ${seq}, so every use of
+# this fixture inserts a different one (the column is unique).
+method: books.BookMutation.CreateBook
+pre: [fixtures/an_author.yaml]
+input:
+    author_id: ${author.id}
+    title: A Book ${seq}
+    isbn: "978000${seq}0000"
+    price_cents: "1500"
+expect:
+    id: {capture: book.id, match: {matcher: not_empty}}

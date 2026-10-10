@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package examples_bookshop.catalog.books;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/catalog/books/types/models.proto";
+
+message CreateAuthorReq {
+  string name = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+}
+
+message CreateBookReq {
+  int64  author_id   = 1;
+  string title       = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 300 }];
+  string isbn        = 3 [(w17.field) = { type: CHAR, min_len: 13, max_len: 13, pattern: "^[0-9]{13}$" }];
+  int64  price_cents = 4 [(w17.field) = { gte: 0 }];
+}
+
+message UpdateBookPriceReq {
+  int64 book_id     = 1;
+  int64 price_cents = 2 [(w17.field) = { gte: 0 }];
+}
+
+message DeleteBookReq { int64 book_id = 1; }
+message DeleteBookResp {}
+
+service BookMutation {
+  rpc CreateAuthor(CreateAuthorReq) returns (Author) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "INSERT INTO books.Author SET name = :name RETURNING id, name" }
+    };
+  }
+
+  rpc CreateBook(CreateBookReq) returns (Book) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "INSERT INTO books.Book SET author_id = :author_id, title = :title, isbn = :isbn, price_cents = :price_cents RETURNING id, author_id, title, isbn, price_cents, created_at" }
+    };
+  }
+
+  rpc UpdateBookPrice(UpdateBookPriceReq) returns (Book) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "UPDATE books.Book SET price_cents = :price_cents WHERE id = :book_id RETURNING id, author_id, title, isbn, price_cents, created_at" }
+    };
+  }
+
+  rpc DeleteBook(DeleteBookReq) returns (DeleteBookResp) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "DELETE FROM books.Book WHERE id = :book_id" }
+    };
+  }
+}

@@ -1,0 +1,155 @@
+package handlers
+
+import (
+	"context"
+	"errors"
+	distxpb "github.com/wandering-compiler/sdk/go/pb/common/distx"
+	"github.com/wandering-compiler/sdk/go/service/tx/distx"
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
+)
+
+// This file implements the `password_reset` feature (E1). It is staged into
+// a bundle only when the activation enables `password_reset` (plugin.yaml
+// maps the feature to this file via go_files). Standalone (the plugin
+// author's own `go test`) always compiles it.
+
+const defaultPasswordResetTTLSeconds = 60 * 60 // 1 hour
+
+// errResetTokenInvalid is the opaque error for any bad ResetPassword: an
+// unknown / expired / already-used token. Never distinguishes the cause.
+var errResetTokenInvalid = errors.New("password reset token invalid/expired/used")
+
+func (h *AuthServiceHandler) passwordResetTTL() time.Duration {
+	if h.PasswordResetTTLSeconds > 0 {
+		return time.Duration(h.PasswordResetTTLSeconds) * time.Second
+	}
+	return defaultPasswordResetTTLSeconds * time.Second
+}
+
+// RequestPasswordReset mints a single-use reset token for the account with
+// the given email and emits PasswordResetRequested (carrying the plaintext
+// token + email) for a hand-written delivery channel. It ALWAYS returns an
+// empty success — whether or not the email exists — so the endpoint can't
+// be used to enumerate registered accounts. The token's hash + expiry are
+// stored; the plaintext is never persisted.
+func (h *AuthServiceHandler) RequestPasswordReset(ctx context.Context, req *pb.RequestPasswordResetReq) (*pb.RequestPasswordResetResp, error) {
+	email := normalizeEmail(req.GetEmail())
+	userResp, err := h.Query.GetUserByEmail(ctx, &pb.GetUserByEmailReq{Email: email})
+	// Unknown email (or any lookup miss): no-op success — never reveal
+	// whether the account exists.
+	if err != nil || userResp.GetUser() == nil || userResp.GetUser().GetId() == "" {
+		return &pb.RequestPasswordResetResp{}, nil
+	}
+	user := userResp.GetUser()
+
+	token, err := randomURLToken()
+	if err != nil {
+		return nil, err
+	}
+	expiresAt := timestamppb.New(time.Now().Add(h.passwordResetTTL()))
+	if _, err := h.Mutation.CreatePasswordResetToken(ctx, &pb.CreatePasswordResetTokenReq{
+		UserId:    user.GetId(),
+		TokenHash: sha256Hex(token),
+		ExpiresAt: expiresAt,
+		Email:     user.GetEmail(), // canonical stored email for the delivery channel
+		Token:     token,           // plaintext — event-only, never persisted
+	}); err != nil {
+		return nil, err
+	}
+	return &pb.RequestPasswordResetResp{}, nil
+}
+
+// ResetPassword consumes a reset token (atomically: single-use + not
+// expired), sets the new password, and revokes every existing session so a
+// stolen-then-reset credential can't keep a live session. Any bad token is
+// an opaque Unauthenticated — no enumeration of valid tokens.
+func (h *AuthServiceHandler) ResetPassword(ctx context.Context, req *pb.ResetPasswordReq) (*pb.ResetPasswordResp, error) {
+	// The consume and the write it authorises are ONE unit.
+	//
+	// Apart, the token is spent before the password changes: a failure in
+	// between burns a valid link and leaves the old password in place, so the
+	// person is left with NEITHER — and they asked for that link precisely
+	// because they could not get in (a consumer). The consume must come first
+	// (it is the check), so the only honest arrangement is to roll the pair
+	// back together.
+	var tx *distx.TxHandle
+	txCtx := ctx
+	var err error
+	if h.DistTx != nil {
+		if tx, txCtx, err = distx.Begin(ctx, h.DistTx, &distxpb.BeginRequest{ConnectionName: h.Connection}); err != nil {
+			return nil, err
+		}
+	}
+	userID, err := h.consumeAndSetPassword(txCtx, sha256Hex(req.GetToken()), req.GetNewPassword())
+	if err != nil {
+		if tx != nil {
+			_ = tx.Rollback(ctx)
+		}
+		return nil, err
+	}
+	if tx != nil {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	// Revoke every existing token (sessions + API tokens): a reset implies the
+	// prior credential may be compromised. Deliberately OUTSIDE the
+	// transaction and still best-effort — the password is committed by now and
+	// a failed sweep must not undo it — but the outcome is REPORTED.
+	//
+	// It used to be `_, _ =` under a comment saying the error was "logged by
+	// the caller's interceptor". It was discarded here, before any interceptor
+	// could see it, and this plugin has no logging at all. So the one case the
+	// sweep exists for — a reset after a theft — could leave the thief's
+	// session alive and tell nobody, least of all the person who had just
+	// reset their password believing it had done something.
+	_, sweepErr := h.Mutation.DeleteUserSessionsForReset(ctx, &pb.DeleteUserSessionsForResetReq{UserId: userID})
+	return &pb.ResetPasswordResp{SessionsRevoked: sweepErr == nil}, nil
+}
+
+// consumeAndSetPassword spends the token and writes the new password. Kept
+// together so one transaction can hold them; separated again, a rollback has
+// no password write to undo and the link is gone either way.
+//
+// Hashing sits BETWEEN them rather than before: hashing first would pay an
+// argon2 derivation for every bogus token somebody posts, on an endpoint that
+// needs no credential to reach.
+func (h *AuthServiceHandler) consumeAndSetPassword(txCtx context.Context, tokenHash, newPassword string) (string, error) {
+	consumed, err := h.Mutation.ConsumePasswordResetToken(txCtx, &pb.ConsumePasswordResetTokenReq{
+		TokenHash: tokenHash,
+	})
+	if err != nil {
+		// Through the opaque constructor, not raw.
+		//
+		// The statement carries RETURNING, so "no live row" arrives as
+		// NotFound — an ERROR, not an empty response. Returned raw it told a
+		// caller apart "this token is unknown/used/expired" from every other
+		// outcome, which is the enumeration the opaque refusal exists to
+		// prevent, and it made the `== ""` branch below unreachable: written
+		// for a shape this mutation never produces (a consumer).
+		//
+		// Unauthenticated() classifies: a refusal stays opaque, an outage
+		// comes back as Unavailable rather than dressed as a bad token.
+		return "", Unauthenticated(err)
+	}
+	userID := consumed.GetUserId()
+	if userID == "" {
+		return "", Unauthenticated(errResetTokenInvalid)
+	}
+	hash, err := h.PasswordHash.Hash(newPassword)
+	if err != nil {
+		return "", err
+	}
+	if _, err := h.Mutation.UpdateUserPassword(txCtx, &pb.UpdateUserPasswordReq{
+		UserId:       userID,
+		PasswordHash: hash,
+	}); err != nil {
+		return "", err
+	}
+	return userID, nil
+}
