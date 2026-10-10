@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"   # nightly, against the main branches of the SDK and the plugins
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  leaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: scripts/check-leaks.sh
+
+  released:
+    if: github.event_name != 'schedule'
+    uses: ./.github/workflows/adoption.yml
+    secrets: inherit
+
+  nightly:
+    if: github.event_name == 'schedule'
+    uses: ./.github/workflows/adoption.yml
+    with:
+      sdk_ref: main
+      plugins_ref: main
+    secrets: inherit

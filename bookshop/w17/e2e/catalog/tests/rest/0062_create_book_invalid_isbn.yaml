@@ -1,4 +1,4 @@
-# An ISBN-13 is thirteen digits; anything else is refused before the
+# An ISBN is digits and hyphens; anything else is refused before the
 # database is reached.
 method: books.BookMutation.CreateBook
 pre: [fixtures/an_author.yaml]

@@ -13,7 +13,7 @@ message CreateAuthorReq {
 message CreateBookReq {
   int64  author_id   = 1;
   string title       = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 300 }];
-  string isbn        = 3 [(w17.field) = { type: CHAR, min_len: 13, max_len: 13, pattern: "^[0-9]{13}$" }];
+  string isbn        = 3 [(w17.field) = { type: CHAR, min_len: 10, max_len: 17, pattern: "^[0-9-]{10,17}$" }];
   int64  price_cents = 4 [(w17.field) = { gte: 0 }];
 }
 

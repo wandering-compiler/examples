@@ -8,7 +8,10 @@ option (w17.rest_api) = {
   name:        "public",
   version:     "v1",
   prefix:      "/api/v1",
-  description: "The bookshop catalog: authors and books. Sign up and sign in through the auth plugin's endpoints.",
+  description: "The bookshop catalog: authors and books. Anyone can browse; adding and changing books needs a signed-in account (the auth plugin's endpoints).",
+  // Every endpoint authenticates the bearer token through the auth
+  // plugin's Authenticate — except the ones marked exclude_auth.
+  auth_methods: [ { ref: "auth.AuthService.Authenticate", token_types: [ TOKEN_TYPE_BEARER ] } ],
   include: [ { plugin: "auth" } ],
   groups: [
     {
@@ -22,8 +25,9 @@ option (w17.rest_api) = {
       prefix:      "/books",
       description: "Books.",
       endpoints: [
-        { ref: "books.BookQuery.ListBooks",          method: GET,    path: "" },
-        { ref: "books.BookQuery.GetBook",            method: GET,    path: "/{book_id}" },
+        // Browsing the catalog needs no account.
+        { ref: "books.BookQuery.ListBooks",          method: GET,    path: "",           exclude_auth: true },
+        { ref: "books.BookQuery.GetBook",            method: GET,    path: "/{book_id}", exclude_auth: true },
         { ref: "books.BookMutation.CreateBook",      method: POST,   path: "", body: "*" },
         { ref: "books.BookMutation.UpdateBookPrice", method: PATCH,  path: "/{book_id}/price", body: "*" },
         { ref: "books.BookMutation.DeleteBook",      method: DELETE, path: "/{book_id}" }

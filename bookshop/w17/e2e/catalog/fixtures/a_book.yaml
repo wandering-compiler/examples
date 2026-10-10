@@ -5,7 +5,7 @@ pre: [fixtures/an_author.yaml]
 input:
     author_id: ${author.id}
     title: A Book ${seq}
-    isbn: "978000${seq}0000"
+    isbn: "978-0-${seq}00000-0"
     price_cents: "1500"
 expect:
     id: {capture: book.id, match: {matcher: not_empty}}

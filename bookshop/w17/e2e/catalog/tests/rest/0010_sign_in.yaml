@@ -1,11 +1,8 @@
-# Edit, then REGENERATE before running: the suite executes the BAKED
-# copy of this file (scenarios_gen_test.go), not the file itself.
-# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
-# silently asserts the previous expectations and passes.
 method: auth.AuthService.SignIn
+pre: [fixtures/a_reader_account.yaml]
 input:
-    email: user${seq}@example.com
+    email: reader@bookshop.example
     password: e2eSecret!23
 expect:
-    user_id: {matcher: not_empty}
+    user_id: {matcher: eq, value: "${reader.user_id}"}
     token: {matcher: not_empty}
