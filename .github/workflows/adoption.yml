@@ -75,7 +75,14 @@ jobs:
         run: |
           set -euo pipefail
           list="${{ inputs.examples }}"
-          [ -n "$list" ] || list="$(ls -d */ | tr -d / | while read -r d; do [ -f "$d/w17/lock.yaml" ] && echo "$d"; done)"
+          if [ -z "$list" ]; then
+            # `if`, not `[ -f … ] && echo`: the last directory without a lock
+            # would end the loop non-zero and set -e would stop the step silently.
+            for d in */; do
+              if [ -f "$d/w17/lock.yaml" ]; then list="$list ${d%/}"; fi
+            done
+          fi
+          [ -n "$list" ] || { echo "::error::no example (a directory with w17/lock.yaml) found"; exit 1; }
           for ex in $list; do
             echo "::group::$ex"
             (
