@@ -96,7 +96,7 @@ volumes:
   catalog-postgres-data:
   nats-data:
 
-# REV-158/159 — bundle binaries join via Docker Compose `include`.
+# Bundle binaries join via Docker Compose `include`.
 # Each per-bundle compose.yaml declares JUST the binary;
 # infrastructure (DBs, queue) lives above.
 include:

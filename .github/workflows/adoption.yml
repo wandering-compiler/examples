@@ -39,6 +39,10 @@ jobs:
     timeout-minutes: 45
     env:
       W17_TOKEN: ${{ secrets.W17_TOKEN }}
+      # A runner's checkout has no branch, and `w17ctl test` syncs the schema
+      # under the branch's initiative. One fixed name for every run, so CI does
+      # not leave an initiative per branch on the console.
+      W17_INITIATIVE: ci
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
