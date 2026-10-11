@@ -22,9 +22,9 @@ on:
         type: string
         default: ""
       w17ctl_version:
-        description: w17ctl release to run
+        description: w17ctl release to run (empty = the newest, prereleases included)
         type: string
-        default: v0.1.0-rc.68
+        default: ''
     secrets:
       W17_TOKEN:
         description: API token of a machine account on the console
@@ -58,7 +58,9 @@ jobs:
       - name: Install w17ctl
         run: |
           mkdir -p "$HOME/bin"
-          curl -fsSL https://get.w17.dev/install.sh | sh -s -- --version "${{ inputs.w17ctl_version }}" --dir "$HOME/bin"
+          v="${{ inputs.w17ctl_version }}"
+          if [ -n "$v" ]; then sel=(--version "$v"); else sel=(--pre); fi
+          curl -fsSL https://get.w17.dev/install.sh | sh -s -- "${sel[@]}" --dir "$HOME/bin"
           echo "$HOME/bin" >> "$GITHUB_PATH"
 
       - name: Resolve the SDK version
