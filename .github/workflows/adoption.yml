@@ -93,15 +93,31 @@ jobs:
             echo "::group::$ex"
             (
               cd "$ex"
-              if [ -n "${{ steps.sdk.outputs.version }}" ]; then
-                w17ctl sdk pin "${{ steps.sdk.outputs.version }}"
-              fi
+              # The plugins under review replace the vendored trees. Copied, not
+              # `w17ctl plugin update`: that records the version in the lock,
+              # and a lock edit is a person's (the console refuses it to a
+              # machine account). Codegen builds from the tree it finds.
               if [ -n "${{ inputs.plugins_ref }}" ]; then
-                for p in $(sed -n 's/^ *name: //p' <(sed -n '/^plugins:/,/^[a-z]/p' w17/lock.yaml)); do
-                  w17ctl plugin update "$p" --from "$GITHUB_WORKSPACE/plugins/$p"
+                for dir in proto/plugins/*/; do
+                  p="$(basename "$dir")"
+                  if [ -d "$GITHUB_WORKSPACE/plugins/$p" ]; then
+                    rsync -a --delete "$GITHUB_WORKSPACE/plugins/$p/" "$dir"
+                  fi
                 done
               fi
               w17ctl codegen --force
+              # The SDK under review, after codegen: codegen writes the lock's
+              # SDK pin into every module, and `w17ctl sdk pin` is a lock edit
+              # too. `go get` moves each module (and its go.sum) to the commit.
+              if [ -n "${{ steps.sdk.outputs.version }}" ]; then
+                find . -name go.mod -not -path '*/node_modules/*' -print0 \
+                  | xargs -0 grep -l 'wandering-compiler/sdk/go ' \
+                  | while IFS= read -r mod; do
+                      docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off \
+                        -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
+                        go get "github.com/wandering-compiler/sdk/go@${{ steps.sdk.outputs.version }}"
+                    done
+              fi
               w17ctl test
             )
             echo "::endgroup::"
