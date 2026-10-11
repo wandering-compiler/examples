@@ -1,0 +1,7 @@
+# An author for the book cases to hang their books on.
+method: books.BookMutation.CreateAuthor
+pre: [auth/auth.yaml]
+input:
+    name: Author ${seq}
+expect:
+    id: {capture: author.id, match: {matcher: not_empty}}

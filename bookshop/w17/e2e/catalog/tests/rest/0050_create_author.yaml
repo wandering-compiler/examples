@@ -1,0 +1,7 @@
+method: books.BookMutation.CreateAuthor
+pre: [auth/auth.yaml]
+input:
+    name: Ursula K. Le Guin
+expect:
+    id: {matcher: not_empty}
+    name: {matcher: eq, value: Ursula K. Le Guin}

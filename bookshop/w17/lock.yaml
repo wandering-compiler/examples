@@ -1,0 +1,43 @@
+admin_languages: []
+admin_wire: CLIENT_WIRE_UNSPECIFIED
+connections:
+    - default: true
+      name: catalog-postgres
+      target_content_sha256: ""
+      target_migration_id: ""
+formats: {}
+generated_code:
+    binaries: []
+    business_bundles: []
+    ci_configs: []
+    clients: []
+    deploy_targets: []
+    e2e: true
+    grpc_clients: []
+    pb_stubs:
+        - language: go
+          output_root: ""
+          package: ""
+    proto_dir: proto
+    replicas: []
+    stubs: srcgo/gen
+infra: null
+languages:
+    - en
+languages_dir: w17/languages
+org_id: 01a08faa-bba7-7f3c-bc4b-962c69e23b74
+org_slug: wandering-compiler
+plugins:
+    - git: null
+      name: auth
+      source: local
+      version: 0.1.0-rc.19
+project: examples-bookshop
+project_id: 1b17ac89-ad36-42b1-912c-8f87457fddd7
+sdk_version: v0.1.0-rc.17
+secrets: null
+signature:
+    alg: ed25519/v1
+    body: c9f93e254b5457125ec53e9c9d378002f9e5dc161609b61733b274412b64079463fcb8ece7ee0a0f049df1e74adc1348c9c13be65697a861aaaf9dcff441b908
+    key_id: ed25519:d1f1f31adf965af1
+w17_url: grpcs://api.w17.app:50051

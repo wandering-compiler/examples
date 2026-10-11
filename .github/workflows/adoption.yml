@@ -1,0 +1,108 @@
+# The adoption test: generate, build and run every example — with the SDK
+# and the plugins at the versions given, or at the versions the examples pin.
+#
+# Called from the SDK and plugins repositories on their pull requests (with
+# the pull request's commit), from this repository's own CI, and nightly
+# against the main branches.
+name: adoption
+
+on:
+  workflow_call:
+    inputs:
+      sdk_ref:
+        description: SDK commit or tag to build against (empty = the version each example pins)
+        type: string
+        default: ""
+      plugins_ref:
+        description: plugins commit or tag to take every installed plugin from (empty = the released versions in each lock)
+        type: string
+        default: ""
+      examples:
+        description: space-separated example directories (empty = all)
+        type: string
+        default: ""
+      w17ctl_version:
+        description: w17ctl release to run (empty = the newest, prereleases included)
+        type: string
+        default: ''
+    secrets:
+      W17_TOKEN:
+        description: API token of a machine account on the console
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  examples:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      W17_TOKEN: ${{ secrets.W17_TOKEN }}
+      # A runner's checkout has no branch, and `w17ctl test` syncs the schema
+      # under the branch's initiative. One fixed name for every run, so CI does
+      # not leave an initiative per branch on the console.
+      W17_INITIATIVE: ci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: wandering-compiler/examples
+          # This repository's own runs test the change under review; a call
+          # from the SDK or the plugins tests the examples as they are.
+          ref: ${{ github.repository == 'wandering-compiler/examples' && github.sha || 'main' }}
+          path: examples
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: inputs.plugins_ref != ''
+        with:
+          repository: wandering-compiler/plugins
+          ref: ${{ inputs.plugins_ref }}
+          path: plugins
+
+      - name: Install w17ctl
+        run: |
+          mkdir -p "$HOME/bin"
+          v="${{ inputs.w17ctl_version }}"
+          if [ -n "$v" ]; then sel=(--version "$v"); else sel=(--pre); fi
+          curl -fsSL https://get.w17.dev/install.sh | sh -s -- "${sel[@]}" --dir "$HOME/bin"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve the SDK version
+        id: sdk
+        if: inputs.sdk_ref != ''
+        run: |
+          # The version Go resolves the ref to (a tag, or a pseudo-version).
+          v="$(docker run --rm -e GOFLAGS=-mod=mod golang:1.26 go list -m -f '{{.Version}}' "github.com/wandering-compiler/sdk/go@${{ inputs.sdk_ref }}")"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "SDK at $v"
+
+      - name: Generate, build and test
+        working-directory: examples
+        run: |
+          set -euo pipefail
+          list="${{ inputs.examples }}"
+          if [ -z "$list" ]; then
+            # `if`, not `[ -f … ] && echo`: the last directory without a lock
+            # would end the loop non-zero and set -e would stop the step silently.
+            for d in */; do
+              if [ -f "$d/w17/lock.yaml" ]; then list="$list ${d%/}"; fi
+            done
+          fi
+          [ -n "$list" ] || { echo "::error::no example (a directory with w17/lock.yaml) found"; exit 1; }
+          for ex in $list; do
+            echo "::group::$ex"
+            (
+              cd "$ex"
+              if [ -n "${{ steps.sdk.outputs.version }}" ]; then
+                w17ctl sdk pin "${{ steps.sdk.outputs.version }}"
+              fi
+              if [ -n "${{ inputs.plugins_ref }}" ]; then
+                for p in $(sed -n 's/^ *name: //p' <(sed -n '/^plugins:/,/^[a-z]/p' w17/lock.yaml)); do
+                  w17ctl plugin update "$p" --from "$GITHUB_WORKSPACE/plugins/$p"
+                done
+              fi
+              w17ctl codegen --force
+              w17ctl test
+            )
+            echo "::endgroup::"
+          done

@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package examples_bookshop.catalog.books;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+
+message Author {
+  option (w17.db.table) = { name: "authors" };
+  int64  id   = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string name = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+}
+
+message Book {
+  option (w17.db.table) = { name: "books" };
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64 author_id = 2 [
+    (w17.field)     = { related_name: "books" },
+    (w17.db.column) = { fk: "books.Author", deletion_rule: CASCADE, index: true }
+  ];
+  string title = 3 [(w17.field) = { type: CHAR, min_len: 1, max_len: 300 }];
+  // ISBN-10 or ISBN-13, digits with optional hyphens.
+  string isbn = 4 [(w17.field) = { type: CHAR, min_len: 10, max_len: 17, unique: true, pattern: "^[0-9-]{10,17}$" }];
+  // Price in the smallest currency unit.
+  int64 price_cents = 5 [(w17.field) = { gte: 0 }];
+  google.protobuf.Timestamp created_at = 6 [(w17.field) = { default_auto: NOW, immutable: true }];
+}

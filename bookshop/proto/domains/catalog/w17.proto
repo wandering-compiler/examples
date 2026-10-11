@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+// The catalog domain: authors and their books, behind a public REST API
+// whose callers sign in with the auth plugin.
+
+package examples_bookshop.catalog;
+
+import "w17/domain.proto";
+import "w17/module.proto";
+
+option (w17.domain) = {
+  plugins: [
+    {
+      source_name:   "auth"
+      registered_as: "auth"
+      // The plugin's own events (sign-ups, role changes) go to this
+      // domain's "accounts" channel.
+      channels:   [ { key: "events", value: "accounts" } ]
+      auth_input: { header_name: "Authorization", scheme: "Bearer" }
+      features:   { names: [ "rbac", "authenticate_turnkey", "sign_up_turnkey", "sign_in_turnkey" ] }
+    }
+  ]
+};
+
+option (w17.module) = {
+  connection: {
+    name: "catalog-postgres",
+    dialect: POSTGRES,
+    version: "18"
+  },
+  channels: [
+    {
+      // In-process: no broker to run for this example.
+      name: "accounts"
+      transport: TRANSPORT_MEMORY
+      buffer_size: 1024
+      retry: { max_deliver: 1 }
+      drain_timeout_seconds: 5
+    }
+  ]
+};

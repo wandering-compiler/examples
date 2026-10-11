@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package examples_bookshop.catalog.books;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/catalog/books/types/models.proto";
+
+message GetBookReq { int64 book_id = 1; }
+
+message ListBooksReq {
+  optional int64 author_id = 1;
+  int32 limit = 2 [(w17.field) = { type: NUMBER, gte: 1, lte: 100 }];
+}
+
+message ListBooksResp { repeated Book books = 1; }
+
+service BookQuery {
+  rpc GetBook(GetBookReq) returns (Book) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "SELECT b.id, b.author_id, b.title, b.isbn, b.price_cents, b.created_at FROM books.Book b WHERE b.id = :book_id" }
+    };
+  }
+
+  rpc ListBooks(ListBooksReq) returns (ListBooksResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT b.id, b.author_id, b.title, b.isbn, b.price_cents, b.created_at "
+          "FROM books.Book b "
+          "WHERE ?b.author_id = :author_id "
+          "ORDER BY b.id ASC "
+          "LIMIT :limit"
+      }
+    };
+  }
+}

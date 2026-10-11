@@ -1,0 +1,7 @@
+# One account with a known email and password, to sign in with.
+method: auth.AuthService.SignUp
+input:
+    email: reader@bookshop.example
+    password: e2eSecret!23
+expect:
+    user_id: {capture: reader.user_id, match: {matcher: not_empty}}

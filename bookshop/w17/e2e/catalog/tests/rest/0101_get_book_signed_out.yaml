@@ -1,0 +1,7 @@
+# Browsing is public: a book reads the same without a token.
+method: books.BookQuery.GetBook
+pre: [fixtures/a_book.yaml]
+input:
+    book_id: ${book.id}
+expect:
+    id: {matcher: eq, value: "${book.id}"}

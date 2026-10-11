@@ -1,0 +1,10 @@
+# Books filtered by author: a fresh author has exactly the one book the
+# fixture created.
+method: books.BookQuery.ListBooks
+pre: [fixtures/a_book.yaml]
+input:
+    author_id: ${author.id}
+    limit: 10
+expect:
+    books: {matcher: count, op: '==', value: 1}
+    books.0.id: {matcher: eq, value: "${book.id}"}
