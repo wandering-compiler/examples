@@ -23,8 +23,9 @@ jobs:
     uses: ./.github/workflows/adoption.yml
     secrets: inherit
 
+  # Also on a manual run, to try the main branches without waiting for night.
   nightly:
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/adoption.yml
     with:
       sdk_ref: main
