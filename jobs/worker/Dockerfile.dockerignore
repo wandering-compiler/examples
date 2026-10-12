@@ -1,0 +1,5 @@
+*
+!srcgo
+!proto/plugins/cluster/src
+!worker
+srcgo/gen

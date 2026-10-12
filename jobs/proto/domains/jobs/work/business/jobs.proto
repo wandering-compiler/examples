@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package examples_jobs.jobs.work;
+
+import "w17/field.proto";
+
+message ShoutReq {
+  string text = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+}
+
+message ShoutResp {
+  // The text, as the worker returned it.
+  string text   = 1;
+  // Which worker ran the job.
+  string worker = 2;
+}
+
+// Jobs is hand-written (the business package of the srcgo module). Each call
+// asks the pool for a slot, sends the job to the worker the relay picks, and
+// returns its answer.
+service Jobs {
+  rpc Shout(ShoutReq) returns (ShoutResp);
+}

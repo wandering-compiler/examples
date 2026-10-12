@@ -12,6 +12,7 @@ tests.
 | [`bookshop`](bookshop) | a catalog of authors and books behind a REST API; sign-up and sign-in with the `auth` plugin, public reads, validation and unique constraints, an end-to-end suite |
 | [`assistant`](assistant) | notes and an assistant that answers questions about them with the `agent` plugin: a hand-written service over it, a tool the model calls, streaming, usage recording and limits, a TLS stand-in for the provider, an end-to-end suite and a live suite |
 | [`billing`](billing) | card payments and a prepaid credit wallet with the `payment` plugin, the provider's signed webhooks, a stand-in for the Stripe API, an end-to-end suite and a live suite against the running stack |
+| [`jobs`](jobs) | jobs on a pool of workers with the `cluster` plugin: a relay built from the plugin, two workers on its worker library, pinned identities set up before start, a hand-written service that places each job and calls the worker with a single-use ticket, an end-to-end suite and a live suite |
 
 ## Running an example
 

@@ -1,0 +1,184 @@
+package tunnel
+
+import (
+	"context"
+	"errors"
+	"io"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+
+	"github.com/wandering-compiler/plugins/cluster/lib/refusal"
+)
+
+// Backend is a worker picked for one call, and the way to let it go again.
+type Backend struct {
+	Conn    *grpc.ClientConn
+	Release func()
+}
+
+// Picker chooses a worker for one incoming call. It must block, or fail, when
+// none is available — returning a nil Conn is not a way to say "later".
+type Picker func(ctx context.Context, method string) (Backend, error)
+
+// Handler forwards ANY method to a picked worker without knowing what the
+// method is.
+//
+// Installed as grpc.UnknownServiceHandler, so the relay serves no services of
+// its own on this port and needs no descriptors for what the workers speak.
+// That ignorance is the point: it is what lets one relay carry compile jobs
+// and another carry page fetches with the same binary.
+func Handler(pick Picker) grpc.StreamHandler {
+	return func(_ any, ss grpc.ServerStream) error {
+		method, ok := grpc.MethodFromServerStream(ss)
+		if !ok {
+			return status.Error(codes.Internal, "tunnel: the stream carries no method name")
+		}
+		be, err := pick(ss.Context(), method)
+		if err != nil {
+			return err
+		}
+		defer be.Release()
+
+		// The caller's metadata travels as-is. The relay adds nothing and
+		// removes nothing: it is a pipe, and a pipe that edited headers would
+		// be a second place where the worker's contract lives.
+		md, _ := metadata.FromIncomingContext(ss.Context())
+		ctx, cancel := context.WithCancel(metadata.NewOutgoingContext(ss.Context(), md.Copy()))
+		defer cancel()
+
+		// Bidirectional in the DESCRIPTOR regardless of what the real method
+		// is. The proxy cannot know the method's cardinality — it has no
+		// descriptors — and the permissive shape carries every narrower one
+		// correctly: a unary call is simply a stream with one message each way.
+		up, err := be.Conn.NewStream(ctx,
+			&grpc.StreamDesc{ServerStreams: true, ClientStreams: true},
+			method, grpc.ForceCodecV2(rawCodec{}))
+		if err != nil {
+			// Nothing reached the worker, so this is the relay failing to
+			// deliver rather than the worker answering — said so with a reason,
+			// because a bare Unavailable is indistinguishable from the caller's
+			// own connection dropping.
+			return refusal.New(codes.Unavailable, refusal.WorkerLost,
+				"relay: the picked worker's tunnel could not carry the call: "+status.Convert(err).Message())
+		}
+
+		// One goroutine per direction. The client→worker copy runs here in the
+		// handler's own goroutine only after the worker's first response, so
+		// both are started before either can block forever.
+		fromClient := forwardToWorker(ss, up)
+		toClient := forwardToClient(ss, up)
+
+		for i := 0; i < 2; i++ {
+			select {
+			case err := <-fromClient:
+				// io.EOF here is the caller FINISHING ITS SEND, not a failure
+				// — for a unary call it is the normal and only outcome, one
+				// message then end-of-stream. Telling the worker so matters:
+				// it may be waiting for exactly that before it answers.
+				if errors.Is(err, io.EOF) {
+					_ = up.CloseSend()
+					continue
+				}
+				cancel()
+				return status.Errorf(codes.Internal, "tunnel: reading from the caller: %v", err)
+			case err := <-toClient:
+				// The worker finished. Its trailers are the call's real
+				// outcome, so they are copied before returning — a proxy that
+				// dropped them would turn every worker-side error into a bare
+				// Unknown.
+				ss.SetTrailer(up.Trailer())
+				if errors.Is(err, io.EOF) {
+					return nil
+				}
+				// The TUNNEL closed under the call (the worker was banned and
+				// the relay cut it, or it hung up) while the caller was still
+				// there. gRPC reports that as Canceled, which reads as the
+				// caller's own doing; say what happened instead.
+				if status.Code(err) == codes.Canceled && ss.Context().Err() == nil {
+					return refusal.New(codes.Unavailable, refusal.WorkerLost,
+						"relay: the worker's tunnel closed during the call: "+status.Convert(err).Message())
+				}
+				return err
+			}
+		}
+		return status.Error(codes.Internal, "tunnel: both directions ended without an outcome")
+	}
+}
+
+func forwardToWorker(ss grpc.ServerStream, up grpc.ClientStream) chan error {
+	out := make(chan error, 1)
+	go func() {
+		for {
+			f := &Frame{}
+			if err := ss.RecvMsg(f); err != nil {
+				out <- err // io.EOF means the caller is done sending
+				return
+			}
+			if err := up.SendMsg(f); err != nil {
+				out <- err
+				return
+			}
+		}
+	}()
+	return out
+}
+
+func forwardToClient(ss grpc.ServerStream, up grpc.ClientStream) chan error {
+	out := make(chan error, 1)
+	go func() {
+		headersSent := false
+		for {
+			f := &Frame{}
+			if err := up.RecvMsg(f); err != nil {
+				out <- err
+				return
+			}
+			if !headersSent {
+				// Headers come from the WORKER and must reach the caller
+				// before the first message, or a client reading them gets
+				// whatever the proxy would have invented instead.
+				h, err := up.Header()
+				if err != nil {
+					out <- err
+					return
+				}
+				if err := ss.SendHeader(h); err != nil {
+					out <- err
+					return
+				}
+				headersSent = true
+			}
+			if err := ss.SendMsg(f); err != nil {
+				out <- err
+				return
+			}
+		}
+	}()
+	return out
+}
+
+// ProxyServerOptions are what a relay's proxy server MUST be built with.
+//
+// Returned as a set rather than documented as a list, because forgetting one
+// of them fails in a way that reads like a client bug: the server decodes the
+// caller's message with the proto codec, hands the handler a *Frame it cannot
+// fill, and reports "failed to unmarshal" — pointing at the message rather
+// than at the server that was never told to stop decoding.
+//
+// ForceServerCodecV2 is safe precisely because this server has no services of
+// its own: everything it sees is bytes on their way somewhere else.
+//
+// The set also carries WorkServerOptions — keepalive and the MaxMessage cap.
+// The cap belongs here for the same reason as the codec: left at gRPC's 4 MiB
+// default, the first message of a codegen run or any one large generated file
+// fails at the relay with ResourceExhausted, reading like the caller's fault
+// while the caller allowed 256 MiB.
+func ProxyServerOptions(pick Picker) []grpc.ServerOption {
+	return append(WorkServerOptions(),
+		grpc.ForceServerCodecV2(rawCodec{}),
+		grpc.UnknownServiceHandler(Handler(pick)),
+	)
+}

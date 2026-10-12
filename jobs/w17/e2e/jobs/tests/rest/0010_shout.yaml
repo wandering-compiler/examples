@@ -1,0 +1,9 @@
+# One job: the control plane places it on the relay, the relay hands it to
+# a worker, and the worker's answer comes back with the worker's name.
+method: work.Jobs.Shout
+pre: [auth/auth.yaml]
+input:
+    text: hello pool
+expect:
+    text: {matcher: eq, value: HELLO POOL}
+    worker: {matcher: regex, pattern: "^worker-[ab]$"}

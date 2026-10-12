@@ -1,0 +1,142 @@
+syntax = "proto3";
+
+// Cluster plugin — reading the worker registry.
+
+package w17.contrib.cluster;
+
+import "google/protobuf/timestamp.proto";
+import "@self/types/models.proto";
+import "w17/contrib.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+
+option go_package = "@project;@pkg";
+
+message ListWorkersReq {
+  // Narrow to one state. ABSENT means every state, which is what the registry
+  // page wants — an operator auditing who has access needs the denied ones in
+  // front of them too, not filtered out of history. Optional because an enum
+  // cannot say "absent" any other way: `:state = 0 OR …` made the field
+  // required, and the admin page's list call (no filter) was refused.
+  optional WorkerState state = 1;
+}
+
+message ListWorkersResp {
+  repeated Worker workers = 1;
+}
+
+// The fingerprints in one state, across EVERY relay.
+//
+// Not per relay, although a worker's certificate is valid at one relay only:
+// the ban set travels on every call the control plane makes to any relay, and
+// a key banned anywhere is a key nobody wants anywhere. One statement per
+// call, rather than one per relay per placement, and a worker that moves
+// relays cannot outrun its ban by having been recorded at the old one.
+message FingerprintsByStateReq {
+  reserved 1;
+  reserved "relay_id";
+  WorkerState state = 2;
+}
+
+message FingerprintsByStateResp {
+  repeated string fingerprints = 1;
+}
+
+message BanSetVersionReq {}
+message BanSetVersionResp {
+  // The newest ban or unban decision; absent when nothing was ever decided.
+  optional google.protobuf.Timestamp version = 1 [(w17.field) = { type: DATETIME }];
+}
+
+message GetWorkerReq {
+  string id = 1 [(w17.field) = { type: UUID }];
+}
+
+message CountWorkersByStateReq {
+  WorkerState state = 1;
+}
+
+message CountWorkersByStateResp {
+  int64 total = 1;
+}
+
+service WorkerQuery {
+  rpc ListWorkers(ListWorkersReq) returns (ListWorkersResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT w.id AS id, "
+          "       w.cert_fingerprint AS cert_fingerprint, "
+          "       w.name AS name, "
+          "       w.device_id AS device_id, "
+          "       w.state AS state, "
+          "       w.relay_id AS relay_id, "
+          "       w.first_seen_at AS first_seen_at, "
+          "       w.decided_at AS decided_at, "
+          "       w.decided_by AS decided_by "
+          "FROM @module.Worker w "
+          "WHERE ?w.state = :state "
+          "ORDER BY w.first_seen_at DESC"
+      }
+    };
+  }
+
+  rpc GetWorker(GetWorkerReq) returns (Worker) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT w.id AS id, "
+          "       w.cert_fingerprint AS cert_fingerprint, "
+          "       w.name AS name, "
+          "       w.device_id AS device_id, "
+          "       w.state AS state, "
+          "       w.relay_id AS relay_id, "
+          "       w.first_seen_at AS first_seen_at, "
+          "       w.decided_at AS decided_at, "
+          "       w.decided_by AS decided_by "
+          "FROM @module.Worker w "
+          "WHERE w.id = :id"
+      }
+    };
+  }
+
+  // BanSetVersion is the version sent with the ban set: the time of the
+  // newest decision, ban or unban, since either changes the set.
+  rpc BanSetVersion(BanSetVersionReq) returns (BanSetVersionResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql: "SELECT MAX(w.decided_at) AS version FROM @module.Worker w"
+      }
+    };
+  }
+
+  rpc FingerprintsByState(FingerprintsByStateReq) returns (FingerprintsByStateResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT ROWS_TO_ARRAY(w.cert_fingerprint) AS fingerprints "
+          "FROM @module.Worker w "
+          "WHERE w.state = :state"
+      }
+    };
+  }
+
+  // Counted in the database rather than by listing and measuring: the sweep
+  // calls this twice around itself, and a list would grow with the registry
+  // while the answer it wants is one number.
+  rpc CountWorkersByState(CountWorkersByStateReq) returns (CountWorkersByStateResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT COUNT(w.id) AS total "
+          "FROM @module.Worker w "
+          "WHERE w.state = :state"
+      }
+    };
+  }
+}

@@ -1,0 +1,5 @@
+method: auth.AuthService.WhoAmI
+pre: [auth/auth.yaml]
+input: {}
+expect:
+    user_id: {matcher: eq, value: "${me.user_id}"}

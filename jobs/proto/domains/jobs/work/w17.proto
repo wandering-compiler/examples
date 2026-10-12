@@ -1,0 +1,5 @@
+syntax = "proto3";
+
+// The work module: the Jobs service.
+
+package examples_jobs.jobs.work;

@@ -1,0 +1,58 @@
+admin_languages: []
+admin_wire: CLIENT_WIRE_UNSPECIFIED
+connections:
+    - default: true
+      name: jobs-postgres
+      target_content_sha256: ""
+      target_migration_id: ""
+formats: {}
+generated_code:
+    binaries: []
+    business_bundles:
+        - domain: jobs
+          env: []
+          register: domains/jobs/work/business
+    ci_configs: []
+    clients: []
+    deploy_targets: []
+    e2e: true
+    grpc_clients: []
+    pb_stubs:
+        - language: go
+          output_root: ""
+          package: ""
+    proto_dir: proto
+    replicas: []
+    stubs: srcgo/gen
+infra: null
+languages:
+    - en
+languages_dir: w17/languages
+org_id: 01a08faa-bba7-7f3c-bc4b-962c69e23b74
+org_slug: wandering-compiler
+plugins:
+    - git:
+        commit: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        digest: 7739875e99db4ad275ff8903e4614556e6698a3b0b6d392390adab7f6c6f6d5c
+        ref: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        repo: https://github.com/wandering-compiler/plugins
+      name: auth
+      source: git
+      version: 0.1.0-rc.25
+    - git:
+        commit: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        digest: 7eaa85110fafbdac8850a101d3e72da911a76fd0767f4b56fca156015ac5501e
+        ref: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        repo: https://github.com/wandering-compiler/plugins
+      name: cluster
+      source: git
+      version: 0.1.0-rc.12
+project: examples-jobs
+project_id: 0e9d85e2-b985-4fea-9297-e721e9d2e520
+sdk_version: v0.1.0-rc.17
+secrets: null
+signature:
+    alg: ed25519/v1
+    body: a22071731e3bf7b33dc9403056fc133a080a6730dc6a5f24a81a5b39aa0449d9eaad52a650c37cd92a91b7bd4928d7442df94a29a282fe7fba15baf5f266040d
+    key_id: ed25519:d1f1f31adf965af1
+w17_url: grpcs://api.w17.app:50051
