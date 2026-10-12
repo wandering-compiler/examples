@@ -1,0 +1,6 @@
+# Local developer compose: the generated stack (compose.w17.yaml) with what
+# this example adds to it (compose.billing.yaml) merged over it.
+include:
+  - path:
+      - compose.w17.yaml
+      - compose.billing.yaml

@@ -1,0 +1,1338 @@
+syntax = "proto3";
+
+// Auth plugin — AuthService (turnkey gateway-facing auth).
+//
+// AuthService.Authenticate is the zero-code wire-up between
+// the project's REST surface (`(w17.rest_api).auth_methods[]`)
+// and the auth plugin's primitives (AuthQuery /
+// AuthMutation). Activating the plugin + referencing this
+// RPC's per-activation FQN in `auth_methods[].ref` is the
+// entire integration — no hand-written `Authenticate` body
+// on the project side.
+//
+// The plugin author's contract:
+//   - AuthReq mirrors the gateway's required shape:
+//     `map<string, string> headers = 1` (validated by the
+//     gateway parser when it reads the auth method).
+//   - AuthResp carries the two fields the gateway router
+//     consumes: `repeated int32 permission_ids` (the deduped
+//     numeric IDs of granted permissions from the activating
+//     domain's AclPermission enum, mandatory when any model /
+//     endpoint declares ACL) + `string user_id` (the
+//     authenticated principal — UUID across the plugin's
+//     identifier strategy; see types/models.proto §"Identifier
+//     strategy").
+//
+// The v4 hand-written handler resolves User +
+// `permission_ids` via the existing
+// GetUserByTokenWithPermissions DQL and passes the int32 list
+// straight through into AuthResp — no bit-packing, no string
+// lookup. Gateway emits per-handler
+// `acllock.HasPermission(ids, int32(pb.AclPermission_X))`
+// checks against the slice.
+//
+// Project-side activation snippet:
+//
+//   option (w17.domain).plugins = {
+//     source_name: "auth"
+//     connections: { main: "forge-postgres" }
+//     channels:    { events: "auth-events" }
+//     // OPTIONAL — defaults Authorization / Bearer.
+//     auth_input: { header_name: "Authorization", scheme: "Bearer" }
+//   };
+//
+//   option (w17.rest_api) = {
+//     auth_methods: [
+//       { ref: "forge.auth.AuthService.Authenticate",
+//         token_types: [TOKEN_TYPE_BEARER] }
+//     ]
+//   };
+//
+// Custom-auth path: projects that want a different sign-in
+// flow (e.g. OAuth, SAML, federated identity) author their
+// own `<Name>Service.Authenticate` in a project domain and
+// point `auth_methods[].ref` at that RPC — the plugin's
+// turnkey AuthService coexists with hand-authored alternatives.
+
+package w17.contrib.auth;
+
+import "google/protobuf/timestamp.proto";
+import "@self/queries/auth_query.proto";
+import "@self/types/models.proto";
+import "w17/contrib.proto";
+import "w17/field.proto";
+
+option go_package = "@project;@pkg";
+
+// AuthReq matches the gateway's parser-enforced auth contract:
+// every HTTP header on the inbound request lands in `headers`
+// (lower-case keys, comma-joined values for multi-occurrence
+// headers per the gateway convention). The generated handler
+// pulls the configured auth header off the map, strips the
+// scheme prefix, and resolves the bearer token.
+message AuthReq {
+  option (w17.contrib.plugin_feature) = "authenticate_turnkey";
+  map<string, string> headers = 1;
+}
+
+// AuthResp matches the gateway's auth contract. The router
+// reads `permission_ids` to seed the per-request ACL check
+// (validateAuthResponseShape rejects an AuthResp missing this
+// field when any surface model / endpoint has effective ACL).
+// The list carries the numeric values of the activating
+// domain's `AclPermission` enum (`w17.lock.acl.proto`) — same
+// underlying int32 the storage layer hands the plugin in
+// `GetUserByTokenWithPermissionsResp.permission_ids`. Gateway
+// emits per-handler
+// `acllock.HasPermission(ids, int32(pb.AclPermission_X))`
+// checks against the slice.
+//
+// `user_id` carries the authenticated principal — UUID across
+// the plugin (types/models.proto §"Identifier strategy"). The
+// `(w17.field).type = UUID` annotation drives validation on
+// the wire shape end-to-end.
+//
+// `scopes` carries data-scope values the gateway threads
+// into outgoing gRPC metadata as `x-w17-scope-<name>`, for the
+// storage codegen's per-model `(w17.db.scope)` auto-stamp (INSERT)
+// + auto-WHERE (SELECT). The plugin publishes the canonical
+// `scopes["user_id"]` = the authenticated user's id; a consuming
+// project scopes its owned tables by referencing scope name
+// `user_id` with its own owner column as the path (e.g.
+// `(w17.db.scope) entries: [{ name: "user_id", path: "owner_id" }]`).
+message AuthResp {
+  option (w17.contrib.plugin_feature) = "authenticate_turnkey";
+  repeated int32      permission_ids = 1;
+  string              user_id        = 2 [(w17.field) = { type: UUID }];
+  map<string, string> scopes         = 3;
+  // session_token_id is the id of the UserToken the bearer resolved to.
+  // The gateway forwards the whole AuthResp to handlers as the user
+  // envelope, so Logout reads this id from the envelope and revokes
+  // exactly the current session — without the raw bearer ever reaching a
+  // backend handler. Empty when the auth backend can't resolve an id.
+  string              session_token_id = 4 [(w17.field) = { type: UUID }];
+
+  // `labels` is the BROADCAST tenancy key, and it is deliberately NOT
+  // `scopes` under another name.
+  //
+  // A scope filters ROWS. A label decides who an EVENT reaches: the
+  // gateway stamps each entry onto the request as `w17-label-<name>`, the
+  // emit path copies those onto every event the request produces, and the
+  // /w17-events hub delivers an event to a connected client only when the
+  // client's own labels satisfy it.
+  //
+  // The two overlap but are not the same set, which is the whole reason
+  // this field exists separately. `scopes["user_id"]` scopes a row to its
+  // OWNER; labelling events with it would shrink a public stream to the
+  // one user who caused each event. So a decorator publishes a label only
+  // for a key that genuinely partitions the AUDIENCE — org_id does, and
+  // the org_membership feature stamps it.
+  //
+  // Empty (the default, and every project that publishes no label) means
+  // events go out unlabelled and every authenticated client receives them
+  // — the single-tenant posture, unchanged.
+  map<string, string> labels = 5;
+}
+
+// SignInReq / SignInResp — canonical email+password sign-in
+// turnkey. The plugin's hand-written SignIn handler resolves the
+// user via AuthQuery.GetUserByEmail, runs the plugin-owned
+// passwordhash.Settings.VerifyAndRotate against the stored hash,
+// and delegates to AuthMutation.IssueToken on success. Every
+// failure mode (no such email, wrong password, transient DB
+// error) maps to a single opaque Unauthenticated status —
+// anti-enumeration.
+message SignInReq {
+  option (w17.contrib.plugin_feature) = "sign_in_turnkey";
+  string email    = 1 [(w17.field) = { type: EMAIL, max_len: 320 }];
+  string password = 2 [(w17.field) = { type: PASSWORD }];
+}
+message SignInResp {
+  option (w17.contrib.plugin_feature) = "sign_in_turnkey";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+  string token   = 2;
+
+  // two_factor — when a challenge is raised SignIn returns
+  // mfa_required=true + a challenge_id INSTEAD of a token; the client
+  // then calls VerifyMfa. Field-gated `two_factor`: both fields drop when
+  // the feature is off, so a non-2FA project sees the unchanged
+  // {user_id, token} shape (and a 2FA project sees them zero-valued on a
+  // login that didn't challenge).
+  bool   mfa_required = 3 [(w17.contrib.plugin_feature_field) = "two_factor"];
+  string challenge_id = 4 [(w17.contrib.plugin_feature_field) = "two_factor"];
+
+  // The server-minted device-trust token for this login (devices
+  // feature). The client stores it and replays it as `X-Device-Trust` on
+  // the next sign-in so a trusted device skips new-device 2FA without
+  // relying on a client-chosen X-Device-Id. Rotated every login; the
+  // client overwrites its stored token only when this is non-empty. Empty
+  // on an mfa_required response (no session issued yet).
+  string device_trust_token = 5 [(w17.contrib.plugin_feature_field) = "devices"];
+}
+
+// SignUpReq / SignUpResp — canonical register-and-issue-token
+// turnkey. The plugin's hand-written SignUp handler hashes the
+// plain-text `password` via the plugin-owned
+// passwordhash.Settings.Hash, calls AuthMutation.CreateUser
+// with the encoded `password_hash`, then AuthMutation.IssueToken
+// for the new user. Duplicate email surfaces as AlreadyExists;
+// transient DB errors propagate verbatim.
+message SignUpReq {
+  option (w17.contrib.plugin_feature) = "sign_up_turnkey";
+  string email    = 1 [(w17.field) = { type: EMAIL, max_len: 320 }];
+  string password = 2 [(w17.field) = { type: PASSWORD }];
+  // The invitation link's token, when the person arrived through one.
+  //
+  // Needed because `invite_only` asks "was THIS ADDRESS invited?", and an OPEN
+  // invitation names no address — so without the token in hand the gate refuses
+  // every holder of an open link, which is the whole of path 1 and happens in the
+  // DEFAULT configuration (`invite_only` defaults true). Found by review, after
+  // the model was already written.
+  //
+  // Validated here and NOT consumed: the invitation is single-use and acceptance
+  // is what spends it, so a signup that fails afterwards must not have burnt the
+  // link. Empty is normal — a bound invitation still matches by address, and a
+  // deployment with `invite_only` off asks nothing at all.
+  string invite_token = 4 [(w17.field) = { type: CHAR, max_len: 128, null: true }];
+  // tenant_slug — the URL-based tenant identifier, bound at the
+  // gateway from a `{tenant_slug}` path placeholder (PATH_VAR). Field-
+  // gated by `tenant_scope`: present only when BOTH sign_up_turnkey
+  // (the message) and tenant_scope are on. The handler resolves it to
+  // a tenant id; host-based tenancy reads the forwarded Host header
+  // instead, so this stays empty there.
+  string tenant_slug = 3 [
+    (w17.field) = { type: SLUG, max_len: 100, null: true },
+    (w17.contrib.plugin_feature_field) = "tenant_scope"
+  ];
+}
+message SignUpResp {
+  option (w17.contrib.plugin_feature) = "sign_up_turnkey";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+  string token   = 2;
+  // With `sign_up_confirmation` SignUp creates no account yet: user_id and
+  // token stay empty, confirmation_required is true, and pending_id is what
+  // ConfirmSignUp takes together with the code mailed to the address.
+  bool   confirmation_required = 3 [(w17.contrib.plugin_feature_field) = "sign_up_confirmation"];
+  string pending_id            = 4 [(w17.contrib.plugin_feature_field) = "sign_up_confirmation"];
+}
+
+// ConfirmSignUp — the second step of a `sign_up_confirmation` registration:
+// the code from the mail turns the pending registration into the account.
+message ConfirmSignUpReq {
+  option (w17.contrib.plugin_feature) = "sign_up_confirmation";
+  string pending_id = 1 [(w17.field) = { type: UUID }];
+  string code       = 2 [(w17.field) = { type: CHAR, max_len: 32 }];
+}
+message ConfirmSignUpResp {
+  option (w17.contrib.plugin_feature) = "sign_up_confirmation";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+  string token   = 2;
+}
+
+// WhoAmIReq / WhoAmIResp — current-principal probe. The FE calls
+// WhoAmI with a bearer token + empty body to confirm the session
+// is still valid (a 401 means the token expired / was revoked).
+// No body: the gateway's auth_method (Authenticate) validates the
+// bearer per-request and threads the authenticated principal into
+// `x-w17-scope-user_id` gRPC metadata; the handler echoes that
+// back. Zero storage round-trips — the scope value IS the proof
+// of a valid token.
+message WhoAmIReq {
+  option (w17.contrib.plugin_feature) = "authenticate_turnkey";
+}
+message WhoAmIResp {
+  option (w17.contrib.plugin_feature) = "authenticate_turnkey";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+
+  // orgs / active_org_id — the caller's organizations and the one THIS
+  // request resolved to.
+  //
+  // Every screen used to rebuild this from further calls, and none of them
+  // could say which organization the answer belonged to: the active one
+  // travels in a header, so a reply carries no trace of it. "Which org am I
+  // looking at" was a question the UI answered from its own memory rather
+  // than from the response.
+  //
+  // FIELD-GATED, not filled conditionally. WhoAmI ships under
+  // `authenticate_turnkey`; organizations exist only under `org_membership`,
+  // and most activations enable the first without the second. A field named
+  // here unconditionally and left empty there is the shape that has bitten
+  // this plugin twice — ListRoles cannot return `org_scoped` for exactly this
+  // reason, and a handler that filtered on it in Go got an empty list from a
+  // column nothing populated. Gated, the fields are DROPPED from the message
+  // when the feature is off, so nothing can read a zero value as an answer.
+  repeated UserOrg orgs = 2 [(w17.contrib.plugin_feature_field) = "org_membership"];
+  // Empty when the request resolved no organization — the caller belongs to
+  // several and named none, or to none at all. That is a real state and the
+  // UI has to be able to tell it from "one, and it is this": the difference
+  // decides whether to show a picker or a workspace.
+  string active_org_id = 3 [
+    (w17.field) = { type: UUID, null: true },
+    (w17.contrib.plugin_feature_field) = "org_membership"
+  ];
+}
+
+// LogoutReq / LogoutResp — revoke the CURRENT session (base-tier, no
+// `devices` feature). No body: the handler reads the authenticated
+// principal (user_id) + the resolved session_token_id from the gateway's
+// auth envelope and deletes exactly that one SESSION token. Idempotent —
+// a logout against an already-revoked / expired session still succeeds.
+// "Log out everywhere / other devices" is the `devices` feature's job
+// (RevokeAllDevices); this revokes only the bearer that made the call.
+message LogoutReq {
+  option (w17.contrib.plugin_feature) = "authenticate_turnkey";
+}
+message LogoutResp {
+  option (w17.contrib.plugin_feature) = "authenticate_turnkey";
+}
+
+// ── api_token: token-management business surface ────────────
+// Authenticated by the caller's SESSION bearer (you manage your
+// API tokens from the browser). The handler reads the principal
+// from the gateway-threaded x-w17-scope-user_id metadata (like
+// WhoAmI), so no token field on the request.
+
+// IssueBotTokenReq — an ADMIN mints an API token for a MACHINE account.
+//
+// ⚠️ This is the one endpoint in the plugin that mints a credential for
+// SOMEBODY ELSE, and `user_id` must name a `kind = BOT` account. That
+// restriction is the whole of what keeps this from being "make yourself
+// access as anyone": without it an admin could hold a working credential for
+// a colleague, and every audit trail would show that colleague acting.
+//
+// Enforced SERVER-SIDE, in the handler. A UI that only offers this for bots is
+// UX, not a control.
+//
+// It does NOT replace CreateApiToken: that one mints for the caller and stays
+// available to every principal, human or machine. The two answer different
+// questions and the self-service path must keep working.
+// --- machine-account management (service_account) ----------------------
+
+message CreateBotReq {
+  option (w17.contrib.plugin_feature) = "service_account";
+  string email = 1 [(w17.field) = { type: EMAIL, max_len: 320 }];
+  // role_id — the role the new bot holds, assigned in the SAME call.
+  //
+  // Not optional, and not a later step. A machine account with no role can
+  // hold a token that does nothing, and the operator finds out when CI fails
+  // rather than here. Must be an API-realm role: see ListBotRoles.
+  string role_id = 2 [(w17.field) = { type: UUID }];
+  // 3 = org_id. Removed: the organization is the CALLER's active one, read
+  // from the request scope. Taking it off the wire let an operator provision a
+  // machine account into a company they were not acting in, and made "no
+  // organization" expressible — which silently produced a bot whose grant
+  // applied nowhere.
+  reserved 3;
+}
+message CreateBotResp {
+  option (w17.contrib.plugin_feature) = "service_account";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+}
+
+message ListBotsReq {
+  option (w17.contrib.plugin_feature) = "service_account";
+}
+message ListBotsResp {
+  option (w17.contrib.plugin_feature) = "service_account";
+  repeated BotSummary bots = 1;
+}
+message BotSummary {
+  option (w17.contrib.plugin_feature) = "service_account";
+  string id = 1 [(w17.field) = { type: UUID }];
+  string email = 2;
+  bool disabled = 3;
+}
+
+message ListBotRolesReq {
+  option (w17.contrib.plugin_feature) = "service_account";
+}
+message ListBotRolesResp {
+  option (w17.contrib.plugin_feature) = "service_account";
+  repeated BotRole roles = 1;
+}
+message BotRole {
+  option (w17.contrib.plugin_feature) = "service_account";
+  string id = 1 [(w17.field) = { type: UUID }];
+  string name = 2;
+  string description = 3;
+}
+
+message IssueBotTokenReq {
+  option (w17.contrib.plugin_feature) = "service_account";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+  string name = 2 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
+  // Least-privilege subset, same semantics as CreateApiToken: the effective
+  // set is the INTERSECTION with the OWNER's realm perms. For a bot with one
+  // narrow role that intersection is a ceiling the token cannot exceed —
+  // which is why a machine account is the right owner for an unattended
+  // credential and a person is not.
+  repeated int32 permission_subset = 3;
+  // When the token stops working. Optional: absent takes the deployment's
+  // default lifetime (api_token_default_ttl_hours, 90 days unless changed;
+  // 0 there means "never"). Present, it must be in the future. A token is
+  // rotated by issuing a new one and revoking the old — the expiry is what
+  // makes forgetting the second step safe.
+  google.protobuf.Timestamp expires_at = 4 [(w17.field) = { type: DATETIME }];
+}
+message IssueBotTokenResp {
+  option (w17.contrib.plugin_feature) = "service_account";
+  // The opaque token — returned ONCE, exactly as CreateApiToken does.
+  string token    = 1;
+  string token_id = 2 [(w17.field) = { type: UUID }];
+  // When it expires; absent = never (the deployment's default is 0).
+  google.protobuf.Timestamp expires_at = 3 [(w17.field) = { type: DATETIME }];
+}
+
+message CreateApiTokenReq {
+  option (w17.contrib.plugin_feature) = "api_token";
+  string name = 1 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
+  // Optional least-privilege subset — permission IDs this token may use.
+  // The effective set is always the INTERSECTION with the caller's
+  // API-realm perms (an out-of-realm entry is dropped at Authenticate),
+  // so a token can never escalate. Empty = full API-realm perms.
+  repeated int32 permission_subset = 2;
+  // When the token stops working. Optional: absent takes the deployment's
+  // default lifetime (api_token_default_ttl_hours, 90 days unless changed;
+  // 0 there means "never"). Present, it must be in the future. A token is
+  // rotated by issuing a new one and revoking the old — the expiry is what
+  // makes forgetting the second step safe.
+  google.protobuf.Timestamp expires_at = 3 [(w17.field) = { type: DATETIME }];
+}
+message CreateApiTokenResp {
+  option (w17.contrib.plugin_feature) = "api_token";
+  // The opaque token string — returned ONCE at creation; never
+  // retrievable again (ListApiTokens omits it).
+  string token    = 1;
+  string token_id = 2 [(w17.field) = { type: UUID }];
+  // When it expires; absent = never (the deployment's default is 0).
+  google.protobuf.Timestamp expires_at = 3 [(w17.field) = { type: DATETIME }];
+}
+
+message ListApiTokensReq {
+  option (w17.contrib.plugin_feature) = "api_token";
+}
+message ListApiTokensResp {
+  option (w17.contrib.plugin_feature) = "api_token";
+  repeated ApiTokenInfo tokens = 1;
+}
+
+message RevokeApiTokenReq {
+  option (w17.contrib.plugin_feature) = "api_token";
+  string token_id = 1 [(w17.field) = { type: UUID }];
+}
+message RevokeApiTokenResp {
+  option (w17.contrib.plugin_feature) = "api_token";
+}
+
+// ── oauth: authorize-redirect + callback surface ────────────
+// Both unauthenticated (the caller has no token yet); `provider` binds
+// from the URL slug. All gated `oauth`.
+
+message OAuthAuthorizeURLReq {
+  option (w17.contrib.plugin_feature) = "oauth";
+  string provider       = 1 [(w17.field) = { type: SLUG, max_len: 64 }];
+  string redirect_after = 2; // where the SPA wants to land post-login
+  // code_challenge is BASE64URL(SHA256(verifier)) (PKCE S256, RFC 7636) of a
+  // verifier the browser keeps until OAuthExchange. Required: it is what
+  // binds the login to the browser that started it.
+  string code_challenge = 3 [(w17.field) = { type: CHAR, max_len: 128 }];
+}
+message OAuthAuthorizeURLResp {
+  option (w17.contrib.plugin_feature) = "oauth";
+  string authorize_url = 1;
+}
+
+message OAuthCallbackReq {
+  option (w17.contrib.plugin_feature) = "oauth";
+  string provider = 1 [(w17.field) = { type: SLUG, max_len: 64 }];
+  string code     = 2;
+  string state    = 3;
+}
+message OAuthCallbackResp {
+  option (w17.contrib.plugin_feature) = "oauth";
+  // code is single-use, short-lived, and redeemable only at OAuthExchange
+  // with the verifier of the authorize step's code_challenge. The callback
+  // never carries a session: it is a URL, and a URL can be handed to anyone.
+  string code           = 5;
+  string redirect_after = 3;
+
+  // user_id, token and device_trust_token moved to OAuthExchangeResp.
+  reserved 1, 2, 4;
+  reserved "user_id", "token", "device_trust_token";
+}
+
+message OAuthExchangeReq {
+  option (w17.contrib.plugin_feature) = "oauth";
+  string code          = 1;
+  string code_verifier = 2;
+  // invite_token is the invitation a NEW account registers with — the same
+  // token SignUp takes, checked by the same rules (invite_only, a bound
+  // invitation's address, an open link spent by its first registration).
+  // Ignored when the identity already belongs to an account. It travels
+  // only here, in the page's own request, never through a URL or the
+  // provider.
+  string invite_token  = 3;
+}
+message OAuthExchangeResp {
+  option (w17.contrib.plugin_feature) = "oauth";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+  string token   = 2;
+  // Server-minted device-trust token (see SignInResp).
+  string device_trust_token = 3 [(w17.contrib.plugin_feature_field) = "devices"];
+}
+
+// ── two_factor: enrollment + challenge verification surface ──
+// EnrollTotp / ConfirmTotp / DisableTotp / GetMfaStatus are bearer-
+// authenticated (the user manages their own factor). VerifyMfa is NOT —
+// it carries a challenge_id (the caller has no token yet). All gated
+// `two_factor`.
+
+message EnrollTotpReq {
+  option (w17.contrib.plugin_feature) = "two_factor";
+  // Required when the caller ALREADY has a confirmed authenticator: a
+  // current code from it, or one of their recovery codes. Re-enrolling
+  // replaces that authenticator, so without this a hijacked session could
+  // switch the victim's 2FA off — the thing DisableTotp's code requirement
+  // exists to prevent. A lost phone is: sign in with a recovery code, then
+  // enrol with another one.
+  string code = 1;
+}
+message EnrollTotpResp {
+  option (w17.contrib.plugin_feature) = "two_factor";
+  // The base32 secret (shown once, for typing in by hand) + the otpauth://
+  // URI an authenticator app scans. The secret is also stored encrypted
+  // server-side.
+  string secret      = 1;
+  string otpauth_uri = 2;
+  // qr_svg — otpauth_uri as a QR code, a self-contained SVG document
+  // (black modules on white, quiet zone included, scales without loss).
+  // Render it as-is (an <img> data URI or inline). Generating it here keeps
+  // the seed out of third-party QR libraries and online QR services.
+  string qr_svg      = 3;
+}
+
+message ConfirmTotpReq {
+  option (w17.contrib.plugin_feature) = "two_factor";
+  string code = 1;
+}
+message ConfirmTotpResp {
+  option (w17.contrib.plugin_feature) = "two_factor";
+  // Ten one-time recovery codes for when the authenticator is lost, shown
+  // ONCE (only their hashes are stored). Confirming replaces any earlier set.
+  repeated string recovery_codes = 1;
+}
+
+message DisableTotpReq {
+  option (w17.contrib.plugin_feature) = "two_factor";
+  // A current TOTP code, re-verified before a CONFIRMED
+  // authenticator is removed so a hijacked session can't permanently
+  // disable the victim's 2FA (a transient compromise then can't
+  // weaken the account). Ignored when no confirmed authenticator
+  // exists (nothing to protect). A recovery code is accepted too (lost
+  // phone). Disabling deletes the recovery codes with the authenticator.
+  string code = 1;
+}
+message DisableTotpResp {
+  option (w17.contrib.plugin_feature) = "two_factor";
+}
+
+message GetMfaStatusReq {
+  option (w17.contrib.plugin_feature) = "two_factor";
+}
+message GetMfaStatusResp {
+  option (w17.contrib.plugin_feature) = "two_factor";
+  bool  totp_enrolled            = 1;
+  // Unused recovery codes left. 0 with an authenticator enrolled: time to
+  // GenerateRecoveryCodes.
+  int64 recovery_codes_remaining = 2;
+}
+
+// GenerateRecoveryCodes — replace the caller's recovery codes with a fresh
+// set of ten. Needs a confirmed authenticator and a current code from it (or
+// a recovery code), like DisableTotp.
+message GenerateRecoveryCodesReq {
+  option (w17.contrib.plugin_feature) = "two_factor";
+  string code = 1;
+}
+message GenerateRecoveryCodesResp {
+  option (w17.contrib.plugin_feature) = "two_factor";
+  repeated string recovery_codes = 1;
+}
+
+message VerifyMfaReq {
+  option (w17.contrib.plugin_feature) = "two_factor";
+  string challenge_id = 1 [(w17.field) = { type: UUID }];
+  // The authenticator's current code — each accepted at most once — or,
+  // for an account with an authenticator, one of its recovery codes.
+  string code         = 2;
+}
+message VerifyMfaResp {
+  option (w17.contrib.plugin_feature) = "two_factor";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+  string token   = 2;
+  // Server-minted device-trust token (see SignInResp). Issued here
+  // because passing VerifyMfa is exactly the new-device 2FA pass that
+  // should let the device skip the challenge next time.
+  string device_trust_token = 3 [(w17.contrib.plugin_feature_field) = "devices"];
+}
+
+// ── devices: device/session management business surface ─────
+// Authenticated by the caller's bearer (you manage your own
+// devices). The principal comes from the gateway-threaded
+// x-w17-scope-user_id metadata (like WhoAmI), so no token field.
+// All gated `devices`.
+
+// DeviceInfo — one device's management view: identity + audit +
+// the two derived booleans the handler computes (never stored):
+// `trusted` (trusted_at present) and `current` (this device is the
+// one the calling request resolved to). Never carries the raw
+// identifier (a fingerprint hash is an internal detail).
+message DeviceInfo {
+  option (w17.contrib.plugin_feature) = "devices";
+  string                    id           = 1 [(w17.field) = { type: UUID }];
+  string                    label        = 2;
+  string                    ip           = 3;
+  google.protobuf.Timestamp last_seen_at = 4;
+  bool                      trusted      = 5;
+  bool                      current      = 6;
+}
+
+message ListDevicesReq {
+  option (w17.contrib.plugin_feature) = "devices";
+}
+message ListDevicesResp {
+  option (w17.contrib.plugin_feature) = "devices";
+  repeated DeviceInfo devices = 1;
+}
+
+message RevokeDeviceReq {
+  option (w17.contrib.plugin_feature) = "devices";
+  string device_id = 1 [(w17.field) = { type: UUID }];
+}
+message RevokeDeviceResp {
+  option (w17.contrib.plugin_feature) = "devices";
+}
+
+message RevokeOtherDevicesReq {
+  option (w17.contrib.plugin_feature) = "devices";
+}
+message RevokeOtherDevicesResp {
+  option (w17.contrib.plugin_feature) = "devices";
+}
+
+message RevokeAllDevicesReq {
+  option (w17.contrib.plugin_feature) = "devices";
+}
+message RevokeAllDevicesResp {
+  option (w17.contrib.plugin_feature) = "devices";
+}
+
+// AuthService — turnkey auth surface. The activating project
+// references `<domain>.<registered_as>.AuthService.Authenticate`
+// in `(w17.rest_api).auth_methods[].ref`; the gateway parser
+// resolves the RPC, the plugin codegen emits the body. No
+// project-side glue.
+//
+// Service-level `authenticate_turnkey` tag: the entire service
+// drops at staging time when the activation doesn't enable the
+// feature. Implicit dependency on `rbac` since the turnkey body
+// delegates to AuthQuery.GetUserByTokenWithPermissions (which
+// joins the RBAC tables). A future declared-dependency
+// mechanism will make this explicit; today the failure mode is
+// a Go compile error pointing at the missing delegate.
+// ── org members + invitations (business surface) ────────────
+//
+// Every one of these acts in the caller's ACTIVE organization — the one
+// Authenticate resolved from the W17-Org header and VALIDATED against
+// membership. None of them takes an org id from the client, and that is
+// deliberate: an id in the request is a value a handler has to remember
+// to distrust, and the one that is already proven is right there.
+
+// UpdateOrgMembershipRole — change one membership's role, under the role
+// ceiling. The shape of AuthMutation.UpdateOrgMembership's, which it calls:
+// the admin's OrgMemberships page edits through this (its `role` is the only
+// editable field), so `id` is the membership the URL names.
+message UpdateOrgMembershipRoleReq {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  string id   = 1 [(w17.field) = { type: UUID }];
+  string role = 2 [(w17.field) = { type: CHAR, max_len: 100 }];
+}
+message UpdateOrgMembershipRoleResp {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  string membership_id = 1;
+}
+
+// RemoveOrgMembership — remove one membership, under the role ceiling: the
+// caller must cover every role the member holds in that organization, since
+// removing the membership revokes them. The admin's OrgMemberships page
+// deletes through this.
+message RemoveOrgMembershipReq {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  string id = 1 [(w17.field) = { type: UUID }];
+}
+message RemoveOrgMembershipResp {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  string membership_id = 1;
+}
+
+message ListOrgMembersReq {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  // org — the organization's slug, as the REST path names it
+  // (`/auth/orgs/{org}/…`): the gateway makes it the request's W17-Org, and
+  // authentication resolves and validates it. The handler acts in the org
+  // authentication resolved and REFUSES a different value here (a gRPC caller
+  // naming one org in this field and another in its metadata). Empty = the
+  // org comes from W17-Org alone.
+  string org = 1 [(w17.field) = { type: SLUG, max_len: 64, blank: true }];
+}
+message ListOrgMembersResp {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  repeated OrgMember members = 1;
+}
+message OrgMember {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  string user_id = 1;
+  string email   = 2;
+  string role    = 3;
+  google.protobuf.Timestamp joined_at = 4;
+  // owner — TRUE for the organization's owner (Organization.owner_id).
+  // Distinct from `role`: a role is a grant an admin can change, ownership is
+  // a property of the organization. Without it the founder is
+  // indistinguishable from anyone they promoted.
+  bool   owner   = 5;
+}
+
+message ListAssignableRolesReq {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  // org — the organization's slug, as the REST path names it
+  // (`/auth/orgs/{org}/…`): the gateway makes it the request's W17-Org, and
+  // authentication resolves and validates it. The handler acts in the org
+  // authentication resolved and REFUSES a different value here (a gRPC caller
+  // naming one org in this field and another in its metadata). Empty = the
+  // org comes from W17-Org alone.
+  string org = 1 [(w17.field) = { type: SLUG, max_len: 64, blank: true }];
+}
+message ListAssignableRolesResp {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  repeated AssignableRole roles = 1;
+}
+// AssignableRole is one choice in a role picker: what to send as
+// `InviteToOrgReq.role`, and enough words for a person to choose between them.
+message AssignableRole {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  // name is the value an invitation carries verbatim.
+  string name = 1;
+  // description is free text from the seeded catalogue; empty when the role
+  // was declared without one, which a UI should render as just the name
+  // rather than as a blank line.
+  string description = 2;
+}
+
+message InviteToOrgReq {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  // EMPTY is a real request: an OPEN invitation, where whoever holds the link
+  // registers with an address of their choosing — the link is the whole
+  // authorisation, and acceptance spends it once. Non-empty BINDS the
+  // invitation to that address. `blank: true` is what lets the empty value past
+  // the generated validation — without it the open path the handler supports
+  // was refused before the handler ran (REQUIRED_VIOLATION), and nothing caught
+  // it because the handler tests call the handler directly.
+  string email = 1 [(w17.field) = { type: EMAIL, max_len: 320, blank: true }];
+  // A Role.name from the RBAC catalogue, not free text. Validated to
+  // exist when the invitation is made, so a typo is the inviter's error
+  // at the moment they make it rather than a failure the invitee runs
+  // into days later — and so that accepting can turn it into a real
+  // grant instead of a label with nothing behind it.
+  string role  = 2 [(w17.field) = { type: SLUG, max_len: 100 }];
+  // Opaque, consumer-owned, and the reason this field exists: the caller pins
+  // whatever their own system needs paired with this invitation — for example a
+  // tenant plus one object in their engine — and gets it back at acceptance out
+  // of the same statement that spends the invitation. See OrgInvite.metadata.
+  string metadata = 3 [(w17.field) = { type: JSON, blank: true }];
+  // org — the organization's slug, as the REST path names it
+  // (`/auth/orgs/{org}/…`): the gateway makes it the request's W17-Org, and
+  // authentication resolves and validates it. The handler acts in the org
+  // authentication resolved and REFUSES a different value here (a gRPC caller
+  // naming one org in this field and another in its metadata). Empty = the
+  // org comes from W17-Org alone.
+  string org = 4 [(w17.field) = { type: SLUG, max_len: 64, blank: true }];
+}
+message InviteToOrgResp {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  OrgInviteSummary invite = 1;
+  // The link's secret, in plaintext, and this is the ONLY time it exists outside
+  // a hash.
+  //
+  // Unlike a password reset — where the token goes to the mailbox and never to a
+  // caller — the inviter IS the delivery channel here: they send the link by mail,
+  // by chat, by whatever they have. So it has to come back to them once, and it
+  // cannot be shown again: the row keeps only sha256 of it.
+  //
+  // ⚠️ Not in `OrgInviteSummary`, deliberately. That summary is what a LIST of an
+  // org's outstanding invitations shows, and a secret that appears in a list is a
+  // secret readable long after the moment it was handed over.
+  string token = 2;
+}
+
+// OrgInviteSummary — what a list of an org's outstanding invitations
+// shows. Not the storage row: `invited_by` is a uuid nobody recognises,
+// and this surface has no join that would turn it into a name.
+message OrgInviteSummary {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  string invite_id = 1;
+  string email     = 2;
+  string role      = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  google.protobuf.Timestamp created_at = 5;
+  // Listed too: an admin screen showing pending invitations has to be able to show
+  // WHAT each one is for. Opaque — see OrgInvite.metadata. (The plaintext token is
+  // deliberately NOT here; it is returned once, by InviteToOrgResp.)
+  string metadata = 6;
+}
+
+message ListOrgInvitesReq {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  // org — the organization's slug, as the REST path names it
+  // (`/auth/orgs/{org}/…`): the gateway makes it the request's W17-Org, and
+  // authentication resolves and validates it. The handler acts in the org
+  // authentication resolved and REFUSES a different value here (a gRPC caller
+  // naming one org in this field and another in its metadata). Empty = the
+  // org comes from W17-Org alone.
+  string org = 1 [(w17.field) = { type: SLUG, max_len: 64, blank: true }];
+}
+message ListOrgInvitesResp {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  repeated OrgInviteSummary invites = 1;
+}
+
+message RevokeOrgInviteReq {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  string invite_id = 1 [(w17.field) = { type: UUID }];
+  // org — the organization's slug, as the REST path names it
+  // (`/auth/orgs/{org}/…`): the gateway makes it the request's W17-Org, and
+  // authentication resolves and validates it. The handler acts in the org
+  // authentication resolved and REFUSES a different value here (a gRPC caller
+  // naming one org in this field and another in its metadata). Empty = the
+  // org comes from W17-Org alone.
+  string org = 2 [(w17.field) = { type: SLUG, max_len: 64, blank: true }];
+}
+message RevokeOrgInviteResp { option (w17.contrib.plugin_feature) = "org_invite"; }
+
+// MyInvite — an invitation addressed to the CALLER, named by the
+// organization rather than by its id, because this is the list a person
+// decides from.
+message MyInvite {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  string invite_id = 1;
+  string org_slug  = 2;
+  string org_name  = 3;
+  string role      = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+message ListMyInvitesReq  { option (w17.contrib.plugin_feature) = "org_invite"; }
+message ListMyInvitesResp {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  repeated MyInvite invites = 1;
+}
+
+message AcceptOrgInviteReq {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  // The token from the link, not a row id.
+  //
+  // ⚠️ Field 1 is RETIRED rather than reused: it held `invite_id`, and a client
+  // built against the old shape would otherwise send a uuid into a field that now
+  // means a secret — accepted as a well-formed string and matching nothing, which
+  // reads as "your invitation is invalid" rather than "your client is old".
+  reserved 1;
+  reserved "invite_id";
+  string token = 2 [(w17.field) = { type: CHAR, max_len: 128 }];
+}
+message AcceptOrgInviteResp {
+  option (w17.contrib.plugin_feature) = "org_invite";
+  string org_id = 1;
+  string role   = 2;
+  // What the inviter pinned, returned from the same statement that consumed the
+  // invitation — so the caller can act on the pairing knowing the acceptance
+  // committed. Empty when nothing was pinned.
+  string metadata = 3;
+}
+
+// ── password_change ─────────────────────────────────────────
+
+message ChangePasswordReq {
+  option (w17.contrib.plugin_feature) = "password_change";
+  // The current password IS the proof, which is what makes this feature
+  // independent of any delivery channel. Verified against the stored
+  // hash before anything is written.
+  string current_password = 1 [(w17.field) = { type: PASSWORD }];
+  string new_password     = 2 [(w17.field) = { type: PASSWORD }];
+}
+message ChangePasswordResp { option (w17.contrib.plugin_feature) = "password_change"; }
+
+service AuthService {
+  // Service-level tag would cascade to SignIn / SignUp too, but
+  // each turnkey has its own opt-in feature tag — the service is
+  // untagged here so every rpc carries an explicit method-level
+  // tag. Authenticate → `authenticate_turnkey`, SignIn →
+  // `sign_in_turnkey`, SignUp → `sign_up_turnkey`.
+  rpc Authenticate(AuthReq) returns (AuthResp) {
+    option (w17.contrib.plugin_feature_rpc) = "authenticate_turnkey";
+  }
+  // AuthenticateAdmin — Authenticate for the admin plane (the admin
+  // preset's user_lookup). Only realm-wide roles count: no organization is
+  // selected, so a role scoped to one organization grants nothing in the
+  // console that spans them all.
+  rpc AuthenticateAdmin(AuthReq) returns (AuthResp) {
+    option (w17.contrib.plugin_feature_rpc) = "authenticate_turnkey";
+  }
+  rpc SignIn(SignInReq) returns (SignInResp) {
+    option (w17.contrib.plugin_feature_rpc) = "sign_in_turnkey";
+  }
+  rpc SignUp(SignUpReq) returns (SignUpResp) {
+    option (w17.contrib.plugin_feature_rpc) = "sign_up_turnkey";
+  }
+  // ConfirmSignUp — create the account a `sign_up_confirmation` SignUp parked,
+  // once the mailed code comes back. Unauthenticated, like SignUp: there is no
+  // account yet to authenticate as.
+  rpc ConfirmSignUp(ConfirmSignUpReq) returns (ConfirmSignUpResp) {
+    option (w17.contrib.plugin_feature_rpc) = "sign_up_confirmation";
+  }
+  // WhoAmI — verify the current bearer + return the principal.
+  // Authenticated like any non-excluded endpoint; the body is
+  // empty because the principal arrives via the gateway's
+  // x-w17-scope-user_id metadata threading.
+  rpc WhoAmI(WhoAmIReq) returns (WhoAmIResp) {
+    option (w17.contrib.plugin_feature_rpc) = "authenticate_turnkey";
+  }
+  // Logout — revoke the caller's CURRENT session token (base-tier, no
+  // `devices` feature). Reads user_id + session_token_id from the gateway
+  // auth envelope and deletes that one SESSION token via
+  // AuthMutation.DeleteSessionToken. Idempotent.
+  rpc Logout(LogoutReq) returns (LogoutResp) {
+    option (w17.contrib.plugin_feature_rpc) = "authenticate_turnkey";
+  }
+
+  // CreateApiToken — issue an API/MCP token for the caller (bearer-
+  // authenticated), optionally narrowed to a permission subset. Returns
+  // the opaque token ONCE. Gated api_token.
+  rpc CreateApiToken(CreateApiTokenReq) returns (CreateApiTokenResp) {
+    option (w17.contrib.plugin_feature_rpc) = "api_token";
+  }
+  // RegisterClient / ListClients / SetClientEnabled / DeleteClient — the
+  // operator's registry of non-loopback redirect targets for the
+  // authorization-code flow. Admin-only, bearer-authenticated: writing one
+  // down is the act that makes a redirect trustworthy, so it belongs to a
+  // person with a session and never to a token in a pipeline. Gated
+  // cli_login.
+  rpc RegisterClient(RegisterClientReq) returns (RegisterClientResp) {
+    option (w17.contrib.plugin_feature_rpc) = "cli_login";
+  }
+  rpc ListClients(ListClientsReq) returns (ListClientsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "cli_login";
+  }
+  rpc SetClientEnabled(SetClientEnabledReq) returns (SetClientEnabledResp) {
+    option (w17.contrib.plugin_feature_rpc) = "cli_login";
+  }
+  rpc DeleteClient(DeleteClientReq) returns (DeleteClientResp) {
+    option (w17.contrib.plugin_feature_rpc) = "cli_login";
+  }
+  // CreateBot — provision a machine account AND give it its role, in one
+  // call. Gated service_account.
+  rpc CreateBot(CreateBotReq) returns (CreateBotResp) {
+    option (w17.contrib.plugin_feature_rpc) = "service_account";
+  }
+  // ListBots — the machine accounts. Gated service_account.
+  rpc ListBots(ListBotsReq) returns (ListBotsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "service_account";
+  }
+  // ListBotRoles — the roles a bot may hold: API-realm roles ONLY.
+  //
+  // Server-side, not a filtered dropdown. A session-realm role granted to a
+  // bot is unreachable anyway — permissions resolve within the presented
+  // token's realm — so offering one would mint a credential that silently
+  // does nothing. Gated service_account.
+  rpc ListBotRoles(ListBotRolesReq) returns (ListBotRolesResp) {
+    option (w17.contrib.plugin_feature_rpc) = "service_account";
+  }
+  // IssueBotToken — mint an API token FOR a machine account. Refuses any
+  // target that is not `kind = BOT`. Gated service_account.
+  rpc IssueBotToken(IssueBotTokenReq) returns (IssueBotTokenResp) {
+    option (w17.contrib.plugin_feature_rpc) = "service_account";
+  }
+  // ListApiTokens — the caller's API tokens (management view, no secret).
+  rpc ListApiTokens(ListApiTokensReq) returns (ListApiTokensResp) {
+    option (w17.contrib.plugin_feature_rpc) = "api_token";
+  }
+  // RevokeApiToken — delete the caller's own API token + its subset rows.
+  rpc RevokeApiToken(RevokeApiTokenReq) returns (RevokeApiTokenResp) {
+    option (w17.contrib.plugin_feature_rpc) = "api_token";
+  }
+
+  // ── oauth — authorize-redirect + callback ───────────────────
+  // OAuthAuthorizeURL builds the IdP authorize URL (client redirects);
+  // OAuthCallback exchanges the provider's code, find-or-creates the user,
+  // and hands the browser a single-use login code. Both unauthenticated.
+  // Gated oauth.
+  rpc OAuthAuthorizeURL(OAuthAuthorizeURLReq) returns (OAuthAuthorizeURLResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth";
+  }
+  rpc OAuthCallback(OAuthCallbackReq) returns (OAuthCallbackResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth";
+  }
+  // OAuthExchange redeems the callback's code with the PKCE verifier and
+  // issues the session. Unauthenticated. Gated oauth.
+  rpc OAuthExchange(OAuthExchangeReq) returns (OAuthExchangeResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth";
+  }
+
+  // ── two_factor — enrollment + challenge verification ────────
+  // EnrollTotp / ConfirmTotp / DisableTotp / GetMfaStatus ride the bearer
+  // middleware (manage your own factor). VerifyMfa is unauthenticated
+  // (challenge_id stands in for the not-yet-issued token). All gated
+  // two_factor.
+  rpc EnrollTotp(EnrollTotpReq) returns (EnrollTotpResp) {
+    option (w17.contrib.plugin_feature_rpc) = "two_factor";
+  }
+  rpc ConfirmTotp(ConfirmTotpReq) returns (ConfirmTotpResp) {
+    option (w17.contrib.plugin_feature_rpc) = "two_factor";
+  }
+  rpc DisableTotp(DisableTotpReq) returns (DisableTotpResp) {
+    option (w17.contrib.plugin_feature_rpc) = "two_factor";
+  }
+  rpc GetMfaStatus(GetMfaStatusReq) returns (GetMfaStatusResp) {
+    option (w17.contrib.plugin_feature_rpc) = "two_factor";
+  }
+  rpc GenerateRecoveryCodes(GenerateRecoveryCodesReq) returns (GenerateRecoveryCodesResp) {
+    option (w17.contrib.plugin_feature_rpc) = "two_factor";
+  }
+  rpc VerifyMfa(VerifyMfaReq) returns (VerifyMfaResp) {
+    option (w17.contrib.plugin_feature_rpc) = "two_factor";
+  }
+
+  // ── devices management — list + log out one/others/all ──────
+  // ListDevices — the caller's devices (mgmt view, derived trusted /
+  // current). RevokeDevice — log out one device (delete its tokens +
+  // the Device row). RevokeOtherDevices — log out every device but the
+  // caller's. RevokeAllDevices — log out everywhere (incl. caller).
+  // All gated `devices`.
+  rpc ListDevices(ListDevicesReq) returns (ListDevicesResp) {
+    option (w17.contrib.plugin_feature_rpc) = "devices";
+  }
+  rpc RevokeDevice(RevokeDeviceReq) returns (RevokeDeviceResp) {
+    option (w17.contrib.plugin_feature_rpc) = "devices";
+  }
+  rpc RevokeOtherDevices(RevokeOtherDevicesReq) returns (RevokeOtherDevicesResp) {
+    option (w17.contrib.plugin_feature_rpc) = "devices";
+  }
+  rpc RevokeAllDevices(RevokeAllDevicesReq) returns (RevokeAllDevicesResp) {
+    option (w17.contrib.plugin_feature_rpc) = "devices";
+  }
+
+  // ── password_reset — request + apply ────────────────────────
+  // RequestPasswordReset (unauthenticated) mints + e-mails a reset token;
+  // it ALWAYS returns success regardless of whether the email exists
+  // (anti-enumeration). ResetPassword (unauthenticated) consumes the token,
+  // sets the new password, and revokes every existing session. Gated
+  // `password_reset`.
+  rpc RequestPasswordReset(RequestPasswordResetReq) returns (RequestPasswordResetResp) {
+    option (w17.contrib.plugin_feature_rpc) = "password_reset";
+  }
+  rpc ResetPassword(ResetPasswordReq) returns (ResetPasswordResp) {
+    option (w17.contrib.plugin_feature_rpc) = "password_reset";
+  }
+
+  // ── email_verification — request + confirm ──────────────────
+  // RequestEmailVerification (bearer-authenticated — you verify your own
+  // address) mints + e-mails a verification token. VerifyEmail
+  // (unauthenticated — the link click carries no session) consumes the
+  // token and stamps email_verified_at. Gated `email_verification`.
+  rpc RequestEmailVerification(RequestEmailVerificationReq) returns (RequestEmailVerificationResp) {
+    option (w17.contrib.plugin_feature_rpc) = "email_verification";
+  }
+  rpc VerifyEmail(VerifyEmailReq) returns (VerifyEmailResp) {
+    option (w17.contrib.plugin_feature_rpc) = "email_verification";
+  }
+
+  // ── cli_login — first-party CLI OAuth (loopback + PKCE) ─────
+  // CliAuthorize (bearer-authenticated — the user is signed into the web)
+  // mints a single-use authorization code bound to the principal + the
+  // CLI's PKCE challenge; the console web then redirects the browser to the
+  // CLI's loopback redirect_uri?code=<code>. CliToken (unauthenticated —
+  // the CLI has no token yet) verifies the PKCE verifier, consumes the
+  // code, and mints the bearer the CLI stores. Gated `cli_login`.
+  rpc CliAuthorize(CliAuthorizeReq) returns (CliAuthorizeResp) {
+    option (w17.contrib.plugin_feature_rpc) = "cli_login";
+  }
+  rpc CliToken(CliTokenReq) returns (CliTokenResp) {
+    option (w17.contrib.plugin_feature_rpc) = "cli_login";
+  }
+
+  // ── org_membership — list the caller's organizations ───────
+  // ListMyOrgs returns the orgs the bearer-authenticated caller belongs to
+  // (for the CLI's `org list` + the login-time membership cache + the init
+  // org picker). The principal is the gateway-resolved caller (never a
+  // client-sent user_id). Gated `org_membership`.
+  rpc ListMyOrgs(ListMyOrgsReq) returns (ListMyOrgsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_membership";
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // org members + invitations
+  // ────────────────────────────────────────────────────────────
+
+  // ListOrgMembers — who is in the caller's active organization.
+  rpc ListOrgMembers(ListOrgMembersReq) returns (ListOrgMembersResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_membership";
+  }
+
+  // UpdateOrgMembershipRole — change a member's role, held to the role
+  // ceiling both ways (handlers/org_membership_role.go): the caller must hold
+  // every permission the NEW role carries, and cover every role the member
+  // holds in that organization now, since the change revokes them. The
+  // membership must be in the caller's active organization when there is
+  // one. The admin's OrgMemberships page edits through it;
+  // AuthMutation.UpdateOrgMembership, which it calls, checks nothing about
+  // the caller, so binding the page to it let anyone who could edit a
+  // membership grant any org role — their own included.
+  rpc UpdateOrgMembershipRole(UpdateOrgMembershipRoleReq) returns (UpdateOrgMembershipRoleResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_membership";
+  }
+
+  // RemoveOrgMembership — the delete twin: the caller must cover every role
+  // the member holds in that organization, which the removal revokes.
+  rpc RemoveOrgMembership(RemoveOrgMembershipReq) returns (RemoveOrgMembershipResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_membership";
+  }
+
+  // ListAssignableRoles — the roles an invitation may name.
+  //
+  // Exists so a caller does not have to KNOW the vocabulary. The role on an
+  // invitation is validated against the catalogue (roleIDByName), so a typo is
+  // refused — but only after the invitation is submitted, and the refusal
+  // cannot say what the valid answers were, because nothing on this surface
+  // could enumerate them. A UI could offer only a free-text field for this,
+  // with no way to populate a picker.
+  //
+  // Returns ORG-SCOPED roles only. A realm role is not something one member
+  // hands another inside an organization — it is platform-wide, and offering
+  // it here would put a realm grant behind an org admin's dropdown.
+  //
+  // Deliberately carries no permissions: the names and their descriptions are
+  // what a human picks between, while which endpoints each one unlocks is an
+  // implementation detail of the deployed lock that would go stale in a UI the
+  // moment the surface grew.
+  rpc ListAssignableRoles(ListAssignableRolesReq) returns (ListAssignableRolesResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_invite";
+  }
+
+  // InviteToOrg — invite an address into the active org with a role.
+  rpc InviteToOrg(InviteToOrgReq) returns (InviteToOrgResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_invite";
+  }
+
+  // ListOrgInvites — the active org's outstanding invitations.
+  rpc ListOrgInvites(ListOrgInvitesReq) returns (ListOrgInvitesResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_invite";
+  }
+
+  // RevokeOrgInvite — withdraw one of them.
+  rpc RevokeOrgInvite(RevokeOrgInviteReq) returns (RevokeOrgInviteResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_invite";
+  }
+
+  // ListMyInvites — invitations addressed to the CALLER, in every org.
+  // Not scoped to an active org, and could not be: the point is that the
+  // caller is not a member of those organizations yet.
+  rpc ListMyInvites(ListMyInvitesReq) returns (ListMyInvitesResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_invite";
+  }
+
+  // AcceptOrgInvite — join. One transaction: consume the invitation,
+  // write the membership, and grant the role IN that organization.
+  rpc AcceptOrgInvite(AcceptOrgInviteReq) returns (AcceptOrgInviteResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_invite";
+  }
+
+  // ChangePassword — rotate the caller's own password. Needs no mail
+  // channel; the current password is the proof.
+  rpc ChangePassword(ChangePasswordReq) returns (ChangePasswordResp) {
+    option (w17.contrib.plugin_feature_rpc) = "password_change";
+  }
+}
+
+// ── password_reset / email_verification business messages ───────
+
+message RequestPasswordResetReq {
+  option (w17.contrib.plugin_feature) = "password_reset";
+  string email = 1 [(w17.field) = { type: EMAIL, max_len: 320 }];
+}
+message RequestPasswordResetResp {
+  option (w17.contrib.plugin_feature) = "password_reset";
+  // Intentionally empty: a uniform success regardless of whether the email
+  // exists (anti-enumeration).
+}
+
+message ResetPasswordReq {
+  option (w17.contrib.plugin_feature) = "password_reset";
+  string token        = 1 [(w17.field) = { type: CHAR, max_len: 128 }];
+  string new_password = 2 [(w17.field) = { type: PASSWORD }];
+}
+message ResetPasswordResp {
+  option (w17.contrib.plugin_feature) = "password_reset";
+  // sessions_revoked reports whether the post-reset sweep actually ran.
+  //
+  // A reset revokes every existing session and API token, because a reset is
+  // what somebody does when they believe a credential is compromised. That
+  // sweep is deliberately best-effort — a failure must not undo the password
+  // change, which has already happened and cannot be rolled back by then.
+  //
+  // What was missing is that nobody was TOLD. The error was discarded at the
+  // call site under a comment claiming "logged by the caller's interceptor",
+  // and the plugin has no logging at all: grep handlers/ for slog, log or
+  // logger and there is nothing. So a reset after a theft could leave the
+  // thief's session alive, report success, and end there.
+  //
+  // `false` means: your password IS changed, and the old sessions may still
+  // be live — sign out everywhere, or reset again. A caller that ignores this
+  // field is no worse off than before; one that reads it can say the true
+  // thing to the person who just reset their password.
+  bool sessions_revoked = 1;
+}
+
+message RequestEmailVerificationReq {
+  option (w17.contrib.plugin_feature) = "email_verification";
+  // No fields: the caller is the bearer-authenticated principal (their
+  // user_id + email come from the session, like WhoAmI).
+}
+message RequestEmailVerificationResp {
+  option (w17.contrib.plugin_feature) = "email_verification";
+}
+
+message VerifyEmailReq {
+  option (w17.contrib.plugin_feature) = "email_verification";
+  string token = 1 [(w17.field) = { type: CHAR, max_len: 128 }];
+}
+message VerifyEmailResp {
+  option (w17.contrib.plugin_feature) = "email_verification";
+}
+
+// ── cli_login business messages (first-party CLI OAuth) ─────
+
+message CliAuthorizeReq {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  // PKCE code_challenge = BASE64URL(SHA256(code_verifier)) (S256 only).
+  string code_challenge = 1 [(w17.field) = { type: CHAR, max_len: 128 }];
+  // Where to send the code. Either a LOOPBACK callback the CLI is listening
+  // on (http://127.0.0.1:PORT/... or http://localhost:PORT/...), which needs
+  // no registration because the target is the user's own machine (RFC 8252
+  // §7.3) — or a callback REGISTERED for `client_id`, matched exactly.
+  //
+  // Anything else is refused: a stolen authorize link pointing at an
+  // attacker-controlled origin is exactly what this is here to stop.
+  string redirect_uri = 2 [(w17.field) = { type: URL, max_len: 2048 }];
+  // state — the client's anti-CSRF value, echoed back untouched.
+  //
+  // PKCE protects the EXCHANGE: a stolen code is useless without the
+  // verifier. It does not protect the browser from being walked through
+  // somebody else's flow — an attacker who gets a victim to complete one with
+  // the attacker's code leaves the victim signed in as the attacker, inside
+  // the victim's own app. `state` is what the client compares on return to
+  // refuse that.
+  //
+  // Its own field rather than something a client appends to redirect_uri: the
+  // redirect is matched as a WHOLE STRING against the registry, so a
+  // per-request value could never be registered.
+  string state = 4 [(w17.field) = { type: CHAR, max_len: 256, blank: true }];
+  // client_id — required for a non-loopback redirect, ignored for loopback.
+  //
+  // A browser app on its own origin cannot use the loopback exemption, so it
+  // names the registration the operator wrote down. Optional on the wire so
+  // the CLI flow, which predates the registry, is unchanged.
+  string client_id = 3 [(w17.field) = { type: SLUG, max_len: 64, blank: true }];
+}
+message CliAuthorizeResp {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  // The single-use authorization code; the console web redirects the
+  // browser to redirect_uri?code=<code>, where the CLI's loopback server
+  // receives it and redeems it at CliToken.
+  string code = 1;
+  // Echoed back so the web front-end builds the redirect without re-reading
+  // the request.
+  string redirect_uri = 2;
+  // The state the request carried, unchanged, so the client can compare it
+  // after the browser comes back.
+  string state = 3 [(w17.field) = { type: CHAR, max_len: 256, blank: true }];
+}
+
+message RegisterClientReq {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  string client_id    = 1 [(w17.field) = { type: SLUG, max_len: 64 }];
+  string name         = 2 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
+  // Exact, whole-string. Registering `https://app.example.com/` does not
+  // authorise `https://app.example.com/cb` — register each callback.
+  string redirect_uri = 3 [(w17.field) = { type: URL, max_len: 2048 }];
+}
+message RegisterClientResp {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  // The stored row. Its `client_secret` is ALWAYS EMPTY here: the registry
+  // queries project explicit column lists that do not name it, so the hash
+  // has exactly one reader (GetAuthClientSecret) and cannot ride out on a
+  // response that happens to carry the model.
+  AuthClient client = 1;
+  // client_secret — the PLAINTEXT, and the only time it exists outside the
+  // client. Stored hashed, never recoverable: a client that loses it is
+  // re-registered rather than reminded. Same single-delivery contract as a
+  // password-reset token.
+  string client_secret = 2;
+}
+message ListClientsReq { option (w17.contrib.plugin_feature) = "cli_login"; }
+message ListClientsResp {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  repeated AuthClient clients = 1;
+}
+message SetClientEnabledReq {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  string id      = 1 [(w17.field) = { type: UUID }];
+  bool   enabled = 2;
+}
+message SetClientEnabledResp { option (w17.contrib.plugin_feature) = "cli_login"; }
+message DeleteClientReq {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  string id = 1 [(w17.field) = { type: UUID }];
+}
+message DeleteClientResp { option (w17.contrib.plugin_feature) = "cli_login"; }
+
+message CliTokenReq {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  string code = 1 [(w17.field) = { type: CHAR, max_len: 128 }];
+  // PKCE code_verifier (RFC 7636: 43–128 chars of the unreserved set).
+  string code_verifier = 2 [(w17.field) = { type: CHAR, max_len: 128 }];
+  // The same redirect the code was issued for (RFC 6749 §4.1.3). Optional
+  // only so a code minted before this binding existed can still be redeemed;
+  // when the stored value is present, this must equal it.
+  string redirect_uri = 3 [(w17.field) = { type: URL, max_len: 2048, blank: true }];
+  // client_secret — REQUIRED when the code was minted for a registered
+  // client, refused without it. Blank for loopback, which has no registration
+  // and authenticates by PKCE alone (RFC 8252) — that is the whole of the
+  // public-client shape this flow still offers.
+  string client_secret = 4 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
+}
+message CliTokenResp {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  string token   = 1; // opaque bearer the CLI stores in ~/.w17/auth.yaml
+  string user_id = 2;
+}
+
+// ── org_membership business messages (multi-org) ────────────
+
+message ListMyOrgsReq {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  // No fields: the caller is the bearer-authenticated principal (their
+  // user_id comes from the session, like WhoAmI).
+}
+message ListMyOrgsResp {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  // Reuses the query-tier view (this proto imports queries/auth_query.proto).
+  repeated UserOrg orgs = 1;
+
+}

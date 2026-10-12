@@ -1,0 +1,7 @@
+# The webhook needs no account, but a delivery without the provider's
+# signature is refused.
+method: payment.PaymentService.IngestStripe
+input:
+    raw_payload: '{"id":"evt_unsigned","type":"payment_intent.succeeded","data":{"object":{"id":"pi_x"}}}'
+expect_error:
+    code: UNAUTHENTICATED

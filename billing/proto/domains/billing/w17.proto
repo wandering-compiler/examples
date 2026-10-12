@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+// The billing domain: accounts from the auth plugin, and everything that
+// moves money from the payment plugin — card payments, a prepaid credit
+// wallet topped up by card, and the provider's webhooks that settle them.
+
+package examples_billing.billing;
+
+import "w17/domain.proto";
+import "w17/module.proto";
+
+option (w17.domain) = {
+  plugins: [
+    {
+      source_name:   "auth"
+      registered_as: "auth"
+      channels:   [ { key: "events", value: "events" } ]
+      auth_input: { header_name: "Authorization", scheme: "Bearer" }
+      features:   { names: [ "rbac", "authenticate_turnkey", "sign_up_turnkey", "sign_in_turnkey" ] }
+    },
+    {
+      source_name:   "payment"
+      registered_as: "payment"
+      // Payment, credit and subscription events go to the same channel.
+      channels: [ { key: "events", value: "events" } ]
+      // stripe_webhooks settles payments; prepaid is the credit wallet,
+      // whose top-ups are granted when the provider confirms the charge.
+      features: { names: [ "stripe_webhooks", "prepaid" ] }
+    }
+  ]
+};
+
+option (w17.module) = {
+  connection: {
+    name: "billing-postgres",
+    dialect: POSTGRES,
+    version: "18"
+  },
+  channels: [
+    {
+      // In-process: no broker to run for this example.
+      name: "events"
+      transport: TRANSPORT_MEMORY
+      buffer_size: 1024
+      retry: { max_deliver: 1 }
+      drain_timeout_seconds: 5
+    }
+  ]
+};

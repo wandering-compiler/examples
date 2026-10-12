@@ -1,0 +1,11 @@
+# A signed-in caller pays only for themselves: naming another account's
+# user_id is refused.
+method: payment.PaymentService.CreatePayment
+pre: [fixtures/someone_else.yaml, auth/auth.yaml]
+input:
+    user_id: ${other.user_id}
+    amount: "5.00"
+    currency: eur
+    idempotency_key: order-${seq}
+expect_error:
+    code: PERMISSION_DENIED

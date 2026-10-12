@@ -1,0 +1,4 @@
+method: auth.AuthService.Logout
+pre: [auth/auth.yaml]
+input: {}
+expect: {}

@@ -1,0 +1,7 @@
+# Until the provider confirms the top-up, nothing is credited.
+method: payment.PaymentService.GetMyCreditBalance
+pre: [auth/auth.yaml, fixtures/a_top_up.yaml]
+input: {}
+expect:
+    balance:
+        balance: {matcher: eq, value: "0"}

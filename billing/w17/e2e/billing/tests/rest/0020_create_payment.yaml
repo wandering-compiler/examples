@@ -1,0 +1,16 @@
+# A card payment. It starts unsettled: the provider confirms it later, by
+# webhook. The client secret is what a browser confirms the card with.
+method: payment.PaymentService.CreatePayment
+pre: [auth/auth.yaml]
+input:
+    amount: "19.99"
+    currency: eur
+    description: A year of the newsletter
+    idempotency_key: order-${seq}
+expect:
+    payment:
+        id: {matcher: not_empty}
+        amount: {matcher: eq, value: "19.9900"}
+        currency: {matcher: eq, value: eur}
+        provider_payment_id: {matcher: not_empty}
+    client_secret: {matcher: not_empty}
