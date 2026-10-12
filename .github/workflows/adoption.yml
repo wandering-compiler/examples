@@ -100,11 +100,27 @@ jobs:
           path: plugins
 
       - name: Install w17ctl
+        env:
+          GH_API_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$HOME/bin"
           v="${{ inputs.w17ctl_version }}"
           if [ -n "$v" ]; then sel=(--version "$v"); else sel=(--pre); fi
-          curl -fsSL https://get.w17.dev/install.sh | sh -s -- "${sel[@]}" --dir "$HOME/bin"
+          # --pre lists releases through the GitHub API, which refuses an
+          # unauthenticated runner once the shared address is over its
+          # hourly limit (403). This curl adds the job's token to API calls
+          # only; downloads and every other host go out unchanged.
+          shim="$RUNNER_TEMP/curlshim"; mkdir -p "$shim"
+          real=$(command -v curl)
+          cat > "$shim/curl" <<SHIM
+          #!/bin/sh
+          for a in "\$@"; do
+            case "\$a" in https://api.github.com/*) exec "$real" -H "Authorization: Bearer \$GH_API_TOKEN" "\$@";; esac
+          done
+          exec "$real" "\$@"
+          SHIM
+          chmod +x "$shim/curl"
+          curl -fsSL https://get.w17.dev/install.sh | PATH="$shim:$PATH" sh -s -- "${sel[@]}" --dir "$HOME/bin"
           echo "$HOME/bin" >> "$GITHUB_PATH"
 
       - name: Resolve the SDK version
