@@ -1,0 +1,10 @@
+# A top-up of the signed-in account's wallet, not yet confirmed by the
+# provider.
+method: payment.PaymentService.TopUpCredit
+input:
+    amount: "10.00"
+    currency: usd
+    idempotency_key: top-up-${seq}
+expect:
+    payment:
+        id: {matcher: not_empty}

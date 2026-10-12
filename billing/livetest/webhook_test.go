@@ -129,8 +129,10 @@ func TestWebhook_EventBeforeItsRowIsRetried(t *testing.T) {
 	o["id"] = "pi_notyet" + randomHex(6)
 	o["status"] = "succeeded"
 	body := event("payment_intent.succeeded", o)
-	if got := deliverSigned(t, body); got < 400 {
-		t.Fatalf("an event whose row has not landed answered %d; the provider would not redeliver it", got)
+	// 404, not just any refusal: a 401 here would mean the signature was
+	// refused and the case under test never ran.
+	if got := deliverSigned(t, body); got != http.StatusNotFound {
+		t.Fatalf("an event whose row has not landed answered %d, want 404: the provider must redeliver it", got)
 	}
 	if got := count(t, `SELECT count(*) FROM payment_processedwebhookevent WHERE provider_event_id = $1`, eventID(t, body)); got != 0 {
 		t.Fatalf("the refused event was recorded as processed; a redelivery would be skipped")

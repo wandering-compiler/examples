@@ -105,8 +105,10 @@ func main() {
 type apiFunc func(form url.Values) (int, object)
 
 // handle authenticates the call, applies the idempotency key and serialises
-// every request: the fake is small, and one lock makes "two concurrent calls
-// with one key" behave like Stripe's (the second sees the first's answer).
+// every request under one lock. Unlike Stripe, which answers 409 to a request
+// whose key is still in flight on another, a concurrent retry here waits and
+// gets the first request's answer: a test cannot rely on this fake to show
+// how the plugin copes with that 409.
 func (s *store) handle(fn apiFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		key, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -145,9 +147,11 @@ func (s *store) handle(fn apiFunc) http.HandlerFunc {
 		}
 		status, body := fn(form)
 		raw, _ := json.Marshal(body)
-		// Stripe stores the answer to a keyed request whatever it was, except
-		// a 5xx, which a retry is meant to try again.
-		if idemKey != "" && status < 500 {
+		// Stripe saves the answer to a keyed request only once the endpoint
+		// has started executing: a request that failed validation saves
+		// nothing, and a retry with the key runs again. Every error this
+		// fake answers is a validation error, so only a success is saved.
+		if idemKey != "" && status < 400 {
 			s.idem[idemKey] = idemEntry{path: r.URL.Path, params: params, status: status, body: raw}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -298,11 +302,17 @@ func (s *store) list(kind string, form url.Values, keep func(object) bool) (int,
 		}
 	}
 	if after := form.Get("starting_after"); after != "" {
+		found := false
 		for i, o := range all {
 			if o["id"] == after {
-				all = all[i+1:]
+				all, found = all[i+1:], true
 				break
 			}
+		}
+		// Stripe refuses a cursor it does not know; starting over from the
+		// first page would hide a paging bug in the caller.
+		if !found {
+			return apiErr(http.StatusBadRequest, "invalid_request_error", "resource_missing", "No such object: '"+after+"'")
 		}
 	}
 	more := len(all) > limit

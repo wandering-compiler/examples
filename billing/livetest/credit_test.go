@@ -163,4 +163,7 @@ func TestCharge_SameKeyFromTwoPeopleIsTwoPayments(t *testing.T) {
 	if pa.Payment.ID == pb.Payment.ID {
 		t.Fatal("two people's charges are one payment")
 	}
+	if pa.Payment.ProviderPaymentID == pb.Payment.ProviderPaymentID {
+		t.Fatal("two people's charges are one payment at the provider")
+	}
 }
