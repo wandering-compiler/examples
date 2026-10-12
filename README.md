@@ -35,7 +35,9 @@ the protos under `proto/`, hand-written code under `srcgo/`, the e2e cases under
 The examples pin released versions of the SDK and the plugins. The SDK and the
 plugins repositories run them, on every pull request, against the change under
 review — so a change that breaks a project built on it fails before it is
-merged. The reusable workflow is
+merged. Each example runs in a job of its own, and an example with a live suite
+(`livetest/run.sh`) runs it on the same stack as its end-to-end suite. The
+reusable workflow is
 [`.github/workflows/adoption.yml`](.github/workflows/adoption.yml):
 
 ```yaml
