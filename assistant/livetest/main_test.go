@@ -33,6 +33,10 @@ var (
 	storageAddr = env("STORAGE_ADDR", "assistant-storage:50051")
 	databaseURL = env("DATABASE_URL", "postgres://assistant:assistant@assistant-postgres:5432/assistant?sslmode=disable")
 
+	// client bounds every call, so a hung stack fails a test instead of
+	// waiting for go test's own timeout.
+	client = &http.Client{Timeout: 30 * time.Second}
+
 	db *sql.DB
 	// usage is the agent plugin's usage mutations over the storage tier's
 	// internal listener: what an operator's own tooling would call to set
@@ -103,7 +107,7 @@ func do(token, method, path string, body any) (int, []byte, error) {
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}

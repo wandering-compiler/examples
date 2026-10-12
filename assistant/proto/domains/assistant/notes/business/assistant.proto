@@ -13,21 +13,29 @@ message AskResp {
   // What the call cost, as the provider counted it.
   int32  input_tokens  = 2;
   int32  output_tokens = 3;
+  // The model stopped before it finished the answer (the output budget ran
+  // out, or the provider filtered it): what was written is in `answer`, but
+  // it is not the whole of it.
+  bool   incomplete    = 4;
 }
 
 // One piece of a streamed answer: text as it is written, then the last one
-// with done set and the tokens counted.
+// with done set, the tokens counted and whether the answer was cut short.
 message AskChunk {
   string text          = 1;
   bool   done          = 2;
   int32  input_tokens  = 3;
   int32  output_tokens = 4;
+  // On the done chunk: the text streamed so far is not the whole answer.
+  bool   incomplete    = 5;
 }
 
 message ResearchResp {
   string answer = 1;
-  // The notes the model asked to see, in the order it asked.
+  // What the model searched the notes for, in the order it asked.
   repeated string searched = 2;
+  // The model stopped before it finished the answer, as in AskResp.
+  bool incomplete = 3;
 }
 
 message MySpendReq {}
@@ -45,8 +53,8 @@ message ModelSpend {
 }
 
 // Assistant is hand-written (the business package of the srcgo module): it
-// decides the model, the instructions and whose bill a call goes on, so a
-// caller can ask questions and nothing else.
+// decides the instructions and whose bill a call goes on, and leaves the model
+// to the deployment's default, so a caller can ask questions and nothing else.
 service Assistant {
   // Ask — one question, one answer.
   rpc Ask(AskReq) returns (AskResp);

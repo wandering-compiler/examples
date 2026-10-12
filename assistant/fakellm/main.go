@@ -19,8 +19,11 @@
 // "decides" to call the first tool with {"query": <the question>}; once tool
 // output is in the input, it answers from it.
 //
-// GET /_test/requests returns what the fake received (newest last), so a test
-// can check what the plugin sent; the API key is never recorded.
+// GET /_test/requests returns the requests the fake answered (the last 200,
+// newest last), so a test can check what the plugin sent; the API key is
+// never recorded. Its X-Fakellm-Total header counts every request ever POSTed
+// to it: the ones no longer listed, and the ones it refused (a wrong key, a
+// malformed body), included.
 package main
 
 import (
@@ -95,7 +98,7 @@ func selfSigned(hosts []string) (tls.Certificate, []byte, error) {
 		SerialNumber:          big.NewInt(1),
 		Subject:               pkix.Name{CommonName: "fakellm test CA"},
 		NotBefore:             now.Add(-time.Hour),
-		NotAfter:              now.Add(7 * 24 * time.Hour),
+		NotAfter:              now.Add(365 * 24 * time.Hour),
 		IsCA:                  true,
 		KeyUsage:              x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
@@ -114,7 +117,7 @@ func selfSigned(hosts []string) (tls.Certificate, []byte, error) {
 		SerialNumber: big.NewInt(2),
 		Subject:      pkix.Name{CommonName: hosts[0]},
 		NotBefore:    now.Add(-time.Hour),
-		NotAfter:     now.Add(7 * 24 * time.Hour),
+		NotAfter:     now.Add(365 * 24 * time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
@@ -144,6 +147,7 @@ func (f *fake) listRequests(w http.ResponseWriter, _ *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Fakellm-Total", strconv.Itoa(f.seq))
 	_ = json.NewEncoder(w).Encode(f.seen)
 }
 
@@ -160,6 +164,10 @@ type request struct {
 var errorMarker = regexp.MustCompile(`\[error:(\d{3})\]`)
 
 func (f *fake) respond(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	f.seq++
+	id := f.seq
+	f.mu.Unlock()
 	if !strings.HasSuffix(r.URL.Path, "/responses") {
 		http.NotFound(w, r)
 		return
@@ -183,8 +191,6 @@ func (f *fake) respond(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.mu.Lock()
-	f.seq++
-	id := f.seq
 	f.seen = append(f.seen, raw)
 	if len(f.seen) > 200 {
 		f.seen = f.seen[len(f.seen)-200:]
@@ -232,7 +238,9 @@ func (f *fake) respond(w http.ResponseWriter, r *http.Request) {
 	}
 	if text != "" {
 		output = []any{map[string]any{
-			"type": "message", "id": fmt.Sprintf("msg_%d", id), "role": "assistant", "status": "completed",
+			// The item ends as the response did: a cut-off message is
+			// "incomplete" on both.
+			"type": "message", "id": fmt.Sprintf("msg_%d", id), "role": "assistant", "status": resp["status"],
 			"content": []any{map[string]any{"type": "output_text", "text": text, "annotations": []any{}}},
 		}}
 	}
