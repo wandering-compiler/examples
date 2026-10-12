@@ -2,7 +2,8 @@ package livetest
 
 import (
 	"encoding/json"
-	"net/http"
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -12,21 +13,23 @@ import (
 // for it after the suite.
 const canary = "canary-5e1f9c0b"
 
-// providerRequests is every request the stand-in provider received. The
-// client trusts the provider's authority through SSL_CERT_FILE, as the
-// bundle does.
-func providerRequests(t *testing.T) []map[string]any {
+// providerRequests is the requests the stand-in provider received (its last
+// 200), and how many it received in all. The client trusts the provider's
+// authority through SSL_CERT_FILE, as the bundle does.
+func providerRequests(t *testing.T) (reqs []map[string]any, total int) {
 	t.Helper()
-	resp, err := http.Get(fakeLLM + "/_test/requests")
+	resp, err := client.Get(fakeLLM + "/_test/requests")
 	if err != nil {
 		t.Fatalf("provider requests: %v", err)
 	}
 	defer resp.Body.Close()
-	var out []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&reqs); err != nil {
 		t.Fatalf("provider requests: %v", err)
 	}
-	return out
+	if total, err = strconv.Atoi(resp.Header.Get("X-Fakellm-Total")); err != nil {
+		t.Fatalf("provider requests: total: %v", err)
+	}
+	return reqs, total
 }
 
 // Every request the plugin sent asks the provider not to keep it, carries
@@ -35,7 +38,7 @@ func providerRequests(t *testing.T) []map[string]any {
 func TestProvider_EveryRequestIsUnstoredAndUsesTheProjectsSettings(t *testing.T) {
 	a := signUp(t)
 	mustAsk(t, a, "Is anything kept?")
-	reqs := providerRequests(t)
+	reqs, _ := providerRequests(t)
 	if len(reqs) == 0 {
 		t.Fatal("the provider received nothing")
 	}
@@ -74,6 +77,6 @@ func TestProvider_AnIncompleteAnswerIsStillRecorded(t *testing.T) {
 	mustAsk(t, a, "[incomplete] Tell me everything")
 	eventually(t, "one usage row", func() (bool, string) {
 		n := usageRows(t, a)
-		return n == 1, ""
+		return n == 1, fmt.Sprintf("%d rows", n)
 	})
 }

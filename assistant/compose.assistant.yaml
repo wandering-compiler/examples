@@ -18,7 +18,9 @@ services:
       - fakellm-ca:/fakellm-ca:ro
     environment:
       # The agent plugin runs here. It sends its key only over HTTPS, so the
-      # bundle trusts the fake's authority, and nothing else, for this stack.
+      # bundle trusts the fake's authority. Go reads SSL_CERT_FILE in place
+      # of the system bundle FILE but still reads /etc/ssl/certs, so the
+      # public authorities stay trusted too.
       SSL_CERT_FILE: /fakellm-ca/ca.pem
       ASSISTANT_AGENT_ENDPOINT: https://fakellm:8443
       # A test value, never a real key.

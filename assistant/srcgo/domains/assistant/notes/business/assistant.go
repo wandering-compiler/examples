@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/wandering-compiler/sdk/go/lib/principal"
 	"google.golang.org/grpc/codes"
@@ -28,8 +30,12 @@ var researchTool = &agentpb.ToolSpec{
 	Name:         "search_notes",
 	Purpose:      "Search the asker's notes by words in the title or body.",
 	Activity:     "Searching your notes",
-	ParamsSchema: `{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}`,
+	ParamsSchema: `{"type":"object","properties":{"query":{"type":"string","maxLength":100}},"required":["query"],"additionalProperties":false}`,
 }
+
+// maxQuery is the longest search the tool runs, in characters. Escaped and
+// wrapped in "%", it still fits SearchNotesReq.pattern (210).
+const maxQuery = 100
 
 type assistant struct {
 	notespb.UnimplementedAssistantServer
@@ -54,6 +60,18 @@ func question(text string) []*agentpb.Message {
 	return []*agentpb.Message{{Role: agentpb.Role_ROLE_USER, Text: text}}
 }
 
+// cutShort is whether the model stopped before it finished: the output
+// budget, a content filter, or the plugin stopping a model that had started
+// to repeat itself (no status at all). The text is still the caller's, but
+// it must not be shown as a whole answer.
+func cutShort(s agentpb.Status) bool {
+	return s != agentpb.Status_STATUS_COMPLETED
+}
+
+// errEndedEarly is a stream from the plugin that ended without its Finished
+// event, which the plugin's contract says ends every one.
+var errEndedEarly = status.Error(codes.Unavailable, "the assistant's answer ended early")
+
 func (a *assistant) Ask(ctx context.Context, req *notespb.AskReq) (*notespb.AskResp, error) {
 	who, err := caller(ctx)
 	if err != nil {
@@ -71,6 +89,7 @@ func (a *assistant) Ask(ctx context.Context, req *notespb.AskReq) (*notespb.AskR
 		Answer:       out.GetText(),
 		InputTokens:  out.GetUsage().GetInputTokens(),
 		OutputTokens: out.GetUsage().GetOutputTokens(),
+		Incomplete:   cutShort(out.GetStatus()),
 	}, nil
 }
 
@@ -91,20 +110,25 @@ func (a *assistant) AskStream(req *notespb.AskReq, out notespb.Assistant_AskStre
 	for {
 		ev, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
-			return nil
+			// Finished ends every stream; reaching the end without it is
+			// not an answer, and must not read as one.
+			return errEndedEarly
 		}
 		if err != nil {
 			return err
 		}
 		switch {
 		case ev.GetDelta() != nil:
-			err = out.Send(&notespb.AskChunk{Text: ev.GetDelta().GetText()})
+			if err := out.Send(&notespb.AskChunk{Text: ev.GetDelta().GetText()}); err != nil {
+				return err
+			}
 		case ev.GetFinished() != nil:
-			u := ev.GetFinished().GetUsage()
-			err = out.Send(&notespb.AskChunk{Done: true, InputTokens: u.GetInputTokens(), OutputTokens: u.GetOutputTokens()})
-		}
-		if err != nil {
-			return err
+			f := ev.GetFinished()
+			u := f.GetUsage()
+			return out.Send(&notespb.AskChunk{
+				Done: true, InputTokens: u.GetInputTokens(), OutputTokens: u.GetOutputTokens(),
+				Incomplete: cutShort(f.GetStatus()),
+			})
 		}
 	}
 }
@@ -117,11 +141,14 @@ func (a *assistant) Research(ctx context.Context, req *notespb.AskReq) (*notespb
 	if err != nil {
 		return nil, err
 	}
+	// Cancelled on every return, so the run ends with this call whichever
+	// way it leaves.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	run, err := a.agent.RunAgent(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = run.CloseSend() }()
 	if err := run.Send(&agentpb.RunAgentReq{Msg: &agentpb.RunAgentReq_Start_{Start: &agentpb.RunAgentReq_Start{
 		Instructions: instructions + " Search the notes before you answer.",
 		Messages:     question(req.GetQuestion()),
@@ -134,14 +161,23 @@ func (a *assistant) Research(ctx context.Context, req *notespb.AskReq) (*notespb
 	resp := &notespb.ResearchResp{}
 	for {
 		ev, err := run.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil, errEndedEarly
+		}
 		if err != nil {
 			return nil, err
 		}
+		// Delta and Activity events are for a watching UI; this answer is
+		// returned whole, so they are skipped.
 		switch {
 		case ev.GetToolCall() != nil:
+			// Every ToolCall is answered, once, whatever the search did:
+			// the plugin waits for it.
 			call := ev.GetToolCall()
 			result, failed, query := a.searchNotes(ctx, call)
-			resp.Searched = append(resp.Searched, query)
+			if query != "" {
+				resp.Searched = append(resp.Searched, query)
+			}
 			if err := run.Send(&agentpb.RunAgentReq{Msg: &agentpb.RunAgentReq_ToolResult_{ToolResult: &agentpb.RunAgentReq_ToolResult{
 				CallId: call.GetCallId(), Result: result, Failed: failed,
 			}}}); err != nil {
@@ -149,6 +185,7 @@ func (a *assistant) Research(ctx context.Context, req *notespb.AskReq) (*notespb
 			}
 		case ev.GetFinished() != nil:
 			resp.Answer = ev.GetFinished().GetText()
+			resp.Incomplete = cutShort(ev.GetFinished().GetStatus())
 			return resp, nil
 		}
 	}
@@ -168,6 +205,9 @@ func (a *assistant) searchNotes(ctx context.Context, call *agentpb.ToolCall) (re
 		return `arguments must be {"query": "<words>"}`, true, ""
 	}
 	query = strings.TrimSpace(args.Query)
+	if utf8.RuneCountInString(query) > maxQuery {
+		return fmt.Sprintf("the query is too long: at most %d characters", maxQuery), true, ""
+	}
 	found, err := a.notes.SearchNotes(ctx, &notespb.SearchNotesReq{Pattern: "%" + likeEscape(query) + "%", Limit: 5})
 	if err != nil {
 		return "the search failed", true, query

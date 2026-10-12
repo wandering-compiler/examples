@@ -8,10 +8,12 @@ for the language-model calls (and for recording what each one cost), the
   note belongs to the account that wrote it. The model declares a data scope
   (`(w17.db.scope)` on `Note`), so storage stamps the owner on each insert and
   filters each read by it; no handler code does that.
-- **The assistant** (the `business` package in this project's Go module, `srcgo`), a hand-written
-  service over the agent plugin. It decides the model, the instructions and
-  whose bill a call goes on, so a caller can ask questions and nothing else:
+- **The assistant** (the `business` package in this project's Go module,
+  `srcgo`), a hand-written service over the agent plugin. It decides the
+  instructions and whose bill a call goes on, and leaves the model to the
+  deployment's default, so a caller can ask questions and nothing else:
   - `POST /api/v1/assistant/ask` — one question, one answer, and its tokens;
+    an answer the model could not finish is marked `incomplete`;
   - `GET /api/v1/assistant/ask/stream?question=…` — the same as server-sent
     events, as the answer is written;
   - `POST /api/v1/assistant/research` — the model may call a tool,
@@ -36,7 +38,8 @@ nothing but loopback, and an example should not need a switch that a
 production deployment could leave on. So the fake makes its own certificate
 authority at start and writes it to a volume; `compose.assistant.yaml` mounts
 it into the storage bundle, which runs the plugin, and trusts it there with
-`SSL_CERT_FILE`.
+`SSL_CERT_FILE`. Go still reads the image's `/etc/ssl/certs`, so the public
+authorities stay trusted as well.
 
 ## Tests
 

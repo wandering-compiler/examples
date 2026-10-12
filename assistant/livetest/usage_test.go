@@ -123,12 +123,12 @@ func TestLimit_RefusesACappedScope(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SetScopeLimit: %v", err)
 	}
-	before := len(providerRequests(t))
+	_, before := providerRequests(t)
 	status, raw, err := ask(a, "Anything at all?")
 	if err != nil || status != http.StatusTooManyRequests || !strings.Contains(string(raw), "RESOURCE_EXHAUSTED") {
 		t.Fatalf("capped ask: %d %s %v, want 429 RESOURCE_EXHAUSTED", status, raw, err)
 	}
-	if after := len(providerRequests(t)); after != before {
+	if _, after := providerRequests(t); after != before {
 		t.Fatalf("the provider received %d requests for a refused question", after-before)
 	}
 }
