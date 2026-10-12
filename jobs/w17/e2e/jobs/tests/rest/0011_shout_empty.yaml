@@ -1,0 +1,7 @@
+# A job needs text.
+method: work.Jobs.Shout
+pre: [auth/auth.yaml]
+input:
+    text: ""
+expect_error:
+    code: INVALID_ARGUMENT

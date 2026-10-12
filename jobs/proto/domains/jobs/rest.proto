@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package examples_jobs.jobs;
+
+import "w17/rest.proto";
+
+option (w17.rest_api) = {
+  name:        "public",
+  version:     "v1",
+  prefix:      "/api/v1",
+  description: "Jobs run on a pool of workers, for signed-in accounts.",
+  auth_methods: [ { ref: "auth.AuthService.Authenticate", token_types: [ TOKEN_TYPE_BEARER ] } ],
+  include: [ { plugin: "auth" } ],
+  groups: [
+    {
+      prefix:      "/jobs",
+      description: "Jobs.",
+      endpoints: [
+        { ref: "work.Jobs.Shout", method: POST, path: "/shout", body: "*" }
+      ]
+    }
+  ]
+};

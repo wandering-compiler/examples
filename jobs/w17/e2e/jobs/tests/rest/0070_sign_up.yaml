@@ -1,0 +1,7 @@
+method: auth.AuthService.SignUp
+input:
+    email: new${seq}@jobs.example
+    password: e2eSecret!23
+expect:
+    user_id: {matcher: not_empty}
+    token: {matcher: not_empty}

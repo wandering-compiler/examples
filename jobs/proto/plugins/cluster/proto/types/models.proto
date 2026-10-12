@@ -1,0 +1,196 @@
+syntax = "proto3";
+
+package w17.contrib.cluster;
+
+import "google/protobuf/timestamp.proto";
+import "w17/contrib.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+
+option go_package = "@project;@pkg";
+
+// Relay — one relay server this control plane may place work on.
+//
+// A relay is a process with two halves: a MANAGEMENT gRPC the control plane
+// calls, and a PROXY gRPC that forwards to whichever worker it chose. It holds
+// no storage — its queue, its capacity and every ticket it has minted live in
+// memory, and all of that is gone when it restarts. Workers dial IN to it and
+// reconnect forever, so a restart heals itself without anyone being told.
+//
+// This row is the WHITELIST. The control plane dials out, and it dials only to
+// a url that appears here with `enabled` set; a relay that is not in this table
+// cannot be reached by accident, and one that is disabled stops receiving work
+// without being deleted (so its history, if the ledger is on, survives).
+message Relay {
+  option (w17.db.table) = {};
+
+  string id = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+
+  // Operator-facing label. This is what the backoffice list shows and what an
+  // incident refers to, so it is a name and not a hostname: "eu-west-1",
+  // "spare-box". Unique, because two relays called the same thing make every
+  // later conversation about them ambiguous.
+  string name = 2 [(w17.field) = { type: SLUG, max_len: 64, unique: true }];
+
+  // `host:port` of the relay's MANAGEMENT endpoint — the half this control
+  // plane calls. Not the proxy endpoint the caller is handed; that one the
+  // relay reports for itself, because only the relay knows how the outside
+  // world reaches it (see ScheduleTaskResp.address).
+  //
+  // A bare `host:port` — a DNS name (a public one, or a service name on the
+  // same internal network as the control plane: `clusterrelay:13444`, or the
+  // swarm's `<stack>_<service>`), an IPv4 address, or a bracketed IPv6 one
+  // without a zone (gRPC cannot dial `[fe80::1%eth0]`, and a link-local zone
+  // means nothing to a relay on another machine); the port is 1-65535. The request carries the same
+  // pattern, so a bad value is refused by name before it reaches the CHECK.
+  // No scheme: it is dialled as a gRPC target, so `https://…` would only fail
+  // at the first call, long after the operator who typed it has left the form.
+  string url = 3 [(w17.field) = {
+    type: CHAR, max_len: 255,
+    pattern: "^([A-Za-z0-9_]([A-Za-z0-9_.-]*[A-Za-z0-9_])?\\.?|\\[[0-9A-Fa-f:.]+\\]):([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$"
+    validation_messages: [{ type: VALIDATION_CHECK_CONSTRAINT, message: "a relay address is host:port with no scheme, e.g. relay.example.com:13444 or clusterrelay:13444" }]
+  }];
+
+  // Lowercase hex SHA-256 of the relay's TLS certificate, no separators, 64
+  // characters.
+  //
+  // The relay's identity is PINNED to this fingerprint rather than validated
+  // against a CA, which means a relay may hold a self-signed certificate and
+  // needs no enrolment ceremony — the operator pastes a fingerprint and that is
+  // the whole trust decision. Rotating a relay's certificate is an edit here,
+  // and an edit is exactly the audit trail that a silent CA-issued swap would
+  // not leave.
+  //
+  // Deliberately NOT a shared secret. A bearer secret would have to be stored
+  // in a form this control plane can read back in order to present it, which
+  // means encrypted at rest, which means key management (the
+  // CRYPTED_SECRET field type). A
+  // fingerprint is PUBLIC information: leaking this table tells an attacker
+  // which certificates to expect and gets them no closer to holding one.
+  //
+  // The format is enforced at the write: a pasted fingerprint with colons,
+  // capitals or a character missing used to be stored and fail only as a pin
+  // mismatch on the first dial.
+  string cert_fingerprint = 4 [(w17.field) = {
+    type: CHAR, max_len: 64,
+    pattern: "^[0-9a-f]{64}$"
+    validation_messages: [{ type: VALIDATION_CHECK_CONSTRAINT, message: "a certificate fingerprint is 64 lowercase hex characters, as relay mint prints it" }]
+  }];
+
+  // Off takes the relay out of scheduling immediately and keeps the row.
+  // Default-on is deliberate: a relay is registered by someone who wants it
+  // used, and a registration that silently does nothing until a second switch
+  // is flipped is a support ticket waiting to happen.
+  bool enabled = 5 [(w17.field) = { default_auto: TRUE }];
+
+  google.protobuf.Timestamp created_at = 6
+      [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+
+  // ─── Observed state, below. Written by the control plane, never by an
+  // operator, and every field of it is a CACHE.
+  //
+  // It exists so the backoffice list can say whether a relay is alive without
+  // opening a connection per row while someone waits for a page to render. It
+  // is therefore allowed to be stale, and nothing in scheduling may READ it as
+  // truth: a relay that looks healthy here can still refuse the next call, and
+  // a relay that looks dead may have come back a second ago. Scheduling learns
+  // the answer by asking.
+
+  // When this control plane last completed a management call to the relay.
+  // Absent means "never reached since the row was created" — which is a
+  // different statement from "reached once and now failing", and the two must
+  // not be collapsed into one zero value.
+  optional google.protobuf.Timestamp last_seen_at = 7
+      [(w17.field) = { type: DATETIME }];
+
+  // What went wrong on the last failed attempt, for the operator who is trying
+  // to work out why a relay is not taking work. Cleared on success.
+  string last_error = 8 [(w17.field) = { type: TEXT, blank: true }];
+}
+
+// WorkerState is where one worker stands with the operator.
+//
+// There is no "pending": a worker exists only once it has ENROLLED, and it
+// enrolled with a registration code an operator asked for — the decision to
+// let it in was taken when the code was handed out. What remains for an
+// operator is the opposite decision, BANNED, which a relay enforces on every
+// connection and every piece of work.
+enum WorkerState {
+  WORKER_STATE_UNSPECIFIED = 0;
+  WORKER_STATE_ENROLLED    = 1;
+  WORKER_STATE_BANNED      = 2;
+}
+
+// Worker — one machine that enrolled with a relay, and whether it is banned.
+//
+// # Why this table exists at all
+//
+// Workers are not on a private network. They are laptops and VPSs at whatever
+// provider was cheapest, dialling in from the public internet. Each relay is a
+// certificate authority for its own workers: a worker generates its own key,
+// presents a one-time registration code the relay minted, and receives a
+// short-lived certificate (weeks) that it renews before expiry with the one it
+// still holds. The certificate is the admission.
+//
+// What a certificate cannot carry is a decision taken AFTER it was issued.
+// That is this table: the ban, kept where it survives — a relay holds nothing
+// across a restart, so the control plane sends the complete ban set on every
+// call it makes to a relay.
+//
+// Short-lived certificates were once rejected here on the grounds that a
+// renewal credential is long-lived by construction. It is not, in this shape:
+// the renewal credential is the current certificate itself, it expires with
+// it, and a banned or expired certificate cannot renew. A leaked key is good
+// for at most one lifetime unless renewed — and renewal is exactly where a ban
+// bites. So expiry bounds a FORGOTTEN ban, and the ban is the immediate
+// response, scoped to one machine.
+message Worker {
+  option (w17.db.table) = {};
+
+  string id = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+
+  // Lowercase hex SHA-256 of the worker key's SubjectPublicKeyInfo. THE
+  // IDENTITY, and the only field here that is evidence rather than a claim:
+  // holding the matching private key is what the handshake proves.
+  //
+  // The KEY's hash, not the certificate's: certificates are renewed every
+  // few weeks, and a certificate hash would change each time and orphan this
+  // row and the ban on it. Everything else below is something the worker SAID
+  // about itself.
+  string cert_fingerprint = 2 [(w17.field) = { type: CHAR, max_len: 64, unique: true }];
+
+  // What the worker calls itself. A CLAIM: any worker can offer any name, so
+  // a ban is taken against the fingerprint beside it, never by name.
+  string name = 3 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
+
+  // The worker's own stable id for itself across restarts. Also a claim; kept
+  // because it survives a re-install that changes the name, which makes it
+  // useful for reading history. Never used to authorise anything.
+  string device_id = 4 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
+
+  // No column default. Proto3 pins 0 to UNSPECIFIED, and a row that defaulted
+  // to "unspecified" would be a worker in no state at all; ENROLLED is what
+  // the code that inserts the row says, explicitly.
+  // Indexed: the ban set is read by state on every relay-bound call (cached
+  // briefly), and a fleet that never deletes rows makes a scan grow forever.
+  WorkerState state = 5 [(w17.db.column) = { index: true }];
+
+  // Which relay reported it. A worker's certificate is valid at exactly one
+  // relay (that relay's CA issued it), and an operator chasing "why is this
+  // machine idle" needs to know which.
+  string relay_id = 6 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+
+  google.protobuf.Timestamp first_seen_at = 7
+      [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+
+  // When the last ban or unban was decided, and by whom. Absent until one is.
+  //
+  // `decided_by` is free text rather than a foreign key on purpose: this
+  // plugin has no user table and must not require one. The consumer writes
+  // whatever identifies an operator in their own system.
+  //
+  // Indexed: the ban set's version is MAX(decided_at), read with the set on
+  // every cache miss (see BanSetVersion), and rows are never deleted.
+  optional google.protobuf.Timestamp decided_at = 8 [(w17.field) = { type: DATETIME }, (w17.db.column) = { index: true }];
+  string decided_by = 9 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
+}

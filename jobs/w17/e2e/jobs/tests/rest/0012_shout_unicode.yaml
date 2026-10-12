@@ -1,0 +1,8 @@
+# The relay forwards the call without reading it, so any payload arrives
+# byte for byte.
+method: work.Jobs.Shout
+pre: [auth/auth.yaml]
+input:
+    text: příliš žluťoučký kůň
+expect:
+    text: {matcher: eq, value: PŘÍLIŠ ŽLUŤOUČKÝ KŮŇ}

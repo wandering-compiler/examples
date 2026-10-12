@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+// The jobs domain: signed-in accounts send small jobs to a pool of workers.
+// The cluster plugin is the pool's control plane: it knows the relays the
+// workers attach to, places each job on one of them and hands the caller a
+// single-use ticket. What the workers do is this project's business, not the
+// plugin's.
+
+package examples_jobs.jobs;
+
+import "w17/domain.proto";
+import "w17/module.proto";
+
+option (w17.domain) = {
+  plugins: [
+    {
+      source_name:   "auth"
+      registered_as: "auth"
+      channels:   [ { key: "events", value: "events" } ]
+      auth_input: { header_name: "Authorization", scheme: "Bearer" }
+      features:   { names: [ "rbac", "authenticate_turnkey", "sign_up_turnkey", "sign_in_turnkey" ] }
+    },
+    {
+      source_name:   "cluster"
+      // One activation per pool: a project with a second kind of worker
+      // activates the plugin again under another name.
+      registered_as: "workers"
+    }
+  ]
+};
+
+option (w17.module) = {
+  connection: {
+    name: "jobs-postgres",
+    dialect: POSTGRES,
+    version: "18"
+  },
+  channels: [
+    {
+      name: "events"
+      transport: TRANSPORT_MEMORY
+      buffer_size: 1024
+      retry: { max_deliver: 1 }
+      drain_timeout_seconds: 5
+    }
+  ]
+};

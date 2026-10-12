@@ -1,0 +1,8 @@
+# A fresh account, signed in: every later step of the test carries its token.
+method: auth.AuthService.SignUp
+input:
+    email: sender${seq}@jobs.example
+    password: e2eSecret!23
+expect:
+    user_id: {capture: me.user_id, match: {matcher: not_empty}}
+    token: {capture: auth.token}

@@ -1,0 +1,107 @@
+# What this example adds to the generated stack (compose.w17.yaml), merged
+# over it by the include in compose.yaml: a relay, two workers, and the
+# one-shot setup that gives each of them, and the control plane, the
+# identity the others pin.
+services:
+  # The plugin's own dev sandbox expects an image built from a clone of the
+  # plugins repository. This example builds the same relay from the tree
+  # vendored into it instead (`relay` below), so the sandbox stays off.
+  clusterrelay:
+    profiles: ["plugin-sandbox"]
+
+  # One-shot: every identity the pool pins (relay/setup.sh).
+  identities:
+    build: { context: ., dockerfile: relay/Dockerfile }
+    entrypoint: ["/usr/local/bin/setup.sh"]
+    user: root
+    restart: "no"
+    volumes:
+      - control-plane:/control-plane
+      - relay-identity:/relay
+      - worker-a:/worker-a
+      - worker-b:/worker-b
+      - pins:/pins
+
+  # The relay workers attach to and jobs are sent through. Only the control
+  # plane's certificate may manage it.
+  relay:
+    build: { context: ., dockerfile: relay/Dockerfile }
+    restart: unless-stopped
+    depends_on:
+      identities: { condition: service_completed_successfully }
+    environment:
+      RELAY_IDENTITY_DIR: /relay
+      # What callers are told to dial: the relay's address on this network.
+      RELAY_PROXY_ADDRESS: relay:9000
+      # How long a granted slot waits for its caller (default 30s). Short
+      # here so the live suite can show an unclaimed ticket expiring.
+      RELAY_TICKET_TTL: 5s
+    volumes:
+      - relay-identity:/relay
+      # The fingerprints only: no other service's key is mounted here.
+      - pins:/pins:ro
+
+  # The cluster plugin runs here, as the control plane: it presents its
+  # client identity to the relay.
+  jobs-storage:
+    depends_on:
+      identities: { condition: service_completed_successfully }
+    volumes:
+      - control-plane:/control-plane:ro
+    environment:
+      JOBS_WORKERS_CLIENT_CERT_PATH: /control-plane/control-plane.crt
+      JOBS_WORKERS_CLIENT_KEY_PATH: /control-plane/control-plane.key
+
+  # One-shot: puts the relay in the plugin's registry, as an operator does
+  # on the Relays page of the admin.
+  register:
+    build: { context: ., dockerfile: register/Dockerfile }
+    restart: "no"
+    depends_on:
+      jobs-storage: { condition: service_started }
+    environment:
+      RELAY_FINGERPRINT_FILE: /pins/relay.fingerprint
+    volumes:
+      - pins:/pins:ro
+
+  # Jobs are sent only once the pool has a relay in it. (A dependency is
+  # also what lets `docker compose up --wait` accept a one-shot that exited.)
+  jobs-business:
+    depends_on:
+      register: { condition: service_completed_successfully }
+
+  worker-a:
+    build: { context: ., dockerfile: worker/Dockerfile }
+    restart: unless-stopped
+    depends_on:
+      relay: { condition: service_started }
+    environment:
+      WORKER_NAME: worker-a
+      WORKER_SLOTS: "1"
+      # How soon a banned worker asks again (default 5m), so a ban lifted by
+      # the live suite takes effect within its run.
+      WORKER_BANNED_RETRY: 2s
+    volumes:
+      - worker-a:/identity
+
+  worker-b:
+    build: { context: ., dockerfile: worker/Dockerfile }
+    restart: unless-stopped
+    depends_on:
+      relay: { condition: service_started }
+    environment:
+      WORKER_NAME: worker-b
+      WORKER_SLOTS: "1"
+      # How soon a banned worker asks again (default 5m), so a ban lifted by
+      # the live suite takes effect within its run.
+      WORKER_BANNED_RETRY: 2s
+    volumes:
+      - worker-b:/identity
+
+volumes:
+  control-plane:
+  # The fingerprints every party pins, and nothing secret.
+  pins:
+  relay-identity:
+  worker-a:
+  worker-b:
