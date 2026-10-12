@@ -144,5 +144,18 @@ jobs:
                     -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
                     go get "github.com/wandering-compiler/sdk/go@${{ steps.sdk.outputs.version }}"
                 done
+            # A module that reaches the SDK only through another one — a
+            # hand-written worker on a vendored plugin tree or on srcgo, by
+            # `replace` — is not moved above, yet the move raises what it has
+            # to list (a newer genproto, say), and its build then stops at
+            # "updates to go.mod needed". Tidy every module, as a consumer
+            # does after an SDK bump, and show what that changed.
+            find . -name go.mod -not -path '*/node_modules/*' -print0 \
+              | while IFS= read -r -d '' mod; do
+                  docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off \
+                    -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
+                    go mod tidy
+                done
+            git diff --stat -- '*go.mod' || true
           fi
           w17ctl test
