@@ -78,8 +78,10 @@ func TestTicket_AdmitsOneCall(t *testing.T) {
 func TestTicket_AnUnclaimedTicketExpires(t *testing.T) {
 	g := grant(t)
 	time.Sleep(6 * time.Second)
-	if _, err := redeem(g, g.GetTicket()); err == nil {
-		t.Fatal("a ticket used after its TTL was admitted")
+	// The relay refuses an expired ticket as it does a spent one; any other
+	// error (an unreachable relay, a failed pin) proves nothing about the TTL.
+	if _, err := redeem(g, g.GetTicket()); refusalReason(err) != "TICKET_NOT_REDEEMABLE" {
+		t.Fatalf("a ticket used after its TTL: %v (reason %q), want TICKET_NOT_REDEEMABLE", err, refusalReason(err))
 	}
 	if got := twoSlowJobs(t, signUp(t)); got[0] == got[1] {
 		t.Fatalf("both jobs ran on %q; the expired ticket's slot did not come back", got[0])

@@ -67,7 +67,7 @@ func main() {
 }
 
 // registered is whether err is the refusal of a second relay with this name:
-// the storage tier answers a unique constraint with InvalidArgument and says
+// the storage tier answers a unique constraint with InvalidArgument and
 // names the violation in the w17 error detail, not in the message.
 func registered(err error) bool {
 	if status.Code(err) == codes.AlreadyExists {
