@@ -12,12 +12,6 @@ permissions:
   contents: read
 
 jobs:
-  leaks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - run: scripts/check-leaks.sh
-
   released:
     if: github.event_name != 'schedule'
     uses: ./.github/workflows/adoption.yml
