@@ -12,9 +12,10 @@ import (
 // slowJob keeps a worker busy for two seconds (worker/main.go).
 const slowJob = "[slow] job"
 
-// Two jobs at once on a pool of two one-slot workers run on both.
-func TestPool_ConcurrentJobsUseBothWorkers(t *testing.T) {
-	token := signUp(t)
+// twoSlowJobs runs two slow jobs at once and returns the workers that ran
+// them.
+func twoSlowJobs(t *testing.T, token string) []string {
+	t.Helper()
 	got := make([]string, 2)
 	var wg sync.WaitGroup
 	for i := range got {
@@ -27,6 +28,12 @@ func TestPool_ConcurrentJobsUseBothWorkers(t *testing.T) {
 		})
 	}
 	wg.Wait()
+	return got
+}
+
+// Two jobs at once on a pool of two one-slot workers run on both.
+func TestPool_ConcurrentJobsUseBothWorkers(t *testing.T) {
+	got := twoSlowJobs(t, signUp(t))
 	if got[0] == got[1] {
 		t.Fatalf("both jobs ran on %q; a one-slot worker took two at once", got[0])
 	}
@@ -66,16 +73,16 @@ func TestTicket_AdmitsOneCall(t *testing.T) {
 }
 
 // A ticket nobody claims within the relay's ticket TTL (5s here) is refused,
-// and its slot goes back to the pool.
+// and its slot goes back to the pool: two jobs at once run on both workers
+// again, where a slot still held would leave them one.
 func TestTicket_AnUnclaimedTicketExpires(t *testing.T) {
 	g := grant(t)
 	time.Sleep(6 * time.Second)
 	if _, err := redeem(g, g.GetTicket()); err == nil {
 		t.Fatal("a ticket used after its TTL was admitted")
 	}
-	token := signUp(t)
-	if _, err := shout(token, "after"); err != nil {
-		t.Fatalf("the expired ticket's slot did not come back: %v", err)
+	if got := twoSlowJobs(t, signUp(t)); got[0] == got[1] {
+		t.Fatalf("both jobs ran on %q; the expired ticket's slot did not come back", got[0])
 	}
 }
 
@@ -118,18 +125,7 @@ func TestBan_StopsWorkReachingTheWorker(t *testing.T) {
 	// The first placement after the ban carries it to the relay. Two jobs at
 	// once would use both workers (TestPool_ConcurrentJobsUseBothWorkers);
 	// with worker-a banned both run on worker-b, one after the other.
-	got := make([]string, 2)
-	var wg sync.WaitGroup
-	for i := range got {
-		wg.Go(func() {
-			w, err := shout(token, slowJob)
-			if err != nil {
-				t.Errorf("job %d: %v", i, err)
-			}
-			got[i] = w
-		})
-	}
-	wg.Wait()
+	got := twoSlowJobs(t, token)
 	for i, w := range got {
 		if w != "worker-b" {
 			t.Errorf("job %d ran on %q, want only worker-b while worker-a is banned", i, w)

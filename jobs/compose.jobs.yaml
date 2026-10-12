@@ -20,6 +20,7 @@ services:
       - relay-identity:/relay
       - worker-a:/worker-a
       - worker-b:/worker-b
+      - pins:/pins
 
   # The relay workers attach to and jobs are sent through. Only the control
   # plane's certificate may manage it.
@@ -37,7 +38,8 @@ services:
       RELAY_TICKET_TTL: 5s
     volumes:
       - relay-identity:/relay
-      - control-plane:/control-plane:ro
+      # The fingerprints only: no other service's key is mounted here.
+      - pins:/pins:ro
 
   # The cluster plugin runs here, as the control plane: it presents its
   # client identity to the relay.
@@ -58,9 +60,9 @@ services:
     depends_on:
       jobs-storage: { condition: service_started }
     environment:
-      RELAY_FINGERPRINT_FILE: /worker-a/relay.fingerprint
+      RELAY_FINGERPRINT_FILE: /pins/relay.fingerprint
     volumes:
-      - worker-a:/worker-a:ro
+      - pins:/pins:ro
 
   # Jobs are sent only once the pool has a relay in it. (A dependency is
   # also what lets `docker compose up --wait` accept a one-shot that exited.)
@@ -98,6 +100,8 @@ services:
 
 volumes:
   control-plane:
+  # The fingerprints every party pins, and nothing secret.
+  pins:
   relay-identity:
   worker-a:
   worker-b:

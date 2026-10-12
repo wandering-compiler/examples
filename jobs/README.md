@@ -32,7 +32,10 @@ anything starts:
 
 - `identities` (one-shot, `relay/setup.sh`) mints the control plane's client
   identity, the relay's identity and the authority it issues worker
-  certificates from, and a certificate for each worker.
+  certificates from, and a certificate for each worker. Each key stays in the
+  volume of the service that presents it; the fingerprints the others pin go
+  to a volume of their own (`pins`), which is all the relay and `register`
+  mount.
 - `relay` starts pinned to the control plane's fingerprint, so nothing else
   may manage it.
 - `register` (one-shot, `register/`) puts the relay in the plugin's registry
@@ -58,8 +61,8 @@ livetest/run.sh      # the live suite
 ```
 
 The end-to-end suite runs a job through the whole chain and checks the
-answer, the worker that ran it, an empty job, and that the relay forwards any
-payload unchanged.
+answer and the worker that ran it, that an empty job is refused, and that the
+relay forwards any payload unchanged.
 
 `livetest/` checks the pool itself:
 

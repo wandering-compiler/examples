@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	workerspb "github.com/wandering-compiler/examples/jobs/w17/stubs/pb/domains/jobs/workers"
+	w17pb "github.com/wandering-compiler/sdk/go/pb/w17"
 )
 
 func env(key, def string) string {
@@ -28,7 +29,7 @@ func env(key, def string) string {
 }
 
 func main() {
-	pin, err := os.ReadFile(env("RELAY_FINGERPRINT_FILE", "/relay/relay.fingerprint"))
+	pin, err := os.ReadFile(env("RELAY_FINGERPRINT_FILE", "/pins/relay.fingerprint"))
 	if err != nil {
 		log.Fatalf("register: the relay's fingerprint: %v", err)
 	}
@@ -52,12 +53,30 @@ func main() {
 		case err == nil:
 			log.Printf("register: relay %s at %s registered", req.GetName(), req.GetUrl())
 			return
-		case status.Code(err) == codes.AlreadyExists || status.Code(err) == codes.InvalidArgument && strings.Contains(err.Error(), "UNIQUE"):
+		case registered(err):
 			log.Printf("register: relay %s was registered already", req.GetName())
 			return
+		case status.Code(err) == codes.InvalidArgument:
+			// The row itself was refused: no retry changes that.
+			log.Fatalf("register: %v", err)
 		case time.Now().After(deadline):
 			log.Fatalf("register: %v", err)
 		}
 		time.Sleep(2 * time.Second)
 	}
+}
+
+// registered is whether err is the refusal of a second relay with this name:
+// the storage tier answers a unique constraint with InvalidArgument and says
+// names the violation in the w17 error detail, not in the message.
+func registered(err error) bool {
+	if status.Code(err) == codes.AlreadyExists {
+		return true
+	}
+	for _, d := range status.Convert(err).Details() {
+		if e, ok := d.(*w17pb.ErrorDetail); ok && e.GetCode() == "UNIQUE_VIOLATION" {
+			return true
+		}
+	}
+	return false
 }
