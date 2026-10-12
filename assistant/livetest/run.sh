@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Runs the live suite against the example's stack: brings it up with the
+# generated e2e suite (`w17ctl test --keep`), runs this package inside the
+# stack's network trusting the stand-in provider's certificate authority,
+# checks the stack's logs, and tears the stack down.
+#
+#   livetest/run.sh            # from the example's root, after `w17ctl codegen`
+#   KEEP=1 livetest/run.sh     # leave the stack running afterwards
+set -euo pipefail
+cd "$(dirname "$0")/.."
+project="assistant-live-$$"
+cleanup() {
+  if [ -z "${KEEP:-}" ]; then docker compose -p "$project" down -v >/dev/null 2>&1 || true; fi
+}
+trap cleanup EXIT
+
+w17ctl test --keep --project "$project"
+
+docker run --rm --network "${project}_default" \
+  -v "${project}_fakellm-ca:/fakellm-ca:ro" -e SSL_CERT_FILE=/fakellm-ca/ca.pem \
+  -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOFLAGS=-buildvcs=false -e GOWORK=off \
+  -v "$PWD:/w" -w /w/livetest golang:1.26 \
+  go test -count=1 -race ./...
+
+# Neither the provider's key nor a prompt it quoted back may reach any log.
+logs="$(docker compose -p "$project" logs --no-color 2>&1)"
+for secret in test-key canary-5e1f9c0b; do
+  if grep -q -- "$secret" <<<"$logs"; then
+    echo "livetest: the stack's logs carry \"$secret\":" >&2
+    grep -- "$secret" <<<"$logs" | head -5 >&2
+    exit 1
+  fi
+done
+echo "livetest: logs carry neither the provider key nor a quoted prompt"

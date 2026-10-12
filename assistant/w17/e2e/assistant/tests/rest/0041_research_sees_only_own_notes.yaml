@@ -1,0 +1,9 @@
+# The search runs as the caller, so another account's notes are never found:
+# the note is written by one account, the question asked by another.
+method: notes.Assistant.Research
+pre: [auth/auth.yaml, fixtures/a_note.yaml, fixtures/a_second_session.yaml]
+input:
+    question: tomatoes
+expect:
+    searched: [tomatoes]
+    answer: {matcher: eq, value: "From your notes: []"}

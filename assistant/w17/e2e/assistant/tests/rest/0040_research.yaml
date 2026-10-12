@@ -1,0 +1,9 @@
+# The model searches the caller's notes (a tool the project runs) and answers
+# from what it found.
+method: notes.Assistant.Research
+pre: [auth/auth.yaml, fixtures/a_note.yaml]
+input:
+    question: tomatoes
+expect:
+    searched: [tomatoes]
+    answer: {matcher: regex, pattern: "Plant the tomatoes in May"}

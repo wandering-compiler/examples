@@ -1,0 +1,489 @@
+package llm
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/openai/openai-go/v2"
+	"github.com/openai/openai-go/v2/responses"
+	"golang.org/x/sync/errgroup"
+)
+
+// ErrTurnsExhausted ends a run whose model kept asking for tools and never
+// produced an answer.
+var ErrTurnsExhausted = errors.New("agent: the model did not finish within the turn limit")
+
+// ErrToolTimeout is a tool call that exceeded Limits.ToolTimeout. Not fatal.
+var ErrToolTimeout = errors.New("agent: the tool did not answer in time")
+
+// describe is what a watcher may be shown about a call: nothing for a name
+// the model invented, else the tool's activity text, or its declared name.
+func describe(t Tool, name string) (declared bool, activity string) {
+	if t == nil {
+		return false, ""
+	}
+	if a, ok := t.(Activity); ok && strings.TrimSpace(a.Activity()) != "" {
+		return true, a.Activity()
+	}
+	return true, name
+}
+
+// RunEvent is something that happened during a run. Exactly one field is set.
+type RunEvent struct {
+	// Delta is a fragment of the answer.
+	Delta string
+
+	// ToolStarted / ToolFinished bracket one tool call, for whoever is
+	// watching. Never required for correctness.
+	ToolStarted  *ToolEvent
+	ToolFinished *ToolEvent
+
+	// TurnSpent reports one model call the run SENT, as soon as it ends: what
+	// it cost and how it ended. One per turn, so a recorder can write a row
+	// per call priced when that call ran. A turn refused before the request,
+	// or never attempted because the context had already ended, sent nothing
+	// and gets none. The sink's error is ignored for it: accounting never
+	// ends a run.
+	TurnSpent *TurnSpend
+}
+
+// TurnSpend is one sent turn's cost.
+type TurnSpend struct {
+	// Usage is what the provider reported; unmeasured when it reported
+	// nothing (a dropped stream, a runaway cut off).
+	Usage Usage
+	// Status is the provider's terminal status, empty when the turn reached
+	// none — the stuck-model guard cut it short.
+	Status string
+	// Failed is set when the turn ended in an error.
+	Failed    bool
+	StartedAt time.Time
+}
+
+// ToolEvent describes one tool call in flight.
+type ToolEvent struct {
+	// CallID is fresh per dispatched call, not the provider's id: the same
+	// value reaches the tool (CallID(ctx)), so a watcher can correlate.
+	CallID string
+	Name   string
+	// Declared is false for a name the model invented; nothing about such a
+	// call is display-safe.
+	Declared bool
+	// Activity is the declared tool's display text (its name when it has
+	// none).
+	Activity string
+	// Arguments is what the model asked for, verbatim. Telemetry only — it is
+	// model output and must not be displayed.
+	Arguments string
+	// Result is what went back to the model. Telemetry only, same reason.
+	Result string
+	// Err is set on a finished call that failed. Display-safe text is the
+	// caller's business; this is for diagnosis.
+	Err error
+}
+
+// Run drives the tool-calling loop: model, tools, model again, until the model
+// answers or a limit stops it.
+//
+// The caller supplies the tools, and their Call is where the work happens. The
+// loop decides WHEN and IN WHAT ORDER, never what.
+func Run(
+	ctx context.Context,
+	client StreamCompleter,
+	m Model,
+	instructions string,
+	history []Message,
+	tools []Tool,
+	limits Limits,
+	sink func(RunEvent) error,
+) (*Completion, error) {
+	if client == nil {
+		return nil, errors.New("agent: no model client")
+	}
+	if sink == nil {
+		return nil, errors.New("agent: no event sink")
+	}
+	byName := make(map[string]Tool, len(tools))
+	for _, t := range tools {
+		// Both refusals below are PREFLIGHT: decided from the request alone,
+		// before any model call. They were plain errors, so the handler read
+		// them as failed provider calls — a usage row for a call that never
+		// happened, and `Unavailable` for what is an invalid argument (the
+		// same mistake the token-budget and JSON-object checks had made, and
+		// were fixed for, before these two).
+		if t == nil || t.Name() == "" {
+			return nil, preflight("a tool has no name")
+		}
+		if raw := t.Params(); len(raw) > 0 {
+			// Refused up front like a bad name: a schema that is not a JSON
+			// object used to be replaced by {"type":"object"}, so the tool
+			// was offered with no argument contract at all.
+			var obj map[string]any
+			if json.Unmarshal(raw, &obj) != nil || obj == nil {
+				return nil, preflight(fmt.Sprintf("tool %q: params_schema is not a JSON object", t.Name()))
+			}
+		}
+		if _, dup := byName[t.Name()]; dup {
+			// Two tools under one name means the model's choice is decided by
+			// map iteration order. Refused rather than resolved, because
+			// whichever rule we picked would be invisible to whoever wrote the
+			// second one.
+			return nil, preflight(fmt.Sprintf("two tools named %q", t.Name()))
+		}
+		byName[t.Name()] = t
+	}
+
+	// shown is every delta the reader was sent, across every turn: the text
+	// the run's answer reports. Only the last turn's text used to be kept,
+	// so text streamed beside tool calls was shown and then missing.
+	// Guarded: tool events reach the sink from parallel calls.
+	var (
+		shownMu sync.Mutex
+		shown   strings.Builder
+	)
+	userSink := sink
+	sink = func(e RunEvent) error {
+		if err := userSink(e); err != nil {
+			return err
+		}
+		if e.Delta != "" {
+			shownMu.Lock()
+			shown.WriteString(e.Delta)
+			shownMu.Unlock()
+		}
+		return nil
+	}
+
+	b := &budget{maxToolCalls: limits.maxToolCalls()}
+	input := inputFrom(history)
+	declared := toolParams(tools)
+
+	// What the run has spent so far, across turns.
+	//
+	// The run used to return the LAST turn's completion and with it the last
+	// turn's usage — so a run of three turns billed one, and the turns that
+	// asked for tools (each re-sending the whole growing input) were never
+	// recorded at all. A run that FAILED billed nothing, though every turn
+	// before the failure had been paid for. The error paths carry the total
+	// too: see SpentBy. Whether the total is MEASURED is runSpend's call: only
+	// when every turn sent reported its usage.
+	var spent runSpend
+
+	for turn := 0; turn < limits.maxTurns(); turn++ {
+		// The LAST permitted turn runs with no tools offered. Dispatching on it
+		// would apply writes whose results the model never gets to read — the
+		// run ends immediately after — so the model is asked to answer with
+		// what it already has instead.
+		offer := declared
+		if turn == limits.maxTurns()-1 {
+			offer = nil
+		}
+
+		// A context that has already ended means no request can leave: the
+		// SDK fails before sending anything. That ending is returned HERE,
+		// rather than by asking the SDK and reading its failure, because the
+		// failure branch below cannot tell "never sent" from "sent and never
+		// reported" — and counting a turn that never left as unreported made
+		// the whole run unmeasured, a floor where the bill was in fact
+		// complete. (A context that ends after this check, while the SDK is
+		// building or sending, is still counted as sent: the conservative
+		// side, an unmeasured row rather than a free one.) Before turn 0 this
+		// is a run that sent nothing at all, and its total is MEASURED at
+		// zero: the cost is known, because nothing went out.
+		if err := ctx.Err(); err != nil {
+			return nil, withSpent(err, spent.usage())
+		}
+
+		turnStartedAt := time.Now()
+		res, calls, err := completeTurn(ctx, client, m, instructions, history, input, offer, sink)
+		if err != nil {
+			switch u, ok := SpentBy(err); {
+			case ok:
+				spent.add(u)
+				_ = sink(RunEvent{TurnSpent: &TurnSpend{Usage: u, Failed: true, StartedAt: turnStartedAt}})
+			case IsPreflight(err):
+				// Refused before the request: no turn was sent.
+			default:
+				// Sent, and the provider never reported what it cost — a
+				// dropped stream, a runaway cut off, a transport error. The
+				// run's total is then a floor, and says so.
+				spent.add(Usage{})
+				_ = sink(RunEvent{TurnSpent: &TurnSpend{Failed: true, StartedAt: turnStartedAt}})
+			}
+			return nil, withSpent(err, spent.usage())
+		}
+		spent.add(res.Usage)
+		_ = sink(RunEvent{TurnSpent: &TurnSpend{Usage: res.Usage, Status: res.Status, StartedAt: turnStartedAt}})
+
+		if len(calls) == 0 {
+			answer := *res
+			answer.Usage = spent.usage()
+			shownMu.Lock()
+			answer.Text = shown.String()
+			shownMu.Unlock()
+			return &answer, nil
+		}
+		if turn == limits.maxTurns()-1 {
+			// The last turn offered no tools. A provider that returns calls
+			// anyway does not get them run: the model would never read the
+			// results, and a mutating call would be applied for nothing.
+			break
+		}
+
+		// Everything the model produced this turn goes back into the input, or
+		// the next turn re-asks for the same tools having forgotten it called
+		// them.
+		input = append(input, assistantToolCalls(calls)...)
+
+		out, err := dispatch(ctx, calls, byName, b, limits, sink)
+		if err != nil {
+			return nil, withSpent(err, spent.usage())
+		}
+		for i, tc := range calls {
+			input = append(input, responses.ResponseInputItemParamOfFunctionCallOutput(tc.ID, out[i]))
+		}
+	}
+
+	// Out of turns with the model still asking. Returning the last completion
+	// alongside the error would invite a caller to show it: it is a tool
+	// request, not an answer. What the turns cost travels on the error.
+	return nil, withSpent(ErrTurnsExhausted, spent.usage())
+}
+
+// dispatch runs one round of tool calls.
+func dispatch(
+	ctx context.Context,
+	calls []toolCall,
+	byName map[string]Tool,
+	b *budget,
+	limits Limits,
+	sink func(RunEvent) error,
+) ([]string, error) {
+	// The whole round is reserved up front — see budget.reserve.
+	if err := b.reserve(len(calls)); err != nil {
+		return nil, err
+	}
+	res := newResults(len(calls))
+
+	run := func(rctx context.Context, idx int, tc toolCall) error {
+		id := NewCallID()
+		declared, activity := describe(byName[tc.Name], tc.Name)
+		if err := sink(RunEvent{ToolStarted: &ToolEvent{
+			CallID: id, Name: tc.Name, Declared: declared, Activity: activity, Arguments: tc.Arguments,
+		}}); err != nil {
+			return Fatal(err)
+		}
+		out, toolErr := execTool(context.WithValue(rctx, callIDKey{}, id), tc, byName, limits.ToolTimeout)
+		res.set(idx, out, toolErr)
+		if err := sink(RunEvent{ToolFinished: &ToolEvent{
+			CallID: id, Name: tc.Name, Declared: declared, Activity: activity, Result: out, Err: toolErr,
+		}}); err != nil {
+			return Fatal(err)
+		}
+		// A tool error stays a tool RESULT — the model sees it and reacts.
+		// Only the loop's own failures travel up.
+		if isFatal(toolErr) {
+			return toolErr
+		}
+		return nil
+	}
+
+	type indexed struct {
+		idx int
+		tc  toolCall
+	}
+	var mutating, readOnly []indexed
+	for i, tc := range calls {
+		if t := byName[tc.Name]; t != nil && t.Mutating() {
+			mutating = append(mutating, indexed{i, tc})
+		} else {
+			readOnly = append(readOnly, indexed{i, tc})
+		}
+	}
+
+	// Mutating first and serially, so a read in the same round never observes a
+	// half-applied write.
+	for _, mu := range mutating {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := run(ctx, mu.idx, mu.tc); err != nil {
+			return nil, err
+		}
+	}
+	if len(readOnly) > 0 {
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(limits.maxParallel())
+		for _, r := range readOnly {
+			g.Go(func() error {
+				if err := gctx.Err(); err != nil {
+					return err
+				}
+				return run(gctx, r.idx, r.tc)
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return nil, err
+		}
+	}
+	return res.out, nil
+}
+
+// execTool runs a single tool. A tool error comes back twice: as the result
+// text, so the model sees it and can react, and as the error, so the activity
+// says it failed. The run continues either way — a tool failing is information,
+// not a crash.
+func execTool(ctx context.Context, tc toolCall, byName map[string]Tool, timeout time.Duration) (string, error) {
+	t, ok := byName[tc.Name]
+	if !ok {
+		// The model invented a tool. Told plainly rather than failed: it
+		// usually corrects itself on the next turn, and failing the run would
+		// discard everything it had got right so far.
+		return fmt.Sprintf("There is no tool named %q.", tc.Name), nil
+	}
+	callCtx := ctx
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		callCtx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	out, err := t.Call(callCtx, tc.Arguments)
+	if err != nil {
+		// The tool's own deadline, not the run's: it fails ALONE, and the
+		// model reads that it did not answer. Only when the error IS that
+		// deadline: a fatal error that merely lands after it (the caller
+		// closing its side, a failed send) must still end the run.
+		if ctx.Err() == nil && errors.Is(callCtx.Err(), context.DeadlineExceeded) &&
+			errors.Is(err, context.DeadlineExceeded) {
+			if t.Mutating() {
+				// Abandoned is not undone: whoever runs the tool may still
+				// apply it. Told so, or the model retries and applies it twice.
+				return fmt.Sprintf("The tool did not answer within %s. Its outcome is unknown: "+
+					"it may still have been applied, so do not repeat it without checking.", timeout), ErrToolTimeout
+			}
+			return fmt.Sprintf("The tool did not answer within %s.", timeout), ErrToolTimeout
+		}
+		if isFatal(err) {
+			return "", err
+		}
+		return "The tool failed: " + err.Error(), err
+	}
+	return out, nil
+}
+
+// completeTurn runs one model call, streaming its text, and returns whatever
+// tool calls it asked for.
+func completeTurn(
+	ctx context.Context,
+	client StreamCompleter,
+	m Model,
+	instructions string,
+	// history is carried alongside `input` purely so the JSON-object
+	// precondition can read the caller's own turns — the same check the
+	// non-tool path makes. Without it this path validated less than its twin.
+	history []Message,
+	input []responses.ResponseInputItemUnionParam,
+	tools []responses.ToolUnionParam,
+	sink func(RunEvent) error,
+) (*Completion, []toolCall, error) {
+	params, err := paramsForInput(m, instructions, history, input)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(tools) > 0 {
+		params.Tools = tools
+		params.ToolChoice = responses.ResponseNewParamsToolChoiceUnion{
+			OfToolChoiceMode: openai.Opt(responses.ToolChoiceOptionsAuto),
+		}
+	}
+	res, calls, err := streamTurn(ctx, client, *params, func(text string) error {
+		return sink(RunEvent{Delta: text})
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return res, calls, nil
+}
+
+// toolCall is one function call the model asked for. Arguments is the raw JSON
+// it produced and may be invalid — validating it is the tool's job, and its
+// complaint goes back to the model as the result.
+type toolCall struct {
+	ID        string
+	Name      string
+	Arguments string
+}
+
+// toolParams turns the caller's tools into what the provider expects.
+func toolParams(tools []Tool) []responses.ToolUnionParam {
+	out := make([]responses.ToolUnionParam, 0, len(tools))
+	for _, t := range tools {
+		schema := map[string]any{"type": "object"}
+		if raw := t.Params(); len(raw) > 0 {
+			var parsed map[string]any
+			if json.Unmarshal(raw, &parsed) == nil {
+				schema = parsed
+			}
+		}
+		out = append(out, responses.ToolParamOfFunction(t.Name(), schema, false))
+	}
+	for i, t := range tools {
+		if fn := out[i].OfFunction; fn != nil {
+			fn.Description = openai.String(t.Purpose())
+		}
+	}
+	return out
+}
+
+// assistantToolCalls records what the model asked for, so the next turn's input
+// shows that it asked.
+func assistantToolCalls(calls []toolCall) []responses.ResponseInputItemUnionParam {
+	out := make([]responses.ResponseInputItemUnionParam, 0, len(calls))
+	for _, tc := range calls {
+		out = append(out, responses.ResponseInputItemUnionParam{
+			OfFunctionCall: &responses.ResponseFunctionToolCallParam{
+				CallID:    tc.ID,
+				Name:      tc.Name,
+				Arguments: tc.Arguments,
+			},
+		})
+	}
+	return out
+}
+
+// paramsForInput is paramsFor with the input already built, for the loop, which
+// accumulates rather than converting a history each turn. ⚠️ This is
+// paramsFor's twin for the tool-calling loop, and the two have to validate
+// ALIKE. They did not: the JSON-object precondition and the preflight marker
+// were added to paramsFor only, so RunAgent went on answering a request the
+// provider is documented to refuse with a plain `Unavailable` and a usage row
+// for a call that never happened. `history` is the caller's own turns, which is
+// what the guard reads.
+func paramsForInput(m Model, instructions string, history []Message, input []responses.ResponseInputItemUnionParam) (*responses.ResponseNewParams, error) {
+	if strings.TrimSpace(m.ID) == "" {
+		return nil, preflight("no model id")
+	}
+	// Zero is "unstated" and is the caller's to resolve before reaching here;
+	// negative is a deliberate "no cap" and passes through.
+	if m.MaxTokens == 0 {
+		return nil, preflight("model has no token budget")
+	}
+	if err := checkJSONObjectPrecondition(m, instructions, history); err != nil {
+		return nil, err
+	}
+	params := responses.ResponseNewParams{
+		Model: m.ID,
+		Input: responses.ResponseNewParamsInputUnion{OfInputItemList: input},
+		Store: openai.Bool(false),
+	}
+	if instructions != "" {
+		params.Instructions = openai.String(instructions)
+	}
+	applyModelParams(&params, m)
+	return &params, nil
+}

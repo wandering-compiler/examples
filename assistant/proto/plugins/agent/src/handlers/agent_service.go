@@ -1,0 +1,241 @@
+// Package handlers is the agent plugin's gRPC surface.
+//
+// It is thin on purpose: it translates the wire contract into the `lib/llm`
+// call and back, and holds nothing. Everything worth explaining about the model
+// call itself lives in `lib/llm`, and everything about whose conversation this
+// is lives in the caller.
+package handlers
+
+import (
+	"context"
+	"log"
+	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	pb "github.com/wandering-compiler/plugins/agent/gen/pb"
+	"github.com/wandering-compiler/plugins/agent/lib/llm"
+)
+
+// AgentServiceHandler serves one model call per request.
+type AgentServiceHandler struct {
+	pb.UnimplementedAgentServiceServer
+
+	// Client is the non-streaming model seam. Never nil after RegisterPlugin.
+	Client llm.Completer
+
+	// StreamClient is the streaming half. Separate field because the two are
+	// separate interfaces — a deployment could satisfy one and not the other,
+	// and CompleteStream says so rather than panicking.
+	StreamClient llm.StreamCompleter
+
+	// Usage records what each call spent. Never nil after RegisterPlugin —
+	// an activation without `usage_persistence` gets a no-op, so the call
+	// sites need no feature check of their own. That is the point of a sink
+	// rather than an `if`: recording is unconditional here, and whether it
+	// lands anywhere is settled once, at wiring time.
+	Usage UsageSink
+
+	// Limits refuses a call whose scope is over its cap. Never nil after
+	// RegisterPlugin — an activation without `usage_persistence`, and a scope
+	// with no limit set, both get an implementation that allows. Same reason
+	// as Usage: the call site asks unconditionally.
+	Limits Limiter
+
+	// DefaultModel and DefaultMaxTokens fill in what a request leaves empty.
+	// Both come from the deployment, so a project can standardise its model
+	// without every caller repeating it.
+	DefaultModel     string
+	DefaultMaxTokens int64
+}
+
+// Complete runs one model call.
+func (h *AgentServiceHandler) Complete(ctx context.Context, req *pb.CompleteReq) (*pb.CompleteResp, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "agent: empty request")
+	}
+
+	if err := h.admitSpend(ctx, req.GetUsageScope(), req.GetUsageLabels()); err != nil {
+		return nil, err
+	}
+
+	m := h.modelFor(req)
+
+	// A caller whose context has already ended gets its own code back and no
+	// usage row: no request can leave, so there is no call to bill. Asking the
+	// SDK and reading its failure recorded a FAILED, unmeasured row — "this
+	// happened and its cost is unknown" — for a call whose cost is known to be
+	// zero, where RunAgent writes no row for the same ending.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, status.FromContextError(ctxErr).Err()
+	}
+
+	startedAt := time.Now()
+	out, err := llm.Complete(ctx, h.Client, m, req.GetInstructions(), messagesFrom(req.GetMessages()))
+	if err != nil {
+		// Recorded even though the call failed: a refused or timed-out
+		// completion can still have spent tokens at the provider, and a bill
+		// that drops them is wrong in the direction nobody checks. The token
+		// counts are whatever the provider managed to report — usually
+		// nothing, which is what `measured` is for.
+		// A request the LLM layer refused BEFORE calling the provider is not a
+		// failed call: no tokens were spent and nothing was unavailable.
+		// Recording one invents spend, and `Unavailable` sends the caller to the
+		// provider's status page for what is an invalid argument.
+		if llm.IsPreflight(err) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		h.recordUsage(req, m.ID, spentOn(out, err), OutcomeFailed, startedAt)
+		// The caller hanging up, or its own deadline passing, is not the
+		// model failing: answered with the caller's own Canceled or
+		// DeadlineExceeded and not logged, as CompleteStream and RunAgent do
+		// (callerLeft). This path alone said Unavailable and blamed the
+		// provider in the log, so a caller retrying on Unavailable retried
+		// its own timeout. Still recorded above: what the provider produced
+		// before the hang-up was paid for.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, status.FromContextError(ctxErr).Err()
+		}
+		// The provider's own text is NOT forwarded whole: it renders the
+		// deployment URL and, on some failures, fragments of the prompt, and
+		// neither belongs in an answer travelling back to whoever asked.
+		//
+		// But this used to forward NOTHING, while the comment here claimed the
+		// detail was in the bundle's logs. Nothing logged it. A one-field
+		// regression then costs PAID runs against a live model to bisect,
+		// because `the model call failed` names neither the field nor the
+		// status: the first line an operator sees, saying nothing.
+		//
+		// So: the provider's own CLASSIFICATION goes to the caller, and the
+		// classification PLUS the URL goes to the log.
+		//
+		// Not the whole error. The full text also carries the response BODY,
+		// and llm.go records that it sometimes quotes the prompt — so `%v`
+		// would put user input into a log that is shipped, aggregated and kept
+		// far longer than the request. A justification that covers the URL
+		// lets the body ride along.
+		log.Printf("agent: model call failed (model %q): %s", m.ID, llm.ProviderLogLine(err))
+		return nil, status.Error(codes.Unavailable, modelCallFailure(err))
+	}
+	h.recordUsage(req, m.ID, out, OutcomeOK, startedAt)
+
+	return &pb.CompleteResp{
+		Text:             out.Text,
+		Status:           statusOf(out.Status),
+		IncompleteReason: reasonOf(out.IncompleteReason),
+		Usage:            usageOf(out.Usage),
+	}, nil
+}
+
+// modelFor resolves the model from the request, falling back to the
+// deployment's defaults for whatever it leaves empty.
+func (h *AgentServiceHandler) modelFor(req *pb.CompleteReq) llm.Model {
+	m := llm.Model{ID: h.DefaultModel, MaxTokens: h.DefaultMaxTokens}
+	// The response format is a property of the REQUEST, not of the model spec,
+	// so it is read before the spec is. It used to be set below the early
+	// return, which meant a caller who relied on the deployment's default model
+	// — no ModelSpec at all — and asked for JSON_OBJECT got neither the
+	// provider's enforcement nor the preflight that guards it: free text where
+	// a JSON object was promised, and no error saying so.
+	m.JSONObject = req.GetResponseFormat() == pb.ResponseFormat_RESPONSE_FORMAT_JSON_OBJECT
+	spec := req.GetModel()
+	if spec == nil {
+		return m
+	}
+	if spec.GetId() != "" {
+		m.ID = spec.GetId()
+	}
+	// Non-zero is the caller speaking, including a NEGATIVE value, which is how
+	// "no cap" is said. Only zero falls through to the deployment default.
+	if spec.GetMaxTokens() != 0 {
+		m.MaxTokens = int64(spec.GetMaxTokens())
+	}
+	m.Effort = effortName(spec.GetEffort())
+	if spec.Temperature != nil {
+		t := spec.GetTemperature()
+		m.Temperature = &t
+	}
+	return m
+}
+
+func usageOf(u llm.Usage) *pb.ModelUsage {
+	return &pb.ModelUsage{
+		Model:             u.Model,
+		Measured:          u.Measured,
+		InputTokens:       int32(u.InputTokens),
+		OutputTokens:      int32(u.OutputTokens),
+		TotalTokens:       int32(u.TotalTokens),
+		CachedInputTokens: int32(u.CachedInputTokens),
+		ReasoningTokens:   int32(u.ReasoningTokens),
+	}
+}
+
+func messagesFrom(in []*pb.Message) []llm.Message {
+	out := make([]llm.Message, 0, len(in))
+	for _, msg := range in {
+		out = append(out, llm.Message{
+			Assistant: msg.GetRole() == pb.Role_ROLE_ASSISTANT,
+			Text:      msg.GetText(),
+		})
+	}
+	return out
+}
+
+// effortName maps the enum onto the provider's vocabulary. UNSPECIFIED becomes
+// the empty string rather than a guess: `lib/llm` then omits the field and the
+// provider applies its own default, which is a decision nobody here has to own.
+func effortName(e pb.Effort) string {
+	switch e {
+	case pb.Effort_EFFORT_NONE:
+		return "none"
+	case pb.Effort_EFFORT_LOW:
+		return "low"
+	case pb.Effort_EFFORT_MEDIUM:
+		return "medium"
+	case pb.Effort_EFFORT_HIGH:
+		return "high"
+	default:
+		return ""
+	}
+}
+
+// statusOf maps the provider's word onto the enum. An unrecognised status
+// becomes UNSPECIFIED rather than COMPLETED: a value the provider invents must
+// not arrive at the caller wearing the word "finished".
+func statusOf(s string) pb.Status {
+	switch s {
+	case llm.StatusCompleted:
+		return pb.Status_STATUS_COMPLETED
+	case llm.StatusIncomplete:
+		return pb.Status_STATUS_INCOMPLETE
+	default:
+		return pb.Status_STATUS_UNSPECIFIED
+	}
+}
+
+func reasonOf(r string) pb.IncompleteReason {
+	switch r {
+	case llm.ReasonMaxOutputTokens:
+		return pb.IncompleteReason_INCOMPLETE_REASON_MAX_OUTPUT_TOKENS
+	case llm.ReasonContentFilter:
+		return pb.IncompleteReason_INCOMPLETE_REASON_CONTENT_FILTER
+	default:
+		return pb.IncompleteReason_INCOMPLETE_REASON_UNSPECIFIED
+	}
+}
+
+// modelCallFailure renders the gRPC message for a failed model call.
+//
+// Names the provider's status, error type and — the one that matters — the
+// REQUEST FIELD it objected to, so a caller reads the cause instead of
+// bisecting for it. Falls back to the bare sentence when the failure is not
+// the provider's (a timeout, a dial error), where there is no classification
+// to quote and the log is the whole story.
+func modelCallFailure(err error) string {
+	if summary, ok := llm.ProviderFault(err); ok {
+		return "agent: the model call failed — the provider said: " + summary +
+			" (full detail is in the bundle's log)"
+	}
+	return "agent: the model call failed (detail is in the bundle's log)"
+}

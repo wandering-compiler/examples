@@ -1,0 +1,10 @@
+# One question, one answer, and what it cost as the provider counted it.
+# (The stand-in provider answers "Answer: <question>" and counts words.)
+method: notes.Assistant.Ask
+pre: [auth/auth.yaml]
+input:
+    question: What should I plant?
+expect:
+    answer: {matcher: eq, value: "Answer: What should I plant?"}
+    input_tokens: {matcher: eq, value: 14}
+    output_tokens: {matcher: eq, value: 6}

@@ -1,0 +1,206 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: w17\n"
+"POT-Creation-Date: 2026-10-12 15:53+0000\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "A token cannot expire in the past. Choose a later date."
+msgstr ""
+
+msgid "An account with this address already exists. Sign in instead."
+msgstr ""
+
+msgid "An account with this email address exists but has not verified it. Sign in with your password and verify the address first."
+msgstr ""
+
+msgid "An account with this email address exists, and the sign-in provider has not verified the address. Sign in with your password instead."
+msgstr ""
+
+msgid "Another change reached this first. Please try again."
+msgstr ""
+
+msgid "Authentication is temporarily unavailable. Please try again shortly."
+msgstr ""
+
+msgid "Authenticator apps are not available here. Your sign-in codes arrive by message instead."
+msgstr ""
+
+msgid "Confirm your email address before accepting this invitation."
+msgstr ""
+
+msgid "No permissions are in effect for you here. If access is scoped by organization, choose one and try again."
+msgstr ""
+
+msgid "Registration is by invitation only. Ask the organization you are joining to invite you."
+msgstr ""
+
+msgid "Registration is not open for this email address."
+msgstr ""
+
+msgid "Set up an authenticator app first. Recovery codes belong to it."
+msgstr ""
+
+msgid "Sign in to do this. An API token cannot create credentials."
+msgstr ""
+
+msgid "Signing in with the provider did not complete. Please start again."
+msgstr ""
+
+msgid "Something went wrong on our side."
+msgstr ""
+
+msgid "That expiry date is not a valid date."
+msgstr ""
+
+msgid "That role carries permissions you do not hold. A role can be granted only by someone who holds everything it grants."
+msgstr ""
+
+msgid "The item you asked for does not exist."
+msgstr ""
+
+msgid "The request could not be accepted as sent."
+msgstr ""
+
+msgid "The request took too long and was stopped."
+msgstr ""
+
+msgid "The request was cancelled before it finished."
+msgstr ""
+
+msgid "The service is temporarily unavailable."
+msgstr ""
+
+msgid "There is no organization role named {role}."
+msgstr ""
+
+msgid "This account has been disabled."
+msgstr ""
+
+msgid "This address does not belong to any organization here. Check the address you registered on."
+msgstr ""
+
+msgid "This authenticator app is already set up. To get new recovery codes, generate them."
+msgstr ""
+
+msgid "This cannot be done in the current state."
+msgstr ""
+
+msgid "This invitation is for a different email address, or has already been used. Ask for a new invitation."
+msgstr ""
+
+msgid "This is not available."
+msgstr ""
+
+msgid "This machine account holds a role with permissions you do not hold, so you cannot issue a token for it."
+msgstr ""
+
+msgid "This member holds a role with permissions you do not have, so you cannot change or remove their membership."
+msgstr ""
+
+msgid "This membership belongs to another organization."
+msgstr ""
+
+msgid "This request names two different organizations. Name one."
+msgstr ""
+
+msgid "This value is not in the expected format."
+msgstr ""
+
+msgid "Too many requests. Please wait and try again."
+msgstr ""
+
+msgid "Too many wrong codes. Wait 15 minutes and try again."
+msgstr ""
+
+msgid "Wrong email or password."
+msgstr ""
+
+msgid "You are not a member of the organization this request names. The W17-Org header takes the organization's slug."
+msgstr ""
+
+msgid "You are not signed in."
+msgstr ""
+
+msgid "You do not have access to this."
+msgstr ""
+
+msgid "already exists"
+msgstr ""
+
+msgid "conflicts with an existing record"
+msgstr ""
+
+msgid "extension must be one of: {extensions}"
+msgstr ""
+
+msgid "format is invalid"
+msgstr ""
+
+msgid "is required"
+msgstr ""
+
+msgid "may not be blank"
+msgstr ""
+
+msgid "must be a valid IP address"
+msgstr ""
+
+msgid "must be a valid JSON document"
+msgstr ""
+
+msgid "must be a valid MAC address"
+msgstr ""
+
+msgid "must be a valid URL"
+msgstr ""
+
+msgid "must be a valid UUID"
+msgstr ""
+
+msgid "must be a valid email address"
+msgstr ""
+
+msgid "must be a valid value"
+msgstr ""
+
+msgid "must be at least {min} (got {got})"
+msgstr ""
+
+msgid "must be at least {min} characters (got {got})"
+msgstr ""
+
+msgid "must be at most {max} (got {got})"
+msgstr ""
+
+msgid "must be at most {max} characters (got {got})"
+msgstr ""
+
+msgid "must be greater than {min} (got {got})"
+msgstr ""
+
+msgid "must be in [0, 100] (got {got})"
+msgstr ""
+
+msgid "must be in [0, 1] (got {got})"
+msgstr ""
+
+msgid "must be less than {max} (got {got})"
+msgstr ""
+
+msgid "must be one of: {choices}"
+msgstr ""
+
+msgid "must fit precision {precision} scale {scale}"
+msgstr ""
+
+msgid "referenced record does not exist"
+msgstr ""
+
+msgid "value violates constraint"
+msgstr ""
+
+msgid "{role} is a realm-wide role. An organization membership can only carry an organization-scoped role."
+msgstr ""

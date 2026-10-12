@@ -1,0 +1,10 @@
+go 1.26.1
+
+use (
+	./srcgo
+	./w17/services/assistant-business
+	./w17/services/assistant-gateway
+	./w17/services/assistant-storage
+	./w17/services/e2erunner
+	./w17/stubs
+)

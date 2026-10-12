@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package examples_assistant.assistant.notes;
+
+import "w17/field.proto";
+
+message AskReq {
+  string question = 1 [(w17.field) = { type: TEXT, min_len: 1, max_len: 4000 }];
+}
+
+message AskResp {
+  string answer        = 1;
+  // What the call cost, as the provider counted it.
+  int32  input_tokens  = 2;
+  int32  output_tokens = 3;
+}
+
+// One piece of a streamed answer: text as it is written, then the last one
+// with done set and the tokens counted.
+message AskChunk {
+  string text          = 1;
+  bool   done          = 2;
+  int32  input_tokens  = 3;
+  int32  output_tokens = 4;
+}
+
+message ResearchResp {
+  string answer = 1;
+  // The notes the model asked to see, in the order it asked.
+  repeated string searched = 2;
+}
+
+message MySpendReq {}
+
+// What the signed-in account's questions have cost so far, per model.
+message MySpendResp {
+  repeated ModelSpend models = 1;
+}
+
+message ModelSpend {
+  string model         = 1;
+  int64  calls         = 2;
+  int64  input_tokens  = 3;
+  int64  output_tokens = 4;
+}
+
+// Assistant is hand-written (the business package of the srcgo module): it
+// decides the model, the instructions and whose bill a call goes on, so a
+// caller can ask questions and nothing else.
+service Assistant {
+  // Ask — one question, one answer.
+  rpc Ask(AskReq) returns (AskResp);
+  // AskStream — the same, streamed as it is written.
+  rpc AskStream(AskReq) returns (stream AskChunk);
+  // Research — the model may search the caller's notes (a tool this
+  // service runs) before it answers.
+  rpc Research(AskReq) returns (ResearchResp);
+  // MySpend — what the caller's questions have cost.
+  rpc MySpend(MySpendReq) returns (MySpendResp);
+}

@@ -1,0 +1,7 @@
+# A new account has spent nothing. (What questions cost once asked is checked
+# by the live suite: the agent plugin records usage asynchronously.)
+method: notes.Assistant.MySpend
+pre: [auth/auth.yaml]
+input: {}
+expect:
+    models: {matcher: empty}

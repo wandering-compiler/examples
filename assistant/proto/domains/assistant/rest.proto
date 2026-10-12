@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package examples_assistant.assistant;
+
+import "w17/rest.proto";
+
+option (w17.rest_api) = {
+  name:        "public",
+  version:     "v1",
+  prefix:      "/api/v1",
+  description: "Notes and an assistant that answers questions about them, for signed-in accounts.",
+  auth_methods: [ { ref: "auth.AuthService.Authenticate", token_types: [ TOKEN_TYPE_BEARER ] } ],
+  include: [ { plugin: "auth" } ],
+  groups: [
+    {
+      prefix:      "/notes",
+      description: "The signed-in account's notes.",
+      endpoints: [
+        { ref: "notes.NoteMutation.CreateNote", method: POST, path: "", body: "*" }
+      ]
+    },
+    {
+      prefix:      "/assistant",
+      description: "Questions to the assistant, and what they cost.",
+      endpoints: [
+        { ref: "notes.Assistant.Ask",       method: POST, path: "/ask",          body: "*" },
+        { ref: "notes.Assistant.Research",  method: POST, path: "/research",     body: "*" },
+        { ref: "notes.Assistant.MySpend",   method: GET,  path: "/spend" }
+      ],
+      // Server-sent events: the answer as it is written (GET, the question
+      // as a query parameter).
+      streams: [
+        { ref: "notes.Assistant.AskStream", path: "/ask/stream" }
+      ]
+    }
+  ]
+};

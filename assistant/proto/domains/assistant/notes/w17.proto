@@ -1,0 +1,5 @@
+syntax = "proto3";
+
+// The notes module: inherits the connection from the domain.
+
+package examples_assistant.assistant.notes;

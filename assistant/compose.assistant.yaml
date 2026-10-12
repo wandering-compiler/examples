@@ -1,0 +1,29 @@
+# What this example adds to the generated stack (compose.w17.yaml), merged
+# over it by the include in compose.yaml.
+services:
+  # A stand-in for the language-model provider (fakellm/), so the example
+  # runs without a provider account. It serves HTTPS with a certificate
+  # authority it makes at start and writes to the fakellm-ca volume.
+  fakellm:
+    build: fakellm
+    restart: unless-stopped
+    volumes:
+      - fakellm-ca:/ca
+
+  assistant-storage:
+    depends_on:
+      fakellm:
+        condition: service_healthy
+    volumes:
+      - fakellm-ca:/fakellm-ca:ro
+    environment:
+      # The agent plugin runs here. It sends its key only over HTTPS, so the
+      # bundle trusts the fake's authority, and nothing else, for this stack.
+      SSL_CERT_FILE: /fakellm-ca/ca.pem
+      ASSISTANT_AGENT_ENDPOINT: https://fakellm:8443
+      # A test value, never a real key.
+      ASSISTANT_AGENT_API_KEY: test-key
+      ASSISTANT_AGENT_DEFAULT_MODEL: gpt-test
+
+volumes:
+  fakellm-ca:
