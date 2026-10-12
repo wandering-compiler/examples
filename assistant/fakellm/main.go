@@ -19,10 +19,11 @@
 // "decides" to call the first tool with {"query": <the question>}; once tool
 // output is in the input, it answers from it.
 //
-// GET /_test/requests returns what the fake received (the last 200, newest
-// last), so a test can check what the plugin sent; the API key is never
-// recorded. Its X-Fakellm-Total header counts every request ever received,
-// the ones no longer listed included.
+// GET /_test/requests returns the requests the fake answered (the last 200,
+// newest last), so a test can check what the plugin sent; the API key is
+// never recorded. Its X-Fakellm-Total header counts every request ever POSTed
+// to it: the ones no longer listed, and the ones it refused (a wrong key, a
+// malformed body), included.
 package main
 
 import (
@@ -163,6 +164,10 @@ type request struct {
 var errorMarker = regexp.MustCompile(`\[error:(\d{3})\]`)
 
 func (f *fake) respond(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	f.seq++
+	id := f.seq
+	f.mu.Unlock()
 	if !strings.HasSuffix(r.URL.Path, "/responses") {
 		http.NotFound(w, r)
 		return
@@ -186,8 +191,6 @@ func (f *fake) respond(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.mu.Lock()
-	f.seq++
-	id := f.seq
 	f.seen = append(f.seen, raw)
 	if len(f.seen) > 200 {
 		f.seen = f.seen[len(f.seen)-200:]

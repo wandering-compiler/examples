@@ -37,12 +37,15 @@ func providerRequests(t *testing.T) (reqs []map[string]any, total int) {
 // the configured model.
 func TestProvider_EveryRequestIsUnstoredAndUsesTheProjectsSettings(t *testing.T) {
 	a := signUp(t)
-	mustAsk(t, a, "Is anything kept?")
+	// Unique, so a stack kept from an earlier run cannot supply the request.
+	question := "Is anything kept? " + randomHex(6)
+	mustAsk(t, a, question)
 	reqs, _ := providerRequests(t)
-	if len(reqs) == 0 {
-		t.Fatal("the provider received nothing")
-	}
+	found := false
 	for i, r := range reqs {
+		if b, _ := json.Marshal(r); strings.Contains(string(b), question) {
+			found = true
+		}
 		if store, ok := r["store"].(bool); !ok || store {
 			t.Errorf("request %d: store = %v, want false", i, r["store"])
 		}
@@ -52,6 +55,9 @@ func TestProvider_EveryRequestIsUnstoredAndUsesTheProjectsSettings(t *testing.T)
 		if ins, _ := r["instructions"].(string); !strings.HasPrefix(ins, "You answer questions from the person who keeps these notes.") {
 			t.Errorf("request %d: instructions = %q", i, ins)
 		}
+	}
+	if !found {
+		t.Fatal("the provider did not receive the question")
 	}
 }
 
