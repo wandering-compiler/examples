@@ -44,3 +44,6 @@ keys/
 
 # Base rsync ignore for `w17ctl stack` remote mode — regenerated every codegen.
 /rsync.ignore
+
+# The lock file w17ctl holds while it rewrites lock.yaml.
+/lock.yaml.lock

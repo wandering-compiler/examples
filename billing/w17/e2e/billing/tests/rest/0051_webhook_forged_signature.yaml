@@ -1,4 +1,6 @@
-# A signature made without the signing secret is refused.
+# A signature made without the signing secret is refused. Its timestamp is
+# long past too, which is reason enough on its own; livetest/ checks each
+# reason separately, a wrong secret at the current time included.
 method: payment.PaymentService.IngestStripe
 headers:
     Stripe-Signature: t=1700000000,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56ff536d0ce8e108d8bd

@@ -17,6 +17,10 @@ hand-written Go: both plugins are activated in
 - **Webhooks** (`POST /api/v1/webhooks/stripe`): no account, but every delivery
   must carry the provider's signature over the exact body.
 
+Unlike the other examples, this one pins its plugins to a commit on the
+plugins repository's `main` (`w17/lock.yaml`), not a release, until a
+release carries the fixes it needs.
+
 ## The provider
 
 `fakestripe/` is a small stateful stand-in for the part of the Stripe API the

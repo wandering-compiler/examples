@@ -92,34 +92,47 @@ func signUp(t *testing.T) account {
 	return account{id: resp.UserID, token: resp.Token}
 }
 
+// The helpers that take a *testing.T fail the test with t.Fatal, which is
+// only allowed on the test's own goroutine. Each has a try* twin that returns
+// the error instead, for the tests that fire requests concurrently.
+
 // call makes one REST call and decodes the answer into out, failing the test
 // unless the status is want.
 func call(t *testing.T, token, method, path string, body any, want int, out any) {
 	t.Helper()
-	status, raw := do(t, token, method, path, body)
-	if status != want {
-		t.Fatalf("%s %s: status %d, want %d: %s", method, path, status, want, raw)
-	}
-	if out != nil {
-		if err := json.Unmarshal(raw, out); err != nil {
-			t.Fatalf("%s %s: decode %s: %v", method, path, raw, err)
-		}
+	if err := tryCall(token, method, path, body, want, out); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func do(t *testing.T, token, method, path string, body any) (int, []byte) {
-	t.Helper()
+func tryCall(token, method, path string, body any, want int, out any) error {
+	status, raw, err := do(token, method, path, body)
+	if err != nil {
+		return err
+	}
+	if status != want {
+		return fmt.Errorf("%s %s: status %d, want %d: %s", method, path, status, want, raw)
+	}
+	if out != nil {
+		if err := json.Unmarshal(raw, out); err != nil {
+			return fmt.Errorf("%s %s: decode %s: %v", method, path, raw, err)
+		}
+	}
+	return nil
+}
+
+func do(token, method, path string, body any) (int, []byte, error) {
 	var rd io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			t.Fatal(err)
+			return 0, nil, err
 		}
 		rd = bytes.NewReader(b)
 	}
 	req, err := http.NewRequest(method, gateway+path, rd)
 	if err != nil {
-		t.Fatal(err)
+		return 0, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
@@ -127,11 +140,14 @@ func do(t *testing.T, token, method, path string, body any) (int, []byte) {
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("%s %s: %v", method, path, err)
+		return 0, nil, fmt.Errorf("%s %s: %v", method, path, err)
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
-	return resp.StatusCode, raw
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, nil, fmt.Errorf("%s %s: read the answer: %v", method, path, err)
+	}
+	return resp.StatusCode, raw, nil
 }
 
 // payment is the part of the plugin's Payment the tests read. The status is
@@ -151,13 +167,21 @@ const (
 
 func pay(t *testing.T, a account, amount string) payment {
 	t.Helper()
+	p, err := tryPay(a, amount)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func tryPay(a account, amount string) (payment, error) {
 	var resp struct {
 		Payment payment `json:"payment"`
 	}
-	call(t, a.token, http.MethodPost, "/api/v1/billing/payments", map[string]any{
+	err := tryCall(a.token, http.MethodPost, "/api/v1/billing/payments", map[string]any{
 		"amount": amount, "currency": "eur", "idempotency_key": "order-" + randomHex(6),
 	}, http.StatusOK, &resp)
-	return resp.Payment
+	return resp.Payment, err
 }
 
 func paymentOf(t *testing.T, a account, id string) payment {
@@ -219,9 +243,17 @@ func signature(body []byte, secret string, ts int64) string {
 // header (none when empty) and returns the status.
 func deliver(t *testing.T, body []byte, sig string) int {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPost, gateway+"/api/v1/webhooks/stripe", bytes.NewReader(body))
+	status, err := tryDeliver(body, sig)
 	if err != nil {
 		t.Fatal(err)
+	}
+	return status
+}
+
+func tryDeliver(body []byte, sig string) (int, error) {
+	req, err := http.NewRequest(http.MethodPost, gateway+"/api/v1/webhooks/stripe", bytes.NewReader(body))
+	if err != nil {
+		return 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if sig != "" {
@@ -229,17 +261,21 @@ func deliver(t *testing.T, body []byte, sig string) int {
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatal(err)
+		return 0, fmt.Errorf("webhook delivery: %v", err)
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
-	return resp.StatusCode
+	return resp.StatusCode, nil
 }
 
 // deliverSigned delivers body signed now with the project's secret.
 func deliverSigned(t *testing.T, body []byte) int {
 	t.Helper()
 	return deliver(t, body, signature(body, webhookSecret, time.Now().Unix()))
+}
+
+func tryDeliverSigned(body []byte) (int, error) {
+	return tryDeliver(body, signature(body, webhookSecret, time.Now().Unix()))
 }
 
 func count(t *testing.T, query string, args ...any) int {

@@ -32,17 +32,20 @@ func TestWebhook_ConcurrentRedeliveryHasOneEffect(t *testing.T) {
 	body := succeeded(t, p.ProviderPaymentID)
 
 	const n = 8
-	statuses := make([]int, n)
 	var wg sync.WaitGroup
 	for i := range n {
-		wg.Go(func() { statuses[i] = deliverSigned(t, body) })
+		wg.Go(func() {
+			s, err := tryDeliverSigned(body)
+			if err != nil {
+				t.Errorf("delivery %d: %v", i, err)
+				return
+			}
+			if s != http.StatusOK {
+				t.Errorf("delivery %d answered %d; every copy of an authentic event must be acknowledged", i, s)
+			}
+		})
 	}
 	wg.Wait()
-	for i, s := range statuses {
-		if s != http.StatusOK {
-			t.Errorf("delivery %d answered %d; every copy of an authentic event must be acknowledged", i, s)
-		}
-	}
 	if got := paymentOf(t, a, p.ID).Status; got != statusSucceeded {
 		t.Fatalf("payment is %d, want %d", got, statusSucceeded)
 	}

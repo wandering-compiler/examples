@@ -51,7 +51,12 @@ func TestTopUp_CreditedOnceOnConfirmation(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 6 {
 		wg.Go(func() {
-			if got := deliverSigned(t, body); got != http.StatusOK {
+			got, err := tryDeliverSigned(body)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if got != http.StatusOK {
 				t.Errorf("delivery answered %d", got)
 			}
 		})
@@ -138,9 +143,16 @@ func TestCharge_ConcurrentFirstChargesShareOneCustomer(t *testing.T) {
 	const n = 6
 	var wg sync.WaitGroup
 	for range n {
-		wg.Go(func() { pay(t, a, "1.00") })
+		wg.Go(func() {
+			if _, err := tryPay(a, "1.00"); err != nil {
+				t.Error(err)
+			}
+		})
 	}
 	wg.Wait()
+	if t.Failed() {
+		t.FailNow()
+	}
 	if got := count(t, `SELECT count(*) FROM payment_customer WHERE user_id = $1`, a.id); got != 1 {
 		t.Fatalf("customers = %d, want 1", got)
 	}
