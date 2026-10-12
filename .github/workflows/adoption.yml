@@ -34,9 +34,49 @@ permissions:
   contents: read
 
 jobs:
-  examples:
+  # Which examples to run: the `examples` input, or every directory with a
+  # w17/lock.yaml.
+  list:
+    runs-on: ubuntu-latest
+    outputs:
+      examples: ${{ steps.list.outputs.examples }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: wandering-compiler/examples
+          ref: ${{ github.repository == 'wandering-compiler/examples' && github.sha || 'main' }}
+          path: examples
+
+      - id: list
+        working-directory: examples
+        run: |
+          set -euo pipefail
+          list="${{ inputs.examples }}"
+          if [ -z "$list" ]; then
+            # `if`, not `[ -f … ] && echo`: the last directory without a lock
+            # would end the loop non-zero and set -e would stop the step silently.
+            for d in */; do
+              if [ -f "$d/w17/lock.yaml" ]; then list="$list ${d%/}"; fi
+            done
+          fi
+          [ -n "$list" ] || { echo "::error::no example (a directory with w17/lock.yaml) found"; exit 1; }
+          # shellcheck disable=SC2086 # the list is space-separated on purpose
+          json="$(printf '%s\n' $list | jq -R . | jq -cs .)"
+          echo "examples=$json" >> "$GITHUB_OUTPUT"
+          echo "examples: $json"
+
+  # One job per example, in parallel: each example is its own project with its
+  # own stack, so nothing is shared between them, and the slowest example sets
+  # the run's length rather than the sum of all of them.
+  example:
+    needs: list
+    name: ${{ matrix.example }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        example: ${{ fromJSON(needs.list.outputs.examples) }}
     env:
       W17_TOKEN: ${{ secrets.W17_TOKEN }}
       # A runner's checkout has no branch, and `w17ctl test` syncs the schema
@@ -77,48 +117,32 @@ jobs:
           echo "SDK at $v"
 
       - name: Generate, build and test
-        working-directory: examples
+        working-directory: examples/${{ matrix.example }}
         run: |
           set -euo pipefail
-          list="${{ inputs.examples }}"
-          if [ -z "$list" ]; then
-            # `if`, not `[ -f … ] && echo`: the last directory without a lock
-            # would end the loop non-zero and set -e would stop the step silently.
-            for d in */; do
-              if [ -f "$d/w17/lock.yaml" ]; then list="$list ${d%/}"; fi
+          # The plugins under review replace the vendored trees. Copied, not
+          # `w17ctl plugin update`: that records the version in the lock,
+          # and a lock edit is a person's (the console refuses it to a
+          # machine account). Codegen builds from the tree it finds.
+          if [ -n "${{ inputs.plugins_ref }}" ]; then
+            for dir in proto/plugins/*/; do
+              p="$(basename "$dir")"
+              if [ -d "$GITHUB_WORKSPACE/plugins/$p" ]; then
+                rsync -a --delete "$GITHUB_WORKSPACE/plugins/$p/" "$dir"
+              fi
             done
           fi
-          [ -n "$list" ] || { echo "::error::no example (a directory with w17/lock.yaml) found"; exit 1; }
-          for ex in $list; do
-            echo "::group::$ex"
-            (
-              cd "$ex"
-              # The plugins under review replace the vendored trees. Copied, not
-              # `w17ctl plugin update`: that records the version in the lock,
-              # and a lock edit is a person's (the console refuses it to a
-              # machine account). Codegen builds from the tree it finds.
-              if [ -n "${{ inputs.plugins_ref }}" ]; then
-                for dir in proto/plugins/*/; do
-                  p="$(basename "$dir")"
-                  if [ -d "$GITHUB_WORKSPACE/plugins/$p" ]; then
-                    rsync -a --delete "$GITHUB_WORKSPACE/plugins/$p/" "$dir"
-                  fi
+          w17ctl codegen --force
+          # The SDK under review, after codegen: codegen writes the lock's
+          # SDK pin into every module, and `w17ctl sdk pin` is a lock edit
+          # too. `go get` moves each module (and its go.sum) to the commit.
+          if [ -n "${{ steps.sdk.outputs.version }}" ]; then
+            find . -name go.mod -not -path '*/node_modules/*' -print0 \
+              | xargs -0 grep -l 'wandering-compiler/sdk/go ' \
+              | while IFS= read -r mod; do
+                  docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off \
+                    -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
+                    go get "github.com/wandering-compiler/sdk/go@${{ steps.sdk.outputs.version }}"
                 done
-              fi
-              w17ctl codegen --force
-              # The SDK under review, after codegen: codegen writes the lock's
-              # SDK pin into every module, and `w17ctl sdk pin` is a lock edit
-              # too. `go get` moves each module (and its go.sum) to the commit.
-              if [ -n "${{ steps.sdk.outputs.version }}" ]; then
-                find . -name go.mod -not -path '*/node_modules/*' -print0 \
-                  | xargs -0 grep -l 'wandering-compiler/sdk/go ' \
-                  | while IFS= read -r mod; do
-                      docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off \
-                        -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
-                        go get "github.com/wandering-compiler/sdk/go@${{ steps.sdk.outputs.version }}"
-                    done
-              fi
-              w17ctl test
-            )
-            echo "::endgroup::"
-          done
+          fi
+          w17ctl test
