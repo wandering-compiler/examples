@@ -26,7 +26,7 @@ release carries the fixes it needs.
 `fakestripe/` is a small stateful stand-in for the part of the Stripe API the
 plugin calls, so the example runs without a Stripe account. Unlike Stripe's
 own mock it keeps what it creates and enforces idempotency keys and the refund
-cap. `compose.yaml` points the plugin at it with test values; the plugin
+cap. `compose.billing.yaml` points the plugin at it with test values; the plugin
 refuses a live key (`sk_live_…`) anywhere but the real API.
 
 ## Tests

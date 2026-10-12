@@ -1,23 +1,6 @@
-# Local developer compose: the generated stack (compose.w17.yaml) plus what
-# this example adds to it.
+# Local developer compose: the generated stack (compose.w17.yaml) with what
+# this example adds to it (compose.billing.yaml) merged over it.
 include:
-  - compose.w17.yaml
-
-services:
-  # A stateful stand-in for the Stripe API (fakestripe/), so the example
-  # runs without a Stripe account. Not for production.
-  fakestripe:
-    build: fakestripe
-    restart: unless-stopped
-
-  billing-storage:
-    depends_on:
-      fakestripe:
-        condition: service_healthy
-    environment:
-      # Test values, never real ones: the plugin refuses to start when a live
-      # key (sk_live_…) is sent to anything but the real API.
-      BILLING_PAYMENT_PROVIDER_API_BASE: http://fakestripe:12111
-      BILLING_PAYMENT_PROVIDER_API_KEY: sk_test_example
-      # Signs the webhooks the live suite delivers (livetest/).
-      BILLING_PAYMENT_WEBHOOK_SIGNING_SECRET: whsec_example
+  - path:
+      - compose.w17.yaml
+      - compose.billing.yaml
