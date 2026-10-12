@@ -1,0 +1,8 @@
+# The provider failing is a temporary failure, and says nothing about the
+# provider to the caller.
+method: notes.Assistant.Ask
+pre: [auth/auth.yaml]
+input:
+    question: "[error:500] Anyone there?"
+expect_error:
+    code: UNAVAILABLE

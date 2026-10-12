@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package examples_assistant.assistant.notes;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/assistant/notes/types/models.proto";
+
+message CreateNoteReq {
+  string title = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+  string body  = 2 [(w17.field) = { type: TEXT, blank: true }];
+}
+
+service NoteMutation {
+  rpc CreateNote(CreateNoteReq) returns (Note) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO notes.Note SET title = :title, body = :body "
+          "RETURNING id, owner_id, title, body, created_at"
+      }
+    };
+  }
+}

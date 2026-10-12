@@ -1,0 +1,11 @@
+# A note belongs to whoever wrote it: the owner is stamped from the session,
+# never taken from the request.
+method: notes.NoteMutation.CreateNote
+pre: [auth/auth.yaml]
+input:
+    title: Garden
+    body: Plant the tomatoes in May.
+expect:
+    id: {matcher: not_empty}
+    owner_id: {matcher: eq, value: "${me.user_id}"}
+    title: {matcher: eq, value: Garden}

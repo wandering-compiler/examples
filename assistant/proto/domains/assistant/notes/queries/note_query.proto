@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package examples_assistant.assistant.notes;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/assistant/notes/types/models.proto";
+
+message SearchNotesReq {
+  // A LIKE pattern over the title and the body ("%" + words + "%").
+  string pattern = 1 [(w17.field) = { type: CHAR, max_len: 210 }];
+  int32  limit   = 2 [(w17.field) = { type: NUMBER, gte: 1, lte: 20 }];
+}
+
+message SearchNotesResp { repeated Note notes = 1; }
+
+service NoteQuery {
+  rpc SearchNotes(SearchNotesReq) returns (SearchNotesResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.owner_id, n.title, n.body, n.created_at "
+          "FROM notes.Note n "
+          "WHERE n.title LIKE :pattern OR n.body LIKE :pattern "
+          "ORDER BY n.created_at DESC "
+          "LIMIT :limit"
+      }
+    };
+  }
+}

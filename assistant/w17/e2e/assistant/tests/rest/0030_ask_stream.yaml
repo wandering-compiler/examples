@@ -1,0 +1,14 @@
+# The answer streamed as it is written: a frame per piece of text, then one
+# that says it is done and what it cost.
+method: notes.Assistant.AskStream
+pre: [auth/auth.yaml]
+input:
+    question: Stream me
+expect_stream:
+    frames:
+        - text: {matcher: eq, value: "Answer: "}
+        - text: {matcher: eq, value: "Stream "}
+        - text: {matcher: eq, value: me}
+        - done: {matcher: eq, value: true}
+          input_tokens: {matcher: eq, value: 12}
+          output_tokens: {matcher: eq, value: 4}

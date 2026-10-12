@@ -1,0 +1,58 @@
+admin_languages: []
+admin_wire: CLIENT_WIRE_UNSPECIFIED
+connections:
+    - default: true
+      name: assistant-postgres
+      target_content_sha256: ""
+      target_migration_id: ""
+formats: {}
+generated_code:
+    binaries: []
+    business_bundles:
+        - domain: assistant
+          env: []
+          register: domains/assistant/notes/business
+    ci_configs: []
+    clients: []
+    deploy_targets: []
+    e2e: true
+    grpc_clients: []
+    pb_stubs:
+        - language: go
+          output_root: ""
+          package: ""
+    proto_dir: proto
+    replicas: []
+    stubs: srcgo/gen
+infra: null
+languages:
+    - en
+languages_dir: w17/languages
+org_id: 01a08faa-bba7-7f3c-bc4b-962c69e23b74
+org_slug: wandering-compiler
+plugins:
+    - git:
+        commit: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        digest: d47d92809553ab84fab3b01ae768e855d220c4ebcd70ec3d5ecf256a0ace52b7
+        ref: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        repo: https://github.com/wandering-compiler/plugins
+      name: agent
+      source: git
+      version: 0.1.0-rc.5
+    - git:
+        commit: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        digest: 7739875e99db4ad275ff8903e4614556e6698a3b0b6d392390adab7f6c6f6d5c
+        ref: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        repo: https://github.com/wandering-compiler/plugins
+      name: auth
+      source: git
+      version: 0.1.0-rc.25
+project: examples-assistant
+project_id: 69eff853-3d53-4330-bd4d-9764220f4153
+sdk_version: v0.1.0-rc.17
+secrets: null
+signature:
+    alg: ed25519/v1
+    body: 4ad4f80b6b3a9fa9218b876f34d90d8c5f2206c2f9e30016bb93f3dfadb436336fafbbb589f9ee8fa6af9db1dac1eb51706539acc5e418ddb032d38c91328b09
+    key_id: ed25519:d1f1f31adf965af1
+w17_url: grpcs://api.w17.app:50051

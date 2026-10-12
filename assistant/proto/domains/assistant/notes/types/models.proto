@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package examples_assistant.assistant.notes;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+
+// A note an account keeps. The assistant reads them through a tool when it
+// researches a question.
+message Note {
+  option (w17.db.table) = {};
+  // Every read and write is the signed-in account's own: storage adds the
+  // owner to each WHERE and stamps it on each INSERT, from the identity the
+  // auth plugin vouches for.
+  option (w17.db.scope) = { entries: [{ name: "user_id", path: "owner_id" }] };
+
+  string id       = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string owner_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];  // stamped from the caller
+  string title    = 3 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+  string body     = 4 [(w17.field) = { type: TEXT, blank: true }];
+  google.protobuf.Timestamp created_at = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+}

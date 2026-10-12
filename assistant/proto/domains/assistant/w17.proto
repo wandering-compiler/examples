@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+// The assistant domain: signed-in accounts keep notes, and ask a language
+// model about them. Accounts come from the auth plugin, the model calls from
+// the agent plugin, which also records what every call spent.
+
+package examples_assistant.assistant;
+
+import "w17/domain.proto";
+import "w17/module.proto";
+
+option (w17.domain) = {
+  plugins: [
+    {
+      source_name:   "auth"
+      registered_as: "auth"
+      channels:   [ { key: "events", value: "events" } ]
+      auth_input: { header_name: "Authorization", scheme: "Bearer" }
+      features:   { names: [ "rbac", "authenticate_turnkey", "sign_up_turnkey", "sign_in_turnkey" ] }
+    },
+    {
+      source_name:   "agent"
+      registered_as: "agent"
+      // Every model call is recorded against a scope (here: the account that
+      // asked), with tokens by kind, so spend can be reported and capped.
+      features: { names: [ "usage_persistence" ] }
+    }
+  ]
+};
+
+option (w17.module) = {
+  connection: {
+    name: "assistant-postgres",
+    dialect: POSTGRES,
+    version: "18"
+  },
+  channels: [
+    {
+      // In-process: no broker to run for this example.
+      name: "events"
+      transport: TRANSPORT_MEMORY
+      buffer_size: 1024
+      retry: { max_deliver: 1 }
+      drain_timeout_seconds: 5
+    }
+  ]
+};

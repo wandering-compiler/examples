@@ -1,0 +1,7 @@
+# A question must have text.
+method: notes.Assistant.Ask
+pre: [auth/auth.yaml]
+input:
+    question: ""
+expect_error:
+    code: INVALID_ARGUMENT

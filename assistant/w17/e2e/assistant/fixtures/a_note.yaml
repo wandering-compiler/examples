@@ -1,0 +1,7 @@
+# A note of the signed-in account.
+method: notes.NoteMutation.CreateNote
+input:
+    title: Garden
+    body: Plant the tomatoes in May.
+expect:
+    id: {capture: note.id, match: {matcher: not_empty}}

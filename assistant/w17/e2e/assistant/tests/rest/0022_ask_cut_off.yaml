@@ -1,0 +1,8 @@
+# An answer the model had to stop at its output budget still arrives: what
+# was written is the caller's.
+method: notes.Assistant.Ask
+pre: [auth/auth.yaml]
+input:
+    question: "[incomplete] Tell me everything"
+expect:
+    answer: {matcher: eq, value: "Answer: [incomplete]"}
