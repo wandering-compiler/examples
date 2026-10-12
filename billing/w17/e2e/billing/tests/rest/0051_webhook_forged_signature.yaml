@@ -1,0 +1,8 @@
+# A signature made without the signing secret is refused.
+method: payment.PaymentService.IngestStripe
+headers:
+    Stripe-Signature: t=1700000000,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56ff536d0ce8e108d8bd
+input:
+    raw_payload: '{"id":"evt_forged","type":"payment_intent.succeeded","data":{"object":{"id":"pi_x"}}}'
+expect_error:
+    code: UNAUTHENTICATED

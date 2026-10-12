@@ -1,0 +1,9 @@
+# An amount must be a positive decimal.
+method: payment.PaymentService.CreatePayment
+pre: [auth/auth.yaml]
+input:
+    amount: "-5"
+    currency: eur
+    idempotency_key: order-${seq}
+expect_error:
+    code: INVALID_ARGUMENT

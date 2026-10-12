@@ -1,0 +1,8 @@
+method: auth.AuthService.SignIn
+pre: [fixtures/an_account_to_sign_in.yaml]
+input:
+    email: returning${once:returning}@billing.example
+    password: e2eSecret!23
+expect:
+    user_id: {matcher: eq, value: "${returning.user_id}"}
+    token: {matcher: not_empty}

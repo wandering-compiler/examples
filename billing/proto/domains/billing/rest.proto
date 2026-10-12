@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package examples_billing.billing;
+
+import "w17/rest.proto";
+
+option (w17.rest_api) = {
+  name:        "public",
+  version:     "v1",
+  prefix:      "/api/v1",
+  description: "Billing for signed-in accounts: card payments and a prepaid credit wallet, served by the payment plugin, plus the provider's webhook.",
+  auth_methods: [ { ref: "auth.AuthService.Authenticate", token_types: [ TOKEN_TYPE_BEARER ] } ],
+  // The plugins' own endpoints: sign-up and sign-in from auth; customers,
+  // payments, the balance and the webhook from payment.
+  include: [ { plugin: "auth" }, { plugin: "payment" } ],
+  groups: [
+    {
+      prefix:      "/credit",
+      description: "The prepaid credit wallet.",
+      endpoints: [
+        // Not in the plugin's own set: a project decides whether its
+        // users top up by card. Acts for the signed-in caller only.
+        { ref: "payment.PaymentService.TopUpCredit", method: POST, path: "/top-ups", body: "*" }
+      ]
+    }
+  ]
+};

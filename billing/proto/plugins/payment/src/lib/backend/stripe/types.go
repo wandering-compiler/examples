@@ -1,0 +1,105 @@
+package stripe
+
+// This file is the single place documenting the Stripe API wire surface
+// the driver depends on — the JSON RESPONSE shapes it decodes and the
+// webhook envelope it parses. (Requests are form-encoded `url.Values`
+// built at each call site, so they aren't modeled as structs.) Field
+// names + json tags mirror Stripe's API; keeping them together makes
+// "what Stripe shape do we rely on" auditable in one read instead of
+// scattered as anonymous inline structs across the call sites.
+//
+// All types are driver-internal (unexported) — the public surface is
+// the provider-neutral backend.Backend interface, never these.
+
+// customerResp ← POST /v1/customers
+type customerResp struct {
+	ID string `json:"id"`
+}
+
+// paymentIntentResp ← POST /v1/payment_intents
+type paymentIntentResp struct {
+	ID           string `json:"id"`
+	Status       string `json:"status"`
+	ClientSecret string `json:"client_secret"`
+}
+
+// refundResp ← POST /v1/refunds
+type refundResp struct {
+	ID       string            `json:"id"`
+	Status   string            `json:"status"`
+	Amount   int64             `json:"amount"`   // minor units
+	Currency string            `json:"currency"` // lowercase ISO-4217
+	Metadata map[string]string `json:"metadata"`
+}
+
+// refundList ← GET /v1/refunds
+type refundList struct {
+	Data    []refundResp `json:"data"`
+	HasMore bool         `json:"has_more"`
+}
+
+// priceResp ← POST /v1/prices
+type priceResp struct {
+	ID string `json:"id"`
+}
+
+// subscriptionResp ← POST /v1/subscriptions
+type subscriptionResp struct {
+	ID               string            `json:"id"`
+	Status           string            `json:"status"`
+	CurrentPeriodEnd int64             `json:"current_period_end"`
+	Metadata         map[string]string `json:"metadata"`
+	Items            struct {
+		Data []struct {
+			Price struct {
+				ID string `json:"id"`
+			} `json:"price"`
+		} `json:"data"`
+	} `json:"items"`
+}
+
+// priceID is the price of the subscription's first (only) item.
+func (s subscriptionResp) priceID() string {
+	if len(s.Items.Data) == 0 {
+		return ""
+	}
+	return s.Items.Data[0].Price.ID
+}
+
+// subscriptionList ← GET /v1/subscriptions
+type subscriptionList struct {
+	Data    []subscriptionResp `json:"data"`
+	HasMore bool               `json:"has_more"`
+}
+
+// apiError ← any non-2xx Stripe response body.
+type apiError struct {
+	Error struct {
+		Message     string `json:"message"`
+		Type        string `json:"type"`
+		Code        string `json:"code"`
+		DeclineCode string `json:"decline_code"`
+	} `json:"error"`
+}
+
+// webhookEnvelope is the parsed shape of an inbound webhook event. For
+// payment_intent.* events data.object.id is the payment-intent id; for
+// customer.subscription.* it is the subscription id (+ status /
+// current_period_end).
+type webhookEnvelope struct {
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Created int64  `json:"created"`
+	Data    struct {
+		Object struct {
+			ID               string            `json:"id"`
+			Status           string            `json:"status"`
+			CurrentPeriodEnd int64             `json:"current_period_end"`
+			Metadata         map[string]string `json:"metadata"`
+			// On a charge: the PaymentIntent it belongs to, and whether it
+			// is fully refunded.
+			PaymentIntent string `json:"payment_intent"`
+			Refunded      bool   `json:"refunded"`
+		} `json:"object"`
+	} `json:"data"`
+}

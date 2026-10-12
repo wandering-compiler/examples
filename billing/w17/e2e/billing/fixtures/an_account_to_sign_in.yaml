@@ -1,0 +1,7 @@
+# An account with a known address and password, to sign in with.
+method: auth.AuthService.SignUp
+input:
+    email: returning${once:returning}@billing.example
+    password: e2eSecret!23
+expect:
+    user_id: {capture: returning.user_id, match: {matcher: not_empty}}

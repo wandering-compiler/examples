@@ -1,0 +1,446 @@
+package handlers
+
+import (
+	"context"
+	"crypto/hmac"
+	"errors"
+	"net/url"
+	"strings"
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
+)
+
+// This file implements the `cli_login` feature — the console acting as a
+// first-party OAuth authorization server for CLIs (w17ctl), via the
+// loopback + PKCE flow (the same UX as `claude login`). Staged into a
+// bundle only when the activation enables `cli_login` (plugin.yaml maps
+// the feature to this file via go_files). The plugin author's standalone
+// `go test` always compiles it.
+//
+// The human authenticates through the project's EXISTING surface (password
+// SignIn or the `oauth` providers) — cli_login does not re-implement
+// human auth; it only mints + redeems the CLI's authorization code. The
+// browser (carrying the user's web-session bearer) hits CliAuthorize; the
+// CLI's loopback server redeems the code at CliToken with its PKCE
+// verifier. The console NEVER inspects or re-signs the bearer client-side —
+// it is minted here (IssueToken) and stays opaque to w17ctl.
+
+// defaultCliAuthCodeTTL bounds how long an issued authorization code stays
+// redeemable. Seconds, not minutes: the browser→loopback hop is immediate,
+// and PKCE already makes a leaked code useless without the verifier, so the
+// short TTL + single-use are defense-in-depth (RFC 6749 §10.5 — codes
+// SHOULD be short-lived and single-use).
+const defaultCliAuthCodeTTL = 60 * time.Second
+
+var (
+	errCliChallengeMissing = errors.New("cli auth: code_challenge required")
+	errCliRedirectUnsafe   = errors.New("cli auth: redirect_uri must be loopback (http://127.0.0.1 / ::1 / localhost) or a registered client callback")
+	errCliVerifierInvalid  = errors.New("cli auth: code_verifier invalid")
+	errCliCodeInvalid      = errors.New("cli auth: authorization code invalid/expired/used")
+	errCliRedirectMismatch = errors.New("cli auth: redirect_uri does not match the one the code was issued for")
+	// One sentinel for every way client authentication can fail — no such
+	// client, disabled since authorize, wrong or absent secret. Telling them
+	// apart is precisely what someone probing the registry would want.
+	errCliClientAuthFailed = errors.New("cli auth: client authentication failed")
+)
+
+// CliAuthorize mints a single-use authorization code for the
+// bearer-authenticated principal, bound to the CLI's PKCE challenge. The
+// caller (the browser, carrying the user's web session) is resolved from
+// the gateway auth envelope — the same source as WhoAmI / Logout, so a
+// direct gRPC call with no threaded principal fails closed. The console
+// web then redirects the browser to redirect_uri?code=<code>.
+func (h *AuthServiceHandler) CliAuthorize(ctx context.Context, req *pb.CliAuthorizeReq) (*pb.CliAuthorizeResp, error) {
+	userID, err := callerUserID(ctx)
+	if err != nil {
+		return nil, Unauthenticated(err)
+	}
+	// The exchange mints a session, so the caller has to be one already.
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
+	}
+	if req.GetCodeChallenge() == "" {
+		return nil, Unauthenticated(errCliChallengeMissing)
+	}
+	if err := h.checkRedirectAllowed(ctx, req.GetClientId(), req.GetRedirectUri()); err != nil {
+		return nil, Unauthenticated(err)
+	}
+	code, err := randomURLToken()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Mutation.CreateCliAuthCode(ctx, &pb.CreateCliAuthCodeReq{
+		UserId:        userID,
+		CodeHash:      sha256Hex(code),
+		CodeChallenge: req.GetCodeChallenge(),
+		RedirectUri:   req.GetRedirectUri(),
+		// Bind the code to the client that asked for it, so the exchange can
+		// demand that client's secret. Blank for loopback — no registration,
+		// no secret, PKCE is the binding (RFC 8252).
+		ClientId:  clientIDForCode(req.GetClientId(), req.GetRedirectUri()),
+		ExpiresAt: timestamppb.New(time.Now().Add(defaultCliAuthCodeTTL)),
+	}); err != nil {
+		return nil, err
+	}
+	// state is echoed, never inspected. It is the CLIENT's anti-CSRF value:
+	// they generate it, keep it, and compare it when the browser comes back.
+	// The server's whole job is to return it unchanged so that comparison is
+	// possible at all.
+	//
+	// PKCE does not cover this. PKCE stops a stolen CODE from being exchanged;
+	// state stops an attacker from making a victim COMPLETE a flow with the
+	// attacker's code and end up signed in as them, inside their own app.
+	//
+	// It has to be its own field: a client cannot smuggle it through
+	// redirect_uri as a query parameter, because the redirect is matched as a
+	// whole string against the registry and a per-request value can never be
+	// registered.
+	return &pb.CliAuthorizeResp{Code: code, RedirectUri: req.GetRedirectUri(), State: req.GetState()}, nil
+}
+
+// CliToken completes the PKCE exchange. It consumes the code single-use
+// FIRST (so a wrong verifier still burns the code — no verifier brute-force
+// against a live code), then verifies the verifier hashes to the bound
+// challenge, then mints the CLI bearer. Unauthenticated — the CLI has no
+// token yet; every failure is the same opaque Unauthenticated.
+func (h *AuthServiceHandler) CliToken(ctx context.Context, req *pb.CliTokenReq) (*pb.CliTokenResp, error) {
+	if len(req.GetCodeVerifier()) < pkceMinVerifierLen {
+		return nil, Unauthenticated(errCliVerifierInvalid)
+	}
+	consumed, err := h.Mutation.ConsumeCliAuthCode(ctx, &pb.ConsumeCliAuthCodeReq{
+		CodeHash: sha256Hex(req.GetCode()),
+	})
+	if err != nil {
+		// Through the opaque constructor, not raw.
+		//
+		// The statement carries RETURNING, so "no live row" arrives as
+		// NotFound — an ERROR, not an empty response. Returned raw it would
+		// tell a caller apart "this token is unknown/used/expired" from every
+		// other outcome, which is the enumeration the opaque refusal exists to
+		// prevent, and the `== ""` branch below is unreachable for it: that
+		// branch handles a shape this mutation never produces.
+		//
+		// Unauthenticated() classifies: a refusal stays opaque, an outage
+		// comes back as Unavailable rather than being dressed as a bad token.
+		return nil, Unauthenticated(err)
+	}
+	userID := consumed.GetUserId()
+	if userID == "" {
+		// Zero rows matched the live-code WHERE → unknown / expired / used.
+		return nil, Unauthenticated(errCliCodeInvalid)
+	}
+	// PKCE S256: the verifier must hash to the challenge the code was bound
+	// to at authorize time. Without this, a stolen code alone would mint a
+	// token (the whole point of PKCE — RFC 7636).
+	if !verifyPKCES256(req.GetCodeVerifier(), consumed.GetCodeChallenge()) {
+		return nil, Unauthenticated(errCliVerifierInvalid)
+	}
+	// RFC 6749 §4.1.3: the exchange must name the redirect the code was issued
+	// for. Without it a client with two registered callbacks could have a code
+	// minted for one redeemed as though it came from the other.
+	//
+	// Enforced for a REGISTERED target and not for loopback, which is where
+	// the gap actually is. A loopback code has one possible class of target
+	// and PKCE already binds it — and every CLI in the field redeems without
+	// naming a redirect, so requiring it there would break them for a
+	// guarantee they already have. A registered client may have several
+	// callbacks, and that is the case §4.1.3 is about.
+	//
+	// Blank on the stored side means a code minted before this binding
+	// existed. Compared in constant time — the value is not a secret, but this
+	// is an unauthenticated path and a length-leaking compare would be a
+	// needless side channel.
+	if stored := consumed.GetRedirectUri(); stored != "" && !isLoopbackRedirect(stored) {
+		if !hmac.Equal([]byte(stored), []byte(req.GetRedirectUri())) {
+			return nil, Unauthenticated(errCliRedirectMismatch)
+		}
+	}
+	// Client authentication. A code minted for a REGISTERED client is redeemed
+	// only by that client, proving itself with the secret it was issued.
+	//
+	// This flow was built for CLIs, where a secret cannot be kept and PKCE
+	// alone is the right answer (RFC 8252). Taking it past loopback to browser
+	// and server apps carried the public-client shape onto clients that CAN
+	// keep one — and then the only thing between "anybody may register a
+	// callback" and "a code is delivered there" was the registry's write path.
+	// A confidential client closes it from the other end: the
+	// registration is worthless without the secret.
+	//
+	// Loopback keeps its public-client shape deliberately. There is no
+	// registration, nothing to authenticate with, and PKCE is the binding —
+	// every CLI in the field redeems this way.
+	if clientID := consumed.GetClientId(); clientID != "" {
+		if err := h.authenticateClient(ctx, clientID, consumed.GetRedirectUri(), req.GetClientSecret()); err != nil {
+			return nil, err
+		}
+	}
+	if err := refuseUnsignableAccount(ctx, h, userID); err != nil {
+		return nil, err
+	}
+	token, hash, err := newBearerToken()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Mutation.IssueToken(ctx, &pb.IssueTokenReq{
+		UserId:    userID,
+		ExpiresAt: h.sessionTokenExpiry(),
+		TokenHash: hash,
+	}); err != nil {
+		return nil, err
+	}
+	return &pb.CliTokenResp{Token: token, UserId: userID}, nil
+}
+
+// authenticateClient verifies a confidential client's secret at the token
+// endpoint. Every failure is the same opaque refusal: which of "no such
+// client", "disabled since authorize", "wrong secret" happened is exactly
+// what an attacker probing the registry would want to learn.
+//
+// A read that does not answer REFUSES. The alternative is to let a client
+// through because the store was down, which is the one moment the check is
+// most worth having.
+// clientIDForCode returns the client a code should be bound to: the presented
+// client_id for a REGISTERED target, and "" for loopback.
+//
+// The discriminator is the redirect, not the presence of a client_id. A caller
+// may send a client_id alongside a loopback redirect — w17ctl does not, but
+// nothing stops it — and binding on that would demand a secret from a public
+// client that has none, breaking every CLI in the field.
+func clientIDForCode(clientID, redirectURI string) string {
+	if isLoopbackRedirect(redirectURI) {
+		return ""
+	}
+	return clientID
+}
+
+func (h *AuthServiceHandler) authenticateClient(ctx context.Context, clientID, redirectURI, presented string) error {
+	if presented == "" {
+		return Unauthenticated(errCliClientAuthFailed)
+	}
+	got, err := h.Query.GetAuthClientSecret(ctx, &pb.GetAuthClientSecretReq{
+		ClientId:    clientID,
+		RedirectUri: redirectURI,
+	})
+	if err != nil {
+		if notFoundOK(err) == nil {
+			return Unauthenticated(errCliClientAuthFailed)
+		}
+		return Unauthenticated(err)
+	}
+	// Disabled BETWEEN authorize and exchange: the code is live, the client is
+	// not. Checked here because GetRegisteredRedirect's `enabled = TRUE` ran at
+	// authorize time and says nothing about now.
+	if !got.GetEnabled() {
+		return Unauthenticated(errCliClientAuthFailed)
+	}
+	// Same comparator the password path uses — constant-time inside, and the
+	// rehash slot is ignored: a client secret is rotated by reissuing it, not
+	// by upgrading its hash under a caller who is only proving identity.
+	ok, _, _ := h.PasswordHash.VerifyAndRotate(got.GetClientSecret(), presented, nil)
+	if !ok {
+		return Unauthenticated(errCliClientAuthFailed)
+	}
+	return nil
+}
+
+// checkRedirectAllowed decides whether a redirect target may receive a code.
+//
+// Two ways to qualify, and only two:
+//
+//   - LOOPBACK, unregistered. The target is the user's own machine, so there
+//     is nowhere for a stolen authorize link to send the code (RFC 8252 §7.3).
+//     This is the CLI case and it is unchanged.
+//   - REGISTERED, matched exactly. Anything else has to be something the
+//     operator wrote down. Exactly, not by prefix: a prefix match accepts
+//     `https://app.example.com.evil.example`, and a host match accepts any
+//     path on a registered origin — including one an attacker can make the
+//     app render.
+//
+// There is deliberately no third way and no env knob to add one. An
+// unregistered non-loopback redirect is the hole the original comment warned
+// about, and a switch that opens it is that hole with a procedure in front.
+//
+// The refusal is the same for "no such client", "not registered for this
+// client" and "registration disabled": the caller must not learn which half
+// they got wrong.
+func (h *AuthServiceHandler) checkRedirectAllowed(ctx context.Context, clientID, redirect string) error {
+	if isLoopbackRedirect(redirect) {
+		return nil
+	}
+	if redirect == "" || clientID == "" {
+		return errCliRedirectUnsafe
+	}
+	// https, checked HERE and not only at registration. Registration is the
+	// only way a row should appear, but "should" is not a control: a row
+	// written by a migration, a restore, or a direct hand on the database
+	// would otherwise authorise a plaintext callback. The registration check
+	// keeps its job — refusing the mistake at the moment someone makes it —
+	// and this one makes the guarantee hold regardless of how the row got
+	// there.
+	if u, err := url.Parse(redirect); err != nil || u.Scheme != "https" {
+		return errCliRedirectUnsafe
+	}
+	resp, err := h.Query.GetRegisteredRedirect(ctx, &pb.GetRegisteredRedirectReq{
+		ClientId:    clientID,
+		RedirectUri: redirect,
+	})
+	if err != nil {
+		// NotFound is "not registered". Anything else is the store failing,
+		// and a lookup we could not run must not authorise a redirect — this
+		// is the gate, so it fails closed.
+		return errCliRedirectUnsafe
+	}
+	if resp.GetClient().GetRedirectUri() == "" {
+		return errCliRedirectUnsafe
+	}
+	// The query already filters on the exact pair and on enabled. Re-checking
+	// the value it returned would be theatre; what IS worth asserting is that
+	// the row we got back is the row we asked for, because a query edited to
+	// match more loosely would otherwise pass silently.
+	if !hmac.Equal([]byte(resp.GetClient().GetRedirectUri()), []byte(redirect)) {
+		return errCliRedirectUnsafe
+	}
+	return nil
+}
+
+// isLoopbackRedirect reports whether a CLI redirect_uri is a safe loopback
+// callback (RFC 8252 §7.3): http scheme, host 127.0.0.1 / ::1 / localhost,
+// any port + path. A non-loopback target would let a stolen authorize link
+// redirect the code to an attacker-controlled origin.
+func isLoopbackRedirect(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "http" {
+		return false
+	}
+	switch u.Hostname() {
+	case "127.0.0.1", "::1", "localhost":
+		return true
+	default:
+		return false
+	}
+}
+
+// --- the client registry ---------------------------------------------------
+//
+// An operator writes down the callbacks they vouch for; CliAuthorize will send
+// a code to one of those and to loopback, and to nothing else.
+//
+// Admin-only and bearer-authenticated, deliberately: registering a redirect is
+// the act that makes it trustworthy, so it belongs to a person with a session
+// rather than to a token sitting in a pipeline. The ACL decides which people.
+
+// RegisterClient writes down one (client_id, redirect_uri) pair.
+func (h *AuthServiceHandler) RegisterClient(ctx context.Context, req *pb.RegisterClientReq) (*pb.RegisterClientResp, error) {
+	if _, err := callerUserID(ctx); err != nil {
+		return nil, Unauthenticated(err)
+	}
+	// A person with a session, as above — and the registration mints a client
+	// secret and a callback CliAuthorize will send a session's code to.
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
+	}
+	// Refused HERE rather than left to the authorize path, where a bad
+	// registration is silently a redirect that never matches. `http` is
+	// allowed only for loopback, which needs no registration at all — so a
+	// registered `http://` target is either a mistake or someone trying to
+	// register a plaintext callback, and neither should be written down.
+	if err := validateRegisteredRedirect(req.GetRedirectUri()); err != nil {
+		return nil, err
+	}
+	// Registering IS becoming a confidential client: the secret is minted
+	// here, hashed before it is stored, and handed back exactly once. There
+	// is no endpoint that returns it again — a client that loses it is
+	// re-registered, the same contract a password-reset token has.
+	secret, err := randomURLToken()
+	if err != nil {
+		return nil, err
+	}
+	hashed, err := h.PasswordHash.Hash(secret)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := h.Mutation.RegisterAuthClient(ctx, &pb.RegisterAuthClientReq{
+		ClientId:     req.GetClientId(),
+		Name:         req.GetName(),
+		RedirectUri:  req.GetRedirectUri(),
+		ClientSecret: hashed,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &pb.RegisterClientResp{Client: resp.GetClient(), ClientSecret: secret}, nil
+}
+
+// ListClients returns every registration, enabled or not — an operator
+// auditing what may receive a code needs to see the disabled rows too.
+func (h *AuthServiceHandler) ListClients(ctx context.Context, _ *pb.ListClientsReq) (*pb.ListClientsResp, error) {
+	if _, err := callerUserID(ctx); err != nil {
+		return nil, Unauthenticated(err)
+	}
+	resp, err := h.Query.ListAuthClients(ctx, &pb.ListAuthClientsReq{})
+	if err != nil {
+		return nil, err
+	}
+	return &pb.ListClientsResp{Clients: resp.GetClients()}, nil
+}
+
+// SetClientEnabled retires or restores ONE callback.
+func (h *AuthServiceHandler) SetClientEnabled(ctx context.Context, req *pb.SetClientEnabledReq) (*pb.SetClientEnabledResp, error) {
+	if _, err := callerUserID(ctx); err != nil {
+		return nil, Unauthenticated(err)
+	}
+	// Restoring a retired callback makes it trustworthy again, the same act as
+	// registering it.
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
+	}
+	if _, err := h.Mutation.SetAuthClientEnabled(ctx, &pb.SetAuthClientEnabledReq{
+		Id: req.GetId(), Enabled: req.GetEnabled(),
+	}); err != nil {
+		return nil, err
+	}
+	return &pb.SetClientEnabledResp{}, nil
+}
+
+// DeleteClient removes a registration outright.
+func (h *AuthServiceHandler) DeleteClient(ctx context.Context, req *pb.DeleteClientReq) (*pb.DeleteClientResp, error) {
+	if _, err := callerUserID(ctx); err != nil {
+		return nil, Unauthenticated(err)
+	}
+	if _, err := h.Mutation.DeleteAuthClient(ctx, &pb.DeleteAuthClientReq{Id: req.GetId()}); notFoundOK(err) != nil {
+		return nil, err
+	}
+	return &pb.DeleteClientResp{}, nil
+}
+
+var (
+	errClientRedirectNotAbsolute = errors.New("cli auth: redirect_uri must be an absolute https URL")
+	errClientRedirectHasFragment = errors.New("cli auth: redirect_uri must not carry a fragment")
+)
+
+// validateRegisteredRedirect refuses a registration the authorize check could
+// never usefully match, and one shape that is a hazard rather than a typo.
+//
+// A fragment is the hazard: it never reaches the server, so `…/cb#x` and
+// `…/cb` are the same request on the wire while being different strings here.
+// Registering one and comparing the other is a mismatch nobody can see.
+func validateRegisteredRedirect(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || !u.IsAbs() || u.Host == "" {
+		return errClientRedirectNotAbsolute
+	}
+	if u.Scheme != "https" {
+		// http is for loopback, which is exempt and needs no registration.
+		return errClientRedirectNotAbsolute
+	}
+	if u.Fragment != "" || strings.Contains(raw, "#") {
+		return errClientRedirectHasFragment
+	}
+	return nil
+}

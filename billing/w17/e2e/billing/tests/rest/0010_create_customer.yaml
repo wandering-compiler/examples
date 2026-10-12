@@ -1,0 +1,10 @@
+# The signed-in account becomes a customer of the payment provider.
+method: payment.PaymentService.CreateCustomer
+pre: [auth/auth.yaml]
+input:
+    email: billing@example.com
+expect:
+    customer:
+        id: {matcher: not_empty}
+        user_id: {matcher: eq, value: "${me.user_id}"}
+        provider_customer_id: {matcher: not_empty}

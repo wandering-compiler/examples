@@ -1,0 +1,8 @@
+method: payment.PaymentService.GetMyPayment
+pre: [auth/auth.yaml, fixtures/a_payment.yaml]
+input:
+    id: ${payment.id}
+expect:
+    payment:
+        id: {matcher: eq, value: "${payment.id}"}
+        description: {matcher: eq, value: A year of the newsletter}

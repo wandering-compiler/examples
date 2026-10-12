@@ -1,0 +1,12 @@
+# A retry with the same idempotency key is the same payment, not a second
+# charge.
+method: payment.PaymentService.CreatePayment
+pre: [auth/auth.yaml, fixtures/a_payment.yaml]
+input:
+    amount: "19.99"
+    currency: eur
+    description: A year of the newsletter
+    idempotency_key: order-${once:order}
+expect:
+    payment:
+        id: {matcher: eq, value: "${payment.id}"}

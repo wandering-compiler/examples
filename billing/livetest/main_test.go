@@ -1,0 +1,270 @@
+// Package livetest proves, against the running stack, what the payment
+// plugin's own unit tests cannot: they run against a fake store and a fake
+// provider, so a real database's constraints and transactions, the gateway
+// between the provider and the plugin, and concurrent requests are out of
+// their reach.
+//
+// It needs what the generated end-to-end suite cannot do: sign a webhook,
+// fire requests concurrently, and read the database. run.sh brings the stack
+// up with `w17ctl test --keep` and runs this package inside the stack's
+// network.
+package livetest
+
+import (
+	"bytes"
+	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strconv"
+	"testing"
+	"time"
+
+	_ "github.com/lib/pq"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	paymentpb "github.com/wandering-compiler/examples/billing/w17/stubs/pb/domains/billing/payment"
+)
+
+var (
+	gateway       = env("GATEWAY_URL", "http://billing-gateway:8080")
+	fakeStripe    = env("FAKESTRIPE_URL", "http://fakestripe:12111")
+	storageAddr   = env("STORAGE_ADDR", "billing-storage:50051")
+	databaseURL   = env("DATABASE_URL", "postgres://billing:billing@billing-postgres:5432/billing?sslmode=disable")
+	webhookSecret = env("WEBHOOK_SECRET", "whsec_example")
+
+	db *sql.DB
+	// payments is PaymentService over the storage tier's internal gRPC
+	// listener: what the project's own code (a job, a subscriber) calls. It
+	// carries no signed-in caller, so it may name the user it acts for.
+	payments paymentpb.PaymentServiceClient
+)
+
+func env(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func TestMain(m *testing.M) {
+	var err error
+	if db, err = sql.Open("postgres", databaseURL); err != nil {
+		fmt.Fprintln(os.Stderr, "livetest: database:", err)
+		os.Exit(1)
+	}
+	conn, err := grpc.NewClient(storageAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "livetest: storage:", err)
+		os.Exit(1)
+	}
+	payments = paymentpb.NewPaymentServiceClient(conn)
+	code := m.Run()
+	_ = conn.Close()
+	_ = db.Close()
+	os.Exit(code)
+}
+
+// account is a signed-up user of the project.
+type account struct {
+	id    string
+	token string
+}
+
+func signUp(t *testing.T) account {
+	t.Helper()
+	var resp struct {
+		UserID string `json:"user_id"`
+		Token  string `json:"token"`
+	}
+	call(t, "", http.MethodPost, "/api/v1/auth/register", map[string]any{
+		"email":    "live-" + randomHex(6) + "@billing.example",
+		"password": "e2eSecret!23",
+	}, http.StatusOK, &resp)
+	return account{id: resp.UserID, token: resp.Token}
+}
+
+// call makes one REST call and decodes the answer into out, failing the test
+// unless the status is want.
+func call(t *testing.T, token, method, path string, body any, want int, out any) {
+	t.Helper()
+	status, raw := do(t, token, method, path, body)
+	if status != want {
+		t.Fatalf("%s %s: status %d, want %d: %s", method, path, status, want, raw)
+	}
+	if out != nil {
+		if err := json.Unmarshal(raw, out); err != nil {
+			t.Fatalf("%s %s: decode %s: %v", method, path, raw, err)
+		}
+	}
+}
+
+func do(t *testing.T, token, method, path string, body any) (int, []byte) {
+	t.Helper()
+	var rd io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rd = bytes.NewReader(b)
+	}
+	req, err := http.NewRequest(method, gateway+path, rd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, raw
+}
+
+// payment is the part of the plugin's Payment the tests read. The status is
+// the enum's number: w17 sends enums as integers.
+type payment struct {
+	ID                string `json:"id"`
+	ProviderPaymentID string `json:"provider_payment_id"`
+	Amount            string `json:"amount"`
+	Status            int    `json:"status"`
+}
+
+const (
+	statusRequiresAction = 1
+	statusSucceeded      = 3
+	statusFailed         = 4
+)
+
+func pay(t *testing.T, a account, amount string) payment {
+	t.Helper()
+	var resp struct {
+		Payment payment `json:"payment"`
+	}
+	call(t, a.token, http.MethodPost, "/api/v1/billing/payments", map[string]any{
+		"amount": amount, "currency": "eur", "idempotency_key": "order-" + randomHex(6),
+	}, http.StatusOK, &resp)
+	return resp.Payment
+}
+
+func paymentOf(t *testing.T, a account, id string) payment {
+	t.Helper()
+	var resp struct {
+		Payment payment `json:"payment"`
+	}
+	call(t, a.token, http.MethodGet, "/api/v1/billing/payments/"+id, nil, http.StatusOK, &resp)
+	return resp.Payment
+}
+
+// providerObject is what the fake provider holds for an id, as the real
+// provider would put it into an event.
+func providerObject(t *testing.T, id string) map[string]any {
+	t.Helper()
+	resp, err := http.Get(fakeStripe + "/_test/objects/" + id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("provider has no object %s: status %d", id, resp.StatusCode)
+	}
+	var o map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&o); err != nil {
+		t.Fatal(err)
+	}
+	return o
+}
+
+// event is a provider event about obj, as its webhook delivers it.
+func event(typ string, obj map[string]any) []byte {
+	b, _ := json.Marshal(map[string]any{
+		"id": "evt_" + randomHex(12), "object": "event", "type": typ,
+		"created": time.Now().Unix(),
+		"data":    map[string]any{"object": obj},
+	})
+	return b
+}
+
+// succeeded is the provider's payment_intent.succeeded for a payment intent.
+func succeeded(t *testing.T, providerPaymentID string) []byte {
+	t.Helper()
+	o := providerObject(t, providerPaymentID)
+	o["status"] = "succeeded"
+	return event("payment_intent.succeeded", o)
+}
+
+// signature is the Stripe-Signature header for body, signed at ts with
+// secret: HMAC-SHA256 over "<ts>.<body>".
+func signature(body []byte, secret string, ts int64) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	fmt.Fprintf(mac, "%d.", ts)
+	mac.Write(body)
+	return "t=" + strconv.FormatInt(ts, 10) + ",v1=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+// deliver posts body to the webhook endpoint with the given signature
+// header (none when empty) and returns the status.
+func deliver(t *testing.T, body []byte, sig string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, gateway+"/api/v1/webhooks/stripe", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if sig != "" {
+		req.Header.Set("Stripe-Signature", sig)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.StatusCode
+}
+
+// deliverSigned delivers body signed now with the project's secret.
+func deliverSigned(t *testing.T, body []byte) int {
+	t.Helper()
+	return deliver(t, body, signature(body, webhookSecret, time.Now().Unix()))
+}
+
+func count(t *testing.T, query string, args ...any) int {
+	t.Helper()
+	var n int
+	if err := db.QueryRowContext(context.Background(), query, args...).Scan(&n); err != nil {
+		t.Fatalf("%s: %v", query, err)
+	}
+	return n
+}
+
+func randomHex(n int) string {
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// eventID is the id of the event in body.
+func eventID(t *testing.T, body []byte) string {
+	t.Helper()
+	var e struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &e); err != nil || e.ID == "" {
+		t.Fatalf("no event id in %s", body)
+	}
+	return e.ID
+}

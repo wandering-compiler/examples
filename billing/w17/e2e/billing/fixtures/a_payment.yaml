@@ -1,0 +1,10 @@
+# A payment of the signed-in account, under a key the test can reuse.
+method: payment.PaymentService.CreatePayment
+input:
+    amount: "19.99"
+    currency: eur
+    description: A year of the newsletter
+    idempotency_key: order-${once:order}
+expect:
+    payment:
+        id: {capture: payment.id, match: {matcher: not_empty}}

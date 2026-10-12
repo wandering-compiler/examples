@@ -1,0 +1,9 @@
+# Another account's payment reads as if it did not exist, so ids cannot be
+# probed. The second sign-up replaces the session: the read is made by a
+# different person than the one who paid.
+method: payment.PaymentService.GetMyPayment
+pre: [auth/auth.yaml, fixtures/a_payment.yaml, fixtures/a_second_session.yaml]
+input:
+    id: ${payment.id}
+expect_error:
+    code: NOT_FOUND

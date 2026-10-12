@@ -1,0 +1,13 @@
+# Topping up the wallet is a card payment; the credit is granted when the
+# provider confirms it (by webhook), not when the payment is created.
+method: payment.PaymentService.TopUpCredit
+pre: [auth/auth.yaml]
+input:
+    amount: "10.00"
+    currency: usd
+    idempotency_key: top-up-${seq}
+expect:
+    payment:
+        id: {matcher: not_empty}
+        amount: {matcher: eq, value: "10.0000"}
+    client_secret: {matcher: not_empty}

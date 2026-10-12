@@ -1,0 +1,9 @@
+go 1.26.1
+
+use (
+	./srcgo
+	./w17/services/billing-gateway
+	./w17/services/billing-storage
+	./w17/services/e2erunner
+	./w17/stubs
+)

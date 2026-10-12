@@ -1,0 +1,7 @@
+# Another account, signed in: from here on the test acts as this person.
+method: auth.AuthService.SignUp
+input:
+    email: second${seq}@billing.example
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}
