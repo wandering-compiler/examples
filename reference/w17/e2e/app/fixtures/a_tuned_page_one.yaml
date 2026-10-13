@@ -1,0 +1,8 @@
+# Page one of the tuned endpoint for the CURRENT caller, capturing the cursor
+# a test resumes from. A cursor is bound to the user who minted it, so a test
+# that resumes one mints it in its own pre chain, after its own sign-in.
+method: tasks.TaskQuery.ListTasksPagedTuned
+input: {}
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    paging.next_cursor: {capture: tuned_own.cursor}
