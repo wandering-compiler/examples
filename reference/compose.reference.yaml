@@ -31,7 +31,7 @@ services:
     build: { context: ., dockerfile: business/Dockerfile }
     restart: unless-stopped
     environment:
-      APP_LISTEN_ADDR: ":50052"
+      APP_LISTEN_ADDR: ":50051"
       APP_STORAGE_BACKEND_ADDR: app-storage:50051
       # The cross-domain usage calls are best-effort; this example runs
       # without them.
@@ -40,10 +40,11 @@ services:
       app-storage: { condition: service_started }
 
   # The gateway sends storage methods to app-storage and the facade
-  # methods to the business server.
+  # methods to the business server. (The admin's defaults already name
+  # app-business:50051.)
   app-gateway:
     environment:
       APP_GATEWAY_STORAGE_BACKEND_ADDR: app-storage:50051
-      APP_GATEWAY_BUSINESS_BACKEND_ADDR: app-business:50052
+      APP_GATEWAY_BUSINESS_BACKEND_ADDR: app-business:50051
     depends_on:
       app-business: { condition: service_started }

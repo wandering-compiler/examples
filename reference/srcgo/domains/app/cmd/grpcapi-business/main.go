@@ -147,7 +147,6 @@ func main() {
 		SentryDSN:       os.Getenv(envSentryDSN),
 		OTelEndpoint:    os.Getenv(envOTelEndpoint),
 		Addr:            addr,
-		Reflection:      true,
 		ShutdownTimeout: 10 * time.Second,
 		RegisterServices: func(s *grpc.Server) error {
 			// Hand-written business facade ONLY — UsersService +
