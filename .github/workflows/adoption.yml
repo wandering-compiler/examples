@@ -148,7 +148,21 @@ jobs:
               fi
             done
           fi
-          w17ctl codegen --force
+          # The console queues at most a few codegen runs per organization,
+          # and the sdk, plugins and examples CI share one, so a busy moment
+          # refuses the run with ORG_PLACEMENT_LIMIT. That refusal, and only
+          # that one, is waited out; any other failure fails the job at once.
+          for wait in 30 60 120 120 0; do
+            if w17ctl codegen --force 2>&1 | tee codegen.log; then
+              break
+            fi
+            if [ "$wait" = 0 ] || ! grep -q ORG_PLACEMENT_LIMIT codegen.log; then
+              exit 1
+            fi
+            echo "::notice::the console's codegen queue for this organization is full; retrying in ${wait}s"
+            sleep "$wait"
+          done
+          rm -f codegen.log
           # The SDK under review, after codegen: codegen writes the lock's
           # SDK pin into every module, and `w17ctl sdk pin` is a lock edit
           # too. `go get` moves each module (and its go.sum) to the commit.
