@@ -1,0 +1,13 @@
+# The last of the pair-wise checks, and the one that catches the failure
+# an HDEL cannot report: deleting a field from the WRONG hash succeeds
+# just as quietly as deleting it from the right one. 0538 says the field
+# is gone from bucket 1; this says it is still there in bucket 2, and
+# only both together say the delete was aimed.
+method: cache.UserSessionQuery.GetUserSession
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 2
+    session_id: e2e-shared-device-token
+expect:
+    device: {matcher: eq, value: ios/safari}

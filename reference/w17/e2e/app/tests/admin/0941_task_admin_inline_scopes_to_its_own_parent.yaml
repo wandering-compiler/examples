@@ -1,0 +1,15 @@
+# The other half of 0940. Same endpoint, different parent, different count.
+#
+# Alone, either case is satisfied by a link that returns everything —
+# 700001 would just happen to be right. Together they are not: the
+# response has to change with the parent, which is the whole content of
+# the word "inline".
+method: admin.TaskAdmin.Inline.CommentAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    id: 700002
+expect:
+    comments: {matcher: count, op: '==', value: 1}
+    comments.0.id: {matcher: eq, value: "720003"}
+    comments.0.body_text: {matcher: eq, value: the only comment on task two}

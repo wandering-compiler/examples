@@ -1,0 +1,44 @@
+# The SERVER-tier emit seen from outside, two tiers deep — 0525's
+# counterpart and the case this example was missing.
+#
+# 0525 awaits a GATEWAY-tier emit, which fires in the gateway process on
+# the gateway's own bus. Everything about the path between the emitting
+# tier and the hub therefore went untested: with an in-process MemoryBus
+# on both ends, a gateway emit reaches the hub without a broker, without
+# a relayed label, without leaving the process.
+#
+# This one leaves it twice. `TasksService.CreateTask` is a FACADE — the
+# REST call reaches it, it calls `TaskMutation.CreateTask`, and the emit
+# fires in STORAGE. So the event has to cross the broker to be seen at
+# all (the hub's bus and the emitting bundle's bus are different objects
+# in different processes), and its `w17-label-*` audience key has to
+# survive TWO hops to be delivered to anyone: an unlabelled event on a
+# label-partitioned surface reaches NOBODY, which looks exactly like an
+# emit that never happened.
+#
+# Both of those were broken, in opposite halves of the stack, and neither
+# was observable from a response body: the task is created either way.
+method: tasks.TasksService.CreateTask
+pre:
+    - auth/auth.yaml
+headers:
+    Idempotency-Key: "e2e-create-${random:uuid}"
+input:
+    user_id: 1
+    category_id: 1
+    title: e2e-value
+    body_text: e2e-value
+    priority: 1
+expect:
+    id: {capture: task.created_id, match: {matcher: not_empty}}
+await_events:
+    - topic: task.created
+      match:
+        # Against the CAPTURED id, not a shape. `task_id` binds
+        # `$response.id` while `user_id` / `category_id` / `title` bind
+        # the REQUEST, so a mapping that read the wrong side would
+        # produce this same envelope with these same values — only the
+        # id the write actually returned separates them.
+        task_id: {matcher: eq, value: "${task.created_id}"}
+        user_id: {matcher: eq, value: "1"}
+        title: {matcher: eq, value: e2e-value}

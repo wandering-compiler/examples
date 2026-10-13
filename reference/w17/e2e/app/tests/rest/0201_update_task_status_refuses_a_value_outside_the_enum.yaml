@@ -1,0 +1,24 @@
+# `(w17.field).type = ENUM` on a field that already IS a proto enum.
+#
+# The number 99 is not a member of `Task.Status`. Without the
+# annotation the request validator has no rule to run, the number
+# reaches `UPDATE tasks.Task SET status = 99`, and the column's
+# `CHECK IN (…)` refuses it — a constraint violation surfacing as a
+# 500 with the failing SQL, not as a named field. With it the refusal
+# happens before any statement runs and says WHICH field is wrong.
+#
+# 99 rather than 0: 0 is the `_UNSPECIFIED` sentinel, which the choice
+# set strips for its own reason (an omitted enum field also reads as
+# 0), so a refusal at 0 would not distinguish "not a member" from
+# "not sent". 99 is only ever a value a caller made up.
+method: tasks.TaskMutation.UpdateTaskStatus
+pre:
+    - fixtures/a_task.yaml
+input:
+    task_id: ${task.id}
+    status: 99
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: status
+          code: INVALID_ENUM

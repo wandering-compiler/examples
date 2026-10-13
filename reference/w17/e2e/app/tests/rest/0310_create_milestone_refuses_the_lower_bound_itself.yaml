@@ -1,0 +1,24 @@
+# `(w17.field).gt` — the STRICT lower bound, at the one value that
+# tells it apart from `gte`.
+#
+# weight 0 is not below the bound; it IS the bound. `gte: 0` would
+# accept this request and `gt: 0` must refuse it, so a request one unit
+# lower would prove nothing — it is refused by either spelling. This is
+# the only input on which the two differ, which is why the case sits on
+# it exactly.
+#
+# The assertion goes through `details`, not `message`: request
+# validation answers "validation failed" for every rule, so the field
+# and the code are the only part that names WHICH bound fired.
+method: tasks.MilestoneMutation.CreateMilestone
+pre:
+    - auth/auth.yaml
+input:
+    name: lower bound release
+    weight: 0
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: weight
+          code: GT_VIOLATION
+          message: {matcher: regex, pattern: "must be greater than 0"}

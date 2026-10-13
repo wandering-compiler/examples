@@ -1,0 +1,126 @@
+syntax = "proto3";
+
+package e2e.billing.core;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "domains/billing/core/types/models.proto";
+
+// SubscriptionQuery — read side of the billing tier. The app
+// domain calls these via cross-domain gRPC at quota-check
+// time.
+//
+// All response messages are flat scalar shapes — Phase-A DQL
+// requires explicit column projection, so the wire shape
+// surfaces the SELECTed columns directly without a wrapper
+// submessage.
+
+message GetAccountByUserReq {
+  int64 user_id = 1;
+}
+// Zero rows → all fields are zero values. Caller checks `id`
+// to distinguish "no account yet" from "account 0".
+message GetAccountByUserResp {
+  int64                       id          = 1;
+  int64                       user_id     = 2;
+  string                      email       = 3;
+  google.protobuf.Timestamp   created_at  = 4;
+}
+
+message GetActivePlanReq {
+  int64                              account_id = 1;
+  // Filter status — facade always passes Subscription.Status.ACTIVE.
+  // Param-bound (rather than literal) because DQL
+  // typechecks string literals as catString, but Subscription.status
+  // is an int-carrying enum (catNumeric) — the literal-vs-enum
+  // path needs a SemType_SEM_ENUM tightening that hasn't landed.
+  // Param binding sidesteps the literal-typecheck path.
+  e2e.billing.core.Subscription.Status status   = 2;
+}
+// Zero-row response (no ACTIVE subscription) → all fields zero;
+// the facade folds this into `has_active=false` when surfacing
+// to the app's quota gate.
+message GetActivePlanResp {
+  int64  id                 = 1;
+  string slug               = 2;
+  string display_name       = 3;
+  int32  monthly_task_quota = 4;
+  int32  price_cents        = 5;
+}
+
+message GetCurrentUsageReq {
+  int64                            account_id = 1;
+  e2e.billing.core.UsageRecord.Kind kind      = 2;
+}
+// One row per matching UsageRecord. The facade folds
+// the row list into a sum at quota-check time.
+message UsageRecordRow {
+  int64                            id          = 1;
+  int32                            count       = 2;
+  google.protobuf.Timestamp        recorded_at = 3;
+}
+message GetCurrentUsageResp {
+  repeated UsageRecordRow records = 1;
+}
+
+message ListPlansReq {}
+message PlanRow {
+  int64  id                  = 1;
+  string slug                = 2;
+  string display_name        = 3;
+  int32  monthly_task_quota  = 4;
+  int32  price_cents         = 5;
+}
+message ListPlansResp {
+  repeated PlanRow plans = 1;
+}
+
+service SubscriptionQuery {
+  rpc GetAccountByUser(GetAccountByUserReq) returns (GetAccountByUserResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:  "SELECT a.id, a.user_id, a.email, a.created_at FROM core.Account a WHERE a.user_id = :user_id"
+      }
+    };
+  }
+
+  // FK-aliased JOIN through the Subscription's `plan` FK
+  // (mirrors the GetTaskWithCategory pattern). Selects the
+  // plan-side columns whose names match the flat
+  // GetActivePlanResp shape. Status filter via enum-name
+  // string literal (ACTIVE matches the proto enum's name).
+  rpc GetActivePlan(GetActivePlanReq) returns (GetActivePlanResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:
+          "SELECT p.id, p.slug, p.display_name, p.monthly_task_quota, p.price_cents "
+          "FROM core.Subscription s JOIN s.plan p "
+          "WHERE s.account_id = :account_id AND s.status = :status"
+      }
+    };
+  }
+
+  rpc GetCurrentUsage(GetCurrentUsageReq) returns (GetCurrentUsageResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:
+          "SELECT u.id, u.count, u.recorded_at "
+          "FROM core.UsageRecord u "
+          "WHERE u.account_id = :account_id AND u.kind = :kind "
+          "ORDER BY u.recorded_at DESC"
+      }
+    };
+  }
+
+  rpc ListPlans(ListPlansReq) returns (ListPlansResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:  "SELECT p.id, p.slug, p.display_name, p.monthly_task_quota, p.price_cents FROM core.Plan p ORDER BY p.price_cents ASC"
+      }
+    };
+  }
+}

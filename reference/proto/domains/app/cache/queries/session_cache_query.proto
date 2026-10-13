@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package e2e.app.cache;
+
+import "w17/db.proto";
+import "domains/app/cache/types/models.proto";
+import "domains/app/workspace/users/types/models.proto";
+
+// SessionCacheQuery — pure-KV read against the Redis session
+// store. The gateway / hand-written auth middleware looks up
+// a session by bearer-token hash on every authenticated
+// request.
+
+message GetSessionReq {
+  string token_hash = 1;
+}
+
+// GetSessionWithUserReq — reverse-direction cross-
+// capability lookup. Same token-hash entry point as
+// `GetSessionReq`; the response carries the resolved
+// User row alongside the cached session.
+message GetSessionWithUserReq {
+  string token_hash = 1;
+}
+
+// GetSessionWithUserResp — response shape for the reverse-
+// direction cross-cap single-row JOIN. The optimizer detects
+// `{CachedSession session; User user;}` with parent on
+// `app-redis` + child on `app-postgres` and routes through
+// `EmitKvSqlSingleRowBody`:
+//   1. HGETALL `sessions:<token_hash>` against s.dbRedis →
+//      kvhash.UnmarshalEntity into resp.Session.
+//   2. QueryRowContext on s.dbPostgres `WHERE u.id = $1`
+//      bound to `resp.Session.UserId` → scan into resp.User.
+// Missing session = NotFound (KV is authoritative entry-
+// point); missing user surfaces via ErrNoRows → NotFound at
+// the outer grpcerr wrapper.
+message GetSessionWithUserResp {
+  e2e.app.cache.CachedSession  session = 1;
+  e2e.app.users.User           user    = 2;
+}
+
+// GetApiTokenReq — read-back for the `kv_atomic` rotation fixture. A
+// KV write returns an ack and nothing else, so a rotation that lost one
+// of its two ops is indistinguishable from one that did not until
+// something reads both keys.
+message GetApiTokenReq {
+  string token_hash = 1;
+}
+
+// ListApiTokensReq — the multi-key read shape.
+//
+// `WHERE <pk> IN (:<repeated bind>)` is the ONLY spelling that
+// reaches Redis MGET; single-key equality (every other KV read in
+// this project) takes the GET path instead. Until this method
+// existed no example had written the IN form, so the multi-key
+// body emitters had never run.
+//
+// This is the JSON half: one `MGET key…` round trip whose values
+// each protojson-decode into the response's repeated field. The
+// HASH half lives on `DeviceProfileQuery.ListDeviceProfiles` —
+// same DQL shape, and a wholly different body, because the table's
+// `redis_layout` is what picks the emitter.
+message ListApiTokensReq {
+  repeated string token_hashes = 1;
+}
+message ListApiTokensResp {
+  repeated e2e.app.cache.CachedApiToken tokens = 1;
+}
+
+service SessionCacheQuery {
+  // GetApiToken — single-key read on the JSON-layout token cache. Its
+  // only job is to let a case assert what RotateToken actually did:
+  // the new hash resolves, the old one does not.
+  rpc GetApiToken(GetApiTokenReq) returns (e2e.app.cache.CachedApiToken) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:  "SELECT c FROM cache.CachedApiToken c WHERE c.token_hash = :token_hash"
+      }
+    };
+  }
+
+  // ListApiTokens — multi-key read on the JSON-layout table.
+  // Resolves to `MGET api_tokens:<h1> api_tokens:<h2> …`, one
+  // round trip, protojson-unmarshalling each returned value into
+  // the response's single repeated field. A key that is absent
+  // comes back nil and is skipped, so the response length is the
+  // number of keys that EXIST, not the number asked for — which
+  // is what makes a partial hit assertable.
+  rpc ListApiTokens(ListApiTokensReq) returns (ListApiTokensResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:  "SELECT c FROM cache.CachedApiToken c WHERE c.token_hash IN (:token_hashes)"
+      }
+    };
+  }
+
+  rpc GetSession(GetSessionReq) returns (e2e.app.cache.CachedSession) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:  "SELECT c FROM cache.CachedSession c WHERE c.token_hash = :token_hash"
+      }
+    };
+  }
+
+  // GetSessionWithUser — reverse-direction cross-cap
+  // fixture. Entry-point Redis lookup chained into a single-
+  // row PG fetch for the source-of-truth User. The DQL
+  // typechecks as a regular bare-name JOIN; the dispatch
+  // layer detects the KV-parent + SQL-child shape and routes
+  // it through the KV→SQL single-row primitive. PK-aligned JOIN
+  // (`u.id = s.user_id` where u.id is the child PK) is the
+  // shape constraint — the SQL child fetches via a single-
+  // row PK lookup keyed by the parsed parent's pointer.
+  rpc GetSessionWithUser(GetSessionWithUserReq) returns (GetSessionWithUserResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:
+          "SELECT s.token_hash AS s_token_hash, s.user_id AS s_user_id, "
+          "       s.expires_at AS s_expires_at, s.created_at AS s_created_at, "
+          "       u.id AS u_id, u.email AS u_email, u.display_name AS u_display_name, "
+          "       u.status AS u_status, u.created_at AS u_created_at "
+          "FROM cache.CachedSession s "
+          "JOIN users.User u ON u.id = s.user_id "
+          "WHERE s.token_hash = :token_hash"
+      }
+    };
+  }
+}

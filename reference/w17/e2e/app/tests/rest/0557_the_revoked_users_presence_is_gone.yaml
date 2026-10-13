@@ -1,0 +1,9 @@
+# The user id the chain resolved. Nothing in the revoke request named
+# user 1 — the device profile did, inside its stored value.
+method: cache.UserPresenceQuery.GetUserPresence
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+expect_error:
+    code: NOT_FOUND

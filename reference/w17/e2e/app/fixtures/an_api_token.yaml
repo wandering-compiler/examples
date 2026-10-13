@@ -1,0 +1,13 @@
+# The token a rotation will revoke. Redis DEL on an absent key succeeds
+# silently, so without this the revoke half of RotateToken would pass
+# whether it ran or not — the fixture is what makes the deletion
+# falsifiable.
+method: cache.SessionCacheMutation.IssueApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e0000000000000000000000000000000000000000000000000000000000old
+    user_id: 1
+    label: ci-deploy
+    expires_at: '2030-01-01T00:00:00Z'
+expect: {}

@@ -1,0 +1,31 @@
+# `materialize.batch_size` + `force: BATCHED` + `max_parallel`.
+#
+# The fixture has FIVE audit rows and the method fetches them in windows
+# of two, so the response is assembled from three round trips, the last
+# one short. What is being asserted is that the assembly is lossless and
+# ordered: a batched fetch that dropped the partial window would return
+# four, and a parallel fetch that appended results in COMPLETION order
+# rather than window order would return five in the wrong sequence.
+#
+# The second failure is the one worth spending a case on. It is
+# invisible to a count, timing-dependent, and the contract
+# `materialize.FetchBatches` documents — "observationally identical to a
+# sequential run" — is precisely a claim about order. Listing the bodies
+# in order is the only assertion that can catch it.
+#
+# `since` predates every seeded row, so the child filter admits all five
+# and the window arithmetic is over a known number.
+method: tasks.TaskQuery.GetTaskAuditsBatched
+pre:
+    - auth/auth.yaml
+input:
+    id: 700005
+    since: '2019-01-01T00:00:00Z'
+expect:
+    task.id: {matcher: eq, value: "700005"}
+    audits: {matcher: count, op: '==', value: 5}
+    audits.0.body_text: {matcher: eq, value: audit one}
+    audits.1.body_text: {matcher: eq, value: audit two}
+    audits.2.body_text: {matcher: eq, value: audit three}
+    audits.3.body_text: {matcher: eq, value: audit four}
+    audits.4.body_text: {matcher: eq, value: audit five}

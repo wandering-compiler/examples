@@ -1,0 +1,25 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# IssueApiToken on its own. It exists as an endpoint because the
+# rotation fixture needs something to revoke, but it earns a case of its
+# own for a different reason: it is the only single-op write on the
+# JSON-layout token cache, so it is what proves the entity round-trips
+# through protojson at all. RotateToken's SET rides inside a
+# MULTI/EXEC, where a marshalling fault would look like an atomicity
+# fault.
+#
+# A distinct hash from the rotation fixtures' on purpose — sharing one
+# would make this case's result depend on whether it ran before or after
+# them.
+method: cache.SessionCacheMutation.IssueApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e000000000000000000000000000000000000000000000000000standalone
+    user_id: 1
+    label: laptop
+    expires_at: '2030-06-01T00:00:00Z'
+expect: {}

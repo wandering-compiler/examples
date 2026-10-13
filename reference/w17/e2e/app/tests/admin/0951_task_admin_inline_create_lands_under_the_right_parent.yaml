@@ -1,0 +1,34 @@
+# What 0950 cannot assert on its own: that the created row landed under
+# the parent whose URL created it.
+#
+# `create`'s response carries an id and nothing else, so "it inserted
+# something" and "it inserted something HERE" are the same observation
+# from that endpoint alone. Reading the parent's inline back separates
+# them — 700001 had two comments and now has three.
+#
+# The created row sorts LAST under `ORDER BY c.id ASC`: seeding an
+# IDENTITY column advances its sequence past the seeded rows, so the
+# seeds hold 7200xx and the inline-created comment takes the next id
+# after them. It is matched by CAPTURE rather than by a literal, so the
+# case states "the row this scenario created" rather than restating an
+# arithmetic the fixture owns.
+#
+# 🔴 This used to assert the created row at index ZERO, and explained
+# that an explicit id on an IDENTITY column "does NOT advance the
+# sequence — so the seeded rows sit at 7200xx while the first generated
+# one starts at 1". That was accurate, and it was the defect: a sequence
+# left behind its own data hands out ids that are already taken, and a
+# fixture seeding low ids made the application's first write fail on the
+# primary key. The high
+# block was the workaround; the seed now advances the sequence instead.
+method: admin.TaskAdmin.Inline.CommentAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    id: 700001
+expect:
+    comments: {matcher: count, op: '==', value: 3}
+    comments.0.id: {matcher: eq, value: "720001"}
+    comments.1.id: {matcher: eq, value: "720002"}
+    comments.2.id: {matcher: eq, value: "${inline_comment.id}"}
+    comments.2.body_text: {matcher: eq, value: added through the inline}

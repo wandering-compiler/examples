@@ -1,0 +1,12 @@
+# An admin_auth login holding ONLY `membership-editor`: it may change and
+# remove memberships on the OrgMemberships page, and covers no other
+# permission — so the role ceiling refuses it a member who holds more
+# (admin/0242, 0243) and lets it remove one who holds nothing in the org
+# (0244). Seeded by fixtures/app/test.json; captures the reserved auth.token
+# slot like auth/admin.yaml, so a step's `pre` re-authenticates as it.
+method: admin.Authenticate
+input:
+    email: e2e-admin-members@example.com
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}

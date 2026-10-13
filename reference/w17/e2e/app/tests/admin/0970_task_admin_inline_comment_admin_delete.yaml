@@ -1,0 +1,14 @@
+# The inline's `delete_` — the field the vocabulary ratchet was actually
+# missing, and the reason the other six came with it (a single-field
+# inline is not something you can declare).
+#
+# Same child-keyed route as `update`, and the same risk: a DELETE keyed on
+# the parent would empty the whole section and report success. 0971 is
+# what refuses that reading.
+method: admin.TaskAdmin.Inline.CommentAdmin.Delete
+pre:
+    - auth/admin.yaml
+input:
+    id: 700001
+    child_id: ${inline_comment.id}
+expect: {}

@@ -1,0 +1,19 @@
+# The bound value, read back through its effect.
+#
+# Redis treats `EXPIRE key -1` as "already expired" and drops the key
+# immediately, which is the one TTL a live case can observe without
+# waiting on a clock. That makes this the assertion the pair exists for:
+# a generated body that ignored `req.GetTtlSeconds()` and passed a
+# constant — or passed seconds where Redis wanted a duration — would
+# leave the key exactly where it is.
+#
+# The sibling at 0562 is the control. Same method, same code path, a
+# lifetime that keeps the key, and 0563 says it stayed. Only one of the
+# two can be explained by "EXPIRE deletes things".
+method: cache.SessionCacheMutation.RefreshApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e-ttl-token-drop
+    ttl_seconds: -1
+expect: {}

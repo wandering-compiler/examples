@@ -1,0 +1,23 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# The detail read behind the list. The skeleton addressed `id:
+# e2e-value`, which is not an id; 720001 is the first seeded comment
+# (fixtures/app/test.json).
+#
+# The page's `detail.read` is GetComment, so the payload is the Comment
+# model — not the joined list row. Asserting the parent id is what says
+# the detail resolved the RIGHT comment rather than any comment: 720001
+# and 720002 both hang off task 700001, so body_text is what separates
+# them.
+method: admin.CommentTaskList.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 720001
+expect:
+    id: {matcher: eq, value: "720001"}
+    task_id: {matcher: eq, value: "700001"}
+    body_text: {matcher: eq, value: first comment on the paged task}

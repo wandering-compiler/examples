@@ -1,0 +1,7 @@
+method: tasks.TasksService.GetTask
+pre:
+    - fixtures/a_task.yaml
+input:
+    task_id: ${task.id}
+expect:
+    task: {matcher: not_empty}

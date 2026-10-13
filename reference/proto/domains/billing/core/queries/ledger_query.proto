@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package e2e.billing.core;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+
+// LedgerQuery — analytics read side of the billing ledger.
+// Two queries pick
+// up where InvoiceQuery left off:
+//
+//   - `ListAccountStatements` — multi-account dashboard
+//     aggregate. LEFT JOIN to LedgerEntry + GROUP BY
+//     account, with CASE-WHEN-based filtered SUMs (DQL
+//     doesn't expose SQL-standard `FILTER (WHERE …)` today).
+//   - `LedgerBalanceTrail` — running balance per account
+//     via window function `SUM(...) OVER (PARTITION BY …
+//     ORDER BY …)`. DQL grammar and storage emit both
+//     support it.
+
+message ListAccountStatementsReq {}
+
+// AccountStatementRow — per-account summary row. Three
+// money totals plus the identifier surface for dashboard
+// rendering.
+message AccountStatementRow {
+  int64  account_id     = 1;
+  string email          = 2;
+  // invoiced_cents — total DEBIT amount on the account's
+  // ledger. Sum of CASE-WHEN over LedgerEntry rows where
+  // direction = DEBIT (= 1).
+  int32  invoiced_cents = 3;
+  // paid_cents — total CREDIT amount on the account's
+  // ledger. Sum of CASE-WHEN over LedgerEntry rows where
+  // direction = CREDIT (= 2).
+  int32  paid_cents     = 4;
+  // balance_cents — net account balance (paid − invoiced).
+  // Negative when the account owes money; positive when
+  // the account has prepaid credit.
+  int32  balance_cents  = 5;
+}
+
+message ListAccountStatementsResp {
+  repeated AccountStatementRow rows = 1;
+}
+
+message LedgerBalanceTrailReq {
+  int64 account_id = 1;
+  int32 limit      = 2;
+}
+
+// LedgerBalancePoint — one ledger entry decorated with the
+// running balance up to and including that entry.
+message LedgerBalancePoint {
+  int64                     entry_id      = 1;
+  google.protobuf.Timestamp posted_at     = 2;
+  // amount_signed — entry amount with the direction sign
+  // applied: DEBIT becomes negative, CREDIT stays positive,
+  // unspecified → 0. Same expression used inside the SUM(...)
+  // OVER window so the running total stays consistent with
+  // the per-row delta.
+  int32                     amount_signed = 3;
+  // running_total — SUM(amount_signed) OVER (PARTITION BY
+  // account_id ORDER BY posted_at). The cumulative balance
+  // after this entry posts.
+  int32                     running_total = 4;
+}
+
+message LedgerBalanceTrailResp {
+  repeated LedgerBalancePoint points = 1;
+}
+
+service LedgerQuery {
+  // ListAccountStatements — dashboard rollup across every
+  // billing Account. LEFT JOIN to LedgerEntry preserves
+  // accounts with no ledger activity (their FILTERed sums
+  // collapse to NULL, which COALESCE turns into 0). Aggregate
+  // `FILTER (WHERE direction = …)` lifts the prior
+  // CASE-WHEN-inside-SUM workaround now that DQL surfaces
+  // the SQL-standard form (PG / SQLite native, MySQL CASE
+  // rewrite at emit time).
+  //
+  // GROUP BY a.id, a.email keeps the projection
+  // single-row-per-account; ORDER BY a.id ASC stabilises the
+  // response so callers / e2e assertions can index
+  // positionally.
+  rpc ListAccountStatements(ListAccountStatementsReq) returns (ListAccountStatementsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:
+          "SELECT a.id AS account_id, "
+          "       a.email AS email, "
+          "       COALESCE(SUM(l.amount_cents) FILTER (WHERE l.direction = 1), 0) AS invoiced_cents, "
+          "       COALESCE(SUM(l.amount_cents) FILTER (WHERE l.direction = 2), 0) AS paid_cents, "
+          "       COALESCE(SUM(l.amount_cents) FILTER (WHERE l.direction = 2), 0) "
+          "       - COALESCE(SUM(l.amount_cents) FILTER (WHERE l.direction = 1), 0) AS balance_cents "
+          "FROM core.Account a "
+          "LEFT JOIN core.LedgerEntry l ON l.account_id = a.id "
+          "GROUP BY a.id, a.email "
+          "ORDER BY a.id ASC"
+      }
+    };
+  }
+
+  // LedgerBalanceTrail — per-account running-balance series.
+  //
+  // Window-function shape:
+  // `SUM(signed) OVER (PARTITION BY account_id ORDER BY
+  // posted_at)`. The typechecker skips window aggregates when
+  // deciding whether a SELECT participates in grouping —
+  // `containsGroupingAggregate` treats `OVER (...)`-bearing
+  // calls as per-row expressions — so peer columns (`l.id`,
+  // `l.posted_at`, the CASE projection) no longer trip the
+  // GROUP-BY scoping rule, so no correlated-subquery
+  // fallback is needed.
+  rpc LedgerBalanceTrail(LedgerBalanceTrailReq) returns (LedgerBalanceTrailResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:
+          "SELECT l.id AS entry_id, "
+          "       l.posted_at AS posted_at, "
+          "       (CASE WHEN l.direction = 2 THEN l.amount_cents ELSE 0 END) "
+          "        - (CASE WHEN l.direction = 1 THEN l.amount_cents ELSE 0 END) "
+          "         AS amount_signed, "
+          "       SUM( "
+          "         (CASE WHEN l.direction = 2 THEN l.amount_cents ELSE 0 END) "
+          "         - (CASE WHEN l.direction = 1 THEN l.amount_cents ELSE 0 END) "
+          "       ) OVER (PARTITION BY l.account_id ORDER BY l.posted_at) "
+          "         AS running_total "
+          "FROM core.LedgerEntry l "
+          "WHERE l.account_id = :account_id "
+          "ORDER BY l.posted_at ASC "
+          "LIMIT :limit"
+      }
+    };
+  }
+}

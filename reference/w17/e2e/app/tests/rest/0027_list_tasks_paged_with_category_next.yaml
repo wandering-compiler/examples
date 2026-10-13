@@ -1,0 +1,23 @@
+# Cursor paging OVER A JOIN, page 2 — resumes from the cursor 0121
+# captured. This is the half that actually exercises the keyset
+# predicate against the joined statement: the boundary WHERE is
+# rebuilt around `t.id` while the LEFT JOIN + COALESCE projection ride
+# along, so a page that lost the JOIN (or a boundary bound to the
+# wrong relation) shows up here as wrong ids or empty categories.
+#
+# Same page size as 0026 (the cursor carries the boundary, not the
+# limit) → the next two seeded rows in `ORDER BY t.id DESC` order.
+#
+# Moved with its partner, and for its reason: see 0026.
+method: tasks.TaskQuery.ListTasksPagedWithCategory
+pre:
+    - auth/auth.yaml
+input:
+    limit: 2
+    cursor: ${tasks_joined.next_cursor}
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    items.0.id: {matcher: eq, value: "700003"}
+    items.0.category: {matcher: eq, value: personal}
+    items.1.id: {matcher: eq, value: "700002"}
+    items.1.category: {matcher: eq, value: work}

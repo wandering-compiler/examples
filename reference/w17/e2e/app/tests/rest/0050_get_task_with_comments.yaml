@@ -1,0 +1,22 @@
+# The task-with-comments JOIN, read against the fixture's freshly created
+# task.
+#
+# `comments` is asserted EMPTY, and that is the stronger claim, not the
+# weaker one. Nothing in this example ever writes a Comment against the
+# fixture task — the only comment writes are the admin scenario's inline
+# steps (0940–0971), which hang off a seeded TaskAdmin parent — so a
+# non-empty list here means the LEFT JOIN fabricated a row or attached
+# someone else's. The scaffold's `>= 0` could not tell those apart from
+# the correct answer.
+#
+# The title comes from fixtures/a_task.yaml and pins WHICH task came
+# back; `task: not_empty` did not, and a JOIN that returned the wrong
+# parent satisfied it.
+method: tasks.TasksService.GetTaskWithComments
+pre:
+    - fixtures/a_task.yaml
+input:
+    id: ${task.id}
+expect:
+    task.title: {matcher: eq, value: e2e task}
+    comments: {matcher: count, op: '==', value: 0}

@@ -1,0 +1,4 @@
+# Standard Go artifacts. NOTE: gen/pb/ is COMMITTED — do not add it here.
+*.test
+*.out
+coverage.txt

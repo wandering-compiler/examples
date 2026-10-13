@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package e2e.app.cache;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "domains/app/cache/types/models.proto";
+
+// UserPresenceMutation — the write half of the presence cache.
+//
+// It exists so the cross-op KV chains have something OBSERVABLE to
+// act on. Those chains read a credential and then delete the
+// presence record of the user it names, and Redis DEL on a missing
+// key is a no-op that reports success — so without a way to plant
+// a presence record and read it back, a chain that resolved
+// `:<op>.user_id` to zero would be indistinguishable from one that
+// resolved it correctly. Both halves have to be reachable for the
+// deletion to mean anything.
+
+message SetUserPresenceReq {
+  int64                     user_id       = 1;
+  google.protobuf.Timestamp last_seen_at  = 2;
+  bool                      online        = 3;
+  string                    current_route = 4;
+}
+message SetUserPresenceResp {}
+
+service UserPresenceMutation {
+  rpc SetUserPresence(SetUserPresenceReq) returns (SetUserPresenceResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:
+          "INSERT INTO cache.UserPresenceCache SET "
+          "user_id = :user_id, last_seen_at = :last_seen_at, "
+          "online = :online, current_route = :current_route"
+      }
+    };
+  }
+}

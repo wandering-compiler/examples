@@ -1,0 +1,25 @@
+# `Index.where` — the half only a live database can settle.
+#
+# This request is the SAME (user_id, locale) pair 0363 was refused for.
+# The single difference is `is_public: false`, which puts the row outside
+# the index's `WHERE is_public = TRUE` predicate — so it does not
+# participate in the uniqueness at all, and a user may keep a draft
+# alongside a published card in the same language.
+#
+# Drop `where` and this index becomes a full unique index: the DDL still
+# reads as an index on (user_id, locale), the emitted name is unchanged,
+# 0363 still passes, and the only visible symptom is this request being
+# refused. Nothing in any artefact says which of the two it is.
+method: users.DirectoryCardMutation.CreateDirectoryCard
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    handle: Alpha-CS-Draft
+    headline: Backend engineer, Prague
+    locale: cs
+    is_public: false
+    visible_from: "2026-01-01T00:00:00Z"
+    visible_until: "2026-12-31T00:00:00Z"
+expect:
+    id: {capture: card_draft.id, match: {matcher: not_empty}}

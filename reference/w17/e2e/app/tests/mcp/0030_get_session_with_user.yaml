@@ -1,0 +1,25 @@
+# The ADMISSION half for a tool declared ONLY in `tools[]`.
+#
+# `cache.SessionCacheQuery.GetSessionWithUser` is published on no other
+# surface — not REST, not admin. Its permission exists solely because the
+# `(w17.mcp_api)` sentinel names it, and the gateway gates the tool on
+# that id. A permissioned caller therefore proves the entire chain:
+# sentinel → ACL collection → gateway registration → visible tool.
+#
+# The assertion is that the tool EXECUTES, not that it returns a row.
+# There is no session for this hash and there is not meant to be: what
+# distinguishes "the chain works" from "the chain is broken" is whether
+# the surface answers at the DATA layer at all. A missing link produces
+# `tool not found` (mcp-go's dispatcher, -32602) long before any lookup.
+#
+# 0060 is the other half, on this same tool with a caller who holds
+# nothing. Neither case means anything alone: `tool not found` is exactly
+# what a never-registered tool returns too, so only the pair separates
+# "the ACL filter hid it" from "the sentinel never reached the gateway".
+method: cache.SessionCacheQuery.GetSessionWithUser
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e-no-such-session
+expect_error:
+    code: NOT_FOUND

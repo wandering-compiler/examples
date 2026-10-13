@@ -1,0 +1,17 @@
+# Gamma tags its OWN note, on top of alpha's foreign tag from the
+# previous link in the chain. Two link rows now point at the same note,
+# one per tenant — which is what lets the count assert a concrete value
+# instead of an omitted zero: gamma must see 1, and would see 2 if the
+# subquery carried no tenant predicate.
+#
+# Leaves the chain authenticated as gamma, so the reader needs no
+# further auth fixture.
+method: tasks.TaskMutation.AttachTenantNoteTag
+pre:
+    - fixtures/a_gamma_note_tagged_by_alpha.yaml
+    - auth/auth_gamma_reader.yaml
+input:
+    note_id: ${note.id}
+    tag: e2e-own-${note.id}
+expect:
+    note_id: {matcher: not_empty}

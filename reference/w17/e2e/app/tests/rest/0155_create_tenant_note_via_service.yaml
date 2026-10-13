@@ -1,0 +1,17 @@
+# Scoped INSERT routed THROUGH the business facade (TasksService)
+# rather than straight to storage. This is the only step that crosses
+# gateway → business → storage with a scoped storage method at the end,
+# so it is the regression guard that the business tier relays the
+# caller's `x-w17-scope-tenant_id` onward to storage over the wire.
+# Without that relay the storage scope guard fails closed (403) even
+# though 0090 (direct gateway→storage CreateTenantNote) still passes.
+# tenant_id is omitted on purpose — it is auto-stamped from the token's
+# scope, never sent in the payload.
+method: tasks.TasksService.CreateTenantNoteViaService
+pre:
+    - auth/auth.yaml
+input:
+    title: e2e-value
+    body: e2e-value
+expect:
+    id: {matcher: not_empty}

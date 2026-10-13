@@ -1,0 +1,18 @@
+# A per-row count riding a PAGED scoped list — the "3 tags" badge beside
+# each row of a directory, and the shape reported as having no
+# expressible form.
+#
+# It is a correlated scalar subquery, not a GROUP BY: grouping collapses
+# rows, which a paged list cannot survive (Paging.Total would be the
+# first group's size). The subquery keeps one row per note, so paging
+# and Total both stay correct.
+#
+# The `pre` chain tags the note once, so its count is exactly 1 —
+# the fixture's note is the only one this chain created.
+method: tasks.TaskQuery.ListTenantNotesPagedWithTagCount
+pre:
+    - fixtures/a_tenant_note_tag.yaml
+input: {}
+expect:
+    items: {matcher: count, op: '>=', value: 1}
+    paging: {matcher: not_empty}

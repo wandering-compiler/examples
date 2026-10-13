@@ -1,0 +1,19 @@
+# `limit: 1` is the subject, so the count is EXACT: the realm has more
+# than one user (0190 lists them, the admin realm seeds two), and the
+# only reason a single row comes back is that the limit was applied.
+# `>= 0` was satisfied by an endpoint that ignored the limit entirely,
+# and equally by one that returned nothing.
+#
+# It also carries a second subject now: `status_exact` is ABSENT here,
+# which is the case an optional-enum filter used to fail — the binding
+# could not say "absent" for an enum and sent its zero value instead,
+# so `(u.status = $1 OR $1 IS NULL)` was false for every row. See 0161
+# and 0162 for the two legs that set it.
+method: users.UsersService.ListUsers
+pre:
+    - auth/auth.yaml
+input:
+    limit: 1
+expect:
+    users: {matcher: count, op: '==', value: 1}
+    users.0.email: {matcher: not_empty}

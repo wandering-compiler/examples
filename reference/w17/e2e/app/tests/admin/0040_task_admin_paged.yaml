@@ -1,0 +1,27 @@
+# Cursor paging, page 1 — over the TaskAdmin admin page
+# (bound to the paged read tasks.TaskQuery.ListTasksPaged). Because the
+# admin scenario runs before any REST task is created, the only tasks are
+# the five seeded in fixtures/app/test.json (ids 700001..700005,
+# COUNT(*) = 5), so this page is fully deterministic.
+#
+# GET /admin/api/list/TaskAdmin?limit=2 — the runner turns the non-path
+# scalar input of a GET into query params, so `limit` lands on the URL and
+# the paged list handler clamps it to a page size of 2. Asserts exactly two
+# items, the seeded total (5), and captures the forward cursor for page 2
+# (0041). `next_cursor` proves the handler ran paging.EncodeCursor with the
+# per-boot HMAC key.
+method: admin.TaskAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    limit: 2
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    # total is a uint64 and travels as a quoted decimal string, like every
+    # 64-bit integer in the dialect (json-dialect.md §2b). It was briefly the
+    # one number carve-out; that exception was removed after it broke this
+    # very surface — the pb codec never inherited it, so admin lists reported
+    # 0 rows on the default wire. An UNQUOTED 5 here would fail: the matcher
+    # only coerces numeric types, never string↔number.
+    paging.total: {matcher: eq, value: "5"}
+    paging.next_cursor: {capture: task_admin.next_cursor, match: {matcher: not_empty}}

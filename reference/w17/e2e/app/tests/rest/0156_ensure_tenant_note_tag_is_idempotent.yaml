@@ -1,0 +1,27 @@
+# `DO NOTHING` on the conflict path, proven by repetition: the `pre`
+# chain already wrote this exact (note_id, tag) row, so THIS call is the
+# second one. A plain INSERT would raise a unique violation here, and a
+# DO UPDATE would write a row — DO NOTHING does neither and still
+# succeeds.
+#
+# The response carries no ROW by construction: the compiler refuses
+# RETURNING on this form, because on a conflict there is no row to return.
+# It does carry `written`, and THAT is what this case asserts: 0, the
+# conflict path writing nothing.
+#
+# The field is `optional` in the proto for exactly this assertion. Without
+# presence proto3 omits a zero, so "wrote 0 rows" and "answered nothing"
+# would be the same bytes over REST and this line would hold against an
+# endpoint that had stopped reporting anything at all.
+#
+# Its pair is the fixture in `pre`, which makes the SAME call against a
+# table without the row and asserts 1. Two calls, one endpoint, two
+# numbers — that is what says the count comes off the statement.
+method: tasks.TaskMutation.EnsureTenantNoteTag
+pre:
+    - fixtures/an_ensured_tenant_note_tag.yaml
+input:
+    note_id: ${note.id}
+    tag: e2e-ensure-${note.id}
+expect:
+    written: 0

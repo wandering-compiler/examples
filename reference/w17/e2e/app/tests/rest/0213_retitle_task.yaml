@@ -1,0 +1,11 @@
+# The control for 0214: a task outside the urgent category is retitled, so the
+# refusal there comes from the guard, not from an endpoint that refuses
+# everything.
+method: tasks.TaskMutation.RetitleTask
+pre:
+    - fixtures/a_task.yaml
+input:
+    task_id: ${task.id}
+    title: e2e task retitled
+expect:
+    id: ${task.id}

@@ -1,0 +1,44 @@
+# Two grouping rules that no query in this example had ever needed.
+#
+# `GROUP BY c.id` alone, with `c.name` in the projection. Every other
+# grouped query here lists every projected column in its GROUP BY (the
+# billing ledger rollup groups by `a.id, a.email`), so the FD-on-PK
+# relaxation — the primary key functionally determines the row, therefore
+# PostgreSQL accepts the shorter clause — had never once had to hold.
+# Turning it off does not produce a wrong number: it refuses the query at
+# compile time, which is how it was break-proofed.
+#
+# `MAX(f.id)` inside the scalar subquery is the second rule. Its only
+# variable belongs to the OUTER query, so SQL assigns the call to the
+# outer level: it is one value per group, it is legal in the inner WHERE
+# (that clause belongs to the inner query and the call does not), and
+# `f.id` inside it is exempt from the GROUP-BY rule it would otherwise
+# violate.
+#
+# The numbers are chosen so a coincidence cannot pass. Campaign 720001
+# has three events in total but only TWO on its newest flight, so a
+# report that ignored `MAX(f.id)` and counted the campaign's events would
+# answer 3.
+#
+# `flight_count` and `newest_flight_events` are `optional` in the
+# response for the third row's sake: it has no flights, both values are
+# zero, and proto3 omits a scalar default from JSON — so without explicit
+# presence "the campaign is empty" and "the field was never projected"
+# are the same bytes, on the one row that proves the LEFT JOIN preserved
+# an empty group.
+method: users.CampaignQuery.CampaignActivity
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 3}
+    rows.0.id: {matcher: eq, value: "720001"}
+    rows.0.name: {matcher: eq, value: spring-launch}
+    rows.0.flight_count: {matcher: eq, value: "2"}
+    rows.0.newest_flight_events: {matcher: eq, value: "2"}
+    rows.1.name: {matcher: eq, value: winter-hold}
+    rows.1.flight_count: {matcher: eq, value: "1"}
+    rows.1.newest_flight_events: {matcher: eq, value: "1"}
+    rows.2.name: {matcher: eq, value: idle-brief}
+    rows.2.flight_count: {matcher: eq, value: "0"}
+    rows.2.newest_flight_events: {matcher: eq, value: "0"}

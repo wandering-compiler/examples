@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+// auditsink plugin — the read side.
+//
+// It exists so the plugin emits a SERVICE and not just a table: a
+// storage bundle that generated nothing would be indistinguishable from
+// one whose connection binding failed, and this is the surface that
+// tells them apart.
+
+package w17.contrib.auditsink;
+
+import "@self/types/models.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+
+option go_package = "@project;@pkg";
+
+message ListAuditSinkReq {
+  int32 limit = 1 [(w17.field) = { type: NUMBER, gte: 1, lte: 100 }];
+}
+message ListAuditSinkResp {
+  repeated AuditSink entries = 1;
+}
+
+service AuditSinkQuery {
+  rpc ListAuditSink(ListAuditSinkReq) returns (ListAuditSinkResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql: "SELECT a.id, a.subject, a.detail, a.created_at FROM @module.AuditSink a ORDER BY a.id DESC LIMIT :limit"
+      }
+    };
+  }
+}

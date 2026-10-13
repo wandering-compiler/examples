@@ -1,0 +1,20 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# The same catalogue WITH counts — the half that `(w17.acl_endpoint) =
+# true` puts back under the gate, because volume is not reference data.
+# One row per seeded category, so `>= 3`; the generated skeleton's
+# `>= 0` would have passed on an empty response.
+#
+# Same limitation as 0250 on the ACL half: every caller in this suite
+# holds the wildcard role, so the gate never has to refuse anyone here.
+# That the permission EXISTS and that this handler CHECKS THAT id is not
+# asserted here.
+method: tasks.TaskLookupQuery.CountTasksPerCategory
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    rows: {matcher: count, op: '>=', value: 3}

@@ -1,0 +1,23 @@
+# Wire proof, part 1 of 2 — the admin surface writes its responses
+# through restgw.WriteResponse, the SAME encoder every generated REST
+# handler uses, so it negotiates the response format off Accept exactly
+# like REST does.
+#
+# This step sends NO Accept header (what a browser fetch() effectively
+# does with `*/*`), and asserts the surface still answers JSON — the
+# fallback that keeps the admin SPA working unchanged. 0012 is the same
+# call asking for binary protobuf.
+#
+# `w17_wire` is the runner's synthetic field carrying the media type the
+# server actually chose, the payload size and whether the bytes parse as
+# JSON — see runner.WireKey. It is injected next to the real response
+# fields, so this step asserts both at once.
+method: admin.UserAdmin.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: "900001"
+expect:
+    email: {matcher: not_empty}
+    w17_wire.content_type: {matcher: eq, value: application/json}
+    w17_wire.json: {matcher: eq, value: true}

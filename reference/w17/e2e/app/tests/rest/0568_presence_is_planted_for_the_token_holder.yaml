@@ -1,0 +1,10 @@
+# The JSON-layout cross-op chain gets its observable target, same shape
+# as 0550's.
+method: cache.UserPresenceMutation.SetUserPresence
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 3
+    online: true
+    current_route: /e2e/token-holder
+expect: {}

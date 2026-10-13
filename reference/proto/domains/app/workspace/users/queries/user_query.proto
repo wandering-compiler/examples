@@ -1,0 +1,187 @@
+syntax = "proto3";
+
+package e2e.app.users;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "w17/mcp.proto";
+import "domains/app/workspace/users/types/models.proto";
+
+message GetUserReq  { int64 user_id = 1; }
+message GetUserResp { int64 id = 1; string email = 2; string display_name = 3; }
+
+// ListUsersReq covers Q8 bonus knobs in one method:
+//
+//   - Q8a Optional fields:    `optional int64 cursor` is
+//     proto3-optional → presence-bearing → DQL `?` marker
+//     skips the predicate when the bind is null
+//     The HTTP gateway sends nil for an
+//     omitted query param, so REST callers paginate by
+//     dropping the `cursor` param on first page.
+//   - Q8d Pagination:         `int32 limit` drives a
+//     DQL `LIMIT :limit` clause + cursor-based ordering
+//     by id ASC.
+//   - Q8g HTTP query params:  the request itself is the
+//     query-param target — `?cursor=42&limit=10` decodes
+//     directly into the message.
+// `query_expand: ["filter"]` on the
+// REST registry expands these scalars into top-level URL
+// query params (`?display_name_prefix=foo&status_exact=ACTIVE`)
+// instead of forcing the caller to nest them inside the
+// `filter` JSON shape. Storage handler still receives
+// `ListUsersReq.Filter`; the gateway flattens / unflattens
+// at the wire level only.
+message UserListFilter {
+  string                       display_name_prefix = 1;
+  e2e.app.users.User.Status    min_status          = 2;
+
+  // The optional-ENUM filter, and the only one of the three that is
+  // actually bound into the DQL below.
+  //
+  // It exists because an `optional <Enum>` in a `?` conjunct was the
+  // one presence-bearing shape this example never executed, and it shipped
+  // broken twice over: the REST layer dropped the query param entirely
+  // (so the filter could not be set), and the storage layer bound the
+  // enum's ZERO VALUE rather than SQL NULL when it was unset (so
+  // `(u.status = $1 OR $1 IS NULL)` was false for every row and the
+  // whole list came back empty — silently, with a 200).
+  //
+  // Keep it bound. A filter field that no DQL reads cannot fail.
+  optional e2e.app.users.User.Status status_exact = 3;
+}
+
+message ListUsersReq {
+  optional int64        cursor = 1;
+  int32                 limit  = 2 [(w17.field) = { type: NUMBER, gte: 1, lte: 100 }];
+  UserListFilter        filter = 3;
+}
+
+// UserSummary is the per-row response payload from
+// ListUsers. Carries the User.Status enum field (Q8b) so
+// the wire shape exercises enum encoding / decoding through
+// SELECT → JSON.
+message UserSummary {
+  int64                              id           = 1;
+  string                             email        = 2;
+  string                             display_name = 3;
+  e2e.app.users.User.Status    status       = 4;
+}
+
+message ListUsersResp {
+  repeated UserSummary users = 1;
+}
+
+// UserQuery exposes the read side of the accounts domain.
+//
+// REST surface is registered in `proto/domains/app/rest.proto`.
+// GetUser + ListUsersWithTasks are exposed directly
+// (R6 storage-tier query proxy); ListUsers + GetUsersByIds are
+// proxied through the UsersService facade.
+service UserQuery {
+  // Read one account by its numeric id.
+  //
+  // This leading comment is what an MCP tool description defaults to,
+  // and it is written for whoever maintains this file. The
+  // `(w17.mcp_description)` below is written for an LLM deciding
+  // whether to call the tool — the two audiences want different prose,
+  // which is the whole reason the override exists. The two texts are
+  // deliberately unlike each other: identical strings would leave the
+  // source of the published description unknowable.
+  rpc GetUser(GetUserReq) returns (GetUserResp) {
+    // The SOURCE-side description override — as opposed to
+    // `McpTool.description_override`, which overrides from the
+    // registry. This one travels with the method: any surface that
+    // publishes GetUser as a tool gets this text without restating it.
+    option (w17.mcp_description) = "Look up one user account by id. Returns the account's email and display name; use it to resolve an id you already hold, not to search for a person.";
+
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "SELECT u.id, u.email, u.display_name FROM users.User u WHERE u.id = :user_id" }
+    };
+  }
+
+  // ListUsers — gRPC-only (REST surface is on the
+  // UsersService facade per the facade-first rule). Runs
+  // the cursor-paginated SELECT; facade exposes it via
+  // GET /users with query params for cursor + limit.
+  rpc ListUsers(ListUsersReq) returns (ListUsersResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT u.id, u.email, u.display_name, u.status "
+          "FROM users.User u "
+          "WHERE ?u.id > :cursor "
+          "AND ?u.status = :filter.status_exact "
+          "ORDER BY u.id ASC "
+          "LIMIT :limit"
+      }
+    };
+  }
+
+  // CountUsers — scalar aggregation backing the admin overview
+  // STAT widget (item 5). gRPC-only; the admin console dials it
+  // and renders `total` as a stat cell. The admin console is
+  // cross-tenant (no scope stamped), so the count spans every
+  // tenant. A bare COUNT(*) is cross-dialect and cheap.
+  rpc CountUsers(CountUsersReq) returns (CountUsersResp) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "SELECT COUNT(*) AS total FROM users.User u" }
+    };
+  }
+
+  // GetUsersByIds — Q8e IN-clause bind from repeated
+  // field. DQL `WHERE u.id IN (:ids)` should expand to
+  // a PG `= ANY($N)` with `pq.Array(req.GetIds())` binding
+  // (the scalable form — single placeholder, server-side
+  // array expansion).
+  rpc GetUsersByIds(GetUsersByIdsReq) returns (ListUsersResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "SELECT u.id, u.email, u.display_name, u.status FROM users.User u WHERE u.id IN (:ids) ORDER BY u.id ASC"
+      }
+    };
+  }
+
+  // ListUsersWithTasks — correlated EXISTS
+  // subquery. Selects users that have at least one Task
+  // row pointing back at them. Outer alias `u` resolves
+  // inside the inner SELECT (`t.user_id = u.id`), which
+  // exercises the correlated-ref path through typecheck +
+  // walker. Direct REST per the same shape as GetUser.
+  rpc ListUsersWithTasks(ListUsersWithTasksReq) returns (ListUsersResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT u.id, u.email, u.display_name, u.status "
+          "FROM users.User u "
+          "WHERE EXISTS (SELECT t.id FROM tasks.Task t WHERE t.user_id = u.id) "
+          "ORDER BY u.id ASC"
+      }
+    };
+  }
+
+}
+
+message ListUsersWithTasksReq {}
+
+message CountUsersReq {}
+// CountUsersResp carries the scalar total for the admin overview STAT
+// widget. COUNT(*) is int64; protojson renders it as a JSON string.
+message CountUsersResp {
+  int64 total = 1;
+}
+
+message GetUsersByIdsReq {
+  repeated int64 ids = 1;
+}
+
+// `GetUserWithPresence` (the forward-direction cross-cap
+// fixture) moved out of this file to
+// `proto/domains/app/cache/queries/user_presence_query.proto`
+// to break the cachepb ↔ userspb import cycle that emerged
+// once the reverse-direction `GetSessionWithUser` was added
+// in cachepb. Both cross-cap RPCs now live in cachepb (which
+// one-way-imports userspb for User as a response field type);
+// userspb no longer imports cachepb.

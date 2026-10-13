@@ -1,0 +1,15 @@
+# Leg 2. Same key, `last_seen_at` omitted, `platform` changed so the
+# write is observable on its own.
+#
+# This is the documented recipe: the compiler's own diagnostics tell an
+# author to "re-issue the full entity with INSERT (Redis SET overwrites
+# unconditionally)". On the JSON layout that is true. On HASH it was not
+# — HSET merges, and the omitted field kept its old value.
+method: cache.DeviceProfileMutation.SetDeviceProfile
+pre:
+    - auth/auth.yaml
+input:
+    device_id: e2e-device-gamma
+    user_id: 3
+    platform: android/chrome
+expect: {}

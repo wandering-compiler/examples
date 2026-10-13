@@ -1,0 +1,22 @@
+# A note owned by the SECOND tenant.
+#
+# Every other TenantNote in this suite is written by tenant-alpha, so
+# until this fixture existed the whole table belonged to one tenant —
+# which means a cross-tenant read had nothing cross-tenant to find. The
+# scope-bypass case asserted `count >= 1` and leaned on a companion case
+# to establish that the CALLER owned none of them; that is state
+# standing in for the assertion, and it hid the fact that the data set
+# could not have distinguished a working bypass from a broken one on
+# tenant_id at all.
+#
+# tenant_id is omitted on purpose, as in every other note fixture: it is
+# auto-stamped from the caller's scope, which is why the auth fixture
+# above has to be a path that genuinely re-authenticates.
+method: tasks.TaskMutation.CreateTenantNote
+pre:
+    - auth/auth_beta_writer.yaml
+input:
+    title: e2e beta note
+    body: written by tenant-beta so a cross-scope read has two tenants to find
+expect:
+    id: {capture: beta_note.id}

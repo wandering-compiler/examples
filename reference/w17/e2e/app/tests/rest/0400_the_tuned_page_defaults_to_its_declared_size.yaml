@@ -1,0 +1,26 @@
+# `PagedConfig.default_limit`.
+#
+# `/paged-tuned` runs DQL byte-identical to `/paged` and differs from it
+# only in the four PagedConfig knobs, so everything these five cases
+# observe is attributable to the config.
+#
+# The request names no page size, so the endpoint must fall back to its
+# DECLARED default of 2 — not to the built-in 20, and not to "all rows".
+# The value is deliberately below the seeded row count: a default of 20
+# against a table this size would return the same thing as no default at
+# all, and the case would pass either way.
+#
+# The captures feed 0404. `items.1.id` is the LAST id on this page,
+# which is what a keyset seek has to step past.
+method: tasks.TaskQuery.ListTasksPagedTuned
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    # The echoed limit is the DIRECT evidence; the row count is
+    # circumstantial (a table with two rows would satisfy it under any
+    # default). `paging.limit` is what the server actually applied.
+    paging.limit: {matcher: eq, value: 2}
+    items: {matcher: count, op: '==', value: 2}
+    items.1.id: {capture: tuned.last_id}
+    paging.next_cursor: {capture: tuned.cursor}

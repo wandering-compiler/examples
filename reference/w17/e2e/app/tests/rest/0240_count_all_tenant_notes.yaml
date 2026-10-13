@@ -1,0 +1,25 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# THE service-level `(w17.db.bypass_scope_service) = "*"` proof — the
+# other slot, on a service whose whole purpose is cross-scope work.
+#
+# Called as tenant-beta, which owns no notes of its own (0225), so a
+# non-zero total counted rows beta cannot see.
+#
+# `num` states that directly. It used to say `not_empty`, which on a
+# number happens to reject zero — the right assertion by accident, and
+# legible only from a comment saying so.
+#
+# Deliberately an aggregate rather than a list: a COUNT collapses the
+# rows, so nothing about the response shape could carry a tenant
+# through. The only thing on trial is which rows the query could touch.
+method: tasks.TenantOpsQuery.CountAllTenantNotes
+pre:
+    - fixtures/a_tenant_note.yaml
+    - auth/auth_beta.yaml
+input: {}
+expect:
+    total: {matcher: num, op: '>=', value: 1}

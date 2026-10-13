@@ -1,0 +1,8 @@
+srcgo/gen/
+bin/
+
+# Written by codegen from the ACL lock (permission ids are allocated there).
+/fixtures/app/acl-roles.json
+
+# Generated CI configurations; this repository runs the examples itself.
+/w17/ci/

@@ -1,0 +1,34 @@
+# The project's one SERVICE-MANAGED upload, end to end.
+#
+# `files:` is what makes this possible at all — the runner spoke only
+# `application/json` until now, so a `multipart: true` endpoint could not
+# be asked for anything and the whole upload surface was provable only
+# against a compiler fixture, which proves the emitter agrees with
+# itself.
+#
+# The part is named `file`, matching the registry's
+# `fields: [{ ref: "stored_path", from: FILE_PART, http_name: "file" }]`.
+# Naming the FIELD instead would pass with the registry's http_name
+# wrong, which is exactly how a multipart binding breaks unnoticed.
+#
+# `.txt` is on the field's `extensions` allow-list. 0331 sends one that
+# is not.
+#
+# `caption` is sent as an ordinary form part. `task_id` is routed into the
+# path and `file` is the file part, so it is the only field here that
+# travels the way a multipart request's remaining scalars do — and the
+# half a gateway can forget to bind. Sending it on the
+# happy path is what makes 0333's refusal mean "the rule fired" rather
+# than "the gateway never read this part at all".
+method: tasks.TaskMutation.UploadAttachment
+pre:
+    - auth/auth.yaml
+input:
+    task_id: 700001
+    caption: probe from the e2e upload
+files:
+    - part: file
+      filename: probe.txt
+      content: "hello from the e2e upload"
+expect:
+    id: {capture: task_upload.id, match: {matcher: not_empty}}

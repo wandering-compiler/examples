@@ -1,0 +1,13 @@
+# TaskFeed detail read — hand-authored for the same reason as 0042: the
+# generate-if-missing scaffold would fill a non-numeric placeholder id and
+# 400. Every admin page needs a detail block, so TaskFeed reuses the same
+# storage-tier read TaskAdmin binds; this step just keeps that required
+# route exercised. The admin-only paging proof itself is 0045 / 0046.
+method: admin.TaskFeed.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: "700005"
+expect:
+    task: {matcher: not_empty}
+    category: {matcher: not_empty}

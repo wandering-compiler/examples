@@ -1,0 +1,22 @@
+# MATCHES — `pattern`.
+#
+# `title_is` is an EXACT match. A caller who types `admin%` expects a
+# prefix search and gets an empty report, because the % is matched
+# literally. The rule refuses the input instead of answering it wrongly.
+#
+# Distinct from `(w17.field).pattern`, which lives on the field: this one
+# is written beside the other rules about the same request, and carries
+# the author's own message rather than the generic format complaint.
+method: tasks.TaskQuery.ListTasksInPriorityRange
+pre:
+    - auth/auth.yaml
+input:
+    min_priority: 0
+    max_priority: 9
+    title_is: admin%
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: title_is
+          code: REGEX_VIOLATION
+          message: {matcher: regex, pattern: "no SQL wildcards"}

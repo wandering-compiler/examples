@@ -1,0 +1,35 @@
+# `PagedConfig.cursor_param` — the endpoint resumes from `after`, not
+# from `cursor`.
+#
+# The assertion is `previous_cursor`, and it is chosen because it is the
+# one thing that is DETERMINISTIC here. Its contract: empty when the
+# caller arrived without a cursor, non-empty otherwise. So an endpoint
+# that IGNORED `after` would answer page one — same row count, same
+# shape, but an empty `previous_cursor`. That single field separates
+# "resumed" from "restarted"; a count cannot.
+#
+# The obvious assertion — that page two's first id is greater than page
+# one's last — is not available: ids here are not predictable (every
+# fixture run creates more tasks, so which ids land on which page depends
+# on how many ran first), and the `num` matcher takes a literal, not a
+# captured value. 0400 captures `tuned.last_id` for that comparison and
+# it could not be used; the capture is kept because it costs nothing and
+# documents the intent.
+#
+# 🔴 The unpredictability used to be explained the other way round: "the
+# seeded rows use a high block because explicit ids do not advance an
+# IDENTITY sequence, so every task a fixture creates gets a LOW id and
+# sorts ahead of them". The seed now advances the sequence, so created tasks sort AFTER the seeds instead of before —
+# the conclusion this case rests on is unchanged, its reason is not.
+#
+# No `pre` pointing at 0400: captures flow between steps of the same run
+# by step ORDER, not by declared dependency — the 0026/0027 pair resumes
+# a cursor the same way. Which is also why this file sorts after it.
+method: tasks.TaskQuery.ListTasksPagedTuned
+pre:
+    - auth/auth.yaml
+input:
+    after: ${tuned.cursor}
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    paging.previous_cursor: {matcher: not_empty}

@@ -1,0 +1,26 @@
+# The multi-key read on the HASH layout — `WHERE pk IN (:ids)`, which is
+# the only spelling that leaves the single-key GET path. Redis has no
+# multi-key HGETALL, so this emits a PIPELINE of HGETALLs, one per key,
+# and that emitter had never run: this example only ever read KV by a
+# single key.
+#
+# THREE ids for TWO keys, and the absent one is in the MIDDLE. An absent
+# key yields an empty hash and is skipped, so the response length is the
+# number of keys that exist — a count of 3 would mean an empty entity got
+# appended, a count of 2 with the wrong platforms would mean the pipeline
+# results were read back out of order, and putting the miss between the
+# two hits is what makes the second failure visible at all.
+method: cache.DeviceProfileQuery.ListDeviceProfiles
+pre:
+    - auth/auth.yaml
+input:
+    device_ids:
+        - e2e-device-alpha
+        - e2e-device-never-written
+        - e2e-device-beta
+expect:
+    profiles: {matcher: count, op: '==', value: 2}
+    profiles.0.device_id: {matcher: eq, value: e2e-device-alpha}
+    profiles.0.platform: {matcher: eq, value: web/firefox}
+    profiles.1.device_id: {matcher: eq, value: e2e-device-beta}
+    profiles.1.platform: {matcher: eq, value: ios/safari}

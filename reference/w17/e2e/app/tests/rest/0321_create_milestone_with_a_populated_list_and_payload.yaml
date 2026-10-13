@@ -1,0 +1,27 @@
+# The DECOY for 0322, and the only step that proves these two columns
+# are written at all.
+#
+# `tags` and `attachment` are the two carriers proto3 cannot tell empty
+# from absent on. 0331 sends both empty and asserts the row lands; on
+# its own that case would also pass if the generated INSERT ignored the
+# columns entirely — nothing about a successful insert says the values
+# arrived. This step sends values that CANNOT be confused with a
+# default or a zero, and 0323 reads them back off the row.
+#
+# The payload is `w17` in base64, which is what protojson renders a
+# `bytes` field as. Chosen short and recognisable so a mismatch reads
+# as a mismatch rather than as noise.
+#
+# POSITION: after 0313/0320, for the reason those two record — the
+# ORDER BY-by-enum cases (0300-0302) assert the exact contents of the
+# milestones table and must run before anything adds a row.
+method: tasks.MilestoneMutation.CreateMilestone
+pre:
+    - auth/auth.yaml
+input:
+    name: tagged release
+    weight: 5
+    tags: [alpha, beta]
+    attachment: dzE3
+expect:
+    id: {capture: tagged_milestone.id, match: {matcher: not_empty}}

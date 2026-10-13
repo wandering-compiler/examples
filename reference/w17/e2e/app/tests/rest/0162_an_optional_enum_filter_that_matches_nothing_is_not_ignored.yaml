@@ -1,0 +1,31 @@
+# The negative half of 0161 — the leg that proves the filter is APPLIED.
+#
+# `3` is DELETED, and no seeded user carries it, so the correct answer is
+# an empty list. That makes this the only one of the three steps a
+# silently-dropped filter cannot pass: if the query param never reaches
+# the WHERE clause, this returns the same rows 0160 does.
+#
+# An empty expected list is normally a smell — it is exactly the vacuous
+# assertion that let this bug live for weeks elsewhere. It is legitimate
+# here only because 0161 pins the same endpoint, same filter field, to a
+# NON-empty result one step earlier: the pair distinguishes "filtered to
+# nothing" from "returns nothing".
+#
+# It has already earned that keep: it went red at `count 2 == 0` and the
+# cause was neither compiler defect it was written for — the hand-written
+# facade forwards the request field by field and had never been taught
+# about `filter`, so the filter was dropped one hop before the SQL. Every
+# other step in the pair passed.
+#
+# The app `users` table holds only the two seeded accounts (03_e2e_seed
+# id 1, 06_admin_e2e_seed id 900001), both status 1 — signups land in the
+# auth plugin's own table, and `admin.Users.Delete` acts on that one, not
+# this one. So nothing in this example can make this list non-empty.
+method: users.UsersService.ListUsers
+pre:
+    - auth/auth.yaml
+input:
+    limit: 10
+    status_exact: 3
+expect:
+    users: {matcher: count, op: '==', value: 0}

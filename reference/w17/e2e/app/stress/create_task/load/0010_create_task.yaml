@@ -1,0 +1,13 @@
+# The hot path, fired under load. ${worker} = worker id, ${seq} = a
+# process-global unique counter — together they keep the Idempotency-Key
+# unique per request so no two creations dedupe. It is a header binding, so
+# it goes under headers: (under input: the gateway overwrote it with "").
+method: tasks.TasksService.CreateTask
+headers:
+    Idempotency-Key: "load-${worker}-${seq}"
+input:
+  user_id: 1
+  category_id: 1
+  title: "load-${worker}-${seq}"
+  body_text: load
+  priority: 1

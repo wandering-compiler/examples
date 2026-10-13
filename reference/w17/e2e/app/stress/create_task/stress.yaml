@@ -1,0 +1,16 @@
+# Reference stress preset — load-tests task creation behind auth.
+#
+# A preset is a directory: setup/ runs ONCE (login, seed), load/ is the hot
+# path driven under this plan, teardown/ runs ONCE. Scaffold your own with
+# `w17gen stress new <domain> <preset>`; it is baked into the e2erunner by
+# `w17gen e2e generate` and run with `./e2erunner -target <url> -stress`.
+concurrency: 10            # parallel workers (fasthttp client — not the bottleneck)
+total_requests: 100        # total CreateTask calls across all workers
+mode: pool                 # each worker fires ONE load op per iteration
+selection: round_robin     # pool only: round_robin | random
+warmup: 0                  # discard metrics during an opening window (here: none)
+# duration: 30s            # ALT to total_requests — a wall-clock window
+# ramp: 5s                 # ramp workers 0 -> concurrency over this window
+thresholds:                # CI gate — a breach fails the generated test (omit = report-only)
+  error_rate: 0.01
+  p99: 2s

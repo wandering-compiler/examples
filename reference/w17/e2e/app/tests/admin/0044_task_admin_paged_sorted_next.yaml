@@ -1,0 +1,32 @@
+# Admin auto-sort × cursor paging (item 2, INC-2) — the sort SURVIVES a
+# Next-cursor hop.
+#
+# This is the step that pins the whole increment. The cursor 0043 captured
+# carries its keyset boundary as (priority, id) = (4, 700004) — positional
+# within the `t.priority DESC, t.id ASC` variant — plus the sort selector
+# itself (w17.PageCursor.sort_by). On resume the handler reads the selector
+# BACK OUT OF THE CURSOR rather than off the query string, so storage picks
+# the identical variant and the seek advances along priority.
+#
+# Note this request deliberately does NOT re-send ?sort_by / ?sort_dir: the
+# cursor alone has to keep the page on its variant. If the selector were
+# dropped anywhere on the round trip (cursor field, decode, metadata, or
+# the storage dispatch) the resume would fall back to the declared
+# `ORDER BY t.id ASC` and seek boundary 4 against `id` — returning the
+# five-row table's low ids, not 700003/700002. Asserting the exact
+# successor pair therefore fails loudly on any break in that chain.
+#
+# `limit` is re-supplied because page size never rides the cursor (same
+# reasoning as 0041 — omitting it falls back to the default page size and
+# would pull every remaining row).
+method: admin.TaskAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    limit: 2
+    cursor: ${task_admin_sorted.next_cursor}
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    paging.total: {matcher: eq, value: "5"}
+    items.0.id: {matcher: eq, value: "700003"}
+    items.1.id: {matcher: eq, value: "700002"}

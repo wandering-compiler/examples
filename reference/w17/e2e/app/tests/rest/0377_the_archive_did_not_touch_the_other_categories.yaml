@@ -1,0 +1,20 @@
+# The negative half of 0375, and the reason the archive case is worth
+# two files.
+#
+# 0376 proves the archive moved the row it was supposed to. On its own
+# that is satisfied by an UPDATE with no WHERE at all — every task would
+# be ARCHIVED and the assertion would still pass. 700001 is status 1 in
+# category 1, outside BOTH terms of the predicate, so it is the row that
+# distinguishes "archived the completed tasks in category 3" from
+# "archived the table".
+#
+# This is the same shape as every other write in this suite: the
+# response tells you an id, never which rows were spared.
+method: tasks.TasksService.GetTask
+pre:
+    - auth/auth.yaml
+input:
+    task_id: 700001
+expect:
+    task.id: {matcher: eq, value: "700001"}
+    task.status: {matcher: eq, value: 1}

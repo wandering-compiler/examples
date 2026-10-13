@@ -1,0 +1,18 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The same call as 0590, against the parent 0591 just proved HAS a
+# child. Deliberately no `pre:` beyond auth — it rides the task the
+# fixture in 0591 captured, so 0593 can read that same row back.
+#
+# The pair 0590/0592 is what keeps the relaxation honest in both
+# directions: 0590 fails if a zero-row op aborts the method, 0592+0593
+# fail if tolerating zero rows turned the op into a no-op.
+method: tasks.TaskMutation.RedactTask
+pre:
+    - auth/auth.yaml
+input:
+    id: ${task.id}
+expect:
+    id: {matcher: eq, value: '${task.id}'}
+    title: {matcher: eq, value: '(redacted)'}

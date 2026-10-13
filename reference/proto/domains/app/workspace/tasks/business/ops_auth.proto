@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package e2e.app.tasks;
+
+// The staged auth plugin's contract types — imported for the RESPONSE
+// only. See the shared-output-type note below for why this file does not
+// declare its own.
+import "domains/app/auth/business/auth_service.proto";
+
+// OpsAuthService — a hand-written auth method that OWNS ITS REQUEST TYPE
+// and POPULATES `permission_ids`, so a declarative ACL gate decides on
+// authority this project computed itself.
+//
+// Why beside PublicLinkAuthService, which is also hand-written: that one
+// deliberately leaves `permission_ids` EMPTY (its endpoints declare
+// `(w17.acl_endpoint) = false`), because a capability link authenticates
+// a LINK and carries no role authority. So this example proved a project
+// can author an auth METHOD, and proved nothing about a project's own
+// code DECIDING what a gate then enforces — which is the half a
+// consumer needs when the identity layer is theirs.
+//
+// The case that made it worth covering: one domain holding the auth
+// plugin and publishing no surface, one domain publishing the only
+// surface and holding no plugin, and a person who must hold authority
+// over the second one's endpoints. The four obvious routes are all
+// closed; this is the open one, so it is covered rather than
+// described.
+//
+// ⚠️ THE RESPONSE TYPE IS SHARED, BY REFUSAL, AND THAT IS NOT A LIMIT ON
+// THE CONSUMER'S CASE. `validateAuthMethodsShareOutputType` refuses two
+// methods on one surface returning different shapes — the gateway
+// decodes through one concrete Go type per request. It exempts a surface
+// with a SINGLE method (`len(api.AuthMethods) <= 1`), which is exactly
+// the domain that activates no auth plugin: there is no `AuthResp` to
+// import there, the project declares its own, and being the only method
+// makes the rule vacuous. This example has three methods, so it shares
+// the plugin's — the half it can prove is the populated ids, not the
+// authored response shape.
+//
+// ⚠️ WHEN YOU DO AUTHOR THE RESPONSE, THE FIELD NUMBERS ARE THE
+// CONTRACT, NOT THE NAMES. It is marshalled into the `x-w17-user`
+// envelope and unmarshalled on the other side AS `AuthResp` — two
+// different messages exchanged as bytes. `permission_ids` must be 1,
+// `user_id` 2, `scopes` 3. Renaming is free; renumbering silently
+// delivers nothing.
+
+// OpsAuthReq — this project's OWN input type, which the parser validates
+// structurally rather than by identity: it must carry
+// `map<string, string> headers = 1`, and nothing else is required. The
+// input is not shared between methods (only the response is), so this is
+// the half of "author the contract types" that a multi-method surface
+// can still exercise.
+message OpsAuthReq {
+  // The request's headers, lower-cased, Authorization included.
+  map<string, string> headers = 1;
+}
+
+// OpsAuthService — resolved by `auth_methods[].ref`, which takes any RPC
+// in the domain. It coexists with the plugin's turnkey and with the
+// capability-link method: the router picks by Authorization scheme, so
+// BASIC reaches this one and neither of the other two.
+service OpsAuthService {
+  rpc AuthenticateOps(OpsAuthReq) returns (e2e.app.auth.AuthResp);
+}

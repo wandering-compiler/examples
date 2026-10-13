@@ -1,0 +1,11 @@
+# The session belongs to b7, an admin no step disables: b2's session (b3)
+# ends when 0120 disables b2 (auth rc.19), which 0125 asserts.
+method: admin.Sessions.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b8
+expect:
+    id: {matcher: not_empty}
+    user_id: {matcher: not_empty}
+    created_at: {matcher: not_empty}

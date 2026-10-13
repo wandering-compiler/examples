@@ -1,0 +1,22 @@
+# One case, three claims — and each is the other two's control.
+#
+#   the ACTION wrote          the two selected rows carry the note
+#   it hit ONLY the selection 710001 is absent, still carrying what the
+#                             detail form left there in 1060
+#   the FILTER discriminates  asking for the note returns two of three
+#
+# The filter axis needs this ordering to mean anything: before the
+# action, every milestone shared the seeded default, so a filter on
+# `status_note` could not tell a working predicate from an ignored one —
+# both return all three. The bulk write is what creates the distinction
+# the filter is then measured against.
+method: admin.MilestoneAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    status_note: reviewed in the bulk modal
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    items.0.id: {matcher: eq, value: "710002"}
+    items.1.id: {matcher: eq, value: "710003"}
+    items.0.status_note: {matcher: eq, value: reviewed in the bulk modal}

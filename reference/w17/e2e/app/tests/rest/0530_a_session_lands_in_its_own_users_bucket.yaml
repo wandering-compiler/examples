@@ -1,0 +1,24 @@
+# HASH_BUCKETED, the write half — and the start of the only sequence that
+# can tell a correct composite key from a broken one.
+#
+# `UserSession` has declared `redis_layout: REDIS_LAYOUT_HASH_BUCKETED`
+# for a long time and nothing had ever addressed a bucket: its only read
+# was the cross-capability fan-out, which HGETALLs a whole hash for a
+# parent row and never resolves a key. The typecheck rule that
+# recognises `bucket = :b AND pk = :p` and the emitter's runtime parser
+# that mirrors it had both run zero times.
+#
+# This write is an UPSERT whose DO UPDATE arm assigns the same values as
+# its INSERT arm, and whose conflict target is the (bucket, PK) PAIR.
+# Neither is decoration: Redis SET overwrites unconditionally, so a
+# divergent update arm would be silently discarded, and a conflict on the
+# PK alone cannot be detected across buckets. The compiler refuses both;
+# this is the shape it admits.
+method: cache.UserSessionMutation.UpsertUserSession
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    session_id: e2e-shared-device-token
+    device: web/firefox
+expect: {}

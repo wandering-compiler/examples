@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+// Module-level cascade for the app domain's `assets` module — the
+// project's file-storage connection.
+//
+// The `app` domain now runs THREE connections:
+//   - `app-postgres` — POSTGRES 18   (domain-level, proto/domains/app/w17.proto)
+//   - `app-redis`    — REDIS 7 KV    (module-level, cache/w17.proto)
+//   - `app-uploads`  — LOCAL_FS KV   (module-level, here)
+//
+// It is its own module because `(w17.module).connection` is singular: a
+// module has exactly one connection, and the tables that need the
+// upload destination live in `tasks` on Postgres. That is fine —
+// `(w17.field).upload.connection` resolves by name within the DOMAIN,
+// not within the module, so `tasks.TaskUpload.stored_path` names
+// `app-uploads` from a Postgres-backed table.
+//
+// The module declares no tables of its own, and LOCAL_FS could not hold
+// them if it did: its single capability is KV, so its "schema" is a
+// manifest and the migrator emits no DDL for it. What the connection
+// contributes is a bucket ROOT, resolved at runtime from the gateway's
+// environment — the migration never carries a host path, because the
+// same migration has to apply on a developer's laptop and in a
+// container where that path means something else.
+//
+// LOCAL_FS is the right dialect for this example and the wrong one for a
+// multi-node deployment: no native TTL, no replication, no backup. A
+// real cluster points the same annotation at S3. Nothing else in the
+// declaration changes, which is the point of naming a connection rather
+// than a path.
+
+package e2e.app.assets;
+
+import "w17/module.proto";
+
+option (w17.module) = {
+  connection: { name: "app-uploads", dialect: LOCAL_FS, version: "1", used_capability: KV }
+};

@@ -1,0 +1,11 @@
+# GetUser deliberately projects WITHOUT password_hash, and the seeded
+# throwaway account is not disabled — so neither field is asserted.
+method: admin.Users.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b2
+expect:
+    id: {matcher: not_empty}
+    email: {matcher: not_empty}
+    created_at: {matcher: not_empty}

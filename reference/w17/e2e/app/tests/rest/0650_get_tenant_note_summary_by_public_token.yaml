@@ -1,0 +1,30 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# the QUERY-string form of a capability link.
+#
+# `credential: { query_param: "public_token" }` instead of the path form
+# 0630 uses. Same auth method, same scope threading; what differs is the
+# runtime helper that pulls the value out (`URLCredentialFromQuery` vs
+# `…FromPath`), which is exactly why "the path form works" proves nothing
+# about this one. The vocabulary ratchet is what noticed: it flags a
+# declared slot no example writes.
+#
+# Like 0630, no `auth/…` fixture and no Authorization header — the
+# runner's CredentialInURL marker means it neither requires nor injects
+# `auth.token`. The link's recipient has no session.
+method: tasks.TaskQuery.GetTenantNoteSummaryByPublicToken
+pre:
+    - fixtures/a_gamma_note_with_public_link.yaml
+input:
+    public_token: ${publiclink.token}
+expect:
+    # The SAME row the path-carried endpoint resolves in 0630. Asserted
+    # against the captured id rather than `not_empty`: a query-param
+    # extraction that silently read the wrong parameter (or none) would
+    # still answer with SOME row of the tenant once the scope filter
+    # applied, and not_empty could not tell the two apart.
+    id: {matcher: eq, value: '${publiclink.note_id}'}
+    title: {matcher: eq, value: e2e gamma shared note}

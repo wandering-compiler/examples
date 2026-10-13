@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+// The `billing` domain's subscriber surface.
+//
+// It renders the DEFAULT shape: a standalone `billing-eventbus` bundle
+// with its own main, its own image and its own place in the deploy
+// topology — the same thing `app` gets in proto/domains/app/subscribers.proto.
+//
+// It used to declare `colocated: true`, which renders a `Register…` helper
+// for the emit binary's main() to hook onto its own bus instead. That
+// alternative is now refused at parse time and the reason is worth keeping
+// here, because the declaration looked perfect: no generated project has a
+// main that can CALL Register (every `w17/services/**` binary is DO NOT
+// EDIT, and hand-written code lives in the project's own srcgo), and no
+// generator emits the call. So this domain published `billing.invoice.issued`
+// to a durable NATS channel, the `Register` library sat there with zero
+// callers repo-wide, and `billing_invoice_notices` was never written —
+// with nothing red anywhere. See w17/event_subscribers.proto.
+//
+// ONE sentinel per domain: the compiler renders one subscriber bundle per
+// domain, which is why billing grew a channel, an event and a handler
+// rather than adding a second sentinel next to `app`'s.
+
+package e2e.billing.core;
+
+import "w17/event_subscribers.proto";
+
+option (w17.event_subscribers) = {
+  subscriptions: [
+    {
+      event:   "InvoiceIssued"
+      channel: "billing"
+
+      // The domain ships one topic today, so the filter narrows
+      // nothing yet — it is written as a PREFIX so the next billing
+      // event reaches this consumer without re-provisioning it, and so
+      // the day a second surface subscribes to the same channel the
+      // scoping already exists rather than having to be retrofitted
+      // onto a live consumer.
+      topic_filter: "billing.invoice.*"
+
+      handler: "core.InvoiceNoticeMutation.OnInvoiceIssued"
+    },
+    {
+      // The SAME event, a DIFFERENT handler service. A domain used to be
+      // limited to one service across every subscription it declares, so
+      // this entry could not be written at all — the first subscription
+      // fixed the choice for the domain's lifetime. The bundle now builds
+      // one client per service, and this is the case that proves
+      // it: two services, one subscriber process, one domain.
+      event:   "InvoiceIssued"
+      channel: "billing"
+      topic_filter: "billing.invoice.*"
+      handler: "core.InvoiceAuditMutation.OnInvoiceIssuedAudit"
+    }
+  ]
+};

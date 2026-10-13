@@ -1,0 +1,27 @@
+# The FIRST of the two rows 0690 streams back.
+#
+# `user_id: 900001` — the seeded admin-page account — is deliberate and is
+# what makes 0690's frame COUNT assertable. Every other case in this suite
+# creates tasks for user 1, so user 1's row count climbs as the suite runs
+# and no case could ever say how many frames a stream of it should carry.
+# Nothing else in this example writes a task for 900001, so these two are all
+# there is.
+#
+# Seeding them in fixtures/app/test.json instead would have been the
+# obvious move and is WRONG: 0025 and admin/0036 assert exact counts over
+# the seeded task set and say in their own comments that the set is the
+# thing they pin. Creating the rows here puts them after those cases
+# instead of underneath them.
+method: tasks.TasksService.CreateTask
+pre:
+    - auth/auth.yaml
+headers:
+    Idempotency-Key: "e2e-stream-1-${random:uuid}"
+input:
+    user_id: 900001
+    category_id: 1
+    title: stream frame one
+    body_text: the first frame of the streamed sequence
+    priority: 1
+expect:
+    id: {capture: stream.first_id}

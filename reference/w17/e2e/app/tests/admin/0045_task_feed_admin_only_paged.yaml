@@ -1,0 +1,32 @@
+# ADMIN-ONLY cursor paging, page 1 — the proof that an admin list pages
+# with NO paged REST endpoint behind it.
+#
+# TaskFeed binds tasks.TaskQuery.ListTasksAdminFeed, a storage read that
+# appears in no REST/MCP/rpc registry at all. The only thing marking it
+# paged is the `w17.Paging paging = 2;` field on its response, which is
+# what makes the storage query keyset-seek and this handler decode/encode
+# cursors. Before that field counted as the declaration, this exact page
+# returned all five rows with a null `paging` envelope.
+#
+# Same five seeded tasks as the REST-paged TaskAdmin steps
+# (fixtures/app/test.json, ids 700001..700005, COUNT(*) = 5 at
+# admin-scenario time) — but this method's DQL orders by id DESC, so page 1
+# is 700005, 700004. TaskAdmin's page 1 over the same rows is 700001,
+# 700002: the keyset direction comes from THIS method, not from the paged
+# REST endpoint next door.
+method: admin.TaskFeed.List
+pre:
+    - auth/admin.yaml
+input:
+    limit: 2
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    # Task.id is an int64 → protojson renders it as a JSON string, so the
+    # expected id stays quoted. paging.total is a uint64 TOO but is the
+    # dialect's one carve-out (json-dialect.md §2b) and travels as a JSON
+    # number — the two sit side by side here precisely because the
+    # carve-out is scoped to w17.Paging.total and nothing else.
+    paging.total: {matcher: eq, value: "5"}
+    items.0.id: {matcher: eq, value: "700005"}
+    items.1.id: {matcher: eq, value: "700004"}
+    paging.next_cursor: {capture: task_feed.next_cursor, match: {matcher: not_empty}}

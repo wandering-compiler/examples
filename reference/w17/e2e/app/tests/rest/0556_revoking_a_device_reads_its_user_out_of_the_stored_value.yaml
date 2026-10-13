@@ -1,0 +1,16 @@
+# The cross-op handover, HASH layout.
+#
+# The request carries a device id and nothing else. The user whose
+# presence record gets deleted is not in it — it is a field of the value
+# the first op decodes, handed to the second op through a Go var the
+# emitter declares for exactly this purpose. A non-final GET whose result
+# nothing consumes is refused outright, so this shape is the only reason
+# the into-var body exists, and no example had ever written one.
+#
+# The ack proves nothing on its own; 0557 and 0558 are the assertion.
+method: cache.DeviceProfileMutation.RevokeDeviceSession
+pre:
+    - auth/auth.yaml
+input:
+    device_id: e2e-device-alpha
+expect: {}

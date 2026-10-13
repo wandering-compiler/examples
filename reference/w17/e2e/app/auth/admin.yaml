@@ -1,0 +1,14 @@
+# Admin login fixture — prefilled by every auth-required admin step.
+#
+# Authenticates against the admin_auth realm (seeded in
+# fixtures/app/test.json), which is a DIFFERENT identity store
+# from the app's tenant-scoped user realm that auth/auth.yaml uses.
+# Both capture the single reserved auth.token slot, which is exactly
+# why admin steps live in their own scenario — mixing them would let
+# ordering decide which realm's token a call carries.
+method: admin.Authenticate
+input:
+    email: e2e-admin@example.com
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}

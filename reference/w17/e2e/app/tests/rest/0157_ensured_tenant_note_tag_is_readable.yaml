@@ -1,0 +1,13 @@
+# The other half of 0156. "Both calls succeeded" is also what a write
+# that silently did nothing at all would look like, so read the link
+# back through the scoped M:N join: the row must actually be there, once.
+#
+# Exactly one, not "at least one" — the tag is derived from the note id,
+# so this chain's tag belongs to this chain's note alone.
+method: tasks.TaskQuery.ListTenantNotesByTag
+pre:
+    - fixtures/an_ensured_tenant_note_tag.yaml
+input:
+    tag: e2e-ensure-${note.id}
+expect:
+    notes: {matcher: count, op: '==', value: 1}

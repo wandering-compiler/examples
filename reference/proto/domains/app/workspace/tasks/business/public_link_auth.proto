@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package e2e.app.tasks;
+
+// The staged auth plugin's contract types. The plugin mounts at
+// `domains/app/auth/` (its `registered_as`), and staging rewrites its
+// proto package from `w17.contrib.auth` to `e2e.app.auth` — hence the
+// fully-qualified names below.
+import "domains/app/auth/business/auth_service.proto";
+
+// PublicLinkAuthService — a URL_TOKEN auth method, written by
+// hand in the project, next to the auth plugin rather than inside it.
+//
+// That coexistence is the point of the fixture. w17 owns the auth
+// CONTRACT (`AuthReq.headers` in, `AuthResp` with `permission_ids` +
+// `scopes` out — both parser-enforced); the auth plugin is one
+// implementation of it, and `auth_methods[].ref` resolves to any RPC
+// in the domain. So a project needing a credential shape the plugin
+// does not offer writes its own method and wires it alongside, with
+// no fork of the plugin and no change to the platform.
+//
+// Two constraints an author hits here, both worth meeting in the
+// example rather than in a doc:
+//
+//  1. Every auth method on ONE surface must return the SAME message
+//     type (parser: validateAuthMethodsShareOutputType — the gateway
+//     decodes `__userData` through one concrete Go type per request).
+//     So this returns the plugin's AuthResp, not a message of its own.
+//     Input types may differ; only the output is pinned.
+//
+//  2. A URL_TOKEN method is reached ONLY through an endpoint that
+//     declares `credential`. It is not a scheme fall-through, so
+//     nothing can present a capability token to it from another route.
+service PublicLinkAuthService {
+  // AuthenticatePublicLink resolves a share-link capability token
+  // into the same AuthResp a signed-in principal produces.
+  //
+  // The credential arrives in `headers` under the reserved key
+  // `x-w17-credential`, which the gateway extracted from the URL and
+  // which no client can set (restgw strips any inbound copy on every
+  // request). To this method it is just another header — which is the
+  // property that keeps the auth backend contract unchanged and lets
+  // a hand-written implementation like this one exist at all.
+  rpc AuthenticatePublicLink(e2e.app.auth.AuthReq) returns (e2e.app.auth.AuthResp);
+}

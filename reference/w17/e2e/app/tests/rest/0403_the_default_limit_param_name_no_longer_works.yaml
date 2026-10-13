@@ -1,0 +1,26 @@
+# The falsifier for the rename, and the only case here that could fail
+# while every other one passes.
+#
+# 0401 proves `per_page` is READ. It does not prove `limit` STOPPED
+# being read: a rename implemented as an added alias would satisfy 0401,
+# 0402 and 0404 exactly as well as a real rename does. This case is what
+# separates them.
+#
+# It matters because the two behave differently for a caller who follows
+# the documentation: with an alias, an API declaring `limit_param:
+# "per_page"` still answers `?limit=`, so a client written against the
+# old name keeps working and nobody learns the contract changed — until
+# the alias is eventually removed and every such client breaks at once.
+#
+# So: `?limit=3` must be IGNORED, and the endpoint must fall back to its
+# declared default of 2. Not 3.
+method: tasks.TaskQuery.ListTasksPagedTuned
+pre:
+    - auth/auth.yaml
+input:
+    limit: 3
+# Sent ON PURPOSE for the endpoint to ignore — codegen refuses an input key the
+# call does not read unless the step says so.
+ignored_input: [limit]
+expect:
+    items: {matcher: count, op: '==', value: 2}

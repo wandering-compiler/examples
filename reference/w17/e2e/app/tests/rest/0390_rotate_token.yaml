@@ -1,0 +1,31 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# Rotation from a hash that was never issued.
+#
+# 0373/0374 cover the ordinary case, where both halves of the MULTI/EXEC
+# have something to do. This one covers the half that has nothing: Redis
+# DEL on an absent key is a no-op that reports zero deletions rather than
+# an error, and the question is whether the surrounding transaction
+# treats that as a failure and discards the SET with it.
+#
+# It is worth asking because the answer is not obvious from the
+# annotation. `kv_atomic` promises all-or-nothing, and a reader could
+# reasonably expect "the DEL found nothing" to count as the "nothing"
+# branch — leaving a caller who rotated a stale token with neither the
+# old one nor the new one, which is the state that locks a user out.
+#
+# Fresh hashes on both sides so the case does not depend on whether the
+# rotation fixtures ran before it.
+method: cache.SessionCacheMutation.RotateToken
+pre:
+    - auth/auth.yaml
+input:
+    old_token_hash: e2e00000000000000000000000000000000000000000000000000neverissued
+    new_token_hash: e2e000000000000000000000000000000000000000000000000000000rotated
+    user_id: 1
+    label: ci-deploy
+    expires_at: '2030-01-01T00:00:00Z'
+expect: {}

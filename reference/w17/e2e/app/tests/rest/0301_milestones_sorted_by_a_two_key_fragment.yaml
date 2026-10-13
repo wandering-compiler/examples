@@ -1,0 +1,39 @@
+# ORDER BY-by-enum, arm 2 of 3 — a `sort_sql` fragment carrying TWO
+# keys (`m.weight DESC, m.name ASC`).
+#
+# SQL forbids ASC/DESC inside a `CASE ... THEN <expr>` branch, so the
+# emitter has to split the fragment on its top-level comma into one
+# enum-gated CASE per key. Unsplit, the statement reads
+# `... THEN m.weight DESC, m.name ASC END` — which no database parses,
+# so that regression arrives here as a 500, not as a wrong order.
+#
+# The SECOND key is what this sequence is really about. Rows 1 and 2 tie
+# on weight 5, and their names sort the opposite way to their ids:
+#
+#   id 3  bravo release    weight 9
+#   id 2  alpha release    weight 5   ← name ASC puts alpha first
+#   id 1  charlie release  weight 5
+#
+# Drop `m.name ASC` and the tie falls through to the query's trailing
+# `m.id ASC`, which yields 3, 1, 2 — so an emitter that keeps only the
+# first key of a multi-key fragment fails this case on the ORDER,
+# without any SQL error to point at it.
+#
+# Names are asserted alongside ids because the tie-break is a claim
+# about names; asserting ids alone would state the outcome without the
+# reason.
+#
+# POSITION IS LOAD-BEARING — see 0300.
+method: tasks.TaskQuery.ListMilestonesSorted
+pre:
+    - auth/auth.yaml
+input:
+    sort_by: MILESTONE_SORT_BY_WEIGHT
+expect:
+    items: {matcher: count, op: '==', value: 3}
+    items.0.id: {matcher: eq, value: "710003"}
+    items.0.weight: {matcher: num, op: '==', value: 9}
+    items.1.id: {matcher: eq, value: "710002"}
+    items.1.name: {matcher: eq, value: alpha release}
+    items.2.id: {matcher: eq, value: "710001"}
+    items.2.name: {matcher: eq, value: charlie release}

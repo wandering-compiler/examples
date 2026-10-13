@@ -1,0 +1,13 @@
+# tenant-alpha, as its own fixture path — for the scoped-stream cases
+# (rest/0695). Same reason auth/auth_beta_writer.yaml exists: a `pre` chain
+# runs each path ONCE per run, so listing auth/auth.yaml again to switch back
+# to alpha is a silent no-op and the step runs as whoever authenticated last.
+# rest/0695 (then numbered 0094) failed exactly that way on its first run: its "alpha" note was
+# written as beta and the stream, correctly scoped, had nothing to send.
+method: auth.AuthService.SignUp
+input:
+    tenant_slug: tenant-alpha
+    email: alpha-streamer${seq}@example.com
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}

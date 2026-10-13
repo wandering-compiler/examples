@@ -1,0 +1,11 @@
+# The bystander. User 2 owns no device the revoke names, so this record
+# must still be there afterwards — which is what separates "the chain
+# deleted the right key" from "the chain deleted the store".
+method: cache.UserPresenceMutation.SetUserPresence
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 2
+    online: true
+    current_route: /e2e/bystander
+expect: {}

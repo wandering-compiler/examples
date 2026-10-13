@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+// auditsink plugin — the one model, and the reason the plugin exists.
+
+package w17.contrib.auditsink;
+
+import "google/protobuf/timestamp.proto";
+import "w17/contrib.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+import "w17/module.proto";
+
+option go_package = "@project;@pkg";
+
+// The ALIAS. `store` is a name that means nothing outside this plugin:
+// staging rewrites `connection: { name: "store" }` to whatever the
+// activation's `connections:` map points it at, before the IR is built.
+//
+// Without the map, a plugin's tables land on the activating domain's
+// default connection and there is nothing to declare — which is why the
+// whole map had no example: the two shipped plugins both take the
+// default, so their activations carry no map and the field has no writer.
+//
+// This one is activated TWICE against DIFFERENT connections — `app` maps
+// it to `app-postgres`, `billing` maps it to `billing-postgres` — so the
+// same plugin's table is emitted into two different databases and the
+// map is the only thing that differs between them.
+option (w17.module) = {
+  connection: { name: "store" }
+};
+
+// AuditSink — an append-only record of something a domain did.
+//
+// Deliberately shapeless: the plugin's job is to provide a place to
+// write, not to model the domain writing to it. What matters here is
+// WHICH DATABASE the table is created in, and that is decided entirely
+// by the activation's alias map.
+message AuditSink {
+  option (w17.contrib.plugin_feature) = "sink";
+  // No `name:` — plugin protos omit it so the table takes the ACTIVATION
+  // prefix. Pinning a name would make two activations collide on one SQL
+  // identifier, and this plugin is activated twice.
+  option (w17.db.table) = {};
+
+  int64  id      = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string subject = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 120 }];
+  string detail  = 3 [(w17.field) = { type: TEXT, blank: true }];
+  google.protobuf.Timestamp created_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
+}

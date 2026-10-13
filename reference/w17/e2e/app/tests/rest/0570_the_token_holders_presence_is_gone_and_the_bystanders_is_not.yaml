@@ -1,0 +1,10 @@
+# User 3's presence went with the token. User 2's — planted at 0551 and
+# still untouched by anything since — is the control that says the chain
+# addressed one key rather than the keyspace.
+method: cache.UserPresenceQuery.GetUserPresence
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 3
+expect_error:
+    code: NOT_FOUND

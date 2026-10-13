@@ -1,0 +1,22 @@
+# `(w17.field).json` in the WHERE, as opposed to in the projection.
+#
+# 0521 reads a key OUT of the document; this one decides WHICH ROWS come
+# back by it. The two halves are separate emits — a projection is a
+# SELECT-list expression and a predicate is a comparison the planner can
+# use an index for — and an emitter that handled one and not the other
+# would leave 0521 green.
+#
+# The pair of cases is what makes it an assertion: `eu-central` returns
+# the row, and a region no document names returns none. Without the
+# empty half, a predicate the emitter dropped entirely (`WHERE TRUE`)
+# would answer the first case correctly.
+#
+# The tier is SPOTLIGHT because 0525 upgraded it.
+method: users.DirectoryPlanQuery.ListDirectoryPlansInRegion
+pre:
+    - auth/auth.yaml
+input:
+    region: eu-central
+expect:
+    plans: {matcher: count, op: '==', value: 1}
+    plans.0.tier: {matcher: eq, value: SPOTLIGHT}

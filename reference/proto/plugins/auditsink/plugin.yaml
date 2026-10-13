@@ -1,0 +1,38 @@
+name: auditsink
+version: 1.0.0
+requires_w17: ">=1.5"
+
+# REQUIRED even for a proto-only plugin: it is the canonical pb path
+# `plugin gen-pb` derives, and codegen emits a `replace` for it — so the
+# `src/` module below has to exist even with no authored handlers.
+go_module: github.com/wandering-compiler/examples/reference/auditsink
+
+description: >-
+  TEST-ONLY plugin. It exists to exercise
+  `(w17.domain).plugins[].connections` — the activation's alias→connection
+  map, which nothing in the shipped catalog can reach because neither `auth`
+  nor `payment` declares a connection alias at all (both bind to the
+  activating domain's default connection, so their activations carry no map
+  and the field has no writer).
+
+  Like `probe` in examples/plugin-surfaces, it lives ONLY in this example's
+  proto tree and not under the repo's `plugins/` catalog: it is a measuring
+  instrument, not something a consumer should install. Plugin STAGING is
+  driven by the uploaded proto tree plus the domain's `(w17.domain).plugins[]`
+  activations — the lock is not consulted — and `w17ctl plugin update --all`
+  only iterates plugins recorded in the lock, so it never touches this one.
+
+license: "Apache-2.0"
+
+# The alias. A plugin references connections by NAME-IN-THE-PLUGIN; the
+# activation maps each alias to a real `lock.connections[]` entry and
+# staging rewrites the staged proto before IR build. Every alias declared
+# here MUST appear as a key in every activation's `connections:` map —
+# which is what makes the field non-optional once a plugin has one.
+connections:
+  - store
+
+features:
+  - name: sink
+    description: "The AuditSink model + its reads. The plugin's whole surface; every activation gets it."
+    default: true

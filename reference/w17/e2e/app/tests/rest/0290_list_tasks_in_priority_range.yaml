@@ -1,0 +1,25 @@
+# The backlog report's happy path — the request that satisfies every
+# cross-field rule on ListTasksInPriorityRangeReq.
+#
+# Written over the generated skeleton, which asserted `count >= 0` on a
+# request that VIOLATES three of the six rules (min == max, title_is ==
+# title_is_not): it would have gone red for reasons unrelated to what it
+# claimed to check, and green against an empty result if it hadn't.
+#
+# Narrowed by exact title to one seeded task (fixtures/app/test.json,
+# priority 3), so the count is exact no matter what other tests have
+# created by the time this runs. `reason` is omitted deliberately: with
+# `title_is` set, REQUIRED_UNLESS is satisfied, which is the permit
+# direction of the rule the next-but-one case proves in the deny
+# direction.
+method: tasks.TaskQuery.ListTasksInPriorityRange
+pre:
+    - auth/auth.yaml
+input:
+    min_priority: 0
+    max_priority: 9
+    title_is: admin paged task 3
+expect:
+    items: {matcher: count, op: '==', value: 1}
+    items.0.id: {matcher: eq, value: "700003"}
+    items.0.priority: {matcher: num, op: '==', value: 3}

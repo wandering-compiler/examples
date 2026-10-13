@@ -1,0 +1,10 @@
+# rest/0217's other half: the same task, closed as DONE, lists nothing. A
+# predicate the database merely accepted would pass 0217 and fail here — the
+# lowered `NOT IN (3, 4)` has to match the stored status.
+method: tasks.TaskQuery.ListCommentsWhileTaskOpen
+pre:
+    - fixtures/the_commented_task_is_done.yaml
+input:
+    task_id: ${task.id}
+expect:
+    rows: {matcher: count, op: '==', value: 0}

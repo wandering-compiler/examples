@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+// Showcase module — exhaustive demonstration of the table-name +
+// prefix combinations.
+// Each message picks one combination so a reader sees the full
+// matrix without hopping across files.
+//
+// What's inherited from the cascade (no need to declare here):
+//   - Connection: `main` (POSTGRES 16) — from
+//     `proto/domains/app/w17.proto` (domain-level).
+//   - Module prefix `showcase` — auto-derived from the directory
+//     name `showcase` in the path.
+//
+// What each message demonstrates:
+//   case A — auto-derive name + auto-derive prefix
+//   case B — explicit name (skips prefix; literal identifier)
+//   case C — auto-derive name + table-level prefix opt-out
+
+package e2e.app.showcase;
+
+
+import "w17/db.proto";
+import "w17/field.proto";
+
+// Case A — DEFAULT BEHAVIOUR.
+//
+// Empty `(w17.db.table) = {}`: presence is the marker,
+// no overrides set. The proto message name `Default` lower-cases
+// to `default` (strict ToLower; no underscore insertion);
+// the module dir name `showcase` becomes the prefix;
+// final SQL identifier: `showcase_default`.
+//
+// (PG keyword `default` is reserved when bare; the module prefix
+// neutralises the collision automatically.)
+message Default {
+  option (w17.db.table) = {};
+
+  int64  id    = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string label = 2 [(w17.field) = { type: CHAR, max_len: 64 }];
+}
+
+// Case B — EXPLICIT NAME.
+//
+// `(w17.db.table).name` set: author owns the entire identifier.
+// Auto-derive doesn't run, the module prefix is NOT applied — the
+// SQL table is literally what the author wrote. Useful when:
+//   - integrating with a legacy schema that fixes the table name
+//   - wanting a name that doesn't follow the convention (e.g.
+//     a snake-cased name like `audit_log` instead of `auditlog`)
+message AuditLog {
+  option (w17.db.table) = { name: "audit_log" };
+
+  int64  id        = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string action    = 2 [(w17.field) = { type: CHAR, max_len: 64 }];
+  string subject   = 3 [(w17.field) = { type: CHAR, max_len: 256 }];
+}
+
+// Case C — TABLE-LEVEL PREFIX OPT-OUT.
+//
+// `(w17.db.table).prefix = false`: keep the auto-derived bare
+// name, drop the module prefix specifically for this one table.
+// Useful when:
+//   - one table in the module is a shared lookup that other
+//     modules also reference and a short stable name reads better
+//   - aligning with an external naming convention where a few
+//     well-known tables stand out
+//
+// Final SQL identifier here: `bare` (auto-derived from `Bare`
+// via lower-case, no prefix because of the opt-out).
+message Bare {
+  option (w17.db.table) = { prefix: false };
+
+  int64  id    = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string value = 2 [(w17.field) = { type: CHAR, max_len: 32 }];
+}

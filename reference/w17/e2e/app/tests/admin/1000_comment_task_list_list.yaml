@@ -1,0 +1,32 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# The unsorted baseline for the two sort cases that follow, written over
+# the generated skeleton's `rows >= 0` — which passes against an empty
+# response, and emptiness is this page's plausible failure (its source
+# is an INNER JOIN, so a broken join condition returns zero rows with a
+# 200).
+#
+# The three seeded comments are degenerate for ordering: every ASCENDING
+# key — `c.id`, `t.title`, `c.body_text` — puts them in the same
+# sequence, because the ids, the parent titles and the body text all
+# happen to run in step. That is why the two cases after this one sort
+# DESCENDING: descending is the only direction in which the keys
+# disagree, and a fixture where every key agrees can prove that a list
+# answered but never that it sorted.
+#
+# `default_sort: task_title` is therefore NOT provable here — it names
+# an order indistinguishable from the storage method's own. That claim
+# lives in the static gate (examplegates/admin_sort_test.go), which
+# reads it out of admin.json.
+method: admin.CommentTaskList.List
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 3}
+    rows.0.id: {matcher: eq, value: "720001"}
+    rows.2.id: {matcher: eq, value: "720003"}
+    rows.2.task_title: {matcher: eq, value: admin paged task 2}

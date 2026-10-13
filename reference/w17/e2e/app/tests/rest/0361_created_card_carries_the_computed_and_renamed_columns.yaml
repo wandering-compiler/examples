@@ -1,0 +1,43 @@
+# Three column-level declarations, read back off the row 0360 created.
+# All three are invisible from the write side, which is why this is a
+# separate step rather than an assertion on the create response.
+#
+# `(w17.db.column).generated_expr` — `search_key` is not a field of
+# CreateDirectoryCardReq and not a column of its INSERT, so nothing on
+# the write path can have supplied it. `alpha-cs` against a handle of
+# `Alpha-CS` is therefore the DATABASE having applied `lower(...)`. A
+# generated column the emitter declared but left out of the DDL would
+# come back as the empty string, and the column is NOT NULL, so
+# "nothing at all" is not an outcome this row could survive.
+#
+# `(w17.db.column).name` — the request said `handle`, the column is
+# `handle_slug`, and the response says `handle` again. Both directions
+# of that resolution run here: the INSERT had to write the SQL name and
+# the SELECT had to project it back under the proto name. This is also
+# the only step that ties the two halves together — the generated
+# column's body names `handle_slug` as opaque SQL, so if the override
+# stopped applying, `search_key` would be computed from a column that
+# does not exist and the schema would not apply at all.
+#
+# `(w17.db.column).db_type` — `headline` is stored as TEXT rather than
+# the VARCHAR(400) its `max_len` would imply. Storage is invisible to a
+# caller by design, so what this step can say is the half that must NOT
+# change: the value round-trips whole. The TEXT/CHECK pair itself is
+# asserted in the static gate.
+method: users.DirectoryCardQuery.GetDirectoryCard
+pre:
+    - auth/auth.yaml
+input:
+    id: ${card_cs.id}
+expect:
+    id: {matcher: eq, value: "${card_cs.id}"}
+    handle: {matcher: eq, value: Alpha-CS}
+    search_key: {matcher: eq, value: alpha-cs}
+    # QUOTED. Inside a flow mapping the comma is a separator, so an
+    # unquoted `Backend engineer, Prague` binds `value` to
+    # "Backend engineer" and drops "Prague" in as a stray key the
+    # matcher decoder ignores — a silently weaker assertion that still
+    # passes.
+    headline: {matcher: eq, value: "Backend engineer, Prague"}
+    locale: {matcher: eq, value: cs}
+    is_public: {matcher: eq, value: true}

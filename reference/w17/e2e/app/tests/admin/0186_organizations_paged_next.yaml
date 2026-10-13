@@ -1,0 +1,17 @@
+# ADMIN-ONLY paging over a plugin preset page, page 2 — resumes from the
+# cursor 0185 captured. Getting the SECOND org back (and only it) is the
+# proof that the keyset seek ran on the plugin's own ORDER BY: without
+# paging this same call returned both rows and a null envelope.
+#
+# `limit` is re-sent because the cursor carries the boundary + total +
+# direction but not the page size.
+method: admin.Organizations.List
+pre:
+    - auth/admin.yaml
+input:
+    limit: 1
+    cursor: ${orgs_admin.next_cursor}
+expect:
+    organizations: {matcher: count, op: '==', value: 1}
+    organizations.0.name: {matcher: eq, value: "E2E Throwaway Org"}
+    paging.total: {matcher: eq, value: "2"}

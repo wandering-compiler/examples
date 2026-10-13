@@ -1,0 +1,20 @@
+# The control for 0506. Same call, same refusal, `Accept-Language: en`.
+#
+# Without it 0506 would be satisfied by a catalog that answered Czech to
+# EVERY request — which is what a hard-coded default, or a resolver that
+# ignored the metadata and read the compile-time language, would do. The
+# pair is what says the locale is negotiated per request rather than
+# fixed at build time.
+method: users.DirectoryCardQuery.GetDirectoryOptIn
+pre:
+    - auth/auth.yaml
+headers:
+    Accept-Language: en
+input:
+    user_id: definitely-not-a-uuid
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: user_id
+          code: INVALID_UUID
+          message: {matcher: eq, value: "must be a valid UUID"}

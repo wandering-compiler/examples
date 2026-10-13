@@ -1,0 +1,26 @@
+# The reference-catalogue detail read, the second route of the page
+# whose model declares `(w17.acl_model) = false`.
+#
+# Hand-written over the generated skeleton, whose `id: e2e-value` is
+# not an int64 and whose `not_empty` expectations say nothing about
+# WHICH row came back — a detail read that returned the wrong category
+# would have passed. Category 2 is `personal` in
+# fixtures/app/test.json.
+#
+# `completed_count` is asserted with `empty`, not with `num` or
+# `not_empty`, and that is a statement about the WIRE rather than
+# laziness: the seeded counter is 0, and protojson omits a zero int32
+# entirely, so "the value is 0" and "the field is absent" are the same
+# observation over this transport. `empty` is the one matcher that says
+# that truthfully; `num` fails on the absent field and `not_empty`
+# would demand the counter be non-zero.
+method: admin.TaskCategoryAdmin.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 2
+expect:
+    id: {matcher: eq, value: "2"}
+    name: {matcher: eq, value: personal}
+    color: {matcher: eq, value: "#33C3FF"}
+    completed_count: {matcher: empty}

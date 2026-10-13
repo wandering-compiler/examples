@@ -1,0 +1,22 @@
+# ADMIN-ONLY paging over a PLUGIN PRESET page, page 1.
+#
+# Organizations is contributed by the auth plugin (presets.admin.pages,
+# org_membership) — the project declares no admin page for it, so there is
+# nothing for a project author to annotate: the paging comes entirely from
+# `w17.Paging` on the plugin's own `ListOrganizationsResp`.
+#
+# Two orgs are seeded (fixtures/app/test.json) and nothing in
+# this scenario creates more before 0210 deletes b4, so the ORDER BY
+# (`o.name ASC, o.id ASC`) makes the walk deterministic:
+#   page 1 = "E2E Membership Org" (b6), page 2 = "E2E Throwaway Org" (b4).
+# limit=1 forces a real second page rather than one page of both rows.
+method: admin.Organizations.List
+pre:
+    - auth/admin.yaml
+input:
+    limit: 1
+expect:
+    organizations: {matcher: count, op: '==', value: 1}
+    organizations.0.name: {matcher: eq, value: "E2E Membership Org"}
+    paging.total: {matcher: eq, value: "2"}
+    paging.next_cursor: {capture: orgs_admin.next_cursor, match: {matcher: not_empty}}

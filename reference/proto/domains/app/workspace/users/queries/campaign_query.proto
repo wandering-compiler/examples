@@ -1,0 +1,369 @@
+syntax = "proto3";
+
+package e2e.app.users;
+
+import "w17/db.proto";
+import "w17/field.proto";
+
+// Six reads over the directory-campaign island, each written for one DQL
+// construct that the whole example had never spelled.
+//
+// "Never spelled" is a measurement, not a guess: `lib/dql/topb.go`
+// converts an already-parsed AST into proto and has no error paths at
+// all, so a function sitting at zero coverage after a full regen means
+// exactly one thing — no example wrote the construct. The same held one
+// layer up in `desugar` and `typecheck`, where the dark functions were
+// the EXISTS-shortcut expander, the FD-on-PK relaxation, the cross-level
+// aggregate attribution and the `%` guard.
+//
+// Everything below is a query someone would plausibly want; the point is
+// which SPELLING each one uses.
+
+message ListCampaignsOnChannelReq { string channel = 1; }
+message ListCampaignsWithHeavyEventReq { int64 min_weight = 1; }
+message ListCampaignsFromSourceReq { string source = 1; }
+
+message CampaignSummary {
+  int64  id   = 1;
+  string name = 2;
+}
+message ListCampaignsResp { repeated CampaignSummary campaigns = 1; }
+
+message CampaignActivityReq {}
+
+// CampaignActivityRow — one row per campaign.
+//
+// `flight_count` and `newest_flight_events` are `optional` because zero
+// is a legitimate answer here (a campaign with no flights) and proto3
+// omits a scalar default from JSON entirely. Without explicit presence
+// "the campaign has no flights" and "the emitter returned nothing for
+// this field" are the SAME bytes on the wire, so the one row that proves
+// the LEFT JOIN preserved an empty campaign is also the one row an
+// assertion could not tell from a hole.
+message CampaignActivityRow {
+  int64           id                   = 1;
+  string          name                 = 2;
+  optional int64  flight_count         = 3;
+  optional int64  newest_flight_events = 4;
+}
+message CampaignActivityResp { repeated CampaignActivityRow rows = 1; }
+
+message ListFlightBucketsReq {
+  int64 campaign_id = 1;
+  // The modulus. A bind rather than a literal so the guard sees a
+  // parameter on the right-hand side — the side it must NOT flag,
+  // since an unresolved parameter is exactly the "unknown" case that
+  // has to stay permissive.
+  int64 bucket = 2;
+}
+
+// FlightBucketRow — one flight's numbers, each reduced modulo the same
+// divisor through a different operand SHAPE.
+//
+// The three integer buckets are `optional` for the same reason as above:
+// `CAST(0.25 AS INTEGER) % 7` is 0, and that zero is the answer, not an
+// absence.
+message FlightBucketRow {
+  int64          id                = 1;
+  optional int64 impression_bucket = 2;
+  optional int64 click_bucket      = 3;
+  double         spend_bucket      = 4;
+  double         coalesced_bucket  = 5;
+  optional int64 abs_bucket        = 6;
+}
+message ListFlightBucketsResp { repeated FlightBucketRow rows = 1; }
+
+message FlightWeightsReq { int64 campaign_id = 1; }
+
+// FlightWeightRow — a flight's total event weight next to its single
+// heaviest event.
+//
+// The two numbers come from two different join SHAPES, which is the
+// reason this row has both: `total_weight` from a derived table (a
+// grouped subquery in the FROM list) and `peak_weight` from an ordinary
+// join whose ON carries a correlated subquery. Neither shape existed
+// anywhere in this example, and the checks that walk them — "does this
+// derived body aggregate over the OUTER query's columns", "does this ON
+// reference an alias joined later" — had never run.
+message FlightWeightRow {
+  int64  id           = 1;
+  string channel      = 2;
+  int64  total_weight = 3;
+  int64  peak_weight  = 4;
+}
+message FlightWeightsResp { repeated FlightWeightRow rows = 1; }
+
+message ChannelBreakdownReq { int64 campaign_id = 1; }
+
+// ChannelBreakdownRow — one row per grouping set.
+//
+// `channel` is `optional` because the rollup rows genuinely have no
+// channel: a grouping set that omits a column produces NULL there, and
+// that NULL is the row's meaning ("every channel"), not a missing value.
+message ChannelBreakdownRow {
+  int64           campaign_id  = 1;
+  optional string channel      = 2;
+  optional int64  flight_count = 3;
+}
+message ChannelBreakdownResp { repeated ChannelBreakdownRow rows = 1; }
+
+message GetCampaignAudienceSourceReq { int64 id = 1; }
+message GetCampaignAudienceSourceResp {
+  int64  id          = 1;
+  string name        = 2;
+  string utm_source  = 3;
+}
+
+service CampaignQuery {
+  // ListCampaignsOnChannel — the EXISTS chain SHORTCUT, single hop.
+  //
+  // `EXISTS c.flights(channel = :channel)` is sugar. The desugar phase
+  // expands it into a full inner SELECT the author never writes:
+  //
+  //   EXISTS (SELECT 1 FROM campaign_flights __exsh_c_flights
+  //           WHERE c.id = __exsh_c_flights.campaign_id
+  //             AND __exsh_c_flights.channel = :channel)
+  //
+  // Two things in that expansion are worth naming because a fixture
+  // that only counts rows cannot see either. The FK predicate lands in
+  // the WHERE and not in the JOIN's ON — deliberately, so the multi-hop
+  // form below stays free of the NULL-semantics differences that ON
+  // predicates acquire across dialects. And the author's bare `channel`
+  // is auto-qualified to the SYNTHESISED alias, which is the only alias
+  // it could mean and not one that appears anywhere in the source text.
+  //
+  // This example already had a hand-written correlated EXISTS
+  // (`UserQuery.ListUsersWithTasks`). That is the OUTPUT of this
+  // expansion, which is why its existence proved nothing about the
+  // expander: the shortcut's seven functions were all at zero.
+  rpc ListCampaignsOnChannel(ListCampaignsOnChannelReq) returns (ListCampaignsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.name "
+          "FROM users.DirectoryCampaign c "
+          "WHERE EXISTS c.flights(channel = :channel) "
+          "ORDER BY c.id ASC"
+      }
+    };
+  }
+
+  // ListCampaignsWithHeavyEvent — the same shortcut, TWO hops.
+  //
+  // This is a different arm of the expander, not a longer version of
+  // the same one. One hop synthesises a bare `SELECT 1 FROM <target>`;
+  // each hop after the first mints an explicit JOIN with a `1 = 1`
+  // placeholder ON and pushes its own FK predicate into the shared
+  // WHERE, so the emitted inner query is:
+  //
+  //   SELECT 1 FROM campaign_flights __exsh_c_flights
+  //   JOIN flight_events __exsh_c_flights_events ON 1 = 1
+  //   WHERE c.id             = __exsh_c_flights.campaign_id
+  //     AND __exsh_c_flights.id = __exsh_c_flights_events.flight_id
+  //     AND __exsh_c_flights_events.weight >= :min_weight
+  //
+  // The bare `weight` qualifies to the LAST synthesised alias — the
+  // ground of the chain — which is the convention the dotted-chain
+  // rewriter already uses on the SELECT side.
+  rpc ListCampaignsWithHeavyEvent(ListCampaignsWithHeavyEventReq) returns (ListCampaignsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.name "
+          "FROM users.DirectoryCampaign c "
+          "WHERE EXISTS c.flights.events(weight >= :min_weight) "
+          "ORDER BY c.id ASC"
+      }
+    };
+  }
+
+  // CampaignActivity — two grouping rules in one query, because the
+  // shape that needs each of them is the same shape.
+  //
+  // FIRST: `GROUP BY c.id` alone, while the projection also carries
+  // `c.name`. Every other grouped query in this example lists every
+  // projected column in its GROUP BY (`GROUP BY a.id, a.email` in the
+  // ledger rollup), which is why the FD-on-PK relaxation had never once
+  // been asked to hold. It is not decoration: the primary key
+  // functionally determines the row, so PostgreSQL accepts the
+  // shorter GROUP BY, and a compiler that did not model that would
+  // refuse a query the database is happy with.
+  //
+  // SECOND: `MAX(f.id)` written INSIDE the scalar subquery. Its only
+  // variable belongs to the OUTER query, so SQL assigns the call to the
+  // outer level — it is one value per group, computed by the enclosing
+  // GROUP BY, and the subquery merely reads it. Two consequences follow
+  // and both are load-bearing here: the aggregate is legal in a WHERE
+  // (that clause belongs to the inner query, and the call does not),
+  // and `f.id` inside it is exempt from the GROUP-BY rule it would
+  // otherwise violate. The inner `COUNT(e.id)` is an ordinary
+  // inner-level aggregate, which is what keeps the subquery
+  // single-row.
+  //
+  // Read plainly: how many flights does the campaign have, and how many
+  // events landed on its newest one.
+  rpc CampaignActivity(CampaignActivityReq) returns (CampaignActivityResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.name, "
+          "       COUNT(f.id) AS flight_count, "
+          "       (SELECT COUNT(e.id) FROM users.FlightEvent e "
+          "        WHERE e.flight_id = MAX(f.id)) AS newest_flight_events "
+          "FROM users.DirectoryCampaign c "
+          "LEFT JOIN c.flights f "
+          "GROUP BY c.id "
+          "ORDER BY c.id ASC"
+      }
+    };
+  }
+
+  // ListFlightBuckets — `%` (modulo) over five operand shapes.
+  //
+  // The guard behind this decides whether the query is EMITTED, and it
+  // is wrong in two directions that look nothing alike. PostgreSQL has
+  // no modulo operator for `float8`, so `click_rate % 7` is a
+  // server-side "operator does not exist" — the CAST is not styling,
+  // it is the only way to ask the question. But `spend` also rides the
+  // DOUBLE carrier while being stored as `NUMERIC(19,4)`, where `%` is
+  // perfectly valid; refusing it because the carrier looks floating is
+  // a loud refusal of a correct query, and that is what the compiler
+  // did before the preset carve-out.
+  //
+  // So the five projections are five different questions to the same
+  // guard: an integer column, a CAST target, a NUMERIC-preset column,
+  // that column inside a value-preserving COALESCE, and an integer
+  // inside ABS. The two function wrappers are there because the guard
+  // has to see THROUGH them — a whitelist that stopped propagating
+  // would either refuse `COALESCE(spend, 0) % n` or, worse, let a
+  // genuine float through under `ABS`.
+  rpc ListFlightBuckets(ListFlightBucketsReq) returns (ListFlightBucketsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT f.id, "
+          "       f.impressions % :bucket AS impression_bucket, "
+          "       CAST(f.click_rate AS INTEGER) % :bucket AS click_bucket, "
+          "       f.spend % :bucket AS spend_bucket, "
+          "       COALESCE(f.spend, 0) % :bucket AS coalesced_bucket, "
+          "       ABS(f.impressions) % :bucket AS abs_bucket "
+          "FROM users.CampaignFlight f "
+          "WHERE f.campaign_id = :campaign_id "
+          "ORDER BY f.id ASC"
+      }
+    };
+  }
+
+  // FlightWeights — two join shapes this example had never written, in the
+  // one query that wants both.
+  //
+  // The DERIVED TABLE (`JOIN (SELECT … GROUP BY …) t`) puts a whole
+  // grouped SELECT into the FROM list. That body is part of THIS query's
+  // FROM clause, which is evaluated before grouping, so an aggregate
+  // there that aggregated the OUTER query's columns would be illegal —
+  // and the walk that decides which level a body's aggregates belong to
+  // had never been handed a body to walk. Here `SUM(e2.weight)`
+  // aggregates the body's OWN rows, which is the legal case and the one
+  // worth having: it is what an example containing only the refusal could
+  // not prove.
+  //
+  // The SUBQUERY IN THE ON is the second. A JOIN may reference the FROM
+  // alias, an earlier join, or its own — never one joined further down —
+  // and that rule has to descend into subqueries written inside the ON,
+  // carrying the aliases each nested SELECT declares for itself so a
+  // legitimate re-use of a name is not mistaken for a forward reference.
+  // No example had ever nested a SELECT in an ON at all.
+  //
+  // Read plainly: per flight, how much its events weigh in total and how
+  // much its single heaviest one weighs. The two differ on any flight
+  // with more than one event, which is what makes them separable.
+  rpc FlightWeights(FlightWeightsReq) returns (FlightWeightsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT f.id, f.channel, t.total_weight, e.weight AS peak_weight "
+          "FROM users.CampaignFlight f "
+          "JOIN (SELECT e2.flight_id AS flight_id, SUM(e2.weight) AS total_weight "
+          "      FROM users.FlightEvent e2 GROUP BY e2.flight_id) t ON t.flight_id = f.id "
+          "JOIN users.FlightEvent e ON e.flight_id = f.id "
+          "     AND e.weight = (SELECT MAX(x.weight) FROM users.FlightEvent x WHERE x.flight_id = f.id) "
+          "WHERE f.campaign_id = :campaign_id "
+          "ORDER BY f.id ASC"
+      }
+    };
+  }
+
+  // ChannelBreakdown — two grouping axes in one pass.
+  //
+  // `GROUPING SETS ((campaign_id, channel), (campaign_id))` asks for the
+  // per-channel counts AND the per-campaign totals in a single scan.
+  // What it costs is that a set which omits a column produces NULL there,
+  // and the compiler has to reason about which columns are still
+  // functionally determined: only the keys present in EVERY set qualify,
+  // which is why the intersection of the sets — and not their union — is
+  // what a functional-dependency exemption may rest on. Computing that
+  // intersection is the step no example had ever triggered, because no
+  // example had ever written more than one grouping set.
+  //
+  // Deliberately NOT ROLLUP. ROLLUP is native on PostgreSQL and MySQL,
+  // spelled differently on MySQL, and refused on SQLite, so it is a
+  // three-dialect claim and belongs where all three dialects live. This
+  // project is Postgres-only and GROUPING SETS has no rewrite here.
+  rpc ChannelBreakdown(ChannelBreakdownReq) returns (ChannelBreakdownResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT f.campaign_id, f.channel, COUNT(f.id) AS flight_count "
+          "FROM users.CampaignFlight f "
+          "WHERE f.campaign_id = :campaign_id "
+          "GROUP BY GROUPING SETS ((f.campaign_id, f.channel), (f.campaign_id)) "
+          "ORDER BY f.campaign_id ASC, f.channel ASC"
+      }
+    };
+  }
+
+  // GetCampaignAudienceSource — a JSON key in the QUOTED form.
+  //
+  // `c.audience."utm.source"` is one key out of the targeting document,
+  // and the quotes are the whole point: the key contains a dot, which
+  // is the character the chain syntax spends on "go one level down".
+  // Written bare, `c.audience.utm.source` is two hops into a document
+  // that has no `utm` object, and the build fails. The quoted spelling
+  // is the escape, and nothing in this example had ever used it — every
+  // JSON key any example reads is a bare identifier.
+  rpc GetCampaignAudienceSource(GetCampaignAudienceSourceReq) returns (GetCampaignAudienceSourceResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.name, c.audience.\"utm.source\" AS utm_source "
+          "FROM users.DirectoryCampaign c WHERE c.id = :id"
+      }
+    };
+  }
+
+  // ListCampaignsFromSource — the same quoted key, in the WHERE.
+  //
+  // The pair matters for the same reason the plan queries read a JSON
+  // key in both positions: a projection is a SELECT-list expression and
+  // a predicate is a comparison the planner can index, and they are
+  // separate emits. One working says nothing about the other.
+  rpc ListCampaignsFromSource(ListCampaignsFromSourceReq) returns (ListCampaignsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.name "
+          "FROM users.DirectoryCampaign c "
+          "WHERE c.audience.\"utm.source\" = :source "
+          "ORDER BY c.id ASC"
+      }
+    };
+  }
+}

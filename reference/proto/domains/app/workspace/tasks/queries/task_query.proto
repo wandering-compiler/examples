@@ -1,0 +1,2223 @@
+syntax = "proto3";
+
+package e2e.app.tasks;
+
+import "google/protobuf/timestamp.proto";
+import "w17/acl.proto";
+import "w17/admin.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+import "w17/paging.proto";
+import "domains/app/workspace/tasks/types/models.proto";
+
+// TaskQuery exposes the read side of the tasks module
+// (storage tier — gRPC-only; the REST surface lives on
+// `TasksService` per the e2e spec's facade-first rule).
+//
+// Carries the streaming methods (server-stream / bidi) and
+// the JOIN-bearing reads — `GetTaskWithCategory` (single-row
+// JOIN, optimizer picks JOIN-strategy: TaskCategory is a
+// small lookup) and `GetTaskWithComments` (fan-out, optimizer
+// picks PREFETCH-strategy: Comment.body_text is unannotated
+// TEXT → 4 KiB default → above the 1 KiB threshold).
+
+message StreamAllTasksReq {
+  int64 user_id = 1;
+}
+
+message LiveSearchReq {
+  string query = 1;
+}
+
+message LiveSearchHit {
+  int64  task_id = 1;
+  string title   = 2;
+}
+
+message GetTaskWithCategoryReq {
+  int64 id = 1;
+}
+
+message GetTaskWithCategoryResp {
+  e2e.app.tasks.Task         task     = 1;
+  e2e.app.tasks.TaskCategory category = 2;
+}
+
+// TaskHeadRow / CategoryRow — a hand-written DTO projection, and
+// deliberately NOT the `Task` / `TaskCategory` models above.
+//
+// Every other JOIN in this project projects into the MODEL message,
+// whose fields carry `(w17.field) = { null: true }`. The scan planner
+// reads nullability off the RESPONSE descriptor first, so on those
+// shapes it never has to ask the schema — and that is why the schema
+// half of the question went unasked for as long as it did. A row like
+// this one carries no such annotation: `parent_id` is a NULL-able
+// COLUMN and nothing on the descriptor says so, which makes the SCHEMA
+// the only source that knows.
+//
+// Every seeded category is top-level, so `parent_id` is NULL on every
+// row these two reads can return. That is the ordinary state of a
+// self-FK, not an edge case arranged for the fixture.
+message CategoryRow {
+  int64  id        = 1;
+  string name      = 2;
+  // Nullable COLUMN, plain proto3 field. A direct
+  // `rows.Scan(&resp.Category.ParentId)` answers 500 on a top-level
+  // category — which is all of them.
+  int64  parent_id = 3;
+}
+
+message TaskHeadRow {
+  int64  id    = 1;
+  string title = 2;
+}
+
+message GetTaskCategoryRowReq {
+  int64 id = 1;
+}
+
+message GetTaskCategoryRowResp {
+  TaskHeadRow task     = 1;
+  CategoryRow category = 2;
+}
+
+message GetTaskWithCommentsReq {
+  int64 id = 1;
+}
+
+message GetTaskWithCommentsResp {
+  e2e.app.tasks.Task             task     = 1;
+  repeated e2e.app.tasks.Comment comments = 2;
+}
+
+// CountTasksByCategoryReq is empty — the aggregation runs
+// across the whole tasks table.
+message CountTasksByCategoryReq {}
+
+// CategoryCount is one row of the GROUP BY result. The proto
+// field names match the SELECT projection's AS aliases so the
+// codegen scan plan resolves by name.
+message CategoryCount {
+  int64 category_id = 1;
+  int64 task_count  = 2;
+}
+
+// CountTasksByCategoryResp is list-shaped (single repeated
+// field) so the storage codegen picks the multi-row path
+// (`QueryContext` + per-row scan).
+message CountTasksByCategoryResp {
+  repeated CategoryCount rows = 1;
+}
+
+// CountTasksByStatusReq is empty — the aggregation runs across
+// the whole tasks table, like its by-category sibling.
+message CountTasksByStatusReq {}
+
+// StatusCount is one row of the GROUP BY over Task.status.
+//
+// `status` is deliberately a bare int32 rather than the
+// `Task.Status` enum: that is what an aggregation row usually
+// looks like, and it is the case the ADMIN display contract has
+// to survive. The row is a DTO — it carries the model column's
+// VALUE and none of its declarations — so nothing on this field
+// says which enum the number belongs to. Projection provenance
+// resolves it from `tasks.Task.status`, which is what lets the
+// admin's donut render "In progress" instead of `2`.
+message StatusCount {
+  int32 status     = 1;
+  int64 task_count = 2;
+}
+
+// CountTasksByStatusResp is list-shaped like the by-category
+// response, so the chart widget reads its rows the same way.
+message CountTasksByStatusResp {
+  repeated StatusCount rows = 1;
+}
+
+// CountTasksPerDayReq is empty — the aggregation runs across the
+// whole tasks table, like its two siblings above.
+message CountTasksPerDayReq {}
+
+// DayCount is one point of the TIME series: an instant plus how
+// many tasks were created at it.
+//
+// `day` is the other half of the axis display contract. Where
+// StatusCount carries a number that means a label, this carries a
+// TIMESTAMP — and a timestamp rendered raw puts
+// "2026-01-01T00:00:00Z" on the one axis a reader is meant to
+// scan. Nothing on this DTO field declares a format; the admin
+// spec grows an `x_format` for it because the proto carrier says
+// DATETIME and provenance ties the alias back to
+// `tasks.Task.created_at`.
+message DayCount {
+  google.protobuf.Timestamp day        = 1;
+  int64                     task_count = 2;
+}
+
+// CountTasksPerDayResp — list-shaped like its siblings.
+message CountTasksPerDayResp {
+  repeated DayCount rows = 1;
+}
+
+// ListCategoriesWithTaskCountsReq is empty — the listing
+// covers every TaskCategory.
+message ListCategoriesWithTaskCountsReq {}
+
+// CategoryWithCount carries a category descriptor + the
+// number of tasks bound to it. Mirrors `task_count` from
+// CategoryCount but adds the category's own metadata so
+// dashboards can render rows without a second lookup.
+message CategoryWithCount {
+  int64  category_id = 1;
+  string name        = 2;
+  int64  task_count  = 3;
+}
+
+// ListCategoriesWithTaskCountsResp — list-shaped response;
+// row count equals the number of categories regardless of
+// whether each category has any matching tasks (LEFT JOIN
+// preserves the parent-side rows). Aggregate `COUNT(t.id)`
+// returns 0 (not NULL) for empty groups, so the scan stays
+// within the non-null path even on outer-join no-match.
+message ListCategoriesWithTaskCountsResp {
+  repeated CategoryWithCount rows = 1;
+}
+
+// ListTasksByPriorityBucketReq is empty — bucketing covers
+// every task.
+message ListTasksByPriorityBucketReq {}
+
+// TaskBucket carries the task's id + title + a CASE-derived
+// priority bucket (`high` / `normal` / `low`). The string
+// column lands as a regular response field; codegen scans it
+// from the projection's AS alias the same as any other column.
+message TaskBucket {
+  int64  id     = 1;
+  string title  = 2;
+  string bucket = 3;
+}
+
+// ListTasksByPriorityBucketResp — list-shaped response. Order
+// stable via ORDER BY id so the e2e assertion can index rows
+// positionally.
+message ListTasksByPriorityBucketResp {
+  repeated TaskBucket rows = 1;
+}
+
+service TaskQuery {
+  // GetTaskForUpdate — `(w17.db.lock)` on a QUERY, which is a different
+  // emit from the same annotation on a mutation.
+  //
+  // A locked mutation owns its transaction, so the lock is simply part of
+  // its SELECT. A locked query does not: it can only take a row lock if
+  // the CALLER already opened a transaction and handed it down. So the
+  // generated body is two-branched — adopt the caller's tx and run the
+  // `FOR UPDATE` variant, or fall back to the pool and run the unlocked
+  // one — and the SQL is emitted TWICE, once per branch.
+  //
+  // `UserMutation.UpdateProfile` has carried the annotation for a long
+  // time and never reached this: it is a mutation. Nothing in this example
+  // had ever locked a read, so the branch that decides between the two
+  // variants had never been emitted.
+  //
+  // The failure it guards is the quiet one. Without the adopted-tx arm a
+  // locked read runs on a pooled connection, outside the caller's
+  // transaction — which acquires no lock and holds nothing, while
+  // returning exactly the row the caller asked for.
+  //
+  // Single-op, unary, and flat on purpose: a locked query that is
+  // multi-op, streaming, multi-connection or JOIN-shaped is refused
+  // upfront with steering, so this is the shape the compiler admits.
+  rpc GetTaskForUpdate(GetTaskForUpdateReq) returns (GetTaskForUpdateResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS id, t.title AS title, t.status AS status "
+          "FROM tasks.Task t WHERE t.id = :id"
+      }
+    };
+    option (w17.db.lock) = {
+      locks: [
+        { resource: "Task", kind: SELECT_FOR_UPDATE }
+      ]
+    };
+  }
+
+  // GetTaskIfUnresolved — the only question that can tell a stored SQL
+  // NULL from a stored 0 in a nullable enum column.
+  //
+  // Reading `resolution` back cannot: a proto3 enum field carries 0 for
+  // both, so a response body looks identical either way. `IS NULL` is
+  // asked of the COLUMN, where the difference actually lives — the row
+  // comes back when the task has no resolution and does not when it has
+  // one. Keyed by id rather than listing, so neither leg depends on what
+  // else the suite has written.
+  rpc GetTaskIfUnresolved(GetTaskIfUnresolvedReq) returns (GetTaskIfUnresolvedResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS id, t.title AS title "
+          "FROM tasks.Task t WHERE t.id = :id AND t.resolution IS NULL"
+      }
+    };
+  }
+
+  // ListCommentsWhileTaskOpen — an enum-name literal compared against a
+  // SCALAR SUBQUERY over an enum column.
+  //
+  // The task's status is read by a subquery, the way a guard reads a value
+  // the request does not carry, and compared with value NAMES. Those have to
+  // be lowered to the enum's numbers exactly as they are against the bare
+  // `t.status` — they were not: the literals stayed strings, the column is
+  // INTEGER, and Postgres refused every call while codegen was clean. Only a
+  // live database shows the difference, which is why this method is driven
+  // by rest/0217–0218 rather than by a fixture of the emitted text.
+  rpc ListCommentsWhileTaskOpen(ListCommentsWhileTaskOpenReq) returns (ListCommentsWhileTaskOpenResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id AS id, c.body_text AS body_text FROM tasks.Comment c "
+          "WHERE c.task_id = :task_id "
+          "AND (SELECT t.status FROM tasks.Task t WHERE t.id = :task_id) NOT IN ('DONE', 'ARCHIVED') "
+          "ORDER BY c.id ASC"
+      }
+    };
+  }
+
+  // CountTasksByCategory — aggregate + GROUP BY end-
+  // to-end. Storage tier projects `(category_id, COUNT(*))`
+  // and the gateway exposes it as a direct-REST endpoint
+  // (analytics/dashboards layer; no facade needed since the
+  // shape is already terminal — just the aggregated rows).
+  // ORDER BY category_id keeps the response stable for the
+  // e2e assertion.
+  rpc CountTasksByCategory(CountTasksByCategoryReq) returns (CountTasksByCategoryResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.category_id AS category_id, COUNT(*) AS task_count "
+          "FROM tasks.Task t "
+          "GROUP BY t.category_id "
+          "ORDER BY t.category_id ASC"
+      }
+    };
+  }
+
+  // CountTasksByStatus — the same aggregate one column over,
+  // grouped by an ENUM. It backs the admin overview's donut, and
+  // it is the shape that proves the admin renders a value by its
+  // TYPE: the projection carries the enum's number, the admin
+  // spec carries the catalogue behind it, and the legend reads
+  // the labels. ORDER BY keeps the row order stable for the e2e
+  // assertion.
+  rpc CountTasksByStatus(CountTasksByStatusReq) returns (CountTasksByStatusResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.status AS status, COUNT(*) AS task_count "
+          "FROM tasks.Task t "
+          "GROUP BY t.status "
+          "ORDER BY t.status ASC"
+      }
+    };
+  }
+
+  // CountTasksPerDay — the same aggregate over TIME, backing the
+  // admin overview's area chart. It is the axis display contract's
+  // other case: the projection returns an instant, the admin spec
+  // carries the `datetime` format behind it, and the axis reads as
+  // a date instead of a wire timestamp. Grouped by the raw column
+  // (DQL has EXTRACT, not a timestamp-bucketing function), which
+  // is enough — the seeded rows carry three distinct instants.
+  // ORDER BY keeps the series in time order; the SPA never
+  // re-sorts what the query handed it.
+  rpc CountTasksPerDay(CountTasksPerDayReq) returns (CountTasksPerDayResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.created_at AS day, COUNT(*) AS task_count "
+          "FROM tasks.Task t "
+          "GROUP BY t.created_at "
+          "ORDER BY t.created_at ASC"
+      }
+    };
+  }
+
+  // ListCategoriesWithTaskCounts — LEFT JOIN end-to-end,
+  // dotted-reverse-access form. The reverse accessor
+  // `c.task_set` (Django default for the Task → TaskCategory FK
+  // since the FK declares no `related_name`) auto-expands at
+  // desugar time into `LEFT JOIN c.task_set __rel_c_task_set`,
+  // so the author writes the natural projection
+  // `COUNT(c.task_set.id)` instead of stitching the JOIN by hand.
+  // `COUNT(...)` over the LEFT-joined alias returns 0 for empty
+  // groups (not NULL), so the response scan stays in the non-
+  // null path.
+  rpc ListCategoriesWithTaskCounts(ListCategoriesWithTaskCountsReq) returns (ListCategoriesWithTaskCountsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id AS category_id, c.name AS name, COUNT(c.task_set.id) AS task_count "
+          "FROM tasks.TaskCategory c "
+          "GROUP BY c.id, c.name "
+          "ORDER BY c.id ASC"
+      }
+    };
+  }
+
+  // ListTasksByPriorityBucket — CASE WHEN ... END AS
+  // alias in SELECT projection. The bucketing collapses raw
+  // priority numbers into named tiers; codegen treats the
+  // CASE-typed projection identically to any aliased column,
+  // landing on `bucket` field via the AS alias. Direct REST
+  // (analytics-shaped, terminal — no facade).
+  rpc ListTasksByPriorityBucket(ListTasksByPriorityBucketReq) returns (ListTasksByPriorityBucketResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS id, t.title AS title, "
+          "       CASE WHEN t.priority >= 7 THEN 'high' "
+          "            WHEN t.priority >= 3 THEN 'normal' "
+          "            ELSE 'low' END AS bucket "
+          "FROM tasks.Task t "
+          "ORDER BY t.id ASC"
+      }
+    };
+  }
+
+  // ListTasksLive — the delivery-fallback poll source for
+  // `TaskCompleted`.
+  //
+  // Deliberately UNPAGED, and that is the whole point of it
+  // existing next to ListTasksPaged below. The fallback poller
+  // issues one call per tick and diffs whole snapshots against
+  // each other; it follows no cursor. Against a cursor-paged
+  // query "the working set" would mean "page one", so with the
+  // default rung of 50 and keyset ASC ordering a task that
+  // transitions to DONE past the last page is never diffed and
+  // the synthesized event never fires — silently, from row 51 on.
+  // Codegen now refuses a paged fallback source outright;
+  // this is what a correct one looks like.
+  //
+  // Same projection as ListTasksPaged, minus the paging envelope.
+  // Direct REST (storage-tier read; the FE polls it by URL).
+  rpc ListTasksLive(ListTasksLiveReq) returns (ListTasksLiveResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id "
+          "FROM tasks.Task t "
+          "ORDER BY t.id ASC"
+      }
+    };
+  }
+
+  // ListTasksPaged — cursor-paging fixture. The DQL
+  // stays cursor-unaware: no LIMIT, no keyset WHERE. The REST
+  // registry's `paged: { enabled: true }` annotation on this
+  // method (see proto/domains/app/rest.proto, /tasks group)
+  // tells the gateway codegen to inject the keyset WHERE +
+  // LIMIT at SQL emit time and to wrap the response with
+  // base64 cursors in `w17.Paging`.
+  //
+  // ORDER BY t.id ASC — `id` is the PK (unique, NOT NULL by
+  // IDENTITY default) so it satisfies the paged-endpoint
+  // tiebreaker rule on its own.
+  //
+  // Projects the two nullable columns (`assignee_id`,
+  // `project_id`) on purpose — they exercise the storage
+  // scan-emit's sql.NullInt64 path so a Task row with NULL
+  // assignee / project comes through without crashing the
+  // row scan (database/sql rejects `NULL → *int64` when
+  // scanning straight into the proto field).
+  //
+  // Direct REST (storage-tier read; no facade hop — paging is
+  // a transport concern that the gateway handles end-to-end).
+  rpc ListTasksPaged(ListTasksPagedReq) returns (ListTasksPagedResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id "
+          "FROM tasks.Task t "
+          "ORDER BY t.id ASC"
+      }
+    };
+  }
+
+  // ListTasksPagedTuned — byte-identical DQL to ListTasksPaged
+  // above, existing only so the PagedConfig knobs have somewhere to
+  // be overridden.
+  //
+  // A second REST binding on ListTasksPaged itself would have been
+  // the cleaner fixture — one storage method, two configs, so every
+  // difference is attributable to the config. Codegen refuses it: a
+  // gRPC method may appear in at most one endpoints[] entry, since
+  // the second registration would clobber the first's routing. The
+  // duplicated DQL is the cost of that rule, and keeping it
+  // character-for-character identical preserves most of the
+  // argument — the two endpoints differ in their paging config and
+  // in nothing a query can see.
+  rpc ListTasksPagedTuned(ListTasksPagedTunedReq) returns (ListTasksPagedTunedResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id "
+          "FROM tasks.Task t "
+          "ORDER BY t.id ASC"
+      }
+    };
+  }
+
+  // ListTasksPagedWithCategory — the paged-list-over-a-JOIN
+  // fixture (see ListTasksPagedWithCategoryReq). LEFT JOIN so a
+  // task whose category row is gone still lists, COALESCE so the
+  // orphaned row scans as "" instead of NULL-into-string.
+  //
+  // Direct REST (storage tier), same as ListTasksPaged.
+  rpc ListTasksPagedWithCategory(ListTasksPagedWithCategoryReq) returns (ListTasksPagedWithCategoryResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id, t.title, t.category_id, "
+          "       COALESCE(c.name, '') AS category, t.created_at "
+          "FROM tasks.Task t "
+          "LEFT JOIN tasks.TaskCategory c ON c.id = t.category_id "
+          "ORDER BY t.id DESC"
+      }
+    };
+  }
+
+  // ListTasksAdminFeed — the ADMIN-ONLY cursor-paging fixture.
+  // Nothing in rest.proto refers to this method: its one and only
+  // consumer is the admin page `TaskFeed`. There is therefore no
+  // `paged: { enabled: true }` anywhere for it — no endpoint to
+  // put one on — and the `w17.Paging` field on
+  // ListTasksAdminFeedResp is what declares the method paged.
+  // Storage still gets the keyset WHERE + LIMIT, and the admin
+  // list handler still emits cursor decode/encode.
+  //
+  // ORDER BY t.id DESC, deliberately the OPPOSITE of
+  // ListTasksPaged's ASC: the keyset direction is read off THIS
+  // method's own DQL, so the admin-only page walking 700005 →
+  // 700001 (while TaskAdmin walks 700001 → 700005 over the same
+  // rows) is visible proof that the paging is this method's, not
+  // inherited from the REST-paged one next to it.
+  //
+  // It also carries `(w17.admin_bypass_acl) = true` — the ONE
+  // method in this project that does. A read-only operational
+  // feed is the shape the opt-out is for: every authenticated
+  // admin may WATCH the queue, while what they may DO to a task
+  // stays gated. requireAuth still fires; only the per-handler
+  // permission check goes away.
+  //
+  // The bypass drops BOTH ACL axes, not just the endpoint one:
+  // the model perm `tasks.Task#view` that the page's
+  // `model: "tasks.Task"` stamps disappears together with the
+  // endpoint perm. TaskAdmin, one page over, binds
+  // ListTasksPaged and keeps both — so the two admin lists over
+  // the SAME model differ only by this annotation.
+  // ListTasksInPriorityRange — the cross-field-validation host (see
+  // ListTasksInPriorityRangeReq). Every optional filter rides the DQL
+  // `?` marker, so an omitted one drops its predicate; `reason` is
+  // audit metadata and reaches no SQL at all.
+  rpc ListTasksInPriorityRange(ListTasksInPriorityRangeReq) returns (ListTasksInPriorityRangeResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id, t.title, t.priority "
+          "FROM tasks.Task t "
+          "WHERE t.priority >= :min_priority "
+          "  AND t.priority <= :max_priority "
+          "  AND ?t.title = :title_is "
+          "  AND ?t.title <> :title_is_not "
+          "  AND ?t.category_id = :category_id "
+          "  AND ?t.project_id = :project_id "
+          "  AND ?t.status <> :exclude_status "
+          "  AND ?t.status = :only_status "
+          "ORDER BY t.priority DESC, t.id ASC"
+      }
+    };
+  }
+
+  // ListMilestonesSorted — the ORDER BY-by-enum host (see
+  // MilestoneSortField). The DQL names the sort parameter and says
+  // nothing else about the order; the fragments live on the enum
+  // values.
+  //
+  // The trailing `m.id ASC` is load-bearing twice: it is the whole
+  // order when the parameter is unset, and it is the fallback that
+  // makes the second key of the BY_WEIGHT fragment observable —
+  // without that key the tied rows come back in id order instead.
+  //
+  // No direction on the `:sort_by` item: direction belongs inside
+  // each value's fragment, and the typechecker refuses it here.
+  rpc ListMilestonesSorted(ListMilestonesSortedReq) returns (ListMilestonesSortedResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT m.id, m.name, m.weight "
+          "FROM tasks.Milestone m "
+          "ORDER BY :sort_by, m.id ASC"
+      }
+    };
+  }
+
+  // ListMilestonesAdmin — the MilestoneAdmin page's list, and the only
+  // list in this example whose request carries filter / search tags.
+  //
+  // `(w17.admin_filter)` and `(w17.admin_search)` are FIELD options on
+  // the bound list method's REQUEST: the SPA renders an input per tagged
+  // field and forwards the value back into that field. Which means the
+  // tag alone is only half — the DQL has to read the field, or the admin
+  // grows an input that changes nothing. Both are bound here, and both
+  // are written so an empty value is a no-op, since the list must still
+  // return every row when the operator has typed nothing.
+  // ListTaskTags — the list source of a COMPOSITE-KEY admin page.
+  //
+  // TaskTag is identified by (task_id, tag_id), so it can declare no admin
+  // detail: a detail is keyed by a single-column row id and there is none to
+  // give it. The page is therefore list-only, which the parser used to refuse
+  // outright — taking every join-table-with-payload out of the console rather
+  // than asking for more work. This method is what that page reads.
+  rpc ListTaskTags(ListTaskTagsReq) returns (ListTaskTagsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT tt.task_id, tt.tag_id "
+          "FROM tasks.TaskTag tt "
+          "ORDER BY tt.task_id ASC, tt.tag_id ASC"
+      }
+    };
+  }
+
+  rpc ListMilestonesAdmin(ListMilestonesAdminReq) returns (ListMilestonesAdminResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT m.id, m.name, m.weight, m.status_note "
+          "FROM tasks.Milestone m "
+          "WHERE (:status_note = \'\' OR m.status_note = :status_note) "
+          "AND (:q = \'\' OR m.name LIKE \'%\' || :q || \'%\') "
+          "ORDER BY m.id ASC"
+      }
+    };
+  }
+
+  // ListTaskComments — the `link` of the TaskAdmin ⇄ CommentAdmin inline
+  // (see admin.proto). An inline's link is the ONE method that makes it an
+  // inline rather than a second list: it takes the PARENT's id and returns
+  // the children of that parent, so the admin can render them inside the
+  // parent's detail page instead of alongside it.
+  //
+  // The parent filter is therefore not optional decoration — a link that
+  // ignored `task_id` would render every comment in the database under
+  // whichever task the operator happened to open, and the page would look
+  // entirely normal doing it. The live case asserts the count under two
+  // different parents for exactly that reason.
+  rpc ListTaskComments(ListTaskCommentsReq) returns (ListTaskCommentsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.task_id, c.body_text, c.created_at "
+          "FROM tasks.Comment c "
+          "WHERE c.task_id = :task_id "
+          "ORDER BY c.id ASC"
+      }
+    };
+  }
+
+  // GetTaskUpload — reads back the handle the gateway derived.
+  //
+  // The upload response carries only an id, so the SHAPE of the stored
+  // key — the bucket path plus the derived sub-bucket levels — is
+  // observable nowhere else. That shape is the whole of what
+  // `expected_objects` / `max_per_bucket` do.
+  rpc GetTaskUpload(GetTaskUploadReq) returns (GetTaskUploadResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT u.id, u.task_id, u.stored_path, "
+          "       u.stored_path AS storage_key "
+          "FROM tasks.TaskUpload u "
+          "WHERE u.id = :id"
+      }
+    };
+  }
+
+  // ListAllComments / GetComment — CommentAdmin's OWN list and detail.
+  //
+  // They exist because a page that is inlined is still a page: the
+  // generator emits standalone list and detail handlers for it whether or
+  // not anyone navigates there, and those handlers have to mean something.
+  // Binding the page's list to the parent-scoped `ListTaskComments` would
+  // have given it a route that always answered empty — a surface that
+  // exists, responds 200, and lies. Binding its detail to a read that
+  // returns a TASK would have been worse: a comment detail page rendering
+  // someone else's model.
+  //
+  // So the child page reads comments unscoped, and the INLINE is what
+  // narrows them to one parent. That is the actual relationship the
+  // annotation expresses.
+  rpc ListAllComments(ListAllCommentsReq) returns (ListAllCommentsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.task_id, c.body_text, c.created_at "
+          "FROM tasks.Comment c "
+          "ORDER BY c.id ASC"
+      }
+    };
+  }
+
+  // ListCommentsWithTaskAdmin — admin-only list carrying a JOINED
+  // DISPLAY column, the shape the AdminColumn sort overrides exist for.
+  //
+  // `task_title` is deliberately a COALESCE rather than a bare
+  // `t.title`: a plain column reference would auto-derive as sortable
+  // and the overrides on the admin page would be decoration. An
+  // expression is the case the codegen cannot classify, so it is the
+  // case where `sortable: true` has to be paired with a `sort_key`
+  // naming the real column.
+  //
+  // The fallback text is also honest — the JOIN is INNER here, but the
+  // column is written so it survives being widened to LEFT later
+  // without changing the sortability story.
+  //
+  // Unpaged on purpose (no `w17.Paging` on the response): `sort_key` is
+  // refused on a cursor-paged list, since the keyset boundary is read
+  // back from the response field and must therefore be the column the
+  // ORDER BY runs on.
+  rpc ListCommentsWithTaskAdmin(ListCommentsWithTaskAdminReq) returns (ListCommentsWithTaskAdminResp) {
+    option (w17.admin_bypass_acl) = true;
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.body_text, COALESCE(t.title, '(no task)') AS task_title "
+          "FROM tasks.Comment c "
+          "INNER JOIN tasks.Task t ON t.id = c.task_id "
+          "ORDER BY c.id ASC"
+      }
+    };
+  }
+
+  rpc GetComment(GetCommentReq) returns (GetCommentResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.task_id, c.body_text, c.created_at "
+          "FROM tasks.Comment c "
+          "WHERE c.id = :id"
+      }
+    };
+  }
+
+  // GetMilestone — the read that makes the two column DEFAULTS
+  // observable. `status_note` and `weight_factor` are projected here
+  // and nowhere else, because a default is only proven by a row that
+  // was created without the column and carries the declared value
+  // anyway.
+  rpc GetMilestone(GetMilestoneReq) returns (GetMilestoneResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT m.id, m.name, m.weight, m.status_note, m.weight_factor, "
+          "       m.tags, m.attachment "
+          "FROM tasks.Milestone m "
+          "WHERE m.id = :id"
+      }
+    };
+  }
+
+  // ListTaskCategoriesAdmin / GetTaskCategory — the two reads the
+  // TaskCategoryAdmin page binds. Ordinary gated methods: the file
+  // cascade allocates an endpoint permission for each and the
+  // generated admin handlers check it. What they do NOT get is a
+  // model permission, because `tasks.TaskCategory` opts the model
+  // axis out — see the option on that message.
+  rpc ListTaskCategoriesAdmin(ListTaskCategoriesAdminReq) returns (ListTaskCategoriesAdminResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.name, c.color, c.parent_id, c.completed_count "
+          "FROM tasks.TaskCategory c "
+          "ORDER BY c.id ASC"
+      }
+    };
+  }
+
+  rpc GetTaskCategory(GetTaskCategoryReq) returns (GetTaskCategoryResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.name, c.color, c.completed_count "
+          "FROM tasks.TaskCategory c "
+          "WHERE c.id = :id"
+      }
+    };
+  }
+
+  rpc ListTasksAdminFeed(ListTasksAdminFeedReq) returns (ListTasksAdminFeedResp) {
+    option (w17.admin_bypass_acl) = true;
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id "
+          "FROM tasks.Task t "
+          "ORDER BY t.id DESC"
+      }
+    };
+  }
+
+  // StreamAllTasks — server-stream. REST mapping is on the
+  // `TasksService.StreamTasks` facade method; this is the
+  // gRPC-only storage primitive.
+  rpc StreamAllTasks(StreamAllTasksReq) returns (stream e2e.app.tasks.Task) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        // ORDER BY is not decoration on a STREAM. The frames arrive in
+        // the order the server sends them, so an unordered query makes
+        // the endpoint's own contract unstatable: no client and no test
+        // can say what frame 2 will be. This was unordered until the
+        // e2e runner learned to assert a frame SEQUENCE and the first
+        // case that tried to name one had nothing to name.
+        dql:  "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, t.status, t.priority, t.created_at FROM tasks.Task t WHERE t.user_id = :user_id ORDER BY t.id"
+      }
+    };
+  }
+
+  // LiveSearch — bidi-stream. Each Recv carries a search query;
+  // each Send returns one hit. B3 emits the per-message
+  // QueryRowContext loop. REST mapping is on the
+  // `TasksService.LiveSearch` facade method.
+  rpc LiveSearch(stream LiveSearchReq) returns (stream LiveSearchHit) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "SELECT t.id AS task_id, t.title FROM tasks.Task t WHERE t.title = :query"
+      }
+    };
+  }
+
+  // GetTaskWithCategory — single-row JOIN through Task's
+  // forward FK to TaskCategory. Optimizer picks JOIN:
+  // TaskCategory has only fixed-size columns (id, CHAR(64)
+  // name, CHAR(7) color) → row size well under 1 KiB.
+  // Single SQL with INNER JOIN; codegen scans into both
+  // pre-allocated nested messages.
+  rpc GetTaskWithCategory(GetTaskWithCategoryReq) returns (GetTaskWithCategoryResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
+          "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
+          "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       t.assignee_id AS t_assignee_id, t.project_id AS t_project_id, "
+          "       c.id AS c_id, c.name AS c_name, c.color AS c_color "
+          "FROM tasks.Task t JOIN t.category c "
+          "WHERE t.id = :id"
+      }
+    };
+  }
+
+  // GetTaskCategoryRow — the same JOIN as above, projecting into a DTO
+  // instead of the models, and reaching one column further:
+  // `c.parent_id`, which the schema declares NULL-able.
+  //
+  // Two things had to be true before this could be scanned safely, and
+  // neither was:
+  //
+  //   * the nullability predicate resolved the FROM alias only, so a
+  //     column reached through a JOIN was invisible to it, and
+  //   * the JOIN body emitters never consulted the predicate's answer
+  //     at all — the slice reached the single-row / streaming planner
+  //     and stopped there.
+  //
+  // Every seeded category is top-level, so this read returns a NULL
+  // `parent_id` on every row it can produce. Before the fix that is a
+  // direct scan into a non-pointer int64 and a 500 on the first call.
+  rpc GetTaskCategoryRow(GetTaskCategoryRowReq) returns (GetTaskCategoryRowResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS t_id, t.title AS t_title, "
+          "       c.id AS c_id, c.name AS c_name, c.parent_id AS c_parent_id "
+          "FROM tasks.Task t JOIN t.category c "
+          "WHERE t.id = :id"
+      }
+    };
+  }
+
+  // GetTaskCategoryRowOptional — the SILENT half of the same defect,
+  // and the reason it is worth its own endpoint.
+  //
+  // Under an outer JOIN the emitter picks a no-match SENTINEL: the
+  // first projected child column that can never be NULL on a MATCHED
+  // row, whose `.Valid` then decides whether the row matched at all.
+  // Eligibility was decided from the RESPONSE field's presence only, so
+  // `c_parent_id` — nullable in the schema, plain in the DTO — was
+  // picked here. Every matched row carries NULL there, so every match
+  // read as a no-match and the child was DROPPED: no error, no wrong
+  // value, just a `category` that is not in the answer.
+  //
+  // It also names its JOIN source as `tasks.TaskCategory`, which is
+  // where the second half of the resolution bug lived: that parses
+  // into the SAME shape as an FK hop off an alias called `tasks`, so
+  // the predicate has to try the hop and then fall back to reading the
+  // label as an entity. Without the fallback this alias bound nothing
+  // and the sentinel went back to being wrong.
+  //
+  // `category_id` is NOT NULL on Task, so the join always matches and
+  // the expected answer is simply "the category is there". That is the
+  // whole assertion, and before the fix it fails.
+  rpc GetTaskCategoryRowOptional(GetTaskCategoryRowReq) returns (GetTaskCategoryRowResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS t_id, t.title AS t_title, "
+          "       c.parent_id AS c_parent_id, c.id AS c_id, c.name AS c_name "
+          "FROM tasks.Task t "
+          "LEFT JOIN tasks.TaskCategory c ON c.id = t.category_id "
+          "WHERE t.id = :id"
+      }
+    };
+  }
+
+  // GetTaskWithComments — fan-out via Comment's forward FK
+  // to Task. Reverse-relation (Task.comments) isn't supported
+  // yet, so the bare-name JOIN with explicit ON predicate
+  // names the relationship: `Comment c ON c.task_id = t.id`.
+  // Comment.body_text is unannotated TEXT → defaults to 4096
+  // bytes → above the 1 KiB threshold → optimizer picks
+  // PREFETCH. Codegen emits TWO QueryContexts: parent task
+  // by id, then comments WHERE task_id = parent's id.
+  rpc GetTaskWithComments(GetTaskWithCommentsReq) returns (GetTaskWithCommentsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
+          "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
+          "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       t.assignee_id AS t_assignee_id, t.project_id AS t_project_id, "
+          "       c.id AS c_id, c.task_id AS c_task_id, c.body_text AS c_body_text, "
+          "       c.created_at AS c_created_at "
+          "FROM tasks.Task t "
+          "LEFT JOIN tasks.Comment c ON c.task_id = t.id "
+          "WHERE t.id = :id"
+      }
+    };
+  }
+
+  // M:1 join through the Task.project FK
+  // (dotted relation access). Single-row response;
+  // optimizer picks JOIN since Project is a small fixed-size
+  // relation. Fixture for the canonical "task + its parent
+  // project" lookup.
+  rpc GetTaskWithProject(GetTaskWithProjectReq) returns (GetTaskWithProjectResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
+          "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
+          "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       p.id AS p_id, p.owner_id AS p_owner_id, p.name AS p_name, "
+          "       p.color AS p_color, p.created_at AS p_created_at "
+          "FROM tasks.Task t JOIN t.project p "
+          "WHERE t.id = :id"
+      }
+    };
+  }
+
+  // reverse-accessor JOIN through Project.tasks.
+  // Lists every task under one project ordered by id ASC.
+  // Demonstrates one-to-many traversal from the parent side
+  // (Project p JOIN p.tasks t).
+  rpc ListProjectTasks(ListProjectTasksReq) returns (ListProjectTasksResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id "
+          "FROM tasks.Project p JOIN p.tasks t "
+          "WHERE p.id = :project_id "
+          "ORDER BY t.id ASC"
+      }
+    };
+  }
+
+  // M:N traversal through TaskTag pivot. Lists
+  // every task carrying a given tag (slug-based lookup so
+  // callers don't need the tag's PK).
+  // Two-hop: Tag → tag_links → Task. The codegen rewrites
+  // the chain into INNER JOINs against task_tags + tasks.
+  rpc ListTasksByTag(ListTasksByTagReq) returns (ListProjectTasksResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id "
+          "FROM tasks.Tag g JOIN g.tag_links tl JOIN tl.task t "
+          "WHERE g.slug = :slug "
+          "ORDER BY t.id ASC"
+      }
+    };
+  }
+
+  // GetTaskWithRecentAudits — LateMaterialize fixture.
+  // Fans out from Task to TaskAuditLog with BOTH a parent-side
+  // filter (`t.id = :id`) and a child-side filter
+  // (`a.created_at > :since`). With `TaskAuditLog.estimated_row_count
+  // = 10000`, the connection's 100 KiB budget, and the
+  // range-predicate selectivity default (0.3) on the child
+  // WHERE, the optimizer's math lands on Strategy 2:
+  //
+  //   filteredRows  = 10000 × 0.3 = 3000
+  //   filteredFields = 3000 × ~4128 B = ~12 MiB > 100 KiB
+  //   pkOnly        = 3000 × 8 B   = ~24 KiB ≤ 100 KiB
+  //
+  // Codegen emits THREE QueryContexts:
+  //
+  //   1. QueryRowContext   — parent Task by id.
+  //   2. QueryContext      — narrow IDs: SELECT a.id
+  //                          FROM ... JOIN ... WHERE ...
+  //   3. QueryContext      — fetch fields: SELECT a.*
+  //                          WHERE a.id = ANY($1) via pq.Array.
+  //
+  // PG-only (the third step uses PG-native ANY-with-array
+  // bind). MySQL / SQLite downgrade to Pipeline (PREFETCH)
+  // until the cross-dialect emit (Fáze 3c) lands.
+  rpc GetTaskWithRecentAudits(GetTaskWithRecentAuditsReq) returns (GetTaskWithRecentAuditsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
+          "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
+          "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       a.id AS a_id, a.task_id AS a_task_id, a.body_text AS a_body_text, "
+          "       a.created_at AS a_created_at "
+          "FROM tasks.Task t "
+          "INNER JOIN tasks.TaskAuditLog a ON a.task_id = t.id "
+          "WHERE t.id = :id AND a.created_at > :since"
+      }
+    };
+  }
+
+  // GetTaskAuditsBatched — the `materialize` override surface.
+  //
+  // Same fan-out as GetTaskWithRecentAudits, but every knob is
+  // pinned instead of derived, because each one is invisible in
+  // the default configuration:
+  //
+  //   force: BATCHED       — on PG the optimizer FUSES to a
+  //                          subselect, so the app-side batched
+  //                          path is exactly what never runs here.
+  //                          Pinning it is the only way this
+  //                          dialect emits the loop at all.
+  //   batch_size: 2        — small enough that the fixture's audit
+  //                          rows span several windows. A batch
+  //                          size no smaller than the row count
+  //                          proves nothing: one window is
+  //                          indistinguishable from no batching.
+  //   max_parallel: 3      — routes the fetch through
+  //                          `materialize.FetchBatches` rather than
+  //                          the inline sequential loop. Its
+  //                          contract is that the parallel run is
+  //                          observationally identical to the
+  //                          sequential one, which is a claim about
+  //                          ORDER, so the live case reads the rows
+  //                          back and asserts their order.
+  //
+  // `max_intermediate_rows` is deliberately NOT set here — it is
+  // fail-closed, and a method that aborts cannot also demonstrate
+  // that batching returns every row. It gets its own method below.
+  rpc GetTaskAuditsBatched(GetTaskAuditsBatchedReq) returns (GetTaskAuditsBatchedResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
+          "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
+          "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       a.id AS a_id, a.task_id AS a_task_id, a.body_text AS a_body_text, "
+          "       a.created_at AS a_created_at "
+          "FROM tasks.Task t "
+          "INNER JOIN tasks.TaskAuditLog a ON a.task_id = t.id "
+          "WHERE t.id = :id AND a.created_at > :since"
+      },
+      materialize: {
+        force: STRATEGY_BATCHED,
+        batch_size: 2,
+        max_parallel: 3
+      }
+    };
+  }
+
+  // GetTaskAuditsCapped — the fail-closed ceiling.
+  //
+  // `max_intermediate_rows` is the only knob in the group whose
+  // whole purpose is to REFUSE. Its docstring promises the narrow
+  // step aborts with RESOURCE_EXHAUSTED instead of growing the ID
+  // slice without bound; a ceiling that is never crossed is an
+  // untested branch, so this one is set to 2 against a fixture
+  // that deliberately has more audit rows than that.
+  //
+  // The value is on the same fan-out as the method above, so the
+  // pair differs in exactly one field — a live case that gets rows
+  // from one and RESOURCE_EXHAUSTED from the other is reading the
+  // ceiling and nothing else.
+  rpc GetTaskAuditsCapped(GetTaskAuditsCappedReq) returns (GetTaskAuditsCappedResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
+          "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
+          "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       a.id AS a_id, a.task_id AS a_task_id, a.body_text AS a_body_text, "
+          "       a.created_at AS a_created_at "
+          "FROM tasks.Task t "
+          "INNER JOIN tasks.TaskAuditLog a ON a.task_id = t.id "
+          "WHERE t.id = :id AND a.created_at > :since"
+      },
+      materialize: {
+        force: STRATEGY_BATCHED,
+        batch_size: 2,
+        max_intermediate_rows: 2
+      }
+    };
+  }
+
+  // ── The optimizer reads the WHERE, and the three methods below
+  //    are what proves it ────────────────────────────────────────
+  //
+  // `GetTaskWithRecentAudits` above lands on a decomposed strategy
+  // through ONE predicate shape — `a.created_at > :since`, a range
+  // comparison, flat 0.3. Every other arm of the selectivity
+  // estimator was dark: equality, index lookup, AND/OR, NOT, IN,
+  // LIKE, IS NULL. So was the arm that matters most, the one where
+  // the WHERE narrows enough that no decomposition is needed at
+  // all.
+  //
+  // These three fan out over the SAME child table with the SAME
+  // row count (10 000) against the SAME 100 KiB budget. Everything
+  // that differs between their generated bodies is the WHERE.
+
+  // GetTaskAuditByEntry — the narrow arm. `a.id` is the child's
+  // PRIMARY KEY, so the estimator uses 1/row-count (0.0001, one
+  // row out of ten thousand) rather than a column default:
+  //
+  //   filteredRows   = 10000 × 0.0001 = 1
+  //   filteredFields = 1 × ~4128 B    = ~4 KiB  ≤ 100 KiB  → fits
+  //
+  // Fitting means DB-PLAN: the JOIN stays in the SQL and ONE
+  // query runs. That is the only method in the project whose
+  // fan-out the cost model deliberately leaves alone, and it is
+  // the reason this one exists — an example in which every fan-out
+  // decomposes cannot show that the decision has two outcomes.
+  rpc GetTaskAuditByEntry(GetTaskAuditByEntryReq) returns (GetTaskAuditByEntryResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
+          "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
+          "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       a.id AS a_id, a.task_id AS a_task_id, a.body_text AS a_body_text, "
+          "       a.created_at AS a_created_at "
+          "FROM tasks.Task t "
+          "INNER JOIN tasks.TaskAuditLog a ON a.task_id = t.id "
+          "WHERE t.id = :id AND a.id = :audit_id"
+      }
+    };
+  }
+
+  // GetTaskAuditsForTask — one character away from the method
+  // above, and a different execution strategy.
+  //
+  // `a.task_id` is not the PK; it carries `index: true`, and a
+  // non-unique index means the "typical cardinality" default,
+  // 0.1 — three orders of magnitude broader than a PK hit:
+  //
+  //   filteredRows   = 10000 × 0.1  = 1000
+  //   filteredFields = 1000 × ~4128 = ~4 MiB   > 100 KiB → no fit
+  //   pkOnly         = 1000 × 8 B   = ~8 KiB   ≤ 100 KiB → fits
+  //
+  // PKs fit, rows don't → narrow to ids first. On Postgres that
+  // fuses into a server-side semi-join, so THREE query contexts
+  // come out where the method above emits one.
+  //
+  // The pair is the razor: same tables, same budget, same join,
+  // same response shape. If the estimator stopped distinguishing
+  // a PK from an indexed column, these two bodies would collapse
+  // into one shape and both would still compile and still return
+  // correct rows — which is exactly why a static assertion has to
+  // hold them apart.
+  rpc GetTaskAuditsForTask(GetTaskAuditsForTaskReq) returns (GetTaskAuditsForTaskResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
+          "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
+          "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       a.id AS a_id, a.task_id AS a_task_id, a.body_text AS a_body_text, "
+          "       a.created_at AS a_created_at "
+          "FROM tasks.Task t "
+          "INNER JOIN tasks.TaskAuditLog a ON a.task_id = t.id "
+          "WHERE t.id = :id AND a.task_id = :audit_task_id"
+      }
+    };
+  }
+
+  // GetTaskAuditsFuzzy — the estimator's remaining grammar, in one
+  // WHERE.
+  //
+  // The child-side conjuncts are compound, which is itself new:
+  // the fan-out WHERE is partitioned by alias before estimation,
+  // so a child predicate had only ever arrived as a single bare
+  // comparison. Here it arrives as a parenthesised OR and as a
+  // negation, and every leaf inside them has its own arm:
+  //
+  //   (a.body_text LIKE '%rror%'  OR  a.body_text IS NULL)
+  //        leading-wildcard LIKE 0.5, IS NULL 0.05
+  //        OR combines by inclusion-exclusion → 0.525
+  //   NOT (a.task_id IN (:excluded_task_ids))
+  //        IN over an indexed column → 0.1, negated → 0.9
+  //   AND of the two (independence)          → 0.4725
+  //
+  //   filteredRows = 4725 → fields ~19 MiB > budget,
+  //                         pks ~37 KiB ≤ budget → decomposes.
+  //
+  // The pattern is written as a LITERAL rather than a bind: the
+  // estimator reads the leading character to tell a prefix match
+  // (index-usable, 0.25) from an unbounded one (0.5), and a
+  // parameter hides that character until runtime, which is after
+  // the decision has been made.
+  rpc GetTaskAuditsFuzzy(GetTaskAuditsFuzzyReq) returns (GetTaskAuditsFuzzyResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
+          "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
+          "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       a.id AS a_id, a.task_id AS a_task_id, a.body_text AS a_body_text, "
+          "       a.created_at AS a_created_at "
+          "FROM tasks.Task t "
+          "INNER JOIN tasks.TaskAuditLog a ON a.task_id = t.id "
+          "WHERE t.id = :id "
+          "  AND (a.body_text LIKE '%rror%' OR a.body_text IS NULL) "
+          "  AND NOT (a.task_id IN (:excluded_task_ids))"
+      }
+    };
+  }
+
+  // 1:N PREFETCH demo. Attachments are large-ish
+  // (filename + content_type pile up over many rows), so
+  // the optimizer picks PREFETCH (two queries: task by id,
+  // attachments WHERE task_id = parent.id) over a JOIN that
+  // would balloon the wire payload with repeated task
+  // columns per attachment.
+  rpc GetTaskWithAttachments(GetTaskWithAttachmentsReq) returns (GetTaskWithAttachmentsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
+          "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
+          "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       a.id AS a_id, a.task_id AS a_task_id, a.filename AS a_filename, "
+          "       a.content_type AS a_content_type, a.size_bytes AS a_size_bytes, "
+          "       a.uploaded_at AS a_uploaded_at "
+          "FROM tasks.Task t LEFT JOIN tasks.Attachment a ON a.task_id = t.id "
+          "WHERE t.id = :id"
+      }
+    };
+  }
+
+  // GetTenantNote — scoped read. The DQL only
+  // matches by `n.id`; the storage codegen auto-appends
+  // `AND n.tenant_id = $<scope>` so cross-tenant id lookups
+  // miss the row and surface as ErrNoRows (gateway → 404).
+  // Missing `x-w17-scope-tenant_id` metadata short-circuits
+  // to 403 PERMISSION_DENIED before the query runs.
+  rpc GetTenantNote(GetTenantNoteReq) returns (GetTenantNoteResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.tenant_id, n.title, n.body, n.created_at "
+          "FROM tasks.TenantNote n "
+          "WHERE n.id = :id"
+      }
+    };
+  }
+
+  // GetTenantNoteByPublicToken — the note a capability
+  // link points at, read as the principal that link authenticated.
+  //
+  // Scoped like every other read on this service: no bypass, so the
+  // auto-WHERE adds `AND n.tenant_id = $<scope>` on top of the token
+  // predicate. The scope value came from the token itself (the auth
+  // method resolved it), so the two agree by construction.
+  //
+  // Be honest about what this proves: with `public_token` globally
+  // unique, the token predicate ALONE already selects one row, so
+  // deleting the scope filter would not change this answer. This
+  // endpoint proves the link authenticates; the sibling below is
+  // what proves the isolation survived.
+  rpc GetTenantNoteByPublicToken(GetTenantNoteByPublicTokenReq) returns (GetTenantNoteByPublicTokenResp) {
+    // (w17.acl_endpoint) = false — a capability principal holds no
+    // ROLE permissions, so gating this on one would refuse every
+    // link. Its authority is the capability itself: the link proves
+    // possession of a token that names exactly one row, and the
+    // routing means a URL_TOKEN principal cannot reach any endpoint
+    // that did not declare `credential` in the first place.
+    //
+    // Capability authz and role authz answer different questions —
+    // "may the bearer of this token see THIS" versus "may this
+    // principal perform THIS ACTION" — and stapling an unrelated
+    // role permission on would be theatre.
+    option (w17.acl_endpoint) = false;
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.tenant_id, n.title, n.body, n.created_at "
+          "FROM tasks.TenantNote n "
+          "WHERE n.public_token = :public_token"
+      }
+    };
+  }
+
+  // ListTenantNotesForPublicLink — the read that can
+  // actually detect a broken scope filter on a capability link, and
+  // the reason the public surface has two endpoints instead of one.
+  //
+  // There is NO token in this DQL. The only thing standing between
+  // this response and every other tenant's notes is the auto-WHERE
+  // fed by the scope the link's auth method returned. Strip that
+  // filter and this endpoint starts answering with rows the link's
+  // recipient has no relationship to — which is exactly the failure
+  // a by-token read cannot see, because a globally unique token is
+  // self-isolating whether the scope works or not.
+  //
+  // It is also the feature's actual claim, stated as a query: once a
+  // URL credential authenticates, tenant isolation carries into
+  // every subsequent read without the author writing a predicate.
+  // An `exclude_auth` + hand-written-WHERE implementation of the
+  // same link could not offer this endpoint at all — there would be
+  // no scope for it to be filtered by.
+  rpc ListTenantNotesForPublicLink(ListTenantNotesForPublicLinkReq) returns (ListTenantNotesForPublicLinkResp) {
+    // (w17.acl_endpoint) = false — a capability principal holds no
+    // ROLE permissions, so gating this on one would refuse every
+    // link. Its authority is the capability itself: the link proves
+    // possession of a token that names exactly one row, and the
+    // routing means a URL_TOKEN principal cannot reach any endpoint
+    // that did not declare `credential` in the first place.
+    //
+    // Capability authz and role authz answer different questions —
+    // "may the bearer of this token see THIS" versus "may this
+    // principal perform THIS ACTION" — and stapling an unrelated
+    // role permission on would be theatre.
+    option (w17.acl_endpoint) = false;
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.tenant_id, n.title "
+          "FROM tasks.TenantNote n "
+          "ORDER BY n.id ASC"
+      }
+    };
+  }
+
+  // GetTenantNoteSummaryByPublicToken — the same capability
+  // link, with the credential in the QUERY STRING instead of the path.
+  //
+  // It exists because `credential` has two slots and a declaration the
+  // example never writes is unmeasured: the vocabulary ratchet flagged
+  // `query_param` the moment the feature landed with only the path form
+  // exercised. Extraction runs through a different runtime helper
+  // (`URLCredentialFromQuery` vs `…FromPath`), so "the path form works"
+  // says nothing about this one.
+  //
+  // Prefer the path form when you control the link shape — query strings
+  // are the part of a URL most eagerly recorded by proxies and
+  // analytics. This slot is for link shapes that cannot use the path.
+  rpc GetTenantNoteSummaryByPublicToken(GetTenantNoteSummaryByPublicTokenReq) returns (GetTenantNoteSummaryByPublicTokenResp) {
+    // Same reasoning as its path-carried sibling above: a capability
+    // principal holds no role permissions.
+    option (w17.acl_endpoint) = false;
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.title "
+          "FROM tasks.TenantNote n "
+          "WHERE n.public_token = :public_token"
+      }
+    };
+  }
+
+  // A scoped server stream with a validated request — see
+  // StreamTenantNotesReq. ORDER BY because a stream's frame order is its
+  // contract.
+  rpc StreamTenantNotes(StreamTenantNotesReq) returns (stream TenantNoteStreamRow) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.title "
+          "FROM tasks.TenantNote n "
+          "WHERE n.title = :title "
+          "ORDER BY n.id ASC"
+      }
+    };
+  }
+
+  // ListTenantNotes — scoped list. No WHERE in the
+  // DQL; the auto-WHERE is the only filter, so the response is
+  // exactly the caller's tenant's notes ordered by id.
+  rpc ListTenantNotes(ListTenantNotesReq) returns (ListTenantNotesResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.tenant_id, n.title, n.body, n.created_at "
+          "FROM tasks.TenantNote n "
+          "ORDER BY n.id ASC"
+      }
+    };
+  }
+
+  // ListAllTenantNotes — the same read as ListTenantNotes above,
+  // with the scope deliberately turned OFF. This is the operator
+  // shape `(w17.db.bypass_scope)` exists for: a reporting endpoint
+  // that must see every tenant's rows, declared per method so the
+  // rest of the service keeps its guard.
+  //
+  // Kept adjacent to ListTenantNotes ON PURPOSE. The two emit into
+  // the same generated file from the same DQL, so the annotation is
+  // the ONLY difference between them: the scoped one carries the
+  // fail-closed metadata guard and `WHERE n.tenant_id = $1`, this
+  // one carries neither. A gate that reads both cannot pass
+  // vacuously — if the bypass silently stopped applying, this body
+  // would grow a predicate its sibling already has.
+  //
+  // The bypass names `tenant_id` rather than `"*"` so it stays
+  // narrow: a second scope axis added to TenantNote later would
+  // still be enforced here, and the author would have to say so
+  // again to drop it.
+  rpc ListAllTenantNotes(ListAllTenantNotesReq) returns (ListAllTenantNotesResp) {
+    option (w17.db.bypass_scope) = "tenant_id";
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.tenant_id, n.title, n.body, n.created_at "
+          "FROM tasks.TenantNote n "
+          "ORDER BY n.id ASC"
+      }
+    };
+  }
+
+  // ListTenantNotesByTag — scoped M:N read. TenantNote is the
+  // FROM (auto-WHERE on `n.tenant_id`), TenantNoteTag arrives
+  // through a JOIN and gets its OWN predicate injected onto the
+  // JOIN's ON clause: `... ON (nt.note_id = n.id) AND
+  // (nt.tenant_id = $<scope>)`.
+  //
+  // Both predicates are load-bearing. The FROM-side filter alone
+  // would not scope the link table — nothing in the compiler
+  // verifies that the authored ON condition actually relates the
+  // two tables, so the joined side is scoped on its own terms.
+  rpc ListTenantNotesByTag(ListTenantNotesByTagReq) returns (ListTenantNotesByTagResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.tenant_id, n.title, n.body, n.created_at "
+          "FROM tasks.TenantNote n "
+          "JOIN tasks.TenantNoteTag nt ON nt.note_id = n.id "
+          "WHERE nt.tag = :tag "
+          "ORDER BY n.id ASC"
+      }
+    };
+  }
+
+  // ListTenantNotesPagedWithTagCount — a PAGED scoped list carrying a
+  // per-row count, the "3 tags" badge beside each row of a directory.
+  //
+  // The count is a correlated scalar subquery, not a GROUP BY: grouping
+  // collapses rows, which a paged list cannot survive (COUNT(*) for
+  // Paging.Total would return one row per group). The subquery is
+  // per-row by construction, so the result stays one row per note and
+  // Total is the number of notes.
+  //
+  // Both models are scoped, and the two predicates land in different
+  // clauses: the note's on the outer WHERE, the link table's INSIDE the
+  // subquery. The outer one does not reach the subquery — without its
+  // own predicate the badge would count other tenants' link rows.
+  rpc ListTenantNotesPagedWithTagCount(ListTenantNotesPagedWithTagCountReq) returns (ListTenantNotesPagedWithTagCountResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.title, "
+          "(SELECT COUNT(*) FROM tasks.TenantNoteTag nt WHERE nt.note_id = n.id) AS tag_count "
+          "FROM tasks.TenantNote n "
+          "ORDER BY n.id ASC"
+      }
+    };
+  }
+
+  // GetTenantNoteWithTag — the LEFT JOIN half of the same scoped
+  // M:N surface, and the shape that makes the ON-versus-WHERE
+  // placement observable at runtime.
+  //
+  // The joined model's tenant predicate lands on the ON clause:
+  //
+  //   LEFT JOIN tenant_note_tags AS nt
+  //     ON (nt.note_id = n.id) AND (nt.tenant_id = $1)
+  //   WHERE (n.id = $2) AND (n.tenant_id = $3)
+  //
+  // Three placements, three different observable results for a
+  // note that carries no tag of the caller's own:
+  //
+  //   - on the ON (correct) — the note comes back, `tag` empty;
+  //   - in the WHERE — the NULL-extended row is discarded, the
+  //     LEFT JOIN silently behaves as an INNER one, and the read
+  //     404s;
+  //   - absent — another tenant's tag on this note leaks into
+  //     `tag`.
+  //
+  // The e2e distinguishes all three.
+  //
+  // `tag` is projected bare even though `TenantNoteTag.tag` is NOT NULL
+  // in the schema: the no-match row hands back SQL NULL, and the scan
+  // planner routes an outer-joined column through sql.NullString for
+  // exactly that reason, leaving the field at its zero value.
+  rpc GetTenantNoteWithTag(GetTenantNoteWithTagReq) returns (GetTenantNoteWithTagResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.title, nt.tag "
+          "FROM tasks.TenantNote n "
+          "LEFT JOIN tasks.TenantNoteTag nt ON nt.note_id = n.id "
+          "WHERE n.id = :id"
+      }
+    };
+  }
+}
+
+message GetTaskWithProjectReq {
+  int64 id = 1;
+}
+message GetTaskWithProjectResp {
+  e2e.app.tasks.Task    task    = 1;
+  e2e.app.tasks.Project project = 2;
+}
+
+message ListProjectTasksReq {
+  int64 project_id = 1;
+}
+message ListProjectTasksResp {
+  repeated e2e.app.tasks.Task tasks = 1;
+}
+
+message ListTasksByTagReq {
+  string slug = 1;
+}
+
+message GetTaskWithAttachmentsReq {
+  int64 id = 1;
+}
+message GetTaskWithAttachmentsResp {
+  e2e.app.tasks.Task                 task        = 1;
+  repeated e2e.app.tasks.Attachment  attachments = 2;
+}
+
+message GetTaskWithRecentAuditsReq {
+  int64                     id    = 1;
+  google.protobuf.Timestamp since = 2;
+}
+message GetTaskWithRecentAuditsResp {
+  e2e.app.tasks.Task                  task   = 1;
+  repeated e2e.app.tasks.TaskAuditLog audits = 2;
+}
+
+message GetTaskAuditsBatchedReq {
+  int64                     id    = 1;
+  google.protobuf.Timestamp since = 2;
+}
+message GetTaskAuditsBatchedResp {
+  e2e.app.tasks.Task                  task   = 1;
+  repeated e2e.app.tasks.TaskAuditLog audits = 2;
+}
+
+message GetTaskAuditsCappedReq {
+  int64                     id    = 1;
+  google.protobuf.Timestamp since = 2;
+}
+message GetTaskAuditsCappedResp {
+  e2e.app.tasks.Task                  task   = 1;
+  repeated e2e.app.tasks.TaskAuditLog audits = 2;
+}
+
+message ListCommentsWhileTaskOpenReq {
+  int64 task_id = 1;
+}
+// Repeated, so "the task is closed" is an empty list rather than a refusal.
+message ListCommentsWhileTaskOpenResp {
+  repeated ListCommentsWhileTaskOpenRow rows = 1;
+}
+message ListCommentsWhileTaskOpenRow {
+  int64  id        = 1;
+  string body_text = 2;
+}
+
+message GetTaskIfUnresolvedReq {
+  int64 id = 1;
+}
+// Repeated, so "no resolution" and "has one" differ by ROW COUNT rather
+// than by a field value — a singular response would have to answer
+// something for a row that is not there, and that answer would be 0
+// again.
+message GetTaskIfUnresolvedResp {
+  repeated GetTaskIfUnresolvedRow rows = 1;
+}
+message GetTaskIfUnresolvedRow {
+  int64  id    = 1;
+  string title = 2;
+}
+
+message GetTaskForUpdateReq {
+  int64 id = 1;
+}
+message GetTaskForUpdateResp {
+  int64  id     = 1;
+  string title  = 2;
+  int32  status = 3;
+}
+
+// The three selectivity fixtures share one response shape — a
+// parent plus a repeated child is what makes a SELECT a fan-out in
+// the first place — so that nothing but the WHERE can account for
+// a difference between their generated bodies.
+message GetTaskAuditByEntryReq {
+  int64 id       = 1;
+  int64 audit_id = 2;
+}
+message GetTaskAuditByEntryResp {
+  e2e.app.tasks.Task                  task   = 1;
+  repeated e2e.app.tasks.TaskAuditLog audits = 2;
+}
+
+message GetTaskAuditsForTaskReq {
+  int64 id            = 1;
+  int64 audit_task_id = 2;
+}
+message GetTaskAuditsForTaskResp {
+  e2e.app.tasks.Task                  task   = 1;
+  repeated e2e.app.tasks.TaskAuditLog audits = 2;
+}
+
+message GetTaskAuditsFuzzyReq {
+  int64          id                 = 1;
+  repeated int64 excluded_task_ids  = 2;
+}
+message GetTaskAuditsFuzzyResp {
+  e2e.app.tasks.Task                  task   = 1;
+  repeated e2e.app.tasks.TaskAuditLog audits = 2;
+}
+
+// TenantNote scope-fixture read side.
+// GetTenantNote returns a single note by id; the auto-WHERE
+// applied by storage codegen prevents tenant A from reading
+// tenant B's row (the WHERE picks the row by id AND
+// tenant_id, so cross-tenant lookups return ErrNoRows → 404).
+//
+// Response is flat scalars matching the canonical
+// "single-fetch" convention in this codebase (mirror of
+// GetUserResp). Avoids the wrapper-message scan path that
+// would need dotted aliases on every SELECT target.
+message GetTenantNoteReq {
+  int64 id = 1;
+}
+message GetTenantNoteResp {
+  int64                     id         = 1;
+  string                    tenant_id  = 2;
+  string                    title      = 3;
+  string                    body       = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// ListTenantNotes returns every note in the caller's tenant.
+// No request fields — the scope filter does all the work.
+// List-shape (`repeated TenantNote notes`) so the codegen
+// picks the multi-row scan path; per-row target is TenantNote
+// directly, so the SELECT projects bare column names that
+// match TenantNote's proto field names 1:1.
+message ListTenantNotesReq {}
+
+// StreamTenantNotesReq — the request of a SERVER STREAM over a SCOPED model
+// that carries a VALIDATED field. That combination did not compile until
+// 2026-10-01: the validation block resolves its messages through
+// `i18n.T(ctx, …)` and a streaming handler has no `ctx` parameter, so a
+// consumer's `codegen` exited 0 on a handler `go build` refused. The
+// generator tests now pin it by parsing; this method is where it is BUILT and
+// RUN (rest/0695, rest/0696).
+message StreamTenantNotesReq {
+  string title = 1 [(w17.field) = { min_len: 1 }];
+}
+message TenantNoteStreamRow {
+  int64  id    = 1;
+  string title = 2;
+}
+message ListTenantNotesResp {
+  repeated e2e.app.tasks.TenantNote notes = 1;
+}
+
+// The capability-link pair.
+//
+// `public_token` is the request field the endpoint's
+// `credential: { path_param: "public_token" }` names, so it binds
+// out of the path template like any other path field. The gateway
+// reads the SAME value a second time for the auth call; the two
+// readings are independent on purpose, so a handler cannot end up
+// answering for one token while having authenticated another.
+message GetTenantNoteByPublicTokenReq {
+  string public_token = 1;
+}
+message GetTenantNoteSummaryByPublicTokenReq {
+  string public_token = 1;
+}
+message GetTenantNoteSummaryByPublicTokenResp {
+  int64  id    = 1;
+  string title = 2;
+}
+
+message GetTenantNoteByPublicTokenResp {
+  int64                     id         = 1;
+  string                    tenant_id  = 2;
+  string                    title      = 3;
+  string                    body       = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// The related-notes list takes the token too — not because the query
+// uses it (it deliberately does not), but because the endpoint's URL
+// carries it and the request message has to hold what the path binds.
+// The response omits `body`: a share link's recipient is entitled to
+// see that sibling notes exist in the same tenant, which is what makes
+// the scope filter observable, without being handed their contents.
+message ListTenantNotesForPublicLinkReq {
+  string public_token = 1;
+}
+message ListTenantNotesForPublicLinkResp {
+  message Item {
+    int64  id        = 1;
+    string tenant_id = 2;
+    string title     = 3;
+  }
+  repeated Item notes = 1;
+}
+
+// ListAllTenantNotes — byte-identical shape to the scoped list, so
+// the only thing separating the two responses is which rows the
+// query was allowed to see.
+message ListAllTenantNotesReq {}
+message ListAllTenantNotesResp {
+  repeated e2e.app.tasks.TenantNote notes = 1;
+}
+
+// ListTenantNotesByTag — same list shape, filtered through the
+// M:N link table. `tag` is the only request field; both tenant
+// filters are injected.
+message ListTenantNotesByTagReq {
+  string tag = 1;
+}
+message ListTenantNotesByTagResp {
+  repeated e2e.app.tasks.TenantNote notes = 1;
+}
+
+// ListTenantNotesPagedWithTagCount — paged list rows carrying a per-row
+// count. `items` is the single repeated field the gateway scans for and
+// `paging` is mandatory on a paged endpoint.
+message ListTenantNotesPagedWithTagCountReq {}
+message TenantNoteWithTagCount {
+  int64  id        = 1;
+  string title     = 2;
+  int64  tag_count = 3;
+}
+message ListTenantNotesPagedWithTagCountResp {
+  repeated TenantNoteWithTagCount items  = 1;
+  w17.Paging                      paging = 2;
+}
+
+// GetTenantNoteWithTag — flat response (same reasoning as
+// GetTenantNoteResp): the single-row LEFT JOIN projects the note's
+// own columns plus the joined `tag`, which is empty when the caller
+// has no tag of their own on this note.
+message GetTenantNoteWithTagReq {
+  int64 id = 1;
+}
+message GetTenantNoteWithTagResp {
+  int64  id    = 1;
+  string title = 2;
+  string tag   = 3;
+}
+
+// Cursor-paging fixture.
+//
+// Request is intentionally empty — the gateway derives `cursor`
+// + `limit` query params from the REST annotation's `paged`
+// config (defaults: cursor=cursor, limit=limit, default_limit=20,
+// max_limit=100), and the cursor itself carries the original
+// (empty) request bytes on resume. Adding filter fields here
+// later is a pure additive change: they'd flow through to the
+// storage WHERE clause and would survive every page transition
+// via the cursor's embedded request bytes.
+// The delivery-fallback poll source's pair. No `w17.Paging` field:
+// its absence IS the declaration that the whole working set comes
+// back in one response, which is what makes it usable as a fallback
+// source at all.
+message ListTasksLiveReq {}
+message ListTasksLiveResp {
+  repeated e2e.app.tasks.Task items = 1;
+}
+
+message ListTasksPagedReq {}
+
+// `items` is the single repeated-message field — the gateway
+// generator scans for it positionally (any name works as long
+// as it's the only `repeated <Msg>` on the response). `paging`
+// is mandatory: codegen errors at build time if a `w17.Paging`
+// field is missing on a paged endpoint's response.
+message ListTasksPagedResp {
+  repeated e2e.app.tasks.Task items  = 1;
+  w17.Paging                  paging = 2;
+}
+
+// Request/response for the PagedConfig override fixture. Same shape
+// as ListTasksPaged's pair — empty request (the gateway derives the
+// paging params from the REST annotation), one repeated field, one
+// mandatory `w17.Paging`.
+message ListTasksPagedTunedReq {}
+message ListTasksPagedTunedResp {
+  repeated e2e.app.tasks.Task items  = 1;
+  w17.Paging                  paging = 2;
+}
+
+// Cursor paging OVER A JOIN — the admin-list shape (a list row
+// that shows a foreign key as a human handle instead of a raw
+// id). Two rules meet here and used to be read as contradictory:
+//
+//   - the joined display column MUST be COALESCE-wrapped, or a
+//     row whose parent was deleted scans NULL into a string and
+//     500s the whole list;
+//   - the response is `{repeated <row>; w17.Paging}`, which is a
+//     paged LIST, not the fan-out `{Parent; repeated Child}` —
+//     the JOIN is many-to-one, no row multiplies.
+//
+// The envelope used to be counted as a shape field, so this
+// exact combination classified as fan-out and was refused with
+// "no projected column carries a JOIN-alias prefix". Keeping a
+// live fixture on the intersection is what stops that from
+// coming back: keyset WHERE, the per-variant sort queries and
+// the Paging.Total COUNT(*) must all carry the JOIN.
+message ListTasksPagedWithCategoryReq {}
+
+// A read projection, not a table message — the row carries one
+// column the Task model doesn't have (`category`, joined off
+// TaskCategory) plus the task columns the list shows.
+message TaskPagedRow {
+  int64                     id          = 1;
+  string                    title       = 2;
+  int64                     category_id = 3;
+  string                    category    = 4;
+  google.protobuf.Timestamp created_at  = 5;
+}
+
+message ListTasksPagedWithCategoryResp {
+  repeated TaskPagedRow items  = 1;
+  w17.Paging            paging = 2;
+}
+
+// The backlog report — the one request in this project that carries
+// CROSS-FIELD validation, `(w17.validate)`.
+//
+// Per-field `(w17.field)` rules judge one value on its own. These
+// judge a COMBINATION, which is where a request can be individually
+// well-formed and jointly nonsense: a priority window that is empty, a
+// title filter that excludes what it includes, a report that widens
+// its own scope with no reason recorded.
+//
+// Every rule kind is here, on purpose. The emitter resolves each rule
+// against the request's field paths and SILENTLY emits nothing when a
+// path does not resolve or carries the wrong kind (see emitLessThan /
+// the validation emitter) — a dropped rule is not a codegen error, it is
+// an absence. That is why the emitted body has to be checked per rule
+// rather than trusting that "the annotation is there".
+//
+// Each rule carries an explicit `message:`; codegen refuses a
+// cross-field rule without one, because the auto-generated default
+// leaks proto field names into user-facing prose.
+message ListTasksInPriorityRangeReq {
+  // The window. Both required — a report over "any priority" is the
+  // default 0..9, stated rather than implied.
+  int32 min_priority = 1 [(w17.field) = { type: NUMBER, gte: 0, lte: 9 }];
+  int32 max_priority = 2 [(w17.field) = { type: NUMBER, gte: 0, lte: 9 }];
+
+  // Exact-title include / exclude. Optional (presence-bearing), so an
+  // omitted one drops its predicate via the DQL `?` marker.
+  optional string title_is     = 3 [(w17.field) = { type: CHAR, max_len: 200, null: true }];
+  optional string title_is_not = 4 [(w17.field) = { type: CHAR, max_len: 200, null: true }];
+
+  // Narrowing by ONE grouping dimension.
+  optional int64 category_id = 5;
+  optional int64 project_id  = 6;
+
+  // Drop one status from the report (e.g. leave out DONE).
+  optional int32 exclude_status = 7;
+
+  // Keep only one status. An optional ENUM under a `?` conjunct with
+  // EQUALITY — the combination this example was missing, and the one
+  // where a lost presence is fatal rather than harmless.
+  //
+  // Every other optional here is an int32 / string, which already bound
+  // as a presence-bearing pointer, and `exclude_status` uses `<>`,
+  // where collapsing an unset value onto 0 filters nothing visible
+  // because no row carries the UNSPECIFIED sentinel. Under `=` the same
+  // collapse asks for `status = 0` and empties the whole report — no
+  // error, just a page that looks like "nothing matched". An
+  // instance of this shape without an e2e case is emitted and never
+  // executed.
+  optional e2e.app.tasks.Task.Status only_status = 9;
+
+  // Why this report was run. Audit metadata — deliberately NOT a
+  // filter, and the only field here that reaches no SQL.
+  string reason = 8 [(w17.field) = { type: CHAR, max_len: 200, null: true }];
+
+  option (w17.validate) = {
+    rules: [
+      // An inverted window returns nothing and reads like a bug in
+      // the caller, not like an empty result.
+      { kind: LESS_THAN, lhs: "min_priority", rhs: "max_priority",
+        message: "the lowest priority in the window must be below the highest one" },
+
+      // Two grouping dimensions at once is an intersection nobody
+      // means to ask for; the report has one grouping axis.
+      { kind: AT_MOST_ONE, fields: ["category_id", "project_id"],
+        message: "narrow the report by a category or by a project, not by both at once" },
+
+      // Dropping a status narrows the report in a way a reader of the
+      // output cannot see, so it has to be recorded.
+      { kind: REQUIRED_IF, field: "reason", when_field: "exclude_status",
+        message: "leaving a status out of the report needs a reason on record" },
+
+      // A report that is not about one specific task is a survey, and
+      // surveys get audited.
+      { kind: REQUIRED_UNLESS, field: "reason", unless_field: "title_is",
+        message: "a report that is not narrowed to one title needs a reason on record" },
+
+      // Including and excluding the same text yields an empty report
+      // for a reason the caller would spend a while looking for.
+      { kind: NOT_CONTAINS, field: "title_is", against_fields: ["title_is_not"],
+        message: "the title you filter for cannot contain the title you exclude — the report would always come back empty" },
+
+      // `title_is` is an EXACT match, not a LIKE pattern. A caller
+      // typing SQL wildcards expects them to work; they do not.
+      { kind: MATCHES, field: "title_is", pattern: "^[^%_]*$",
+        message: "the title filter matches exactly and takes no SQL wildcards — drop the % and _ characters" }
+    ]
+  };
+}
+
+// One report row. A projection, not a table message.
+message TaskPriorityRow {
+  int64  id       = 1;
+  string title    = 2;
+  int32  priority = 3;
+}
+
+message ListTasksInPriorityRangeResp {
+  repeated TaskPriorityRow items = 1;
+}
+
+// MilestoneSortField — the sort dimension of ListMilestonesSorted,
+// and the only place in this project where
+// `(w17.db.enum_value).sort_sql` is declared.
+//
+// `ORDER BY :sort_by` is the compiler's ONE schema-driven
+// sort-by-parameter form: the caller sends an enum value, codegen
+// expands it into a static `CASE :sort_by WHEN <num> THEN <fragment>
+// END` per value, and no caller-supplied text ever reaches the ORDER
+// BY clause. Which orderings the endpoint can serve is therefore
+// fixed at compile time, by this enum.
+//
+// The three arms are deliberately three DIFFERENT shapes of
+// fragment, because a fragment is spliced into SQL verbatim and each
+// shape goes down its own emit path:
+//
+//   * UNSPECIFIED carries NO fragment. It is the documented "no
+//     sort" sentinel — every CASE arm returns NULL, so the query's
+//     trailing `m.id ASC` decides the order. It is also the value a
+//     blanket "proto3 zero means omitted" request rule refuses,
+//     which answers 400 on the one value the feature defines as
+//     meaningful; the omit-the-parameter case is what keeps that
+//     from coming back here.
+//
+//   * BY_WEIGHT carries TWO keys. SQL forbids ASC/DESC inside a
+//     `CASE ... THEN <expr>` branch, so a multi-key fragment must be
+//     split on its top-level comma into one enum-gated CASE per key
+//     — unsplit it emits `THEN m.weight DESC, m.name ASC END`, which
+//     no database parses. The second key is not decoration: the
+//     fixture rows tie on weight, so dropping it falls back to
+//     `m.id ASC` and reverses that pair.
+//
+//   * BY_TARGET carries ONE key whose column is a function call, so
+//     the fragment contains a comma that must NOT split and a
+//     direction that must still be lifted out of the CASE branch.
+//     Splitting here truncates the SQL mid-call.
+enum MilestoneSortField {
+  MILESTONE_SORT_UNSPECIFIED = 0;
+  MILESTONE_SORT_BY_WEIGHT   = 1 [(w17.db.enum_value) = { sort_sql: "m.weight DESC, m.name ASC" }];
+  MILESTONE_SORT_BY_TARGET   = 2 [(w17.db.enum_value) = { sort_sql: "coalesce(m.target_count, 0) DESC" }];
+}
+
+message ListMilestonesSortedReq {
+  MilestoneSortField sort_by = 1;
+}
+
+// One milestone row. The sort KEYS are not all projected — the
+// ordering has to come out of the SQL, not out of anything the
+// assertion could re-derive from the response.
+message MilestoneRow {
+  int64  id     = 1;
+  string name   = 2;
+  int32  weight = 3;
+}
+
+message ListTaskTagsReq {}
+message ListTaskTagsResp {
+  repeated e2e.app.tasks.TaskTag links = 1;
+}
+
+message ListMilestonesAdminReq {
+  // The filter axis: an exact-match dropdown the SPA renders from the
+  // field's proto type. Empty = unfiltered, which is what makes the
+  // page usable before the operator picks anything.
+  string status_note = 1 [(w17.admin_filter) = true];
+  // The search axis: one debounced textbox above the list. A separate
+  // tag from `admin_filter` because the SPA renders them in different
+  // places and the storage method owns what "search" means — here a
+  // LIKE over the name.
+  string q = 2 [(w17.admin_search) = true];
+}
+
+message MilestoneAdminRow {
+  int64  id          = 1;
+  string name        = 2;
+  int32  weight      = 3;
+  string status_note = 4;
+}
+
+message ListMilestonesAdminResp {
+  repeated MilestoneAdminRow items = 1;
+}
+
+message ListMilestonesSortedResp {
+  repeated MilestoneRow items = 1;
+}
+
+message ListTaskCommentsReq {
+  // The PARENT's id. The admin's inline handler stamps it from the detail
+  // page's route, so the operator never supplies it — which is also why a
+  // link that failed to filter on it would be invisible from the UI.
+  int64 task_id = 1;
+}
+
+message ListTaskCommentsResp {
+  repeated e2e.app.tasks.Comment comments = 1;
+}
+
+message GetTaskUploadReq {
+  int64 id = 1;
+}
+// Both path fields carry the SAME stored handle, and the response
+// renders them differently — that difference is the whole of what a
+// download endpoint's field selector does.
+//
+// The gateway rewrites every response field that is BOTH an UPLOADED_*
+// field AND covered by a download endpoint, replacing the raw storage
+// handle with a URL under that endpoint's prefix. So which endpoint
+// covers a field is legible from the value the caller receives:
+//
+//   stored_path — covered by the `/files` download → a RELATIVE URL
+//                 under that prefix, which is what a browser fetches.
+//   storage_key — EXCLUDED from `/files` and covered by `/blobs`
+//                 instead → an ABSOLUTE URL under the other prefix.
+//
+// Two prefixes and two URL forms in one response. A selector that
+// ignored `exclude` would put both under `/files`; one that ignored
+// `url_form` would render both the same way. Neither can be mistaken
+// for correct.
+message GetTaskUploadResp {
+  int64  id      = 1;
+  int64  task_id = 2;
+  string stored_path = 3 [(w17.field) = {
+    type: UPLOADED_FILE,
+    extensions: ["txt", "md"],
+    upload: {
+      connection:       "app-uploads",
+      bucket_path:      "/task-attachments",
+      expected_objects: 100000,
+      max_per_bucket:   100,
+      max_size_bytes:   65536
+    }
+  }];
+  string storage_key = 4 [(w17.field) = {
+    type: UPLOADED_FILE,
+    extensions: ["txt", "md"],
+    upload: {
+      connection:       "app-uploads",
+      bucket_path:      "/task-attachments",
+      expected_objects: 100000,
+      max_per_bucket:   100,
+      max_size_bytes:   65536
+    }
+  }];
+}
+
+message ListAllCommentsReq {}
+message ListAllCommentsResp {
+  repeated e2e.app.tasks.Comment comments = 1;
+}
+
+message ListCommentsWithTaskAdminReq {}
+
+// One row of the joined admin list. No `w17.Paging` field — the list is
+// deliberately unpaged (see the RPC).
+message CommentWithTaskRow {
+  int64  id         = 1;
+  string body_text  = 2;
+  string task_title = 3;
+}
+
+message ListCommentsWithTaskAdminResp {
+  repeated CommentWithTaskRow rows = 1;
+}
+
+message GetCommentReq {
+  int64 id = 1;
+}
+message GetCommentResp {
+  int64                     id         = 1;
+  int64                     task_id    = 2;
+  string                    body_text  = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message GetMilestoneReq {
+  int64 id = 1;
+}
+
+// Carries the two defaulted columns. They are absent from every write
+// path in this project, so the only way a value gets in there is the
+// column default — which is exactly the claim being read back.
+message GetMilestoneResp {
+  int64  id            = 1;
+  string name          = 2;
+  int32  weight        = 3;
+  string status_note   = 4;
+  double weight_factor = 5;
+  // Read back so the write of these two is provable at all. On its own
+  // an empty value here proves nothing — proto3 omits an empty
+  // repeated and an empty bytes from the JSON, so "written empty" and
+  // "never written" look identical on the wire. The suite therefore
+  // asserts the NON-empty pair through this response and lets the
+  // empty pair be proven by the create succeeding, which is the thing
+  // that actually breaks.
+  repeated string tags = 6;
+  bytes attachment = 7;
+}
+
+// The reference-catalogue admin surface (see the TaskCategoryAdmin
+// page in admin.proto). Both methods exist so `tasks.TaskCategory`
+// has an admin page at all — which is the only place the model ACL
+// axis is observable, and TaskCategory is the one model in this
+// project that declares `(w17.acl_model) = false`.
+//
+// They sit on TaskQuery, NOT on TaskLookupQuery: that service
+// declares `(w17.acl_service) = false`, so a page bound to it would
+// have neither ACL axis and "the model axis is off" could not be
+// told apart from "nothing is on". Here the file-level cascade keeps
+// the endpoint axis, so the page gates on the endpoint and on
+// nothing else — which is exactly the claim being measured.
+message ListTaskCategoriesAdminReq {}
+
+message ListTaskCategoriesAdminResp {
+  repeated e2e.app.tasks.TaskCategory categories = 1;
+}
+
+message GetTaskCategoryReq {
+  int64 id = 1;
+}
+
+message GetTaskCategoryResp {
+  int64  id              = 1;
+  string name            = 2;
+  string color           = 3;
+  int32  completed_count = 4;
+}
+
+// ADMIN-ONLY paging (see ListTasksAdminFeed). Identical shape to
+// ListTasksPagedResp — `repeated <Msg>` + `w17.Paging` — and that
+// is the whole point: the shape alone declares the method paged.
+// No REST endpoint reads this response.
+message ListTasksAdminFeedReq {}
+
+message ListTasksAdminFeedResp {
+  repeated e2e.app.tasks.Task items  = 1;
+  w17.Paging                  paging = 2;
+}

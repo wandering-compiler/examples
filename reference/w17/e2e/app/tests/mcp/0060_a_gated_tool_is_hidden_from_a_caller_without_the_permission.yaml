@@ -1,0 +1,27 @@
+# THE refusal half of the MCP permission gate — the half that was
+# unassertable until `expect_transport_error` existed.
+#
+# A gated tool the caller may not use is filtered out of `tools/list`
+# (mcp.Server.filterTools, fail-closed so tool existence does not leak),
+# so calling it by name answers mcp-go's `tool not found` at the JSON-RPC
+# layer. That IS the ACL refusal, but it carries no gRPC status, and
+# `expect_error` requires a code — for good reason, since an assertion
+# that only says "the call failed" holds for a malformed request too.
+#
+# 0020 is the other half: the same surface, the same transport, a caller
+# who HAS the permission, and the call goes through. Neither case means
+# anything alone — `tool not found` is also what a never-registered tool
+# answers, so only the pair separates "the filter hid it" from "the
+# sentinel never reached the gateway".
+#
+# `auth_nogrant.yaml` goes LAST: every auth fixture captures the same
+# reserved `auth.token` slot, so the final one wins. The caller is
+# authenticated (the step still needs a token — an open surface is not an
+# anonymous one) and holds an empty UserRole set.
+method: auth.AuthService.WhoAmI
+pre:
+    - auth/auth.yaml
+    - auth/auth_nogrant.yaml
+input: {}
+expect_transport_error:
+    message: {matcher: regex, pattern: "tool not found"}

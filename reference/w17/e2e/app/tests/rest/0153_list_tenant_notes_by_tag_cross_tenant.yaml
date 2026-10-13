@@ -1,0 +1,23 @@
+# THE cross-tenant leak guard for JOIN-side scope injection.
+#
+# tenant-alpha created a note and tagged it (the first two `pre`
+# entries); auth_beta then re-authenticates the step as tenant-beta
+# while alpha's captured tag stays in scope. Beta asks for alpha's
+# exact tag and must get nothing back.
+#
+# What is actually on trial is the predicate on the JOIN's ON clause.
+# The FROM-side filter (`n.tenant_id`) alone would already hide alpha's
+# NOTES from beta here, so a zero-row result is necessary but not
+# sufficient evidence on its own — read this together with the
+# generated SQL asserted in the storage codegen's unit tests, which
+# pins `... INNER JOIN tenant_note_tags AS nt ON (nt.note_id = n.id)
+# AND (nt.tenant_id = $1) ...`. Together they cover both the shape and
+# the runtime behaviour.
+method: tasks.TaskQuery.ListTenantNotesByTag
+pre:
+    - fixtures/a_tenant_note_tag.yaml
+    - auth/auth_beta.yaml
+input:
+    tag: ${tag.value}
+expect:
+    notes: {matcher: count, op: '==', value: 0}

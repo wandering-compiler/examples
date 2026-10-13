@@ -1,0 +1,24 @@
+# The inline's `link` — and the one assertion that separates "filtered to
+# this parent" from "not filtered at all".
+#
+# A link that ignored `task_id` would return every comment in the database
+# under whichever task the operator opened. Rendered inside the parent's
+# detail page it would look completely normal, which is why the fixture
+# puts comments on TWO parents with different counts
+# (fixtures/app/test.json): task 700001 has two, task
+# 700002 has one. This case pins the first, 0941 pins the second, and no
+# unfiltered link satisfies both.
+#
+# The ids are asserted in order because the link declares `ORDER BY c.id
+# ASC` — the section's row order is a claim the endpoint makes, not an
+# accident of insertion.
+method: admin.TaskAdmin.Inline.CommentAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    id: 700001
+expect:
+    comments: {matcher: count, op: '==', value: 2}
+    comments.0.id: {matcher: eq, value: "720001"}
+    comments.0.body_text: {matcher: eq, value: first comment on the paged task}
+    comments.1.id: {matcher: eq, value: "720002"}

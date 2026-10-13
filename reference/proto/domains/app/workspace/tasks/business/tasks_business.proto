@@ -1,0 +1,240 @@
+syntax = "proto3";
+
+package e2e.app.tasks;
+
+
+import "domains/app/workspace/tasks/types/models.proto";
+import "domains/app/workspace/tasks/mutations/task_mutation.proto";
+import "domains/app/workspace/tasks/queries/task_query.proto";
+import "domains/app/workspace/tasks/events/events.proto";
+
+// TasksService is the business-layer facade for the `app`
+// domain's tasks module. Hand-written in the domain's
+// grpcapi-business binary; composes TaskQuery + TaskMutation
+// + cross-domain calls to the `billing` domain (best-effort
+// non-atomic usage recording / quota gates).
+//
+// Per this project's facade-first rule: every REST endpoint
+// for the tasks module flows through this facade except the
+// single direct example on `UserQuery.GetUser`. The methods
+// below mirror the underlying TaskQuery / TaskMutation RPC
+// shapes — the facade body either delegates straight through
+// or layers in cross-domain orchestration (e.g. CreateTask
+// commits PG then fires a best-effort RecordUsage at billing).
+//
+// `from_cache` on GetTaskResp is a placeholder for an
+// in-domain Redis cache; it is false unconditionally today.
+
+message GetTaskReq {
+  int64 task_id = 1;
+}
+message GetTaskResp {
+  Task task       = 1;
+  bool from_cache = 2;
+}
+
+// A capability link that opens a STREAM.
+//
+// The unary form proved a share link can authenticate; this
+// proves the same credential works on a long-lived connection, which
+// needed periodic re-auth first. A stream authenticates ONCE at upgrade,
+// so before the watchdog a revoked link kept feeding an open connection
+// until the socket dropped — for a healthy connection, days. That hole
+// was not the capability link's (a Bearer stream had it too), but a link
+// with no session lifecycle is what made it matter.
+message StreamPublicNoteUpdatesReq {
+  // Bound from the path template AND read independently by the gateway
+  // for the auth call. Two readings on purpose: a handler must never end
+  // up answering for one token while having authenticated another.
+  string public_token = 1;
+}
+message PublicNoteUpdate {
+  int64  id        = 1;
+  string tenant_id = 2;
+  string title     = 3;
+}
+
+message StreamTasksReq {
+  int64 user_id = 1;
+}
+
+// LiveSearchReq/Hit + GetTaskWithCategoryReq/Resp +
+// GetTaskWithCommentsReq/Resp live in the storage queries
+// layer (queries/task_query.proto) — same import pattern as
+// the mutation-tier types above. Storage owns the wire shape;
+// the facade RPCs reuse it via import.
+
+// TaskInput / CreateTaskReq / CreateTaskResp / DeleteTaskReq /
+// DeleteTaskResp live in the storage layer
+// (mutations/task_mutation.proto) — the storage tier owns the
+// wire shape, the facade re-uses it. Importing keeps a single
+// FQN per type (proto3 refuses duplicates within one package),
+// and the facade body trivially passes the request through to
+// TaskMutation.
+
+message BulkCreateTasksResp {
+  int32 inserted = 1;
+}
+
+// UpdateTaskAndInvalidateReq — binding showcase.
+//
+// `id`              — bound from the URL path template
+//                     (`/tasks/{id}` auto-binds id without a
+//                     fields[] entry).
+// `if_match`        — bound from the HTTP `If-Match` header
+//                     for optimistic-concurrency control. Real
+//                     flows compare against the row's last
+//                     mutation timestamp / version; the e2e
+//                     fixture just records the header value.
+// `idempotency_key` — bound from the HTTP `Idempotency-Key`
+//                     header for retry dedup. Same dedup-
+//                     placeholder shape as CreateTask.
+// `patch`           — the `body: "patch"` shortcut points at
+//                     this submessage. The body of the PATCH
+//                     IS the patch's contents, unwrapped to
+//                     top-level JSON (`{ "priority": 5 }`)
+//                     instead of `{ "patch": { "priority": 5 } }`.
+message UpdateTaskAndInvalidateReq {
+  int64                       id              = 1;
+  string                      if_match        = 2;
+  string                      idempotency_key = 3;
+  TaskPatch                   patch           = 4;
+}
+message UpdateTaskAndInvalidateResp {
+  int64 id = 1;
+}
+
+service TasksService {
+  // StreamPublicNoteUpdates — the capability-link stream.
+  //
+  // Reads through the SCOPED list query, so what a link's recipient
+  // receives is bounded by the scope its auth method returned, exactly
+  // as on the unary sibling. The token appears nowhere in the read.
+  rpc StreamPublicNoteUpdates(StreamPublicNoteUpdatesReq) returns (stream PublicNoteUpdate);
+
+
+  // GetTask — pure relational read. A Redis-backed cache
+  // fronting this read INSIDE the app domain (multi-connection)
+  // would make `from_cache=true` possible; today it is always
+  // false.
+  rpc GetTask(GetTaskReq) returns (GetTaskResp) {
+  }
+
+  // StreamTasks — server-stream of every task for a user.
+  // REST mapping (B4): SSE.
+  rpc StreamTasks(StreamTasksReq) returns (stream Task) {
+  }
+
+  // LiveSearch — bidi-stream. Each Recv carries a search
+  // query; each Send returns one hit. REST mapping (B4):
+  // WebSocket.
+  rpc LiveSearch(stream LiveSearchReq) returns (stream LiveSearchHit) {
+  }
+
+  // GetTaskWithCategory — facade wrapper around the
+  // optimizer-picks-JOIN storage query.
+  rpc GetTaskWithCategory(GetTaskWithCategoryReq) returns (GetTaskWithCategoryResp) {
+  }
+
+  // GetTaskWithComments — facade wrapper around the
+  // optimizer-picks-PREFETCH storage query.
+  rpc GetTaskWithComments(GetTaskWithCommentsReq) returns (GetTaskWithCommentsResp) {
+  }
+
+  // BulkCreateTasks — client-stream. Pumps inputs through
+  // to the storage TaskMutation.BulkInsert. HTTP method is
+  // GET because the REST mapping is WebSocket: the WS
+  // upgrade handshake is RFC 6455-defined as GET +
+  // Upgrade: websocket. POST would semantically read better
+  // for "create resources" but breaks the upgrade.
+  rpc BulkCreateTasks(stream TaskInput) returns (BulkCreateTasksResp) {
+  }
+
+  // UpdateTaskAndInvalidate is R7 — the canonical non-atomic
+  // mutation across two PG instances. Steps:
+  //   1. UPDATE the Task row in app PG via TaskMutation.UpdateTask.
+  //   2. RecordUsage (kind=TASK_UPDATED) in the billing PG via
+  //      cross-domain gRPC.
+  //
+  // Non-atomic per D41 — `app` and `billing` live on different
+  // PG instances (different operators in the canonical
+  // self-hosted-vs-SaaS deploy story), and the
+  // wandering-compiler rejects cross-connection
+  // transactions. If billing fails after the app PG commits,
+  // the task update succeeds but the usage record is missing;
+  // an out-of-band reconciliation job is the production-grade
+  // mitigation. A Redis cache invalidation could be paired with this
+  // RPC alongside the cross-domain usage record.
+  rpc UpdateTaskAndInvalidate(UpdateTaskAndInvalidateReq) returns (UpdateTaskAndInvalidateResp) {
+  }
+
+  // CreateTask — Q8 bonus showcase (Q8c cross-module FK
+  // + Q8f INSERT RETURNING) PLUS the cross-domain billing
+  // hook (best-effort RecordUsage with kind=TASK_CREATED).
+  // REST POST /tasks; body carries the create payload.
+  rpc CreateTask(CreateTaskReq) returns (CreateTaskResp) {
+  }
+
+  // DeleteTask — DELETE HTTP verb coverage: a pure PG mutation.
+  rpc DeleteTask(DeleteTaskReq) returns (DeleteTaskResp) {
+  }
+
+  // CreateTenantNoteViaService — the ONLY facade method that
+  // reaches a SCOPED storage mutation (TaskMutation.CreateTenantNote,
+  // whose `TenantNote` model carries `(w17.db.scope) tenant_id`).
+  // Every other facade method above delegates to unscoped storage
+  // primitives, so this is the one endpoint that exercises the
+  // gateway → business → storage trust-metadata chain end to end:
+  // the gateway threads `x-w17-scope-tenant_id` to the business
+  // tier, and the business→storage hop MUST relay it onward or the
+  // storage scope guard fails closed with PermissionDenied. It is a
+  // deliberate regression guard for that relay (the direct
+  // `TaskMutation.CreateTenantNote` endpoint only covers the
+  // gateway→storage hop and never crosses the business tier). Reuses
+  // the storage CreateTenantNote request/response shape by import.
+  rpc CreateTenantNoteViaService(CreateTenantNoteReq) returns (CreateTenantNoteResp) {
+  }
+}
+
+// HandlerAck — acknowledgement payload returned by every
+// eventbus handler RPC. Mirrors the eventbus-fixture
+// convention (a one-bit "ok" plus room to grow later).
+message HandlerAck {
+  bool ok = 1;
+}
+
+// TasksBusiness — in-domain eventbus handler service for
+// the `app/tasks` module. Each RPC receives
+// one event message; the subscriber dispatcher
+// (generated from subscribers/subscribers.proto) calls
+// them on every delivery.
+//
+// Constraints enforced by the eventbus parser (`subscribers-
+// registry.md`):
+//   - handler input type FQN must match the event message FQN
+//   - RPCs must be unary (no streaming)
+//   - service must live in the same domain as the
+//     subscriber sentinel
+//
+// All three RPCs satisfy these. Hand-written bodies live
+// in the app domain's business package (modules/tasks/business).
+service TasksBusiness {
+  // OnTaskCompletedCounter — increments
+  // TaskCategory.completed_count for the event's
+  // category_id. Subscriber 1 (counter maintenance).
+  rpc OnTaskCompletedCounter(TaskCompleted) returns (HandlerAck);
+
+  // OnTaskStatusChangedCacheInvalidate — invalidates the
+  // app-redis cached copy of the task on any status flip.
+  // Subscriber 2 (cache invalidation), branch A.
+  rpc OnTaskStatusChangedCacheInvalidate(TaskStatusChanged) returns (HandlerAck);
+
+  // OnTaskCompletedCacheInvalidate — same cache-invalidate
+  // path triggered specifically on completion (a TaskCompleted
+  // implies a status flip but UpdateTaskStatus emits
+  // TaskStatusChanged separately, so completion gets its own
+  // explicit subscription rather than implicitly relying on
+  // both being emitted from the same code path).
+  // Subscriber 2 (cache invalidation), branch B.
+  rpc OnTaskCompletedCacheInvalidate(TaskCompleted) returns (HandlerAck);
+}

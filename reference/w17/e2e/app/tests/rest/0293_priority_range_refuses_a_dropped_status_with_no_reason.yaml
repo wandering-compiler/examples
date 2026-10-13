@@ -1,0 +1,23 @@
+# REQUIRED_IF — `when_field`.
+#
+# Excluding a status narrows the report in a way a reader of the OUTPUT
+# cannot see: the rows that were left out leave no trace. So the request
+# that drops them has to say why.
+#
+# `title_is` is set so the REQUIRED_UNLESS rule over the same `reason`
+# field is satisfied — otherwise both rules would fire and this case
+# could pass on the wrong one.
+method: tasks.TaskQuery.ListTasksInPriorityRange
+pre:
+    - auth/auth.yaml
+input:
+    min_priority: 0
+    max_priority: 9
+    title_is: admin paged task 3
+    exclude_status: 3
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: reason
+          code: REQUIRED_VIOLATION
+          message: {matcher: regex, pattern: "leaving a status out"}

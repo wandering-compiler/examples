@@ -1,0 +1,36 @@
+# `RestEndpoint.raw_body_field` — the body arrives untouched.
+#
+# The payload is JSON that NO marshaler would reproduce: two spaces
+# after the comma, one before the `7`. Round-tripping it through
+# JSON→proto→JSON yields `{"event":"card.published","id":7}` — 33 bytes
+# against these 36, and a completely different sha256. So both asserted
+# quantities move the moment anything between the socket and the handler
+# re-encodes the body, and neither of them can be satisfied by accident.
+#
+# The digest is asserted by EQUALITY against a value computed outside
+# this repo (`sha256sum` of those exact 36 bytes). `not_empty` would be
+# green against a digest of anything at all, including the transcoded
+# form — which is the failure this endpoint exists to make impossible.
+#
+# `byte_len` is not redundant. A digest mismatch says "the bytes
+# differed" and stops there; the length says HOW, and the two together
+# separate a re-marshal (shorter, different digest) from a truncation or
+# an encoding change (different length, different digest) without anyone
+# having to reproduce the failure by hand.
+#
+# The e2e runner had to learn this endpoint shape: its baked routing
+# table modelled `body` and not `raw_body_field`, so it posted its own
+# JSON envelope — `{"payload":"…","signature":"…"}` — and a step could
+# only ever have asserted the digest OF THAT ENVELOPE. `Endpoint.
+# RawBodyField` now sends the named value as the body verbatim, which is
+# the only way a client can exercise a contract about wire bytes.
+method: users.UsersService.IngestSignedWebhook
+pre:
+    - auth/auth.yaml
+headers:
+    Content-Type: application/json
+input:
+    payload: '{"event":"card.published",  "id": 7}'
+expect:
+    digest: {matcher: eq, value: 3b4db1b7bf0d1d283854189e8fd3f6025c51216b08b383cbf61d4e6836d09eed}
+    byte_len: {matcher: eq, value: 36}

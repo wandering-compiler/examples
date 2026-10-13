@@ -1,0 +1,11 @@
+# The second key. It exists for two later cases at once: the multi-key
+# read needs more than one key to be a multi-key read, and the revoke
+# needs a device whose user is NOT the one being revoked.
+method: cache.DeviceProfileMutation.SetDeviceProfile
+pre:
+    - auth/auth.yaml
+input:
+    device_id: e2e-device-beta
+    user_id: 2
+    platform: ios/safari
+expect: {}

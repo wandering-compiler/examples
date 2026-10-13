@@ -1,0 +1,20 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The AFTER half: the comment 0591 observed is gone, so the op whose
+# zero-row outcome is now tolerated still EXECUTES when there IS a row.
+# Switching that op from QueryRow().Scan to ExecContext is precisely
+# the kind of change that can drop a statement while every status code
+# stays 200 — and 0590 alone would have passed either way.
+#
+# The title is re-read too: it pins that this is the redacted parent
+# and not some other task the earlier steps left lying around, which a
+# bare `count == 0` would happily accept.
+method: tasks.TasksService.GetTaskWithComments
+pre:
+    - auth/auth.yaml
+input:
+    id: ${task.id}
+expect:
+    task.title: {matcher: eq, value: '(redacted)'}
+    comments: {matcher: count, op: '==', value: 0}

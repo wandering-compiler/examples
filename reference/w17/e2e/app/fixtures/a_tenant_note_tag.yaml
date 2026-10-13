@@ -1,0 +1,16 @@
+# Tags the note from a_tenant_note.yaml, and captures the tag so the
+# steps that read it back use the exact same string. The tag carries
+# ${seq} so each run gets its own, keeping the row counts below exact
+# rather than "at least".
+#
+# tenant_id is omitted on both sides of the UPSERT on purpose — it is
+# auto-stamped from the caller's scope, never sent in the payload.
+method: tasks.TaskMutation.AttachTenantNoteTag
+pre:
+    - fixtures/a_tenant_note.yaml
+input:
+    note_id: ${note.id}
+    tag: e2e-tag-${seq}
+expect:
+    note_id: {matcher: not_empty}
+    tag: {capture: tag.value}

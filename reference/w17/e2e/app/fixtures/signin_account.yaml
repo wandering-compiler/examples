@@ -1,0 +1,10 @@
+# Registers a known account so the SignIn test has credentials to log in
+# with. SignUp owns password hashing, so this is the only way to get a
+# row whose hash the SignIn verifier accepts.
+method: auth.AuthService.SignUp
+input:
+    tenant_slug: tenant-alpha
+    email: e2e-signin@example.com
+    password: e2eSecret!23
+expect:
+    user_id: {matcher: not_empty}

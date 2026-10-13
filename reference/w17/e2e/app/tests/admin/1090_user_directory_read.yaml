@@ -1,0 +1,13 @@
+# UserDirectory's detail reads through the STORAGE tier (users.UserQuery.
+# GetUser) while its list goes through the business tier (1085): one page,
+# two tiers, each call on the conn of the tier that serves it. The seeded
+# user 900001 is the same row UserAdmin reads in 0011.
+method: admin.UserDirectory.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: "900001"
+expect:
+    id: {matcher: eq, value: "900001"}
+    email: {matcher: not_empty}
+    display_name: {matcher: not_empty}

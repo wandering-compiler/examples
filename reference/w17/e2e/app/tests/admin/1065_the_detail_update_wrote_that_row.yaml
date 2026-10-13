@@ -1,0 +1,16 @@
+# The half 1060 cannot see: it answers with the id it was handed, which
+# is also what an UPDATE matching no rows returns.
+#
+# The two columns the form sent unchanged are asserted too — an update
+# that bound the wrong request field would rewrite one of them, and a
+# write-then-read of only the changed column would not notice.
+method: admin.MilestoneAdmin.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 710001
+expect:
+    id: {matcher: eq, value: "710001"}
+    name: {matcher: eq, value: charlie release}
+    weight: {matcher: num, op: '==', value: 5}
+    status_note: {matcher: eq, value: edited on the detail form}

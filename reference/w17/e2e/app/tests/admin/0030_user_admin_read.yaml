@@ -1,0 +1,11 @@
+# Hand-declared page over the project's own users table (not a plugin
+# preset). Row seeded in fixtures/app/test.json.
+method: admin.UserAdmin.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: "900001"
+expect:
+    id: {matcher: not_empty}
+    email: {matcher: not_empty}
+    display_name: {matcher: not_empty}

@@ -1,0 +1,28 @@
+# The SILENT half, and the one no error message would ever have
+# reported.
+#
+# Under an outer JOIN the emitter picks a no-match SENTINEL: the first
+# projected child column that can never be NULL on a MATCHED row. Its
+# `.Valid` then decides whether the row matched. Eligibility was read
+# off the RESPONSE field's presence only, so `c_parent_id` — nullable in
+# the schema, plain on the DTO — qualified, and it is NULL on every
+# matched row here. Every match therefore read as a no-match and the
+# child was dropped: HTTP 200, no error, no wrong value, just a
+# `category` that is not in the answer.
+#
+# `Task.category_id` is NOT NULL, so the join always matches. That makes
+# the assertion the simplest one there is — the category is present —
+# and it is exactly the assertion that fails before the fix.
+#
+# Same row and same category as 0580; the two differ only in the JOIN
+# kind and in which child column is projected first.
+method: tasks.TaskQuery.GetTaskCategoryRowOptional
+pre:
+    - auth/auth.yaml
+input:
+    id: 700005
+expect:
+    task.id: {matcher: eq, value: "700005"}
+    category: {matcher: not_empty}
+    category.id: {matcher: eq, value: "3"}
+    category.name: {matcher: eq, value: urgent}

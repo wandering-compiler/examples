@@ -1,0 +1,18 @@
+# The scalar subquery as a WRITTEN VALUE, read back.
+#
+# The fixture in `pre` wrote a Comment whose body_text it never supplied:
+# the value came from `(SELECT c.name FROM TaskCategory c WHERE c.id =
+# :category_id)`. "It returned an id" would pass for a subquery that
+# wrote nothing, so the claim is on the TEXT — it has to be the seeded
+# category's name.
+#
+# Category 1 is `work` in the seed (w17/fixtures/app/test.seed.json), the
+# same row `a_task.yaml` attaches its task to.
+method: tasks.TasksService.GetTaskWithComments
+pre:
+    - fixtures/a_snapshotted_comment.yaml
+input:
+    id: ${task.id}
+expect:
+    comments: {matcher: count, op: '==', value: 1}
+    comments.0.body_text: {matcher: eq, value: work}

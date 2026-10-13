@@ -1,0 +1,26 @@
+# The JOIN half of the third NULL reason, live.
+#
+# `TaskCategory.parent_id` is NULL-able in the schema and plain proto3
+# on `CategoryRow` — the DTO declares no presence, so the response
+# descriptor cannot answer the question and the SCHEMA is the only
+# thing that knows. Two separate omissions had to be closed before this
+# request could succeed: the predicate resolved the FROM alias only (a
+# column reached through a JOIN was invisible to it), and the JOIN body
+# emitters never consulted its answer at all.
+#
+# Every seeded category is top-level, so `parent_id` is NULL on every
+# row this read can return — the ordinary state of a self-FK, not an
+# arrangement. Before the fix this is `rows.Scan(&resp.Category.ParentId)`
+# into a non-pointer int64 and the endpoint answers 500 on every call.
+#
+# 700005 is the admin-paging seed row (07_task_admin_seed.sql), category
+# 3 = 'urgent' from 03_e2e_seed.sql.
+method: tasks.TaskQuery.GetTaskCategoryRow
+pre:
+    - auth/auth.yaml
+input:
+    id: 700005
+expect:
+    task.id: {matcher: eq, value: "700005"}
+    category.id: {matcher: eq, value: "3"}
+    category.name: {matcher: eq, value: urgent}

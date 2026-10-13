@@ -1,0 +1,11 @@
+# The empty half. Without it, an expansion that dropped the author's
+# predicate entirely — leaving "does this campaign have ANY flight" —
+# still answers 0540 correctly for two of the three campaigns and would
+# only be caught by the count.
+method: users.CampaignQuery.ListCampaignsOnChannel
+pre:
+    - auth/auth.yaml
+input:
+    channel: display
+expect:
+    campaigns: {matcher: count, op: '==', value: 0}

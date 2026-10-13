@@ -1,0 +1,31 @@
+# `(w17.event_emit_gateway)` — the emit generated in the GATEWAY, seen
+# from outside.
+#
+# The static gate reads the two emit sites and says the storage tier
+# does not carry this one. This says the surviving site actually fires:
+# the request enters through the REST gateway, and the event lands on
+# `/w17-events` while the response is still being read.
+#
+# `await_events` is the only way to assert it. The emit happens AFTER
+# the business call returns success, so the response body is identical
+# whether the event was published or dropped — a fact the response
+# cannot report is exactly what the SSE stream is for.
+#
+# The payload matchers are exact, not `not_empty`. The mapping is
+# `$response.id` / `$response.tier`, and a mapping that read the REQUEST
+# instead would produce the same shape with the same tier here; only the
+# id separates them, and only against a captured value.
+method: users.DirectoryPlanMutation.UpgradeDirectoryPlan
+pre:
+    - auth/auth.yaml
+input:
+    id: ${plan.id}
+    tier: SPOTLIGHT
+expect:
+    id: {matcher: eq, value: "${plan.id}"}
+    tier: {matcher: eq, value: SPOTLIGHT}
+await_events:
+    - topic: directory.plan.upgraded
+      match:
+        plan_id: {matcher: eq, value: "${plan.id}"}
+        tier: {matcher: eq, value: SPOTLIGHT}

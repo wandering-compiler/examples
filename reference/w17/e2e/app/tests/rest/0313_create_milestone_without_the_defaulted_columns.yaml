@@ -1,0 +1,32 @@
+# The happy path of CreateMilestone — and the setup for the defaults
+# proof in 0320.
+#
+# What matters here is what the request does NOT carry. `status_note`
+# and `weight_factor` are not fields of CreateMilestoneReq and not
+# columns of its INSERT, so nothing on this path can supply them. The
+# row that lands therefore carries either the values the schema
+# declares as defaults or nothing at all — and both columns are NOT
+# NULL, so "nothing at all" is not an outcome the row could survive.
+#
+# `name` is a value the custom validator accepts and 0312's is not,
+# which is the permit direction of the same rule.
+#
+# POSITION IS LOAD-BEARING. This is the first step in the whole suite
+# that adds a milestone row, and the ORDER BY-by-enum cases (0300-0302)
+# assert the exact contents AND count of that table. They pass because
+# they run before this one. A step that creates a milestone must never
+# be inserted ahead of them; if one is needed, move it after 0302
+# rather than loosening their assertions — an ordering asserted over an
+# unknown row set is not an ordering assertion.
+#
+# The id this step is handed comes from the IDENTITY sequence, which the
+# seed's explicit ids do NOT advance — which is why that seed takes a
+# 7100xx block and not 1, 2, 3. See fixtures/app/test.json.
+method: tasks.MilestoneMutation.CreateMilestone
+pre:
+    - auth/auth.yaml
+input:
+    name: delta release
+    weight: 4
+expect:
+    id: {capture: created_milestone.id, match: {matcher: not_empty}}

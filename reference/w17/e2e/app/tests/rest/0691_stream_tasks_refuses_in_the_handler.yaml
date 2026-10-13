@@ -1,0 +1,29 @@
+# A stream refused by its HANDLER — the second door a stream refuses by.
+#
+# rest/0680 and rest/0696 are refused by the GATEWAY, before the stream
+# opens: the connect answers an ordinary REST error. This one is refused
+# after the gateway has already sent `200 text/event-stream`, because the
+# decision is the facade's (StreamTasks with no user). It can only reach
+# the caller as an `event: error` frame, and every refusal a backend makes
+# on a stream — scope, ACL, overload — arrives the same way.
+#
+# A consumer found this half unassertable on 2026-10-06: the runner read
+# the 200 as "the stream opened" and reported SUCCEEDED against a server
+# that had refused correctly. The `details` entry is load-bearing too —
+# the gateway's SSE error frame used to drop `details[]`, so the handler's
+# STREAM_USER_REQUIRED never left the gateway on a stream.
+#
+# English on purpose (`Accept-Language: en`): the project's default locale
+# is Czech, and rest/0692 is the same refusal read in it.
+method: tasks.TasksService.StreamTasks
+pre:
+    - auth/auth.yaml
+headers:
+    Accept-Language: en
+input:
+    user_id: 0
+expect_error:
+    code: INVALID_ARGUMENT
+    message: Choose whose tasks to stream.
+    details:
+        - code: STREAM_USER_REQUIRED

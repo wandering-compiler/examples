@@ -1,0 +1,20 @@
+# tenant-beta tags tenant-ALPHA's note.
+#
+# The link row is legitimately writable: alpha's note id is just an
+# integer, and a foreign key is not tenant-aware, so nothing stops beta
+# from pointing a link row of its own at it. The row that lands carries
+# beta's tenant_id (the UPSERT auto-stamp guarantees that much) while
+# its note_id belongs to alpha.
+#
+# That is the setup for 0154 — the one shape where ONLY the JOIN-side
+# scope predicate stands between alpha and another tenant's data.
+method: tasks.TaskMutation.AttachTenantNoteTag
+pre:
+    - fixtures/a_tenant_note.yaml
+    - auth/auth_beta.yaml
+input:
+    note_id: ${note.id}
+    tag: e2e-xtag-${seq}
+expect:
+    note_id: {matcher: not_empty}
+    tag: {capture: xtag.value}

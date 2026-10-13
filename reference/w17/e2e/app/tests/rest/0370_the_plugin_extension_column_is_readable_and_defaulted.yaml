@@ -1,0 +1,31 @@
+# `(w17.contrib.extends)` + `Extends.target` — the merged column, read
+# back off a row the PLUGIN wrote.
+#
+# The account is the one `auth/auth.yaml` registered through the
+# plugin's turnkey sign-up. That handler's INSERT names the plugin's own
+# columns and knows nothing about `directory_opt_in`, so everything this
+# step asserts was decided by the schema:
+#
+#   - the column exists on `auth_user` at all, which is the merge;
+#   - a project module can READ it, which is what makes the merge worth
+#     anything;
+#   - it carries `unset`, the declared default. Not the empty string:
+#     a column that reached the DDL without its DEFAULT would satisfy
+#     NOT NULL from the carrier's zero and come back as "", which is
+#     exactly the failure this value is chosen to be distinguishable
+#     from.
+#
+# The step that proves the other half of the default is 0010: an
+# extension column that landed NOT NULL with no default would make every
+# sign-up in this suite fail, including the one this step depends on.
+#
+# The negative half — that only the `auth` realm got the column, and the
+# `admin_auth` activation of the SAME plugin did not — is not visible
+# from any endpoint, and lives in the static gate.
+method: users.DirectoryCardQuery.GetDirectoryOptIn
+pre:
+    - auth/auth.yaml
+input:
+    user_id: ${auth.user_id}
+expect:
+    directory_opt_in: {matcher: eq, value: unset}

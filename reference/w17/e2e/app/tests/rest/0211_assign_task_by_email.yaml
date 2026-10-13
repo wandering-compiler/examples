@@ -1,0 +1,11 @@
+# The lookup op ("u") finds the seeded user by email and the task is assigned
+# to them. The control for 0212: the refusal there has to come from the email,
+# not from an endpoint that refuses everything.
+method: tasks.TaskMutation.AssignTaskByEmail
+pre:
+    - fixtures/a_task.yaml
+input:
+    task_id: ${task.id}
+    assignee_email: e2e-owner@example.com
+expect:
+    id: {matcher: not_empty}

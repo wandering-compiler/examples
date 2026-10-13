@@ -1,0 +1,45 @@
+# THE regression case: an empty repeated value and an empty `bytes`
+# value must be WRITABLE.
+#
+# Both arrive at the server as a nil Go slice — proto3 gives neither
+# carrier presence, so an empty list is indistinguishable from an
+# omitted one — and a nil slice is what a driver sends as SQL NULL.
+# Both columns are NOT NULL. So unless the generated binding coerces
+# the slice non-nil first (`dqlbind.Arr` / `dqlbind.Bytes`), this
+# INSERT is refused by the database and this step fails.
+#
+# The assertion is the step SUCCEEDING, and that is deliberate: reading
+# the values back would prove nothing here, because an empty repeated
+# and an empty bytes are omitted from the response JSON exactly like
+# columns that were never written. 0321 + 0323 carry that half.
+#
+# This shipped as a defect twice before it was a rule, and this example
+# was silent both times: every `pq.Array` in it was a `= ANY($n)`
+# FILTER, where NULL and `{}` match nothing equally. No example had
+# ever written either kind of column, so the first consumer to do it
+# was the console's own deploy registry — production code, real
+# database, `not_null violation` naming no column the author wrote.
+#
+# A generator that dropped the array bind or the bytes bind would turn a
+# create red — the two are covered independently, not by one assertion
+# standing in for both.
+#
+# ⚠️ It goes red at 0313, not here, and that is worth knowing before
+# you debug it. Once the INSERT NAMES these columns, every create in
+# the suite binds them, so the first create to run is the one that
+# fails — 0313, which sends neither field. This step is not the only
+# detector; it is the one that says WHY, and the only one that sends
+# the values EXPLICITLY empty rather than omitting them. Those are
+# different inputs down to the wire: `tags: []` arrives as a present
+# empty list, an omitted field arrives as nothing, and both end up nil
+# in Go. That they cannot be told apart is the whole defect.
+method: tasks.MilestoneMutation.CreateMilestone
+pre:
+    - auth/auth.yaml
+input:
+    name: untagged release
+    weight: 6
+    tags: []
+    attachment: ""
+expect:
+    id: {capture: untagged_milestone.id, match: {matcher: not_empty}}

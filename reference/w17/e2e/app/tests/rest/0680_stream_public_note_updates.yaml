@@ -1,0 +1,21 @@
+# The refusable half of the streaming surface.
+#
+# A stream case that only ever proves the happy path is the state
+# `expect_error` was made required for on the unary side: a guard nobody
+# drives is a guard nobody has seen fire. This drives one.
+#
+# `StreamPublicNoteUpdates` is a capability-link stream — # so its credential is the `public_token` path segment rather than a
+# bearer header, and an unknown token has to be refused at CONNECT. That
+# is the shape worth pinning: the refusal happens before any frame
+# exists, so it comes back as an ordinary REST envelope with a canonical
+# code, and the case is written with the same `expect_error:` vocabulary
+# every other refusal in this suite uses.
+#
+# No `pre: auth/...` on purpose. The recipient of a share link has no
+# session, and a case that signed someone in first would be asserting a
+# request no real caller makes.
+method: tasks.TasksService.StreamPublicNoteUpdates
+input:
+    public_token: not-a-real-share-token
+expect_error:
+    code: UNAUTHENTICATED

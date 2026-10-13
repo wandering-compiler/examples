@@ -1,0 +1,321 @@
+syntax = "proto3";
+
+// Domain-level cascade config.
+//
+// Every .proto file under proto/domains/app/<module>/<...>/*.proto
+// inherits this `(w17.module)` option — the connection is
+// declared once at domain root and applies to every table in the
+// domain. Module-level w17.proto + per-file (w17.module) can
+// override or extend on a per-field basis (presence-aware merge:
+// later level wins where set, earlier level fills gaps).
+//
+// The file is a SENTINEL — it carries options only, no messages.
+// Loader recognises `w17.proto` at domain or module root and reads
+// its options as cascade defaults.
+
+package e2e.app;
+
+import "w17/acl.proto";
+import "w17/db.proto";
+import "w17/domain.proto";
+import "w17/module.proto";
+
+// **Auth plugin activation.** The `app` domain activates the
+// `auth` plugin (registered_as `auth`) instead of hand-writing
+// its own user / token / sign-in surface. The storage codegen
+// stages the plugin's protos into the synthetic
+// `domains/app/auth/` module (one collapsed `appauthpb` package
+// via the Module-mode StubTarget) and wires its RegisterPlugin
+// into the storage bundle main via the reusable pluginwire seam.
+// All the plugin's default features are enabled — `rbac`,
+// `authenticate_turnkey` (bearer -> principal + permissions),
+// `sign_up_turnkey`, `sign_in_turnkey`. The plugin's internal
+// `events` channel alias maps onto the domain's real `tasks`
+// NATS channel; auth_input configures bearer-token extraction
+// for the `Authenticate` turnkey. The REST registry (rest.proto)
+// exposes SignUp + SignIn + WhoAmI and points `auth_methods` at
+// the plugin's `auth.AuthService.Authenticate`.
+option (w17.domain) = {
+  plugins: [
+    {
+      source_name:   "auth"
+      registered_as: "auth"
+      channels:   [ { key: "events", value: "tasks" } ]
+      auth_input: { header_name: "Authorization", scheme: "Bearer" }
+      features:   { names: [ "rbac", "authenticate_turnkey", "sign_up_turnkey", "sign_in_turnkey", "tenant_scope" ] }
+      // This project curates its own /auth routes in rest.proto —
+      // SignUp is mounted at `/{tenant_slug}/register` for URL-based
+      // tenancy, which the generic preset can't express. Plugin REST
+      // presets are OFF by default (opt-in via `(w17.rest_api).include`),
+      // so simply NOT including "auth" leaves the hand-written routes the
+      // single source. The plugin's `auth_methods` posture is still
+      // injected automatically and deduped against the hand-written
+      // `auth.AuthService.Authenticate`, so the surface stays
+      // secure-by-default with no duplicate.
+    },
+    // **Second activation — the admin auth realm (item 6).** The same
+    // `auth` plugin activated again under `registered_as: "admin_auth"`
+    // gives the administrator a *tenant-less* identity that shares this
+    // database but is fully isolated from the app's tenant-scoped users:
+    // distinct stubs (`e2e.app.admin_auth.*` vs `e2e.app.auth.*`),
+    // distinct Go package, distinct tables (`admin_auth_user` /
+    // `admin_auth_user_token` / `admin_auth_role` / …). Features OMIT
+    // `tenant_scope` (the admin belongs to no tenant) and
+    // `sign_up_turnkey` (admins are seeded, never self-register) — so the
+    // sign_up_turnkey-gated signup.go and tenant_scope-gated tenant.go
+    // never stage for this realm. The admin surface (admin.proto) points
+    // its `login_method` / `user_lookup` at `admin_auth.AuthService.*`,
+    // so the Django-style admin authenticates against THIS realm, never
+    // the tenant-scoped app users. It contributes neither REST routes nor
+    // MCP tools to the app's public gateway — because plugin REST/MCP
+    // presets are opt-in and the app gateway's registries never `include`
+    // "admin_auth". (This also means the old WhoAmI MCP-tool collision
+    // with the "auth" realm can't happen: neither realm's tools are
+    // published unless explicitly included.)
+    {
+      source_name:   "auth"
+      registered_as: "admin_auth"
+      channels:   [ { key: "events", value: "tasks" } ]
+      auth_input: { header_name: "Authorization", scheme: "Bearer" }
+      // user_admin adds the turnkey Django-style Users admin page (list +
+      // detail + disable/enable/delete) onto this realm's admin surface,
+      // alongside the Roles page — exercising the plugin's admin user
+      // management. Staff realm only; the customer `auth` realm above
+      // omits it (its users aren't admin-managed from here).
+      //
+      // org_membership adds the turnkey Organizations + OrgMemberships
+      // admin pages onto this surface — the multi-org tables are plugin-
+      // owned, so a project can't author these pages itself. This is what
+      // exercises the ADMIN-FK read-projection lists (ListOrgMemberships →
+      // OrgMembershipAdminRow, LEFT JOIN User+Organization): the list shows
+      // the member's email + the org's name instead of two raw UUIDs. The
+      // realm sends no W17-Org header, so the org-scope decorator no-ops
+      // (resolveOrgScope returns nil) — admin login is unaffected.
+      features:   { names: [ "rbac", "authenticate_turnkey", "sign_in_turnkey", "user_admin", "org_membership" ] }
+    },
+
+    // **The connection-alias fixture.** `auditsink` is TEST-ONLY and
+    // lives in this example's proto tree (proto/plugins/auditsink), for
+    // the same reason `probe` lives in plugin-surfaces': it is a
+    // measuring instrument, not something a consumer installs.
+    //
+    // It declares one connection ALIAS (`store`) and therefore CANNOT be
+    // activated without a `connections:` map — which is the whole point.
+    // Neither shipped plugin declares an alias, so both bind to the
+    // activating domain's default connection, their activations carry no
+    // map, and the field had no writer anywhere in this example.
+    //
+    // Here it maps to the app domain's own Postgres. The SAME plugin is
+    // activated again in `billing` against `billing-postgres`, so the
+    // one table it owns is created in TWO DIFFERENT DATABASES and the
+    // map is the only thing that differs between the two activations.
+    {
+      source_name:   "auditsink"
+      registered_as: "auditsink"
+      connections:   [ { key: "store", value: "app-postgres" } ]
+      features:      { names: [ "sink" ] }
+    }
+  ]
+};
+
+// ACL cascade on for the `app` domain. Every model
+// gets `<module>.<Model>#<action>` perm checks on its auto-
+// generated CRUD handlers; every REST-exposed RPC gets
+// `<module>.<Service>.<Method>` checks. The activated auth
+// plugin's `Authenticate` turnkey populates AuthResp.permission_ids
+// from the bearer token's RBAC role grants (real permission
+// lookup — replaces the former hand-written grant-all stub).
+option (w17.acl_models)    = true;
+option (w17.acl_endpoints) = true;
+
+// Declarative role catalogue for the `admin_auth` realm — the only
+// activation here with `org_membership`, which is what makes it the
+// place `scope` means anything.
+//
+// `key` is the seeded row's identity and is deliberately NOT the name:
+// renaming a role must move its label, never its id, or every existing
+// UserRole keeps pointing at the row the rename abandoned.
+//
+// The pair covers both scopes on purpose. `platform-staff` is REALM —
+// it reaches into every organization, which is right for the operator's
+// own people and is the reading an unset `scope` would silently inherit.
+// `org-auditor` is ORG — its grants exist only inside the organization
+// it was assigned in, so the same person can hold it in one company
+// without holding it in another. An ORG role cannot carry `first_user` /
+// `default`: signup happens before any membership exists, so the
+// assignment would land with no organization and grant everywhere.
+// The app realm's e2e bootstrap role, DECLARED rather than seeded.
+//
+// It replaces a plpgsql trigger `fixtures/app/test.json` used to install:
+// an AFTER INSERT on auth_user that granted a wildcard role to every new
+// account. That trigger was a shortcut against the seed file's own opening
+// rule ("anything a user could create through the API is NOT seeded here") —
+// assigning a role is exactly that, and the plugin's turnkey SignUp does it
+// through the real `AssignRoleToUser` mutation.
+//
+// first_user + default together mean EVERY signup, which is what the trigger
+// did: the first account takes the first_user path, everyone after it the
+// default one. all_permissions makes the grant a runtime wildcard, so the role
+// never falls behind a surface that grows — the same reason the seed used it
+// instead of enumerating permission ids.
+// The app realm's bootstrap role, declared rather than seeded in SQL.
+//
+// It replaces what `fixtures/app/test.json` did with a trigger on
+// auth_user: create a wildcard role, then grant it to every account as it is
+// inserted. That was a shortcut against the seed file's own stated rule —
+// anything creatable through the API is built by the test's own actions — and
+// it needed an email-prefix hole (`nogrant-%`) punched back through it so that
+// SOME caller in the suite could still be refused by an ACL gate.
+//
+// `first_user` + `default` reproduce the grant through the real path: the auth
+// plugin resolves a signup's roles from these columns and links them with the
+// AssignRoleToUser mutation, inside the signup's own transaction. Both flags,
+// not just `default`: the plugin gives the FIRST account the first_user roles
+// and every later one the default roles, so a role carrying only `default`
+// would leave the first signup with nothing.
+//
+// `all_permissions` is the wildcard the auth turnkey expands against the
+// compile-time permission lock, so the grant covers endpoints added later. The
+// enumerated form it replaced was a hardcoded id range that silently
+// under-granted the moment codegen allocated one more.
+//
+// The permission-less caller is now a SEEDED identity that signs IN rather
+// than a signup the grant skips — the same shape the admin realm has always
+// used for its grant-less admin, and one that does not need the assignment
+// path to carry an exception.
+option (w17.acl_roles) = {
+  key:             "e2e-all"
+  name:            "e2e-all"
+  activation:      "auth"
+  scope:           ACL_ROLE_SCOPE_REALM
+  all_permissions: true
+  first_user:      true
+  default:         true
+};
+
+option (w17.acl_roles) = {
+  key:             "platform-staff"
+  name:            "platform-staff"
+  activation:      "admin_auth"
+  scope:           ACL_ROLE_SCOPE_REALM
+  all_permissions: true
+  first_user:      true
+};
+option (w17.acl_roles) = {
+  key:        "org-auditor"
+  name:       "org-auditor"
+  activation: "admin_auth"
+  scope:      ACL_ROLE_SCOPE_ORG
+  include:    [ "admin_auth.AuthQuery.*" ]
+};
+// membership-editor — may change and remove memberships on the admin's
+// OrgMemberships page and NOTHING ELSE. It covers no org-auditor permission,
+// so the role ceiling has to refuse it a member who holds org-auditor
+// (admin/0242, 0243) while letting it remove one who holds nothing there
+// (0244). Without such a caller the ceiling's refusal is reachable by no
+// e2e step: the admin the suite signs in as holds every permission.
+option (w17.acl_roles) = {
+  key:        "membership-editor"
+  name:       "membership-editor"
+  activation: "admin_auth"
+  scope:      ACL_ROLE_SCOPE_REALM
+  include:    [
+    "admin_auth.AuthService.UpdateOrgMembershipRole",
+    "admin_auth.AuthService.RemoveOrgMembership",
+    "admin_auth.OrgMembership#change",
+    "admin_auth.OrgMembership#delete"
+  ]
+};
+
+// `query_memory_budget_bytes` opt-in for the
+// LateMaterialize fixture. Tight 100 KiB ceiling forces the
+// optimizer's Strategy 2 pick on `GetTaskWithRecentAudits`
+// (annotated `TaskAuditLog`: filtered fields ~12 MB don't fit,
+// PK-only ~24 KB does). Tables without
+// `estimated_row_count` skip budget consultation entirely —
+// the row-shape fallback (`joinHeavyByteThreshold`) keeps
+// the pre-budget routing for Comment / Attachment / etc.
+option (w17.module) = {
+  connection: {
+    name: "app-postgres",
+    dialect: POSTGRES,
+    version: "18",
+    query_memory_budget_bytes: 102400
+  },
+
+  // What this project's build context does not need, appended to every
+  // bundle's generated Dockerfile.dockerignore.
+  //
+  // Here because the vocabulary needs a consumer in this example: an annotation
+  // no example declares is one the emitters can stop honouring without a
+  // single test going red. The two patterns are the shapes a real project
+  // brings — a front-end build output directory and large media — and neither
+  // is anything w17 would guess at, which is exactly why the generated half
+  // stops where it does and leaves this half to the author.
+  //
+  // The generated half owns `w17/` and this one may not touch it: codegen
+  // REFUSES a pattern under that prefix, because `w17/stubs` is a replace
+  // target and `go.work` uses every module under `w17/services`, so excluding
+  // one makes BuildKit copy nothing and say nothing.
+  build_context_excludes: ["frontend/dist/", "*.mp4"],
+
+  // channels[] cascade for the `app` domain's
+  // eventbus surface.
+  // Two channels split by durability shape:
+  //   `tasks`     — NATS JetStream for durable lifecycle
+  //                 events. Default retry shape is the
+  //                 5-deliver / 30s ack / exponential backoff
+  //                 baseline; per-event `(w17.event).retry`
+  //                 overrides for higher-importance signals
+  //                 (TaskCompleted bumps to 10 / 60s).
+  //   `telemetry` — in-process MEMORY for best-effort
+  //                 fire-and-forget signals (TaskViewed and
+  //                 similar). Drops on full buffer; no
+  //                 redelivery; one delivery attempt.
+  // event_defaults applies to events that declare a channel
+  // without their own retry block.
+  channels: [
+    {
+      name: "tasks"
+      transport: TRANSPORT_NATS
+      retry: {
+        max_deliver: 5
+        ack_wait_seconds: 30
+        backoff: BACKOFF_EXPONENTIAL
+      }
+      drain_timeout_seconds: 30
+    },
+    {
+      name: "telemetry"
+      transport: TRANSPORT_MEMORY
+      buffer_size: 4096
+      retry: { max_deliver: 1 }
+      drain_timeout_seconds: 5
+    }
+  ]
+
+  event_defaults: {
+    retry: { max_deliver: 3 }
+
+    // The domain-wide FE delivery timings, tier 2 of the
+    // three-tier cascade (per-event override → this → the framework's
+    // 15s / 60s / 300s).
+    //
+    // The framework default is tuned for a page a user leaves open: it
+    // waits fifteen seconds before it will even consider polling, and
+    // keeps going for five minutes of silence. Everything browser-
+    // facing in this domain is a live board somebody is watching while
+    // they work, so the honest domain default is faster to notice a
+    // dropped push and quicker to stop bothering the backend once
+    // nothing is happening.
+    //
+    // Only the THRESHOLDS cascade. `fallback` and `dedup_key` are
+    // inherently per-event — there is no domain-wide answer to "which
+    // query reproduces this" — and are ignored here.
+    delivery: {
+      expected_seconds: 5
+      max_seconds:      20
+      give_up_seconds:  120
+    }
+  }
+};

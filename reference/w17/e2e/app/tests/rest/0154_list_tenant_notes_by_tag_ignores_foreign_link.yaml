@@ -1,0 +1,22 @@
+# The step that isolates the JOIN-side scope predicate, and the only
+# one that does.
+#
+# Setup (the `pre` chain): alpha creates a note; beta tags THAT note, so
+# a link row exists with alpha's note_id and beta's tenant_id. Then
+# alpha authenticates again — through auth_alpha_reader.yaml, NOT
+# auth/auth.yaml, which the chain has already pulled in and would not
+# re-run — and lists by beta's tag.
+#
+# Alpha owns the note, so the FROM-side filter (`n.tenant_id`) passes —
+# it is not what stops this. Only `nt.tenant_id` on the JOIN's ON clause
+# excludes beta's link row. Drop that predicate and this query returns
+# alpha's note, meaning another tenant's link rows can steer what alpha
+# sees. Hence: exactly zero.
+method: tasks.TaskQuery.ListTenantNotesByTag
+pre:
+    - fixtures/a_cross_tenant_note_tag.yaml
+    - auth/auth_alpha_reader.yaml
+input:
+    tag: ${xtag.value}
+expect:
+    notes: {matcher: count, op: '==', value: 0}

@@ -1,0 +1,19 @@
+# The DB-planned arm — the same fan-out, one column different, and the
+# only one in the project the optimizer leaves as a single JOIN.
+#
+# It reads the same table as 0574 and picks one of the same five rows, so
+# the two together say the strategies AGREE. That is the property a
+# static gate cannot check and the one that matters: a cost model is
+# allowed to choose any strategy it likes, and not allowed to change the
+# answer by choosing.
+method: tasks.TaskQuery.GetTaskAuditByEntry
+pre:
+    - auth/auth.yaml
+input:
+    id: 700005
+    audit_id: 730103
+expect:
+    task.id: {matcher: eq, value: "700005"}
+    audits: {matcher: count, op: '==', value: 1}
+    audits.0.id: {matcher: eq, value: "730103"}
+    audits.0.body_text: {matcher: eq, value: audit three}

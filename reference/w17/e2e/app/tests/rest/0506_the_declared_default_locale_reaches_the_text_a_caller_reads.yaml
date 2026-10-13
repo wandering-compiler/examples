@@ -1,0 +1,41 @@
+# `default_language`, end to end — the metadata key 0502 reads is worth
+# nothing on its own, so this closes the loop: a request naming no
+# locale is REFUSED IN CZECH.
+#
+# It took three fixes to become reachable, and each one was invisible
+# from the layer above it:
+#
+#   * no bundle BAKED the catalogs into its image — the emitted
+#     Dockerfile carried the COPY as a commented-out suggestion — so
+#     `i18n.RegisterFS` soft-failed everywhere and every message in
+#     every example stack rendered as its msgid;
+#   * only the GATEWAY ever called RegisterFS, so the `i18n.T` calls in
+#     generated storage validation blocks had no catalog even where one
+#     was mounted;
+#   * and this refusal comes from a STORAGE-tier method, which is the
+#     half that was unreachable.
+#
+# The catalog is translated for exactly ONE msgid, this one; every other
+# entry carries the English source text. That is deliberate. 0310 and
+# 0311 read the numeric-bound refusals in English and send no
+# Accept-Language either, so a fully translated catalog would silently
+# retranslate assertions this change never touched. One translated
+# string proves the locale is live; leaving the rest alone proves
+# nothing else moved.
+#
+# The trigger is `GetDirectoryOptInReq.user_id`, typed UUID on the
+# REQUEST message — so the message is one of the framework's own msgids
+# rather than an author string this project invented.
+#
+# A read, and a refused one, so nothing is written.
+method: users.DirectoryCardQuery.GetDirectoryOptIn
+pre:
+    - auth/auth.yaml
+input:
+    user_id: definitely-not-a-uuid
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: user_id
+          code: INVALID_UUID
+          message: {matcher: eq, value: "musí být platné UUID"}

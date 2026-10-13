@@ -1,0 +1,11 @@
+method: tasks.TaskQuery.GetTenantNote
+pre:
+    - fixtures/a_tenant_note.yaml
+input:
+    id: ${note.id}
+expect:
+    id: {matcher: not_empty}
+    tenant_id: {matcher: not_empty}
+    title: {matcher: not_empty}
+    body: {matcher: not_empty}
+    created_at: {matcher: not_empty}

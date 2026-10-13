@@ -1,0 +1,39 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# step 2 of 3 — the link authenticates.
+#
+# There is NO `auth/…` fixture in this chain beyond the one the mint
+# needed, and the runner sends no Authorization header for this step:
+# the endpoint declares `credential: { path_param: "public_token" }`,
+# so its table entry carries `CredentialInURL` and the runner neither
+# requires nor injects `auth.token`. That absence is the test. A step
+# that quietly carried a bearer token would keep passing if the URL
+# credential stopped working altogether.
+#
+# What this DOES prove: an unauthenticated request carrying only a
+# capability token in its path reaches a tenant-scoped row, which means
+# the auth method resolved the token and the gateway threaded the
+# resulting scope.
+#
+# What it does NOT prove, and 0640 exists for: that the scope is doing
+# any work. `public_token` is globally unique, so `WHERE public_token =
+# :token` selects one row whether or not the auto-WHERE is appended —
+# deleting the scope filter would leave this answer unchanged.
+method: tasks.TaskQuery.GetTenantNoteByPublicToken
+pre:
+    - fixtures/a_gamma_note_with_public_link.yaml
+input:
+    public_token: ${publiclink.token}
+expect:
+    id: {matcher: eq, value: '${publiclink.note_id}'}
+    # tenant-gamma's seeded id (fixtures/app/test.json). Asserted
+    # literally rather than as "not empty": the row the link resolves to
+    # must belong to the tenant the link was minted in, and a not_empty
+    # check would pass for any tenant at all.
+    tenant_id: {matcher: eq, value: '33333333-3333-3333-3333-333333333333'}
+    title: {matcher: eq, value: e2e gamma shared note}
+    body: {matcher: not_empty}
+    created_at: {matcher: not_empty}

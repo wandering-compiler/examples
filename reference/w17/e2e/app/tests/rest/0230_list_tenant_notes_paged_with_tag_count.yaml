@@ -1,0 +1,20 @@
+# The other half of what the GROUP BY spelling would have cost:
+# `Paging.total` still comes back on a list whose projection carries a
+# per-row subquery.
+#
+# The count query drops the target list, so the subquery never reaches
+# it and Total counts notes. Under a GROUP BY the same COUNT(*) would
+# have returned one row per group and Total would have been the first
+# group's size — which is why that spelling is refused on a paged
+# method, and why this asserts the total is actually there.
+#
+# (Auto-scaffolded when the endpoint was declared, then filled in; it
+# keeps the number the generator gave it rather than the 016x block of
+# its siblings.)
+method: tasks.TaskQuery.ListTenantNotesPagedWithTagCount
+pre:
+    - fixtures/a_tenant_note.yaml
+input: {}
+expect:
+    items: {matcher: count, op: '>=', value: 1}
+    paging.total: {matcher: not_empty}

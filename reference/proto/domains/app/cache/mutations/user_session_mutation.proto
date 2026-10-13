@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package e2e.app.cache;
+
+import "w17/db.proto";
+import "domains/app/cache/types/models.proto";
+
+// UserSessionMutation — the write half of the HASH_BUCKETED layout.
+//
+// `UserSession` has carried `redis_layout: REDIS_LAYOUT_HASH_BUCKETED`
+// from the start, and until this file existed nothing had ever ADDRESSED
+// a bucket: the layout was declared, read once through the cross-
+// capability fan-out (which never touches a bucket key, it HGETALLs the
+// whole hash), and otherwise inert. The composite-key path — the
+// typecheck rule that recognises `bucket = :b AND pk = :p`, and the
+// runtime parser in the redis emitter that is its mirror — had run zero
+// times between them, which is what "declared but never queried" looks
+// like from the coverage side.
+//
+// The model's own comment used to say bucketed mutation authoring did
+// not exist, and named a grammar (`INSERT … WHERE … VALUES (…)`) that
+// was never the shape. It is spelled the ordinary way: both key columns
+// are SET pairs, because a bucketed write needs the bucket value to pick
+// the Redis HASH and the PK value to pick the field inside it. That
+// comment is corrected in types/models.proto.
+
+message UpsertUserSessionReq {
+  int64  user_id    = 1;
+  string session_id = 2;
+  string device     = 3;
+}
+// Redis SET / HSET returns an ack, not a row — a KV write has no
+// RETURNING to project (and the compiler refuses one), so there is
+// nothing to carry back that the caller does not already hold.
+message UpsertUserSessionResp {}
+
+message DeleteUserSessionReq {
+  int64  user_id    = 1;
+  string session_id = 2;
+}
+message DeleteUserSessionResp {}
+
+service UserSessionMutation {
+  // UpsertUserSession — one device's session, written into its user's
+  // bucket.
+  //
+  // UPSERT rather than INSERT because a gateway re-registering a live
+  // session is the ordinary case, and because the conflict arms are
+  // where the KV rules have teeth. Two of them apply here and both are
+  // satisfied deliberately:
+  //
+  //   The conflict TARGET is `(user_id, session_id)` — the pair, not the
+  //   primary key alone. A bucketed entity's storage identity is
+  //   (bucket, PK): the HASH key comes from the bucket value and the
+  //   field name from the PK value, so a conflict on the PK alone could
+  //   not be detected across buckets. On an unbucketed KV table the same
+  //   rule reads the other way round and the PK alone is the only legal
+  //   target.
+  //
+  //   The DO UPDATE arm assigns the SAME values as the INSERT arm.
+  //   Redis SET overwrites unconditionally, so the emitter applies the
+  //   insert values on conflict too — a divergent update arm would be
+  //   accepted by the author, discarded by the store, and visible to
+  //   nobody. The compiler refuses that shape; this is the shape it
+  //   admits.
+  rpc UpsertUserSession(UpsertUserSessionReq) returns (UpsertUserSessionResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:
+          "UPSERT INTO cache.UserSession SET "
+          "user_id = :user_id, session_id = :session_id, device = :device "
+          "ON CONFLICT (user_id, session_id) DO UPDATE SET device = :device"
+      }
+    };
+  }
+
+  // DeleteUserSession — sign one device out.
+  //
+  // The composite WHERE is not a stylistic choice: `HDEL` takes a key
+  // and a field, so both halves are required to name the thing being
+  // removed. Dropping the bucket half would delete a field from
+  // whichever hash happened to be addressed, and dropping the PK half
+  // leaves nothing to remove — neither is expressible, which is why the
+  // shape is checked rather than trusted.
+  rpc DeleteUserSession(DeleteUserSessionReq) returns (DeleteUserSessionResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:  "DELETE FROM cache.UserSession WHERE user_id = :user_id AND session_id = :session_id"
+      }
+    };
+  }
+}

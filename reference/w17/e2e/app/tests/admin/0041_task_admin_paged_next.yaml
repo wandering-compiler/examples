@@ -1,0 +1,27 @@
+# Cursor paging, page 2 — resumes the TaskAdmin listing
+# from the cursor 0040 captured. Captures live in the scenario-wide scope,
+# so `${task_admin.next_cursor}` bound by 0040 flows into this step even
+# though it is a separate file (the e2e schema is one call per file).
+#
+# GET /admin/api/list/TaskAdmin?cursor=<next_cursor> — the handler
+# paging.DecodeCursor's it (same in-memory per-boot key that encoded it),
+# advances the keyset past id 700002, and returns the NEXT two rows. The
+# exact-id assertions prove this is the successor page, not a repeat of
+# page 1: Task.id is an int64, which protojson renders as a JSON string, so
+# the expected ids are quoted. Total stays 5 (carried on the cursor's
+# cached-total metadata).
+method: admin.TaskAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    # The cursor carries the keyset boundary + total + direction, but NOT
+    # the page size — the client re-supplies `limit` on every page request
+    # (omitting it here would fall back to the default_limit of 50 and pull
+    # all remaining rows). Same page size as 0040 → exactly the next two.
+    limit: 2
+    cursor: ${task_admin.next_cursor}
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    paging.total: {matcher: eq, value: "5"}
+    items.0.id: {matcher: eq, value: "700003"}
+    items.1.id: {matcher: eq, value: "700004"}

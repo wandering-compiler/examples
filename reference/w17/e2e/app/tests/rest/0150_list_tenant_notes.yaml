@@ -1,0 +1,17 @@
+# The tenant-scoped note list, read as the alpha principal.
+#
+# The floor of 1 is earned earlier in this same scenario: 0090 creates a
+# tenant note under this very principal, so an empty answer here means
+# the scope predicate dropped the caller's own row. That is the failure
+# the scaffold's `>= 0` was blind to — and 0225 is its mirror, asserting
+# the SAME endpoint answers with exactly zero for a beta principal. The
+# pair is the isolation proof; a floor of 0 on this side would have left
+# 0225 proving only that beta sees nothing, never that alpha sees
+# anything.
+method: tasks.TaskQuery.ListTenantNotes
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    notes: {matcher: count, op: '>=', value: 1}
+    notes.0.title: {matcher: not_empty}

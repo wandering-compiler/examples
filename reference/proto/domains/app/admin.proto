@@ -1,0 +1,619 @@
+syntax = "proto3";
+
+// Admin surface for the `app` domain. Walking-skeleton
+// over the existing User model + UserQuery, with password
+// support — login_method points at a
+// real Login RPC (username+password → token via
+// passwordhash.Verify), and password_hash appears in detail.fields
+// as a writable credential row (Mantine PasswordInput; empty =
+// don't-change).
+//
+// Build mental model: this file declares ONE admin bundle. The
+// codegen orchestrator's `admin_targets[]` entry consumes the
+// declaration + emits an `<output_dir>/` admin bundle alongside
+// the existing storage + gateway-rest bundles.
+
+package e2e.app;
+
+import "w17/admin.proto";
+
+option (w17.admin_api) = {
+  name: "admin",
+  prefix: "/admin",
+
+  // The admin's own default locale, independent of the REST surface's
+  // (`languages: [en]` in the lock — the admin ships `admin_languages:
+  // [cs, en]` and this picks which of the two an operator lands in
+  // before choosing anything).
+  //
+  // `cs` rather than `en` on purpose: `en` is the runtime fallback for
+  // an EMPTY default, so declaring it would be indistinguishable from
+  // declaring nothing at all. The non-fallback value is the only one
+  // whose arrival in the spec proves the declaration was read.
+  default_language: "cs"
+
+  // Project-owned SPA slot code. `w17/admin-custom/slots.tsx` exports a
+  // `SlotRegistry`; the generated entry imports it and spreads it over
+  // its own empty one.
+  //
+  // It is the escape hatch for the admin surface (non-negotiable rule
+  // #3), and the only place project slot code SURVIVES: the bundle tree
+  // under `w17/services/` is `DO NOT EDIT` and rewritten wholesale, so a
+  // slot map edited into the generated `main.tsx` lasts until the next
+  // regen. Declaring the directory is what moves that code outside the
+  // rewrite.
+  //
+  // The registered slot renders TaskAdmin's `priority` cell as a word.
+  // That is deliberately something no annotation can express — a format
+  // localises a value, it does not swap in a different vocabulary — so
+  // the declaration cannot be mistaken for one of the declarative knobs
+  // next to it.
+  custom_js: "w17/admin-custom"
+
+  // email+password login flow served by the SECOND activation of the
+  // `auth` plugin — the tenant-less admin realm `admin_auth` (item 6),
+  // NOT the tenant-scoped `auth` realm the app's users live in. The
+  // administrator is a separate principal in its own `admin_auth_*`
+  // tables, so an admin login never collides with — and is never
+  // scoped by — any tenant.
+  //   login_method = admin_auth.AuthService.SignIn — plugin turnkey
+  //     (`sign_in_turnkey`): GetUserByEmail + passwordhash.
+  //     VerifyAndRotate + IssueToken; returns { user_id, token }.
+  //   user_lookup = admin_auth.AuthService.Authenticate — plugin
+  //     per-request identity + permissions + scopes resolution from
+  //     the Bearer token SignIn issued. No tenant scope is stamped
+  //     (the admin_auth activation omits `tenant_scope`).
+  auth: {
+    login_method: "admin_auth.AuthService.SignIn"
+    user_lookup:  "admin_auth.AuthService.Authenticate"
+  }
+
+  // Overview landing (item 5). Two declarative widgets — no project JS
+  // on either. Declaring any widget replaces the default group-count
+  // tiles with this widget grid.
+  //
+  //   user_stats (STAT) — the runtime fetches
+  //     GET /admin/api/widget/user_stats (backed by the cross-tenant
+  //     COUNT(*) query users.UserQuery.CountUsers) and renders `total`
+  //     as a stat cell.
+  //   task_categories (CHART) — the runtime fetches
+  //     GET /admin/api/widget/task_categories (backed by the GROUP BY
+  //     aggregation tasks.TaskQuery.CountTasksByCategory), reads the
+  //     `rows` array off the response and draws one bar per category.
+  //     BAR because the X axis is a set of unordered categories, not a
+  //     time line.
+  overview: {
+    widgets: [
+      {
+        slot: "user_stats"
+        size: ADMIN_WIDGET_SIZE_MEDIUM
+        kind: ADMIN_WIDGET_KIND_STAT
+        title: "Users"
+        source: "users.UserQuery.CountUsers"
+        values: [ { field: "total", label: "Total users" } ]
+      },
+      {
+        slot: "task_categories"
+        size: ADMIN_WIDGET_SIZE_MEDIUM
+        kind: ADMIN_WIDGET_KIND_CHART
+        title: "Tasks per category"
+        source: "tasks.TaskQuery.CountTasksByCategory"
+        chart_kind: ADMIN_CHART_KIND_BAR
+        x_field: "category_id"
+        series: [ { field: "task_count", label: "Tasks" } ]
+      },
+      {
+        // task_statuses (CHART/DONUT) — the axis DISPLAY proof. Its
+        // aggregation groups by an enum column, so the wire carries
+        // the enum's NUMBER; the emitted spec carries the catalogue
+        // behind it (`x_choices`), and the runtime draws a legend of
+        // labels rather than "1 / 2 / 3". The row field is a bare
+        // int32, so the catalogue is resolved through projection
+        // provenance — see StatusCount in tasks/queries.
+        slot: "task_statuses"
+        size: ADMIN_WIDGET_SIZE_MEDIUM
+        kind: ADMIN_WIDGET_KIND_CHART
+        title: "Tasks by status"
+        source: "tasks.TaskQuery.CountTasksByStatus"
+        chart_kind: ADMIN_CHART_KIND_DONUT
+        x_field: "status"
+        series: [ { field: "task_count", label: "Tasks" } ]
+      },
+      {
+        // tasks_over_time (CHART/AREA) — the axis display contract's
+        // TIME case. Its aggregation groups by a timestamp column, so
+        // the wire carries an instant ("2026-01-01T00:00:00Z"); the
+        // emitted spec carries the `datetime` format behind it
+        // (`x_format`), and the runtime draws dates on the axis rather
+        // than wire timestamps. AREA because the X axis is a time line,
+        // not a set of unordered categories.
+        slot: "tasks_over_time"
+        size: ADMIN_WIDGET_SIZE_LARGE
+        kind: ADMIN_WIDGET_KIND_CHART
+        title: "Tasks over time"
+        source: "tasks.TaskQuery.CountTasksPerDay"
+        chart_kind: ADMIN_CHART_KIND_AREA
+        x_field: "day"
+        series: [ { field: "task_count", label: "Tasks" } ]
+      }
+    ]
+  }
+
+  // Left-nav grouping. Empty renders every page flat in declaration
+  // order, so this block is the difference between a nav that GROWS
+  // with the page list and one somebody decided.
+  //
+  // 🔴 It must name the plugin's pages too. `Users` / `Organizations` /
+  // `Roles` / `Sessions` / `OrgMemberships` are contributed by the auth
+  // activation's admin preset, which presetinject appends to
+  // `pages[]` BEFORE the gateway parser resolves the surface — so from
+  // the nav's point of view they are ordinary declared pages, and the
+  // "every page belongs to exactly one group" rule counts them. That is
+  // fail-closed and right: an activation that starts contributing a
+  // page breaks the build rather than silently dropping it out of the
+  // navigation, which is what a nav listing only hand-written pages
+  // would do.
+  //
+  // The grouping is by WHO IS ASKING, not by module: an operator
+  // triaging work does not want the tenant's org chart in the same
+  // section, and the access-control pages are the ones with a different
+  // blast radius.
+  nav: [
+    {
+      title: "Work"
+      pages: ["TaskAdmin", "TaskFeed", "TaskCategoryAdmin", "MilestoneAdmin", "CommentAdmin", "CommentTaskList", "TaskTagAdmin"]
+    },
+    {
+      title: "Directory"
+      pages: ["UserAdmin", "UserDirectory", "Users", "Organizations", "OrgMemberships"]
+    },
+    {
+      title: "Access"
+      pages: ["Roles", "Sessions"]
+    }
+  ]
+
+  pages: [
+    {
+      // An admin page whose list is served by the BUSINESS tier —
+      // `users.UsersService` is the hand-written facade in app-business, not
+      // a storage query. The admin dials that tier for it
+      // (APP_ADMIN_BUSINESS_BACKEND_ADDR); until 2026-10-04 an admin reached
+      // only storage, so a page (or a user_lookup) bound to a project Service
+      // answered Unimplemented, and then was refused at codegen. Same rows as
+      // UserAdmin, a different tier behind them — admin/0050 proves it live.
+      name: "UserDirectory"
+      model: "users.User"
+      list: {
+        source: "users.UsersService.ListUsers"
+        columns: [ { name: "email" }, { name: "display_name" } ]
+        detail_link_column: "email"
+      }
+      detail: {
+        read: "users.UserQuery.GetUser"
+        readonly_fields: ["id"]
+      }
+    },
+    {
+      name: "UserAdmin"
+      model: "users.User"
+      list: {
+        source: "users.UserQuery.ListUsers"
+        // Each column is an AdminColumn { name, label?, ref? }. The
+        // `id` column carries a `ref` (ADMIN-FK): it renders the row's
+        // human `display_name` (read row-locally from the ListUsers
+        // projection, no fetch) and links to the referenced page's
+        // detail. This walking-skeleton admin has one model, so the
+        // ref points at UserAdmin itself (the "same page" case); a
+        // multi-model admin points `page` at the FK target's own page
+        // (e.g. owner_id → Organizations).
+        columns: [
+          { name: "id", ref: { title: "display_name", page: "UserAdmin" } },
+          { name: "email" },
+          { name: "display_name" },
+          { name: "status" }
+        ]
+        detail_link_column: "email"
+      }
+      detail: {
+        read: "users.UserQuery.GetUser"
+        // Note: password_hash listed deliberately. Admin
+        // renders it as Mantine PasswordInput with placeholder
+        // "Leave empty to keep current"; storage codegen auto-hashes on update
+        // when a non-empty value is submitted. Listed in
+        // readonly_fields would show `••••••••` placeholder
+        // (hash string never displayed).
+        readonly_fields: ["id"]
+      }
+    },
+    {
+      // Cursor-paging proof — an admin page bound to the
+      // already-paged storage read `tasks.TaskQuery.ListTasksPaged`
+      // (empty request; `w17.Paging` response field; ORDER BY t.id ASC
+      // keyset). Because the backing LIST method is paged, the admin
+      // list codegen emits cursor decode/encode + boundaries/limit/
+      // total metadata into this page's list handler and adds a
+      // `paging` object to admin.json.
+      //
+      // A list-ONLY page was rejected at ACL-generate time ("admin page
+      // has no `detail` block … every admin page declares at minimum a
+      // detail with read:"), so a minimal detail is required. The read
+      // binds `tasks.TaskQuery.GetTaskWithCategory` — a STORAGE-tier
+      // read app-admin's backend (app-storage) actually serves (the
+      // TasksService facade lives in app-gateway, not the admin
+      // backend), whose request PK field `id` matches the Task model's
+      // PK so the {id} URL segment stamps cleanly.
+      //
+      // INC-2 also makes this page the PAGED auto-sort fixture. Every
+      // column below is projected as a plain NOT NULL column by the
+      // source DQL, so all five are auto-sortable under the D5 paged
+      // rule — no annotation needed, DQL stays the single source of
+      // truth. Storage emits one statically-typed keyset query per
+      // (column, direction) variant (`ORDER BY <column>, t.id`) and the
+      // list handler carries the active selector in the cursor, so a
+      // Next hop resumes under the same variant. Proven live by the
+      // admin e2e steps 0043 / 0044.
+      name: "TaskAdmin"
+      model: "tasks.Task"
+      // Page-level chrome override. The model already carries
+      // `(w17.admin_title) = "#{id} {title}"`; this page shows the
+      // status instead of the id, because the operator arriving HERE
+      // is triaging, while the FK picker that reads the model-level
+      // template needs the id to tell two same-named tasks apart.
+      //
+      // The two templates must stay DIFFERENT for either to be
+      // provable. `TaskFeed` below deliberately declares none, so the
+      // three arms are: overridden (here), inherited (TaskFeed), and
+      // the model-level template itself (spec `title_templates`).
+      title: "{title} ({status})"
+      list: {
+        source: "tasks.TaskQuery.ListTasksPaged"
+        columns: [
+          { name: "id" },
+          { name: "title" },
+          { name: "status" },
+          // Header override. The projected field is named for the
+          // query; the column heading is for a human reading a triage
+          // list. Without it the header humanises to "Priority" —
+          // which is a perfectly good header, and that is the trap:
+          // a label that stopped being applied still renders a
+          // plausible word. "Urgency" is not derivable from the field
+          // name, so its presence in the spec can only come from this
+          // declaration.
+          { name: "priority", label: "Urgency" },
+          // Format override on a column that ALREADY has a format.
+          // `created_at` is a timestamp, so the field's semantic type
+          // implies the `datetime` preset and the spec carries it
+          // today without anyone declaring anything. Overriding to
+          // `short_date` is therefore the only arm that proves the
+          // override is read at all: dropping it does not remove the
+          // format, it silently restores the inherited one — a diff
+          // an assertion on "has a format" would never see.
+          { name: "created_at", format: "{value|short_date}" }
+        ]
+        detail_link_column: "title"
+      }
+      detail: {
+        read: "tasks.TaskQuery.GetTaskWithCategory"
+      }
+      // The one inline in this example. An inline is what turns two pages
+      // into a parent/child relationship: the child's rows render INSIDE
+      // the parent's detail page, filtered to that parent, with their own
+      // create / update / delete routes hung off it
+      // (`/api/inline/TaskAdmin/{id}/CommentAdmin[/{child_id}]`).
+      //
+      // All seven fields are declared, because six of them are separately
+      // losable and each loses something different:
+      //
+      //   page    — which page supplies the child rows and their columns.
+      //   link    — the read, and the ONLY thing that scopes the children
+      //             to this parent. It takes `task_id`; a link that ignored
+      //             it would show every comment in the database under
+      //             whichever task was open, looking perfectly normal.
+      //   layout  — TABULAR borrows CommentAdmin's `list.columns`; STACKED
+      //             would render cards instead. Declared explicitly rather
+      //             than left to the default so the choice is legible.
+      //   label   — the section heading. Empty inherits the child page's
+      //             plural title, so a lost one is invisible: the section
+      //             still has a heading, just not this one.
+      //   create  — reuses the existing AddTaskComment, which also emits
+      //             TaskCommentAdded. An admin adding a comment is the same
+      //             event as anyone else adding one; a separate silent
+      //             insert here would make the counter subscriber wrong for
+      //             admin-created rows only.
+      //   update  — keys on the CHILD's id, not the parent's.
+      //   delete_ — same, and it is the field the vocabulary ratchet was
+      //             actually missing; the other six came with it because a
+      //             single-field inline is not a thing you can declare.
+      //
+      // Absent `create`/`update`/`delete_` the spec simply omits those
+      // endpoints and the SPA renders a read-only section — which is a
+      // legitimate configuration, and therefore one that a missing emit is
+      // indistinguishable from. That is what the gate is for.
+      inlines: [
+        {
+          page:    "CommentAdmin"
+          link:    "tasks.TaskQuery.ListTaskComments"
+          layout:  ADMIN_INLINE_LAYOUT_TABULAR
+          label:   "Comments on this task"
+          create:  "tasks.TaskMutation.AddTaskComment"
+          update:  "tasks.TaskMutation.UpdateTaskComment"
+          delete_: "tasks.TaskMutation.DeleteTaskComment"
+        }
+      ]
+    },
+    {
+      // ADMIN-ONLY cursor paging — the page TaskAdmin above is NOT.
+      // TaskAdmin's source is also published as a paged REST endpoint
+      // (`/tasks/paged`), which used to be the only way an admin list
+      // could page at all: paging was detected from the REST registry, so
+      // a list with no public endpoint behind it silently returned every
+      // row with a nil `paging` envelope.
+      //
+      // This page binds tasks.TaskQuery.ListTasksAdminFeed, which appears
+      // in NO registry but its own admin page. The `w17.Paging` field on
+      // its response is the declaration: the storage query gets the keyset
+      // WHERE + LIMIT, the list handler gets cursor decode/encode, and
+      // admin.json gets the `paging` block the SPA needs to render Prev /
+      // Next. Proven live by the admin e2e steps 0045 / 0046 — which walk
+      // the SAME five seeded tasks as 0040 / 0041 but in the opposite
+      // direction, because this method's own DQL orders by id DESC.
+      name: "CommentTaskList"
+      model: "tasks.Comment"
+      // The column-sort override trio.
+      //
+      // Its source is UNPAGED, and that is forced rather than chosen:
+      // codegen refuses `sort_key` on a cursor-paged list, because the
+      // next-page keyset boundary is read back from the field on the
+      // response item, so the ORDER BY has to run on the column that
+      // field carries. A sort_key pointing elsewhere would seek one
+      // column's boundary against another and page through the wrong
+      // rows. The refusal is right, and it means this fixture needs a
+      // list with no `w17.Paging` on its response.
+      list: {
+        source: "tasks.TaskQuery.ListCommentsWithTaskAdmin"
+        // Names a column that is sortable ONLY because of the override
+        // below. If `sortable` or `sort_key` stopped taking effect the
+        // page would not fail — it would quietly fall back to the
+        // storage method's own order (c.id ASC), which is why the live
+        // assertion reads the ORDER rather than the status code.
+        default_sort: "task_title"
+        columns: [
+          { name: "id" },
+          // Force-OFF on a column the derivation WOULD have made
+          // sortable: `body_text` is a plain NOT NULL column reference,
+          // the textbook auto-sortable case. Without this arm the
+          // tri-state would only ever be observed saying yes.
+          { name: "body_text", sortable: false },
+          // Force-ON plus the fragment. `COALESCE(t.title, …)` is an
+          // EXPRESSION, so the DQL-driven derivation classifies it as
+          // not sortable and the codegen has no fragment to infer —
+          // which is exactly when `sortable: true` REQUIRES `sort_key`
+          // to name the real underlying column.
+          { name: "task_title", sortable: true, sort_key: "t.title" }
+        ]
+        detail_link_column: "body_text"
+      }
+      // The GROUPED half of the pair — same model and same update
+      // method as CommentAdmin, rendered as sections instead of a flat
+      // list. Three things are separately losable here and each loses
+      // something different:
+      //
+      //   title      the section heading. An empty one is legal (an
+      //              unnamed section), so a dropped title still renders
+      //              a section — just an anonymous one.
+      //   fields     which inputs the section holds, in order. This is
+      //              also the editable set the admin guard checks, minus
+      //              whatever readonly_fields names.
+      //   collapsed  whether the section starts folded. False is the
+      //              default, so this is the only arm whose loss is
+      //              indistinguishable from never declaring it — hence
+      //              a `true` on the section where folding is the
+      //              point.
+      //
+      // The second section holds only readonly fields, which is the
+      // case the parser explicitly allows (fieldset entries validate
+      // against the update request OR the read response). It is also
+      // why `collapsed` belongs on that one: provenance is what an
+      // operator opens when something looks wrong, not while editing.
+      detail: {
+        read:   "tasks.TaskQuery.GetComment"
+        update: "tasks.TaskMutation.UpdateTaskComment"
+        fieldsets: [
+          { title: "Comment", fields: ["body_text"] },
+          { title: "Provenance", fields: ["id", "created_at"], collapsed: true }
+        ]
+        readonly_fields: ["id", "created_at"]
+      }
+    },
+    {
+      name: "TaskFeed"
+      model: "tasks.Task"
+      list: {
+        source: "tasks.TaskQuery.ListTasksAdminFeed"
+        columns: [
+          { name: "id" },
+          { name: "title" },
+          { name: "status" },
+          { name: "priority" }
+        ]
+        detail_link_column: "title"
+      }
+      detail: {
+        read: "tasks.TaskQuery.GetTaskWithCategory"
+      }
+    },
+    {
+      // The MODEL-axis opt-out, which nothing else in this example
+      // exercises. `tasks.TaskCategory` declares
+      // `(w17.acl_model) = false` (see models.proto), so this page's
+      // routes are gated by their ENDPOINT permission and by nothing
+      // else — no `tasks.TaskCategory#view` is allocated at all.
+      //
+      // The page above (TaskAdmin, model `tasks.Task`) inherits the
+      // same domain-wide `(w17.acl_models) = true` and keeps its
+      // model permission. The two are therefore a matched pair: if
+      // the model axis stopped working altogether, this page's
+      // expectations would still hold and only that one would break.
+      //
+      // A reference catalogue is the shape the opt-out is for: no
+      // user data, so "may I see it" is decided by the endpoint the
+      // caller can reach, not by a second permission granted per
+      // model.
+      name: "TaskCategoryAdmin"
+      model: "tasks.TaskCategory"
+      list: {
+        source: "tasks.TaskQuery.ListTaskCategoriesAdmin"
+        columns: [
+          { name: "id" },
+          { name: "name" },
+          { name: "color" },
+          { name: "completed_count" }
+        ]
+        detail_link_column: "name"
+      }
+      detail: {
+        read: "tasks.TaskQuery.GetTaskCategory"
+      }
+    },
+    {
+      // The page carrying the three surfaces nothing else in this example
+      // declares: list FILTERS, a restricted editable set, and bulk
+      // ACTIONS. It hosts them on `tasks.Milestone` because a bulk write
+      // needs rows whose content nobody else asserts — the milestone
+      // cases pin ids and order, not `status_note`, and the seed leaves
+      // that column to its default.
+      name: "MilestoneAdmin"
+      model: "tasks.Milestone"
+      list: {
+        // Its request carries the `(w17.admin_filter)` /
+        // `(w17.admin_search)` tags — the only list in this example that
+        // does. The tags sit on the REQUEST, so what they produce is an
+        // input the SPA forwards; whether anything happens is decided by
+        // the DQL, which binds both.
+        source: "tasks.TaskQuery.ListMilestonesAdmin"
+        columns: [
+          { name: "id" },
+          { name: "name" },
+          { name: "weight" },
+          { name: "status_note" }
+        ]
+        detail_link_column: "name"
+      }
+      detail: {
+        read:   "tasks.TaskQuery.GetMilestone"
+        update: "tasks.MilestoneMutation.UpdateMilestone"
+        // Declared in an order the DEFAULT cannot produce. The default is
+        // the update request's fields in proto declaration order — name,
+        // status_note, weight — so listing the same three in a different
+        // order is what separates a declaration that was read from one
+        // that was dropped. All three persisted fields are present, which
+        // the admin guard requires: a request field the DQL SETs but the form
+        // omits stays writable through a direct POST, so the editable set
+        // is a claim the guard holds the page to.
+        fields: ["status_note", "name", "weight"]
+        readonly_fields: ["id"]
+      }
+      // The bulk action. Six fields, every one separately losable:
+      //
+      //   name    — URL fragment and slot-key root.
+      //   source  — the method; its request must carry `repeated string
+      //             ids`, matched by name.
+      //   fields  — the extras beyond `ids`. Required with no default,
+      //             because defaulting to "all" would drop every internal
+      //             request field into a bulk modal. An ids-only action
+      //             leaves it empty, and an empty list cannot tell
+      //             "declared none" from "never read" — hence the note.
+      //   label   — button text. Empty humanises `name` to "Mark
+      //             reviewed", so the declared label is deliberately
+      //             different from the humanised form; otherwise the two
+      //             outcomes are the same string.
+      //   confirm — modal body. Empty means the button submits directly,
+      //             and a bulk overwrite with no confirmation step is a
+      //             different product decision, not a cosmetic one.
+      //   target  — where it renders. LIST is the default, so BOTH is the
+      //             only value distinguishable from a dropped field.
+      actions: [
+        {
+          name:    "mark_reviewed"
+          source:  "tasks.MilestoneMutation.MarkMilestonesReviewed"
+          fields:  ["note"]
+          label:   "Flag as reviewed"
+          confirm: "Overwrite the status note on every selected milestone?"
+          target:  ADMIN_ACTION_TARGET_BOTH
+        }
+      ]
+    },
+    {
+      // CommentAdmin exists to be INLINED. An inline references another page
+      // by name and borrows its `list.columns` for the TABULAR rendering, so
+      // the child needs a page of its own even when nobody navigates to it
+      // directly — which is exactly this one's situation.
+      //
+      // It keeps a `list.source` because a page without one is not a page;
+      // what makes it a child is that TaskAdmin declares it as an inline,
+      // not anything here. Both remain reachable, and that is the point:
+      // the inline is a second VIEW of these rows, not a different set.
+      name: "CommentAdmin"
+      model: "tasks.Comment"
+      list: {
+        source: "tasks.TaskQuery.ListAllComments"
+        columns: [
+          { name: "id" },
+          { name: "body_text" },
+          { name: "created_at" }
+        ]
+        detail_link_column: "body_text"
+      }
+      // The FLAT half of the fields/fieldsets pair. `CommentTaskList`
+      // below renders the SAME model through the SAME update method as
+      // grouped sections; the two are mutually exclusive on one page
+      // (the parser refuses a detail declaring both), so proving either
+      // rendering exists takes two pages.
+      //
+      // 🔴 `fields` is deliberately NOT declared here, and the reason is
+      // worth keeping: with this update mutation it would be
+      // UNFALSIFIABLE. The default expansion is the update request's
+      // client-settable fields, the admin guard requires the declared set to
+      // cover every field the DQL persists, and UpdateTaskCommentReq
+      // persists exactly one (`body_text`, with `id` as the WHERE key).
+      // So the only legal declaration IS the default, and removing it
+      // changes nothing in the emitted spec — a gate over it would be
+      // green whether or not the compiler ever read the field.
+      //
+      // Making it provable needs an update request carrying a field the
+      // mutation does not SET, or two settable fields declared in an
+      // order other than the proto's. Neither exists in this example yet,
+      // so the item stays uncounted rather than nominally covered.
+      detail: {
+        read:   "tasks.TaskQuery.GetComment"
+        update: "tasks.TaskMutation.UpdateTaskComment"
+        // Sourced from the READ response, not the update request, and
+        // never sent back. `created_at` is `immutable` on the model, so
+        // an editable input for it would promise something the storage
+        // layer refuses.
+        readonly_fields: ["id", "created_at"]
+      }
+    },
+    {
+      // The composite-key page: list, and NO detail.
+      //
+      // TaskTag is identified by (task_id, tag_id). A detail is keyed by a
+      // single-column row id, so this model cannot declare one — and the
+      // parser used to refuse the whole page for it, which removed the table
+      // from the console instead of asking for a block the author could not
+      // write. The refusal now applies only to models that HAVE a
+      // single-column identity, and this page is the live proof of the other
+      // branch: the admin e2e opens it and reads its rows.
+      name: "TaskTagAdmin"
+      model: "tasks.TaskTag"
+      list: {
+        source: "tasks.TaskQuery.ListTaskTags"
+        columns: [
+          { name: "task_id" },
+          { name: "tag_id" }
+        ]
+      }
+    }
+  ]
+};

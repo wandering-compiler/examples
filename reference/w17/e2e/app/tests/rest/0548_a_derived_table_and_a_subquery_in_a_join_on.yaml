@@ -1,0 +1,39 @@
+# Two join SHAPES this example had never contained, in the query that wants
+# both.
+#
+# A DERIVED TABLE puts a grouped SELECT into the FROM list. That body is
+# part of this query's FROM clause, which is evaluated before grouping,
+# so an aggregate there over the OUTER query's columns is illegal —
+# PostgreSQL says "aggregate functions are not allowed in FROM clause of
+# their own query level". The walk that decides which level a body's
+# aggregates belong to had never been handed a body, because no example
+# had ever written one. Here `SUM(e2.weight)` aggregates the body's own
+# rows, which is the LEGAL case: an example that only ever hit the refusal
+# would prove the rule fires and never that it lets the right thing
+# through.
+#
+# The SUBQUERY IN THE ON is the second. A JOIN may reference the FROM
+# alias, an earlier join, or its own — never one joined further down —
+# and that rule has to descend into subqueries written inside the ON,
+# tracking the aliases each nested SELECT declares for itself so a name
+# it re-uses is not mistaken for a forward reference. Nothing had ever
+# nested a SELECT in an ON.
+#
+# The two numbers separate on the second row: flight 720102 has two
+# events (3 and 4), so its total is 7 and its peak is 4. On the first
+# row they coincide because that flight has a single event — which is
+# why the assertion needs both rows.
+method: users.CampaignQuery.FlightWeights
+pre:
+    - auth/auth.yaml
+input:
+    campaign_id: 720001
+expect:
+    rows: {matcher: count, op: '==', value: 2}
+    rows.0.id: {matcher: eq, value: "720101"}
+    rows.0.channel: {matcher: eq, value: search}
+    rows.0.total_weight: {matcher: eq, value: "9"}
+    rows.0.peak_weight: {matcher: eq, value: "9"}
+    rows.1.id: {matcher: eq, value: "720102"}
+    rows.1.total_weight: {matcher: eq, value: "7"}
+    rows.1.peak_weight: {matcher: eq, value: "4"}

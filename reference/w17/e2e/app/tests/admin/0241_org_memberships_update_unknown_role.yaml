@@ -1,0 +1,24 @@
+# A role that names no org-scoped role is refused as a mistake in the REQUEST.
+#
+# UpdateOrgMembership looks the role up by name (op "r") before it moves the
+# member's grant. That lookup used to miss with the generic NOT_FOUND — "The
+# item you asked for does not exist." — the same answer as a missing
+# membership, so an admin who mistyped a role was sent looking for a
+# membership that exists (0240 hit exactly that). The op now declares what its
+# miss means (`on_empty`): INVALID_ARGUMENT on the `role` field, with a code a
+# client can branch on and the typed value in the sentence.
+#
+# The membership is the same b5 as 0240, so the 404 this replaces cannot come
+# from a missing row: the refusal must be the role's.
+method: admin.OrgMemberships.Update
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b5
+    role: org-audtor
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: role
+          code: UNKNOWN_ORG_ROLE
+          message: "There is no organization role named org-audtor."

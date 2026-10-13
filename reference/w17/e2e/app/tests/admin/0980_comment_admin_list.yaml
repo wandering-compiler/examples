@@ -1,0 +1,25 @@
+# CommentAdmin's OWN list — the page the inline borrows its columns from.
+#
+# Written over the generated skeleton's `count >= 0`, which passes on an
+# empty response. Emptiness is exactly this page's plausible failure: its
+# first binding was the parent-scoped `ListTaskComments`, which as a
+# standalone route would have answered zero rows forever while returning
+# 200. The exact count is what refuses that.
+#
+# The three seeded comments span TWO parents
+# (fixtures/app/test.json), so this also states the
+# relationship the inline expresses: the standalone page is unscoped, and
+# the INLINE is what narrows it. If this page ever agreed with the inline's
+# count, one of the two would be wrong.
+#
+# POSITION IS LOAD-BEARING. It runs after 0971 has restored the fixture, so
+# the count is the seeded three and not the inline lifecycle's leftovers.
+method: admin.CommentAdmin.List
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    comments: {matcher: count, op: '==', value: 3}
+    comments.0.id: {matcher: eq, value: "720001"}
+    comments.2.id: {matcher: eq, value: "720003"}
+    comments.2.task_id: {matcher: eq, value: "700002"}

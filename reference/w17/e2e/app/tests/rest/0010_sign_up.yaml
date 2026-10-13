@@ -1,0 +1,8 @@
+method: auth.AuthService.SignUp
+input:
+    tenant_slug: tenant-alpha
+    email: user${seq}@example.com
+    password: e2eSecret!23
+expect:
+    user_id: {matcher: not_empty}
+    token: {matcher: not_empty}

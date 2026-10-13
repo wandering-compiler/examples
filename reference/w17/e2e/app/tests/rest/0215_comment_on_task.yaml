@@ -1,0 +1,10 @@
+# The control for 0216: op "frozen" finds nothing for an ordinary task, and the
+# comment is written.
+method: tasks.TaskMutation.CommentOnTask
+pre:
+    - fixtures/a_task.yaml
+input:
+    task_id: ${task.id}
+    body_text: e2e guarded comment
+expect:
+    id: {matcher: not_empty}

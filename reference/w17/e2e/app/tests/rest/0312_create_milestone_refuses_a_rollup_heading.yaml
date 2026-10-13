@@ -1,0 +1,33 @@
+# `(w17.field).custom_validator` — the escape hatch, end to end.
+#
+# The rule lives in hand-written Go in the project's OWN module (the
+# app domain's validators package), and codegen splices the call into the
+# generated bundle by import. So this case proves three things at once,
+# none of which a unit test of the function can:
+#
+#   1. the generated bundle can REACH hand-written project code at all
+#      (the import is emitted and the workspace resolves it);
+#   2. the call runs on the request path, ahead of the other rules on
+#      the same field;
+#   3. the validator's OWN error text reaches the caller — every other
+#      rule emits copy from the defaults catalogue, this one does not.
+#
+# The input is `Sub-Total`, not `total`: the rule normalises case and
+# punctuation before comparing, so a value that only matches AFTER
+# normalisation is what separates it from anything `choices` or
+# `pattern` could have expressed. A validator reduced to plain equality
+# would let this through.
+#
+# `weight` is valid, so the refusal cannot be the bound rules firing.
+method: tasks.MilestoneMutation.CreateMilestone
+pre:
+    - auth/auth.yaml
+input:
+    name: Sub-Total
+    weight: 4
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: name
+          code: CUSTOM_VALIDATOR
+          message: {matcher: regex, pattern: "rollup report's own headings"}

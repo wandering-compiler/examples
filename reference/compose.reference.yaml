@@ -1,0 +1,24 @@
+# What this example adds to the generated stack (compose.w17.yaml), merged
+# over it by the include in compose.yaml: the hand-written business server
+# of the app domain, and the gateway's route to it.
+services:
+  app-business:
+    build: { context: ., dockerfile: business/Dockerfile }
+    restart: unless-stopped
+    environment:
+      APP_LISTEN_ADDR: ":50052"
+      APP_STORAGE_BACKEND_ADDR: app-storage:50051
+      # The cross-domain usage calls are best-effort; this example runs
+      # without them.
+      APP_BILLING_BACKEND_ADDR: disabled
+    depends_on:
+      app-storage: { condition: service_started }
+
+  # The gateway sends storage methods to app-storage and the facade
+  # methods to the business server.
+  app-gateway:
+    environment:
+      APP_GATEWAY_STORAGE_BACKEND_ADDR: app-storage:50051
+      APP_GATEWAY_BUSINESS_BACKEND_ADDR: app-business:50052
+    depends_on:
+      app-business: { condition: service_started }

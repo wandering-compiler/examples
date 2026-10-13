@@ -1,0 +1,17 @@
+# Creates a task and hangs ONE comment off it, so a case can act on a
+# parent that genuinely has children. `a_task.yaml` alone cannot: the
+# example never wrote a Comment over REST, which is why the "parent with
+# children" half of the multi-op purge shape had nowhere to live.
+#
+# Captures the comment id as well as the task id — a later assertion
+# about the comment being gone is only worth something if this step can
+# prove one existed.
+method: tasks.TaskMutation.AddTaskComment
+pre:
+    - fixtures/a_task.yaml
+input:
+    task_id: ${task.id}
+    author_id: 1
+    body_text: e2e comment
+expect:
+    id: {capture: comment.id, match: {matcher: not_empty}}

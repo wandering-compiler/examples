@@ -1,0 +1,23 @@
+# `AdminColumn.sortable: true` + `sort_key` — the LIVE half.
+#
+# `task_title` renders `COALESCE(t.title, '(no task)')`, an expression
+# the DQL-driven derivation classifies as unsortable. The column is
+# offered at all only because of `sortable: true`, and it can only be
+# offered because `sort_key: "t.title"` names an ORDER BY fragment the
+# codegen had no way to infer.
+#
+# Descending is load-bearing. Ascending `t.title` puts the same row
+# first as the default `c.id ASC` does, so an ascending assertion would
+# pass against a request the handler ignored entirely. Descending pulls
+# the task-two comment to the front, which no other ordering of this
+# fixture does.
+method: admin.CommentTaskList.List
+pre:
+    - auth/admin.yaml
+input:
+    sort_by: task_title
+    sort_dir: desc
+expect:
+    rows: {matcher: count, op: '==', value: 3}
+    rows.0.id: {matcher: eq, value: "720003"}
+    rows.0.task_title: {matcher: eq, value: admin paged task 2}

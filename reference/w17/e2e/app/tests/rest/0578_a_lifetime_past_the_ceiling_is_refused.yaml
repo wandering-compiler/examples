@@ -1,0 +1,18 @@
+# The upper bound, one second past it.
+#
+# 31 536 000 is a year and is accepted; 31 536 001 is not. Testing the
+# endpoint+1 rather than something obviously huge is what separates
+# `lte` from `lt` — any larger value is refused by either spelling.
+#
+# Same reasoning as 0577 for its position: a refusal writes nothing.
+method: cache.SessionCacheMutation.RefreshApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e-ttl-token-drop
+    ttl_seconds: 31536001
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: ttl_seconds
+          code: LTE_VIOLATION

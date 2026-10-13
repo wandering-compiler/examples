@@ -1,0 +1,11 @@
+# HDEL takes a key and a field, so the DELETE's WHERE has to carry both
+# halves — the same composite shape as the read, checked by the same
+# rule. The two steps after this one are what say it removed the right
+# one.
+method: cache.UserSessionMutation.DeleteUserSession
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    session_id: e2e-shared-device-token
+expect: {}

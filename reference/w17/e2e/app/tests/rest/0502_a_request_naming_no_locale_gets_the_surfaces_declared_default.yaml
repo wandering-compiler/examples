@@ -1,0 +1,19 @@
+# `(w17.rest_api).default_language`.
+#
+# The request names no locale at all — no Accept-Language, no
+# X-User-Locale — so the only thing that can put a value on
+# `w17-language` is the surface's declared default. gettext's own
+# compile-time fallback is "en", which is why the surface declares "cs":
+# under `default_language: "en"` this assertion would hold with the
+# field deleted from the registry, and the case would be measuring the
+# framework rather than the annotation.
+#
+# The stamp is a FALLBACK, not an override — it only fires for a key no
+# upstream middleware populated. 0503 and 0504 are the same call with a
+# locale named, and they get that locale instead.
+method: users.UsersService.EchoRequestContext
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    language: {matcher: eq, value: cs}

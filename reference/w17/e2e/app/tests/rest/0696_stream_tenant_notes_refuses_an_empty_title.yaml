@@ -1,0 +1,17 @@
+# The same stream refuses a request its declared rule rejects, with the
+# structured INVALID_ARGUMENT a unary method returns.
+#
+# Over REST the gateway's pre-flight answers this before storage is dialled;
+# the storage handler's own block (the one that did not compile) is the
+# defence for callers that reach storage directly, and rest/0695 is what
+# proves it builds. Both carry the same rule from the same declaration.
+method: tasks.TaskQuery.StreamTenantNotes
+pre:
+    - auth/auth.yaml
+input:
+    title: ""
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: title
+          code: REQUIRED_VIOLATION

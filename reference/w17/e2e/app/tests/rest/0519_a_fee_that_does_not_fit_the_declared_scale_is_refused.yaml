@@ -1,0 +1,35 @@
+# `(w17.field).precision` / `.scale` — the refusal the declaration
+# promises, enforced on the REQUEST.
+#
+# 19.905 is three decimals against `scale: 2`. Without enforcement the
+# generator emits nothing for this declaration: the value was accepted,
+# PostgreSQL rounded it to 19.91 on the way into NUMERIC(10,2), and the
+# caller got a 201 for a money value it never sent. This suite pinned that
+# rounding as the expected answer, which is how the hole survived — 0520
+# used to send 19.905 and 0521 used to assert 19.91 came back.
+#
+# The check cannot live in the DDL. PostgreSQL coerces a value to the
+# column type BEFORE evaluating constraints, so a `CHECK (scale(fee) <= 2)`
+# on a NUMERIC(10,2) column is vacuously true — the value is already
+# rounded when the constraint runs. The request side is the only place the
+# promise can hold, which is why this is a `details` refusal and not a
+# database one (contrast 0522, where the choices CHECK does fire at the DB).
+#
+# It sits at 0519 rather than inside the 0520 block because that block has
+# no free slot and this case must run BEFORE 0524's exact row count: a
+# refusal that silently INSERTED is precisely what that count exists to
+# catch. Nothing here depends on the row 0520 writes.
+method: users.DirectoryPlanMutation.CreateDirectoryPlan
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    tier: FEATURED
+    invoice_reference: INV-000122
+    monthly_fee: "19.905"
+    placement: '{"region":"eu-central"}'
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: monthly_fee
+          code: DECIMAL_PRECISION_VIOLATION

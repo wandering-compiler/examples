@@ -1,0 +1,24 @@
+# The step that pins the ON-clause predicate down to one placement.
+#
+# Setup: alpha creates a note, beta tags THAT note, alpha reads it back.
+# Alpha owns the note and has no tag of their own on it, so the three
+# possible placements of the joined model's scope predicate each give a
+# different, distinguishable answer:
+#
+#   - on the ON (correct)  → the note, with an EMPTY tag;
+#   - in the WHERE         → 404, the LEFT JOIN having become INNER;
+#   - absent               → the note, carrying BETA'S tag.
+#
+# Asserting `tag` is empty rejects the third; asserting the call
+# succeeds at all rejects the second. 0158 covers the same WHERE
+# mistake without needing a second tenant.
+method: tasks.TaskQuery.GetTenantNoteWithTag
+pre:
+    - fixtures/a_cross_tenant_note_tag.yaml
+    - auth/auth_alpha_reader.yaml
+input:
+    id: ${note.id}
+expect:
+    id: {matcher: not_empty}
+    title: {matcher: not_empty}
+    tag: {matcher: empty}

@@ -1,0 +1,731 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: w17\n"
+"POT-Creation-Date: 2026-10-08 14:31+0000\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "A token cannot expire in the past. Choose a later date."
+msgstr "A token cannot expire in the past. Choose a later date."
+
+msgid "Admin Auth · Auth Mutation · Delete Organization"
+msgstr "Admin Auth · Auth Mutation · Delete Organization"
+
+msgid "Admin Auth · Auth Mutation · Delete User"
+msgstr "Admin Auth · Auth Mutation · Delete User"
+
+msgid "Admin Auth · Auth Mutation · Disable Users"
+msgstr "Admin Auth · Auth Mutation · Disable Users"
+
+msgid "Admin Auth · Auth Mutation · Enable Users"
+msgstr "Admin Auth · Auth Mutation · Enable Users"
+
+msgid "Admin Auth · Auth Mutation · Revoke User Token"
+msgstr "Admin Auth · Auth Mutation · Revoke User Token"
+
+msgid "Admin Auth · Auth Mutation · Update Organization"
+msgstr "Admin Auth · Auth Mutation · Update Organization"
+
+msgid "Admin Auth · Auth Mutation · Update User"
+msgstr "Admin Auth · Auth Mutation · Update User"
+
+msgid "Admin Auth · Auth Query · Get Org Membership"
+msgstr "Admin Auth · Auth Query · Get Org Membership"
+
+msgid "Admin Auth · Auth Query · Get Organization"
+msgstr "Admin Auth · Auth Query · Get Organization"
+
+msgid "Admin Auth · Auth Query · Get User"
+msgstr "Admin Auth · Auth Query · Get User"
+
+msgid "Admin Auth · Auth Query · Get User Token"
+msgstr "Admin Auth · Auth Query · Get User Token"
+
+msgid "Admin Auth · Auth Query · List Org Memberships"
+msgstr "Admin Auth · Auth Query · List Org Memberships"
+
+msgid "Admin Auth · Auth Query · List Organizations"
+msgstr "Admin Auth · Auth Query · List Organizations"
+
+msgid "Admin Auth · Auth Query · List User Tokens"
+msgstr "Admin Auth · Auth Query · List User Tokens"
+
+msgid "Admin Auth · Auth Query · List Users"
+msgstr "Admin Auth · Auth Query · List Users"
+
+msgid "Admin Auth · Auth Service · Remove Org Membership"
+msgstr "Admin Auth · Auth Service · Remove Org Membership"
+
+msgid "Admin Auth · Auth Service · Update Org Membership Role"
+msgstr "Admin Auth · Auth Service · Update Org Membership Role"
+
+msgid "Admin Auth · Org Membership · Change"
+msgstr "Admin Auth · Org Membership · Change"
+
+msgid "Admin Auth · Org Membership · Delete"
+msgstr "Admin Auth · Org Membership · Delete"
+
+msgid "Admin Auth · Org Membership · View"
+msgstr "Admin Auth · Org Membership · View"
+
+msgid "Admin Auth · Organization · Change"
+msgstr "Admin Auth · Organization · Change"
+
+msgid "Admin Auth · Organization · Delete"
+msgstr "Admin Auth · Organization · Delete"
+
+msgid "Admin Auth · Organization · View"
+msgstr "Admin Auth · Organization · View"
+
+msgid "Admin Auth · User Token · Delete"
+msgstr "Admin Auth · User Token · Delete"
+
+msgid "Admin Auth · User Token · View"
+msgstr "Admin Auth · User Token · View"
+
+msgid "Admin Auth · User · Action:disable"
+msgstr "Admin Auth · User · Action:disable"
+
+msgid "Admin Auth · User · Action:enable"
+msgstr "Admin Auth · User · Action:enable"
+
+msgid "Admin Auth · User · Change"
+msgstr "Admin Auth · User · Change"
+
+msgid "Admin Auth · User · Delete"
+msgstr "Admin Auth · User · Delete"
+
+msgid "Admin Auth · User · View"
+msgstr "Admin Auth · User · View"
+
+msgid "An account with this address already exists. Sign in instead."
+msgstr "An account with this address already exists. Sign in instead."
+
+msgid "Another change reached this first. Please try again."
+msgstr "Another change reached this first. Please try again."
+
+msgid "Auth · Auth Mutation · Delete Role"
+msgstr "Auth · Auth Mutation · Delete Role"
+
+msgid "Auth · Auth Mutation · Update Role"
+msgstr "Auth · Auth Mutation · Update Role"
+
+msgid "Auth · Auth Query · Get Role"
+msgstr "Auth · Auth Query · Get Role"
+
+msgid "Auth · Auth Query · List Roles"
+msgstr "Auth · Auth Query · List Roles"
+
+msgid "Auth · Auth Service · Who Am I"
+msgstr "Auth · Auth Service · Who Am I"
+
+msgid "Auth · Role · Change"
+msgstr "Auth · Role · Change"
+
+msgid "Auth · Role · Delete"
+msgstr "Auth · Role · Delete"
+
+msgid "Auth · Role · View"
+msgstr "Auth · Role · View"
+
+msgid "Authentication is temporarily unavailable. Please try again shortly."
+msgstr "Authentication is temporarily unavailable. Please try again shortly."
+
+msgid "Authenticator apps are not available here. Your sign-in codes arrive by message instead."
+msgstr "Authenticator apps are not available here. Your sign-in codes arrive by message instead."
+
+msgid "Cache · Device Profile Mutation · Revoke Device Session"
+msgstr "Cache · Device Profile Mutation · Revoke Device Session"
+
+msgid "Cache · Device Profile Mutation · Set Device Profile"
+msgstr "Cache · Device Profile Mutation · Set Device Profile"
+
+msgid "Cache · Device Profile Query · Get Device Profile"
+msgstr "Cache · Device Profile Query · Get Device Profile"
+
+msgid "Cache · Device Profile Query · List Device Profiles"
+msgstr "Cache · Device Profile Query · List Device Profiles"
+
+msgid "Cache · Session Cache Mutation · Issue Api Token"
+msgstr "Cache · Session Cache Mutation · Issue Api Token"
+
+msgid "Cache · Session Cache Mutation · Persist Api Token"
+msgstr "Cache · Session Cache Mutation · Persist Api Token"
+
+msgid "Cache · Session Cache Mutation · Refresh Api Token"
+msgstr "Cache · Session Cache Mutation · Refresh Api Token"
+
+msgid "Cache · Session Cache Mutation · Revoke Token Presence"
+msgstr "Cache · Session Cache Mutation · Revoke Token Presence"
+
+msgid "Cache · Session Cache Mutation · Rotate Token"
+msgstr "Cache · Session Cache Mutation · Rotate Token"
+
+msgid "Cache · Session Cache Query · Get Api Token"
+msgstr "Cache · Session Cache Query · Get Api Token"
+
+msgid "Cache · Session Cache Query · Get Session With User"
+msgstr "Cache · Session Cache Query · Get Session With User"
+
+msgid "Cache · Session Cache Query · List Api Tokens"
+msgstr "Cache · Session Cache Query · List Api Tokens"
+
+msgid "Cache · User Presence Mutation · Set User Presence"
+msgstr "Cache · User Presence Mutation · Set User Presence"
+
+msgid "Cache · User Presence Query · Get User Presence"
+msgstr "Cache · User Presence Query · Get User Presence"
+
+msgid "Cache · User Session Mutation · Delete User Session"
+msgstr "Cache · User Session Mutation · Delete User Session"
+
+msgid "Cache · User Session Mutation · Upsert User Session"
+msgstr "Cache · User Session Mutation · Upsert User Session"
+
+msgid "Cache · User Session Query · Get User Session"
+msgstr "Cache · User Session Query · Get User Session"
+
+msgid "Choose whose tasks to stream."
+msgstr "Choose whose tasks to stream."
+
+msgid "Confirm your email address before accepting this invitation."
+msgstr "Confirm your email address before accepting this invitation."
+
+msgid "No permissions are in effect for you here. If access is scoped by organization, choose one and try again."
+msgstr "No permissions are in effect for you here. If access is scoped by organization, choose one and try again."
+
+msgid "Nobody is registered with the email {assignee_email}."
+msgstr "Nobody is registered with the email {assignee_email}."
+
+msgid "Set up an authenticator app first. Recovery codes belong to it."
+msgstr "Set up an authenticator app first. Recovery codes belong to it."
+
+msgid "Something went wrong on our side."
+msgstr "Something went wrong on our side."
+
+msgid "Task {task_id} is urgent and takes no new comments."
+msgstr "Task {task_id} is urgent and takes no new comments."
+
+msgid "Tasks · Comment · Add"
+msgstr "Tasks · Comment · Add"
+
+msgid "Tasks · Comment · Change"
+msgstr "Tasks · Comment · Change"
+
+msgid "Tasks · Comment · Delete"
+msgstr "Tasks · Comment · Delete"
+
+msgid "Tasks · Comment · View"
+msgstr "Tasks · Comment · View"
+
+msgid "Tasks · Milestone Mutation · Create Milestone"
+msgstr "Tasks · Milestone Mutation · Create Milestone"
+
+msgid "Tasks · Milestone Mutation · Mark Milestones Reviewed"
+msgstr "Tasks · Milestone Mutation · Mark Milestones Reviewed"
+
+msgid "Tasks · Milestone Mutation · Update Milestone"
+msgstr "Tasks · Milestone Mutation · Update Milestone"
+
+msgid "Tasks · Milestone · Action:mark Reviewed"
+msgstr "Tasks · Milestone · Action:mark Reviewed"
+
+msgid "Tasks · Milestone · Change"
+msgstr "Tasks · Milestone · Change"
+
+msgid "Tasks · Milestone · View"
+msgstr "Tasks · Milestone · View"
+
+msgid "Tasks · Task Lookup Query · Count Tasks Per Category"
+msgstr "Tasks · Task Lookup Query · Count Tasks Per Category"
+
+msgid "Tasks · Task Mutation · Add Task Comment"
+msgstr "Tasks · Task Mutation · Add Task Comment"
+
+msgid "Tasks · Task Mutation · Append Task Audits"
+msgstr "Tasks · Task Mutation · Append Task Audits"
+
+msgid "Tasks · Task Mutation · Archive Task Batch"
+msgstr "Tasks · Task Mutation · Archive Task Batch"
+
+msgid "Tasks · Task Mutation · Assign Task By Email"
+msgstr "Tasks · Task Mutation · Assign Task By Email"
+
+msgid "Tasks · Task Mutation · Attach Tenant Note Link"
+msgstr "Tasks · Task Mutation · Attach Tenant Note Link"
+
+msgid "Tasks · Task Mutation · Attach Tenant Note Tag"
+msgstr "Tasks · Task Mutation · Attach Tenant Note Tag"
+
+msgid "Tasks · Task Mutation · Bookmark Tenant Note"
+msgstr "Tasks · Task Mutation · Bookmark Tenant Note"
+
+msgid "Tasks · Task Mutation · Comment On Task"
+msgstr "Tasks · Task Mutation · Comment On Task"
+
+msgid "Tasks · Task Mutation · Complete Task"
+msgstr "Tasks · Task Mutation · Complete Task"
+
+msgid "Tasks · Task Mutation · Create Tenant Note"
+msgstr "Tasks · Task Mutation · Create Tenant Note"
+
+msgid "Tasks · Task Mutation · Create Tenant Note With Public Link"
+msgstr "Tasks · Task Mutation · Create Tenant Note With Public Link"
+
+msgid "Tasks · Task Mutation · Delete Task Comment"
+msgstr "Tasks · Task Mutation · Delete Task Comment"
+
+msgid "Tasks · Task Mutation · Ensure Tenant Note Tag"
+msgstr "Tasks · Task Mutation · Ensure Tenant Note Tag"
+
+msgid "Tasks · Task Mutation · Redact Task"
+msgstr "Tasks · Task Mutation · Redact Task"
+
+msgid "Tasks · Task Mutation · Retitle Task"
+msgstr "Tasks · Task Mutation · Retitle Task"
+
+msgid "Tasks · Task Mutation · Snapshot Comment"
+msgstr "Tasks · Task Mutation · Snapshot Comment"
+
+msgid "Tasks · Task Mutation · Update Task Comment"
+msgstr "Tasks · Task Mutation · Update Task Comment"
+
+msgid "Tasks · Task Mutation · Update Task Status"
+msgstr "Tasks · Task Mutation · Update Task Status"
+
+msgid "Tasks · Task Mutation · Upload Attachment"
+msgstr "Tasks · Task Mutation · Upload Attachment"
+
+msgid "Tasks · Task Query · Count Tasks By Category"
+msgstr "Tasks · Task Query · Count Tasks By Category"
+
+msgid "Tasks · Task Query · Count Tasks By Status"
+msgstr "Tasks · Task Query · Count Tasks By Status"
+
+msgid "Tasks · Task Query · Count Tasks Per Day"
+msgstr "Tasks · Task Query · Count Tasks Per Day"
+
+msgid "Tasks · Task Query · Get Comment"
+msgstr "Tasks · Task Query · Get Comment"
+
+msgid "Tasks · Task Query · Get Milestone"
+msgstr "Tasks · Task Query · Get Milestone"
+
+msgid "Tasks · Task Query · Get Task Audit By Entry"
+msgstr "Tasks · Task Query · Get Task Audit By Entry"
+
+msgid "Tasks · Task Query · Get Task Audits Batched"
+msgstr "Tasks · Task Query · Get Task Audits Batched"
+
+msgid "Tasks · Task Query · Get Task Audits Capped"
+msgstr "Tasks · Task Query · Get Task Audits Capped"
+
+msgid "Tasks · Task Query · Get Task Audits For Task"
+msgstr "Tasks · Task Query · Get Task Audits For Task"
+
+msgid "Tasks · Task Query · Get Task Audits Fuzzy"
+msgstr "Tasks · Task Query · Get Task Audits Fuzzy"
+
+msgid "Tasks · Task Query · Get Task Category"
+msgstr "Tasks · Task Query · Get Task Category"
+
+msgid "Tasks · Task Query · Get Task Category Row"
+msgstr "Tasks · Task Query · Get Task Category Row"
+
+msgid "Tasks · Task Query · Get Task Category Row Optional"
+msgstr "Tasks · Task Query · Get Task Category Row Optional"
+
+msgid "Tasks · Task Query · Get Task For Update"
+msgstr "Tasks · Task Query · Get Task For Update"
+
+msgid "Tasks · Task Query · Get Task If Unresolved"
+msgstr "Tasks · Task Query · Get Task If Unresolved"
+
+msgid "Tasks · Task Query · Get Task Upload"
+msgstr "Tasks · Task Query · Get Task Upload"
+
+msgid "Tasks · Task Query · Get Task With Category"
+msgstr "Tasks · Task Query · Get Task With Category"
+
+msgid "Tasks · Task Query · Get Tenant Note"
+msgstr "Tasks · Task Query · Get Tenant Note"
+
+msgid "Tasks · Task Query · Get Tenant Note With Tag"
+msgstr "Tasks · Task Query · Get Tenant Note With Tag"
+
+msgid "Tasks · Task Query · List All Comments"
+msgstr "Tasks · Task Query · List All Comments"
+
+msgid "Tasks · Task Query · List All Tenant Notes"
+msgstr "Tasks · Task Query · List All Tenant Notes"
+
+msgid "Tasks · Task Query · List Categories With Task Counts"
+msgstr "Tasks · Task Query · List Categories With Task Counts"
+
+msgid "Tasks · Task Query · List Comments While Task Open"
+msgstr "Tasks · Task Query · List Comments While Task Open"
+
+msgid "Tasks · Task Query · List Milestones Admin"
+msgstr "Tasks · Task Query · List Milestones Admin"
+
+msgid "Tasks · Task Query · List Milestones Sorted"
+msgstr "Tasks · Task Query · List Milestones Sorted"
+
+msgid "Tasks · Task Query · List Task Categories Admin"
+msgstr "Tasks · Task Query · List Task Categories Admin"
+
+msgid "Tasks · Task Query · List Task Comments"
+msgstr "Tasks · Task Query · List Task Comments"
+
+msgid "Tasks · Task Query · List Task Tags"
+msgstr "Tasks · Task Query · List Task Tags"
+
+msgid "Tasks · Task Query · List Tasks By Priority Bucket"
+msgstr "Tasks · Task Query · List Tasks By Priority Bucket"
+
+msgid "Tasks · Task Query · List Tasks In Priority Range"
+msgstr "Tasks · Task Query · List Tasks In Priority Range"
+
+msgid "Tasks · Task Query · List Tasks Live"
+msgstr "Tasks · Task Query · List Tasks Live"
+
+msgid "Tasks · Task Query · List Tasks Paged"
+msgstr "Tasks · Task Query · List Tasks Paged"
+
+msgid "Tasks · Task Query · List Tasks Paged Tuned"
+msgstr "Tasks · Task Query · List Tasks Paged Tuned"
+
+msgid "Tasks · Task Query · List Tasks Paged With Category"
+msgstr "Tasks · Task Query · List Tasks Paged With Category"
+
+msgid "Tasks · Task Query · List Tenant Notes"
+msgstr "Tasks · Task Query · List Tenant Notes"
+
+msgid "Tasks · Task Query · List Tenant Notes By Tag"
+msgstr "Tasks · Task Query · List Tenant Notes By Tag"
+
+msgid "Tasks · Task Query · List Tenant Notes Paged With Tag Count"
+msgstr "Tasks · Task Query · List Tenant Notes Paged With Tag Count"
+
+msgid "Tasks · Task Query · Stream Tenant Notes"
+msgstr "Tasks · Task Query · Stream Tenant Notes"
+
+msgid "Tasks · Task Tag · View"
+msgstr "Tasks · Task Tag · View"
+
+msgid "Tasks · Task · View"
+msgstr "Tasks · Task · View"
+
+msgid "Tasks · Tasks Service · Bulk Create Tasks"
+msgstr "Tasks · Tasks Service · Bulk Create Tasks"
+
+msgid "Tasks · Tasks Service · Create Task"
+msgstr "Tasks · Tasks Service · Create Task"
+
+msgid "Tasks · Tasks Service · Create Tenant Note Via Service"
+msgstr "Tasks · Tasks Service · Create Tenant Note Via Service"
+
+msgid "Tasks · Tasks Service · Delete Task"
+msgstr "Tasks · Tasks Service · Delete Task"
+
+msgid "Tasks · Tasks Service · Get Task"
+msgstr "Tasks · Tasks Service · Get Task"
+
+msgid "Tasks · Tasks Service · Get Task With Category"
+msgstr "Tasks · Tasks Service · Get Task With Category"
+
+msgid "Tasks · Tasks Service · Get Task With Comments"
+msgstr "Tasks · Tasks Service · Get Task With Comments"
+
+msgid "Tasks · Tasks Service · Live Search"
+msgstr "Tasks · Tasks Service · Live Search"
+
+msgid "Tasks · Tasks Service · Stream Public Note Updates"
+msgstr "Tasks · Tasks Service · Stream Public Note Updates"
+
+msgid "Tasks · Tasks Service · Stream Tasks"
+msgstr "Tasks · Tasks Service · Stream Tasks"
+
+msgid "Tasks · Tasks Service · Update Task And Invalidate"
+msgstr "Tasks · Tasks Service · Update Task And Invalidate"
+
+msgid "Tasks · Tenant Ops Query · Count All Tenant Notes"
+msgstr "Tasks · Tenant Ops Query · Count All Tenant Notes"
+
+msgid "That expiry date is not a valid date."
+msgstr "That expiry date is not a valid date."
+
+msgid "That role cannot be assigned in this organization: it is not an organization role, or it no longer exists. Choose a role again."
+msgstr "That role cannot be assigned in this organization: it is not an organization role, or it no longer exists. Choose a role again."
+
+msgid "That role carries permissions you do not hold. A role can be granted only by someone who holds everything it grants."
+msgstr "That role carries permissions you do not hold. A role can be granted only by someone who holds everything it grants."
+
+msgid "The item you asked for does not exist."
+msgstr "The item you asked for does not exist."
+
+msgid "The request could not be accepted as sent."
+msgstr "The request could not be accepted as sent."
+
+msgid "The request took too long and was stopped."
+msgstr "The request took too long and was stopped."
+
+msgid "The request was cancelled before it finished."
+msgstr "The request was cancelled before it finished."
+
+msgid "The service is temporarily unavailable."
+msgstr "The service is temporarily unavailable."
+
+msgid "There is no organization role named {role}."
+msgstr "There is no organization role named {role}."
+
+msgid "This address does not belong to any organization here. Check the address you registered on."
+msgstr "This address does not belong to any organization here. Check the address you registered on."
+
+msgid "This authenticator app is already set up. To get new recovery codes, generate them."
+msgstr "This authenticator app is already set up. To get new recovery codes, generate them."
+
+msgid "This cannot be done in the current state."
+msgstr "This cannot be done in the current state."
+
+msgid "This is not available."
+msgstr "This is not available."
+
+msgid "This machine account holds a role with permissions you do not hold, so you cannot issue a token for it."
+msgstr "This machine account holds a role with permissions you do not hold, so you cannot issue a token for it."
+
+msgid "This member holds a role with permissions you do not have, so you cannot change or remove their membership."
+msgstr "This member holds a role with permissions you do not have, so you cannot change or remove their membership."
+
+msgid "This membership belongs to another organization."
+msgstr "This membership belongs to another organization."
+
+msgid "This request names two different organizations. Name one."
+msgstr "This request names two different organizations. Name one."
+
+msgid "This value is not in the expected format."
+msgstr "This value is not in the expected format."
+
+msgid "Too many requests. Please wait and try again."
+msgstr "Too many requests. Please wait and try again."
+
+msgid "Too many wrong codes. Wait 15 minutes and try again."
+msgstr "Too many wrong codes. Wait 15 minutes and try again."
+
+msgid "Users · Campaign Query · Campaign Activity"
+msgstr "Users · Campaign Query · Campaign Activity"
+
+msgid "Users · Campaign Query · Channel Breakdown"
+msgstr "Users · Campaign Query · Channel Breakdown"
+
+msgid "Users · Campaign Query · Flight Weights"
+msgstr "Users · Campaign Query · Flight Weights"
+
+msgid "Users · Campaign Query · Get Campaign Audience Source"
+msgstr "Users · Campaign Query · Get Campaign Audience Source"
+
+msgid "Users · Campaign Query · List Campaigns From Source"
+msgstr "Users · Campaign Query · List Campaigns From Source"
+
+msgid "Users · Campaign Query · List Campaigns On Channel"
+msgstr "Users · Campaign Query · List Campaigns On Channel"
+
+msgid "Users · Campaign Query · List Campaigns With Heavy Event"
+msgstr "Users · Campaign Query · List Campaigns With Heavy Event"
+
+msgid "Users · Campaign Query · List Flight Buckets"
+msgstr "Users · Campaign Query · List Flight Buckets"
+
+msgid "Users · Directory Card Mutation · Create Directory Card"
+msgstr "Users · Directory Card Mutation · Create Directory Card"
+
+msgid "Users · Directory Card Query · Get Directory Card"
+msgstr "Users · Directory Card Query · Get Directory Card"
+
+msgid "Users · Directory Card Query · Get Directory Opt In"
+msgstr "Users · Directory Card Query · Get Directory Opt In"
+
+msgid "Users · Directory Card Query · List Directory Cards"
+msgstr "Users · Directory Card Query · List Directory Cards"
+
+msgid "Users · Directory Plan Mutation · Create Directory Plan"
+msgstr "Users · Directory Plan Mutation · Create Directory Plan"
+
+msgid "Users · Directory Plan Mutation · Replace Directory Plan"
+msgstr "Users · Directory Plan Mutation · Replace Directory Plan"
+
+msgid "Users · Directory Plan Mutation · Retire Directory Plan"
+msgstr "Users · Directory Plan Mutation · Retire Directory Plan"
+
+msgid "Users · Directory Plan Mutation · Upgrade Directory Plan"
+msgstr "Users · Directory Plan Mutation · Upgrade Directory Plan"
+
+msgid "Users · Directory Plan Query · Get Directory Plan"
+msgstr "Users · Directory Plan Query · Get Directory Plan"
+
+msgid "Users · Directory Plan Query · List Directory Plans"
+msgstr "Users · Directory Plan Query · List Directory Plans"
+
+msgid "Users · Directory Plan Query · List Directory Plans In Region"
+msgstr "Users · Directory Plan Query · List Directory Plans In Region"
+
+msgid "Users · User Query · Count Users"
+msgstr "Users · User Query · Count Users"
+
+msgid "Users · User Query · Get User"
+msgstr "Users · User Query · Get User"
+
+msgid "Users · User Query · List Users"
+msgstr "Users · User Query · List Users"
+
+msgid "Users · User Query · List Users With Tasks"
+msgstr "Users · User Query · List Users With Tasks"
+
+msgid "Users · User · View"
+msgstr "Users · User · View"
+
+msgid "Users · Users Service · Echo Request Context"
+msgstr "Users · Users Service · Echo Request Context"
+
+msgid "Users · Users Service · Get Users By Ids"
+msgstr "Users · Users Service · Get Users By Ids"
+
+msgid "Users · Users Service · Ingest Signed Webhook"
+msgstr "Users · Users Service · Ingest Signed Webhook"
+
+msgid "Users · Users Service · List Users"
+msgstr "Users · Users Service · List Users"
+
+msgid "Wrong email or password."
+msgstr "Wrong email or password."
+
+msgid "You are not a member of the organization this request names. The W17-Org header takes the organization's slug."
+msgstr "You are not a member of the organization this request names. The W17-Org header takes the organization's slug."
+
+msgid "You are not signed in."
+msgstr "You are not signed in."
+
+msgid "You do not have access to this."
+msgstr "You do not have access to this."
+
+msgid "a published card cannot advertise confidential work"
+msgstr "a published card cannot advertise confidential work"
+
+msgid "a report that is not narrowed to one title needs a reason on record"
+msgstr "a report that is not narrowed to one title needs a reason on record"
+
+msgid "already exists"
+msgstr "already exists"
+
+msgid "an invoice reference looks like INV-000123"
+msgstr "an invoice reference looks like INV-000123"
+
+msgid "conflicts with an existing record"
+msgstr "conflicts with an existing record"
+
+msgid "extension must be one of: {extensions}"
+msgstr "extension must be one of: {extensions}"
+
+msgid "format is invalid"
+msgstr "format is invalid"
+
+msgid "is required"
+msgstr "is required"
+
+msgid "leaving a status out of the report needs a reason on record"
+msgstr "leaving a status out of the report needs a reason on record"
+
+msgid "may not be blank"
+msgstr "may not be blank"
+
+msgid "must be a valid IP address"
+msgstr "must be a valid IP address"
+
+msgid "must be a valid JSON document"
+msgstr "must be a valid JSON document"
+
+msgid "must be a valid MAC address"
+msgstr "must be a valid MAC address"
+
+msgid "must be a valid URL"
+msgstr "must be a valid URL"
+
+msgid "must be a valid UUID"
+msgstr "must be a valid UUID"
+
+msgid "must be a valid email address"
+msgstr "must be a valid email address"
+
+msgid "must be a valid value"
+msgstr "must be a valid value"
+
+msgid "must be at least {min} (got {got})"
+msgstr "must be at least {min} (got {got})"
+
+msgid "must be at least {min} characters (got {got})"
+msgstr "must be at least {min} characters (got {got})"
+
+msgid "must be at most {max} (got {got})"
+msgstr "must be at most {max} (got {got})"
+
+msgid "must be at most {max} characters (got {got})"
+msgstr "must be at most {max} characters (got {got})"
+
+msgid "must be greater than {min} (got {got})"
+msgstr "must be greater than {min} (got {got})"
+
+msgid "must be in [0, 100] (got {got})"
+msgstr "must be in [0, 100] (got {got})"
+
+msgid "must be in [0, 1] (got {got})"
+msgstr "must be in [0, 1] (got {got})"
+
+msgid "must be less than {max} (got {got})"
+msgstr "must be less than {max} (got {got})"
+
+msgid "must be one of: {choices}"
+msgstr "must be one of: {choices}"
+
+msgid "must fit precision {precision} scale {scale}"
+msgstr "must fit precision {precision} scale {scale}"
+
+msgid "narrow the report by a category or by a project, not by both at once"
+msgstr "narrow the report by a category or by a project, not by both at once"
+
+msgid "referenced record does not exist"
+msgstr "referenced record does not exist"
+
+msgid "that handle is already taken"
+msgstr "that handle is already taken"
+
+msgid "that placement tier is not on sale"
+msgstr "that placement tier is not on sale"
+
+msgid "the lowest priority in the window must be below the highest one"
+msgstr "the lowest priority in the window must be below the highest one"
+
+msgid "the title filter matches exactly and takes no SQL wildcards — drop the % and _ characters"
+msgstr "the title filter matches exactly and takes no SQL wildcards — drop the % and _ characters"
+
+msgid "the title you filter for cannot contain the title you exclude — the report would always come back empty"
+msgstr "the title you filter for cannot contain the title you exclude — the report would always come back empty"
+
+msgid "the visible-from date must not be later than the visible-until date"
+msgstr "the visible-from date must not be later than the visible-until date"
+
+msgid "this email address is already registered"
+msgstr "this email address is already registered"
+
+msgid "value violates constraint"
+msgstr "value violates constraint"
+
+msgid "you already have a published card in this language"
+msgstr "you already have a published card in this language"
+
+msgid "{role} is a realm-wide role. An organization membership can only carry an organization-scoped role."
+msgstr "{role} is a realm-wide role. An organization membership can only carry an organization-scoped role."
+
+msgid "{value} per month"
+msgstr "{value} per month"

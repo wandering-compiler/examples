@@ -1,0 +1,34 @@
+# Cursor paging OVER A JOIN, page 1 — the admin-list shape (a FK
+# rendered as a human handle) under keyset pagination. This pair of
+# steps exists because the two were refused together: the `w17.Paging`
+# envelope counted as a response SHAPE field, so `{repeated row;
+# w17.Paging}` + a JOIN classified as the fan-out `{Parent; repeated
+# Child}` and died on "no projected column carries a JOIN-alias prefix".
+#
+# `ORDER BY t.id DESC` keyset + the five seeded admin rows
+# (700001..700005, fixtures/app/test.json) make page 1 deterministic:
+# 700005 (category 3 = urgent) then 700004 (category 2 = personal). The
+# `category` values prove the LEFT JOIN really ran — a dropped JOIN would
+# COALESCE every row to "".
+#
+# 🔴 POSITION IS LOAD-BEARING, and this pair used to sit at 0121/0122
+# where it was not. The old argument was that page 1 holds regardless of
+# what earlier steps created, because a created task took a LOW id and
+# sorted below the seeds under DESC. That stopped being true when the
+# seed started advancing its IDENTITY sequence:
+# created tasks now take ids ABOVE the seed block and land on page 1
+# first. The fix is to run before anything creates a task — the same
+# remedy 0025 prescribes for itself, and for the same reason — rather
+# than to restate ids that depend on how many steps ran first.
+method: tasks.TaskQuery.ListTasksPagedWithCategory
+pre:
+    - auth/auth.yaml
+input:
+    limit: 2
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    items.0.id: {matcher: eq, value: "700005"}
+    items.0.category: {matcher: eq, value: urgent}
+    items.1.id: {matcher: eq, value: "700004"}
+    items.1.category: {matcher: eq, value: personal}
+    paging.next_cursor: {capture: tasks_joined.next_cursor, match: {matcher: not_empty}}

@@ -1,0 +1,16 @@
+# The users↔tasks join. User 1 owns the seeded tasks
+# (fixtures/app/test.json) and is the owner every fixture
+# CreateTask names, so the join can never legitimately come back empty —
+# which is exactly what the scaffold's `>= 0` permitted.
+#
+# The floor stays a floor because the number of users WITH tasks is not
+# this step's subject and grows with this example; `users.0.email` is what
+# proves the joined row carries its projected columns rather than an id
+# and nulls.
+method: users.UserQuery.ListUsersWithTasks
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    users: {matcher: count, op: '>=', value: 1}
+    users.0.email: {matcher: not_empty}

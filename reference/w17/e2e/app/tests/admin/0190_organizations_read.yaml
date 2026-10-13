@@ -1,0 +1,11 @@
+method: admin.Organizations.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b4
+expect:
+    id: {matcher: not_empty}
+    slug: {matcher: not_empty}
+    name: {matcher: not_empty}
+    kind: {matcher: not_empty}
+    created_at: {matcher: not_empty}

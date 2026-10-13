@@ -1,0 +1,26 @@
+# `(w17.field).choices` — the value set, enforced at the database.
+#
+# `PLATINUM` is a plausible tier name that is NOT one of the enum's
+# values. Everything else about the request is the accepted shape from
+# 0520 (a fresh invoice reference, so the only thing wrong here is the
+# tier), which is what makes the refusal attributable.
+#
+# The message is the table's own `validation_messages[]` entry for that
+# constraint, not the generic default. Asserting it is what separates
+# "the choices CHECK fired" from "some CHECK on this table fired" — and
+# the two are otherwise indistinguishable, since every unnamed
+# constraint on the row refuses with the same words.
+method: users.DirectoryPlanMutation.CreateDirectoryPlan
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    tier: PLATINUM
+    invoice_reference: INV-000124
+    monthly_fee: "9.00"
+    placement: '{"region":"eu-central"}'
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - code: INVALID_VALUE
+          message: {matcher: eq, value: that placement tier is not on sale}

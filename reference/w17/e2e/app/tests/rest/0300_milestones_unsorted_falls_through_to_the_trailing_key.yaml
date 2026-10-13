@@ -1,0 +1,38 @@
+# ORDER BY-by-enum, arm 1 of 3 — the UNSPECIFIED / "no sort" sentinel.
+#
+# `sort_by` is omitted, which over the wire is the enum's zero value.
+# Every `CASE WHEN $1 = <n>` arm then returns NULL for every row, so the
+# whole ordering falls to the query's trailing `m.id ASC`.
+#
+# Two different regressions land here, which is why the file exists
+# separately from the two sorted arms:
+#
+#   * A blanket "proto3 zero means the field was omitted" request rule
+#     refuses this value — and answering 400 to "do not re-sort" is a
+#     400 on the one value the feature documents as meaningful. This
+#     case is that rule's live tripwire.
+#   * If an arm's CASE were emitted without its enum gate, some other
+#     ordering would leak into the unsorted request and the sequence
+#     below would not be 1, 2, 3.
+#
+# The three rows are the whole `milestones` table at this point in the
+# run (fixtures/app/test.json), so the sequence is exact
+# rather than a prefix.
+#
+# POSITION IS LOAD-BEARING, for this file and for 0301 / 0302. The first
+# step that adds a milestone row is 0313, and these three run before it.
+# A creating step inserted ahead of them turns every sequence here into
+# a claim about an unknown list — the fix is to move that step after
+# 0302, not to loosen these.
+#
+# id is an int64 → quoted decimal string; weight is an int32 → JSON
+# number.
+method: tasks.TaskQuery.ListMilestonesSorted
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    items: {matcher: count, op: '==', value: 3}
+    items.0.id: {matcher: eq, value: "710001"}
+    items.1.id: {matcher: eq, value: "710002"}
+    items.2.id: {matcher: eq, value: "710003"}

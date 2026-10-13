@@ -1,0 +1,22 @@
+# `(w17.db.method).kv_atomic` — the SET half of the MULTI/EXEC.
+#
+# RotateToken issues one hash and revokes another inside a single
+# `TxPipelined`. Its response is empty — a KV write acks and has no row
+# to return — so the call proves nothing by itself; this case and 0374
+# read the two keys it touched, and together they are the whole
+# assertion.
+#
+# `label` is carried through the rotation rather than being a constant
+# the handler could have invented. Asserting it proves the queued SET
+# took the request's values: a pipe that queued the command but bound
+# the wrong entity would still leave a resolvable key.
+method: cache.SessionCacheQuery.GetApiToken
+pre:
+    - auth/auth.yaml
+    - fixtures/a_rotated_token.yaml
+input:
+    token_hash: e2e0000000000000000000000000000000000000000000000000000000000new
+expect:
+    token_hash: {matcher: eq, value: e2e0000000000000000000000000000000000000000000000000000000000new}
+    user_id: {matcher: eq, value: "1"}
+    label: {matcher: eq, value: ci-deploy}

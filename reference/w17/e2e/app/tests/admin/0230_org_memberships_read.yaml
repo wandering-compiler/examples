@@ -1,0 +1,11 @@
+method: admin.OrgMemberships.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b5
+expect:
+    id: {matcher: not_empty}
+    user_id: {matcher: not_empty}
+    org_id: {matcher: not_empty}
+    role: {matcher: not_empty}
+    created_at: {matcher: not_empty}

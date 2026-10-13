@@ -1,0 +1,11 @@
+# The removal twin of 0242: removing b5 revokes the member's org-auditor grant,
+# which this caller does not cover. Refused; 0250 deletes b5 as the full admin.
+method: admin.OrgMemberships.Delete
+pre:
+    - auth/admin_members.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b5
+expect_error:
+    code: PERMISSION_DENIED
+    details:
+        - code: MEMBER_ABOVE_CALLER

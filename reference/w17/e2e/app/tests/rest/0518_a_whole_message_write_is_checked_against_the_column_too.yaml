@@ -1,0 +1,31 @@
+# The DECIMAL scale refusal, reached through the WHOLE-MESSAGE write.
+#
+# 0519 sends the same 19.905 to the column-by-column spelling of this write
+# and is refused. A generator can miss this one: the rule that
+# travels from the column to the request only ever attached to a top-level
+# request field, and here the caller's value sits one message deep
+# (`plan.monthly_fee`). Same declaration, same column, same value — two
+# answers, chosen by how the author happened to type the DQL.
+#
+# The failure it leaves open is the silent one: PostgreSQL coerces to
+# NUMERIC(10,2) BEFORE any CHECK runs, so the third decimal is gone by the
+# time the database looks and the caller gets a success for a money amount it
+# never sent.
+#
+# Sits before 0520 for the same reason 0519 does: it must not add a row, and
+# 0524 counts them.
+method: users.DirectoryPlanMutation.ReplaceDirectoryPlan
+pre:
+    - auth/auth.yaml
+input:
+    id: 1
+    plan:
+        tier: FEATURED
+        invoice_reference: INV-000122
+        monthly_fee: "19.905"
+        placement: '{"region":"eu-central"}'
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: plan.monthly_fee
+          code: DECIMAL_PRECISION_VIOLATION

@@ -1,0 +1,11 @@
+# The control for 0242/0243: the same narrow caller removes c4, whose member
+# holds no role in the organization — nothing it does not cover is revoked. So
+# the refusals above come from the ceiling, not from an endpoint this caller
+# cannot reach at all.
+method: admin.OrgMemberships.Delete
+pre:
+    - auth/admin_members.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000c4
+expect:
+    membership_id: {matcher: not_empty}

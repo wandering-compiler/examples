@@ -1,0 +1,23 @@
+# LESS_THAN — `lhs`/`rhs`.
+#
+# min == max is an empty window: the report comes back with nothing and
+# reads as "no such tasks" rather than "you asked for nothing". The rule
+# turns a silently empty answer into a refusal that says which pair is
+# wrong.
+#
+# Every case in this group asserts through `details`, not `message`:
+# request validation answers "validation failed" for EVERY rule, so a
+# message-only assertion would be the same assertion six times.
+method: tasks.TaskQuery.ListTasksInPriorityRange
+pre:
+    - auth/auth.yaml
+input:
+    min_priority: 5
+    max_priority: 5
+    title_is: admin paged task 3
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: min_priority
+          code: LT_VIOLATION
+          message: {matcher: regex, pattern: "must be below the highest"}

@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+// Module-level cascade for the app domain's cache module
+// (multi-connection per domain).
+//
+// The `app` domain runs TWO connections:
+//   - `main`  — POSTGRES 18 (declared at proto/domains/app/w17.proto)
+//   - `cache` — REDIS 7 KV  (declared here, scoped to this module)
+//
+// Tables / RPCs under proto/domains/app/cache/<...>/*.proto pick
+// up the `cache` connection via cascade. Tables under other app
+// modules (users, tasks, …) keep the `main` connection from the
+// domain-level w17.proto.
+//
+// D26 / D42 — within one domain, each connection name is unique;
+// Redis (KV) ↔ Postgres (RELATIONAL) are different
+// (dialect, capability) tuples so they coexist cleanly. The
+// app facade orchestrates non-atomic PG↔Redis writes since
+// the wandering-compiler rejects transactions spanning
+// connections (D41).
+
+package e2e.app.cache;
+
+import "w17/module.proto";
+
+// `encoding` says how VALUES are serialised at storage time. It is
+// meaningful only for a KV capability — a relational connection encodes
+// per column via SQL types — which is why this is the one connection in
+// the project that can carry it.
+//
+// JSON is also today's only encoding `apply` supports (PROTOBUF is
+// declared in the vocabulary and lands later), so the declaration
+// cannot currently change behaviour. It is written anyway, and not as
+// decoration: the value travels into the connection manifest the
+// migration tooling reads, and a data migration over this connection
+// has to know which codec produced the bytes it is transforming. An
+// undeclared encoding is a default that nobody stated and that the next
+// codec makes ambiguous.
+option (w17.module) = {
+  connection: {
+    name: "app-redis", dialect: REDIS, version: "7", used_capability: KV,
+    encoding: STORAGE_JSON
+  }
+};

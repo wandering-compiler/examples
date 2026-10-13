@@ -1,0 +1,30 @@
+# The happy path, and the setup for everything 0361-0369 asserts.
+#
+# POSITION IS LOAD-BEARING. This is the first step in the suite that
+# writes to `user_directory_cards`, and 0369 asserts the table's exact
+# contents and count afterwards. Every case in this block depends on the
+# ones before it; a card written outside 0360-0368 breaks 0369, and the
+# answer is to extend 0369 rather than loosen it — a count asserted over
+# an unknown row set is not a count assertion.
+#
+# `handle` is deliberately MIXED CASE. `search_key` is a generated
+# column computed as `lower(handle_slug)`, so a handle that was already
+# lowercase would leave a database that computed nothing looking exactly
+# like one that computed correctly.
+#
+# `user_id: 1` is the app `users` row from fixtures/app/test.json —
+# the domain users table has no create endpoint, and this card FKs to
+# it.
+method: users.DirectoryCardMutation.CreateDirectoryCard
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    handle: Alpha-CS
+    headline: Backend engineer, Prague
+    locale: cs
+    is_public: true
+    visible_from: "2026-01-01T00:00:00Z"
+    visible_until: "2026-12-31T00:00:00Z"
+expect:
+    id: {capture: card_cs.id, match: {matcher: not_empty}}

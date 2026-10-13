@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package e2e.app.tasks;
+
+import "w17/db.proto";
+import "domains/app/workspace/tasks/types/models.proto";
+
+// TenantOpsQuery — the SERVICE-level half of the scope-bypass
+// surface (`(w17.db.bypass_scope_service)`), and the reason it is
+// its own service rather than another method on TaskQuery.
+//
+// The two slots are not interchangeable. `bypass_scope` extends
+// MethodOptions and will not even compile inside a `service` body;
+// `bypass_scope_service` extends ServiceOptions and applies to
+// every RPC the service declares. So the service-level slot is for
+// a service whose WHOLE PURPOSE is cross-scope work — an operator
+// / reporting surface — and putting it on TaskQuery would strip the
+// guard off the scoped reads that prove tenant isolation there.
+//
+// `"*"` is the wildcard form: bypass EVERY scope on every scoped
+// model these methods touch. Contrast the method-level bypass on
+// `TaskQuery.ListAllTenantNotes`, which names `tenant_id`
+// explicitly and would therefore still enforce a second axis added
+// to TenantNote later. Both forms are load-bearing and both are
+// exercised, because they fail differently: a broken wildcard
+// leaves a predicate behind, a broken named list bypasses too much.
+service TenantOpsQuery {
+  option (w17.db.bypass_scope_service) = "*";
+
+  // CountAllTenantNotes — a cross-tenant aggregate, the plainest
+  // thing an operator surface does. No request fields: there is
+  // nothing to filter by, which is the point.
+  rpc CountAllTenantNotes(CountAllTenantNotesReq) returns (CountAllTenantNotesResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT COUNT(*) AS total "
+          "FROM tasks.TenantNote n"
+      }
+    };
+  }
+
+  // ResolvePublicNoteToken — the token→tenant lookup a
+  // capability link's auth method runs, and the ONE cross-tenant
+  // read this feature introduces.
+  //
+  // It lives here, on the declared bypass surface, because that is
+  // the honest place for it. A public link arrives with no identity
+  // at all, so nothing has established a scope yet; the whole job of
+  // this query is to produce one. It cannot be scoped by definition
+  // — a query that needed the answer to run would be circular.
+  //
+  // That is also the shape of the argument for building capability
+  // links as an auth method rather than as an `exclude_auth` route
+  // with a hand-written WHERE. Both approaches contain exactly one
+  // unscoped read. The difference is where it sits: here it is a
+  // single named query on a service whose entire purpose is
+  // declared cross-tenant work, its output is a scope value, and
+  // every read that follows is filtered by the platform. In the
+  // other approach the unscoped read IS the endpoint, and nothing
+  // downstream is filtered by anything.
+  rpc ResolvePublicNoteToken(ResolvePublicNoteTokenReq) returns (ResolvePublicNoteTokenResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.tenant_id "
+          "FROM tasks.TenantNote n "
+          "WHERE n.public_token = :public_token"
+      }
+    };
+  }
+}
+
+message CountAllTenantNotesReq {}
+message CountAllTenantNotesResp {
+  int64 total = 1;
+}
+
+message ResolvePublicNoteTokenReq {
+  // public_token — the raw capability value out of the URL. The
+  // caller (the auth handler) refuses an empty string before
+  // reaching here; see the handler comment for why an empty token
+  // matching a NULL-token row would be the whole hole.
+  string public_token = 1;
+}
+message ResolvePublicNoteTokenResp {
+  int64  id        = 1;
+  string tenant_id = 2;
+}

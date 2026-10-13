@@ -1,0 +1,8 @@
+method: tasks.TasksService.GetTaskWithCategory
+pre:
+    - fixtures/a_task.yaml
+input:
+    id: ${task.id}
+expect:
+    task: {matcher: not_empty}
+    category: {matcher: not_empty}

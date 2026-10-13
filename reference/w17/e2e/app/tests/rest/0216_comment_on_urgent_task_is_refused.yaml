@@ -1,0 +1,15 @@
+# Op "frozen" FINDS the urgent task, and its `on_present` answers with the
+# author's refusal: FAILED_PRECONDITION, a code a client branches on, on the
+# field it is about, with the id in the sentence. The INSERT never runs.
+method: tasks.TaskMutation.CommentOnTask
+pre:
+    - fixtures/an_urgent_task.yaml
+input:
+    task_id: ${urgent.id}
+    body_text: e2e comment on an urgent task
+expect_error:
+    code: FAILED_PRECONDITION
+    details:
+        - field: task_id
+          code: TASK_FROZEN
+          message: "Task ${urgent.id} is urgent and takes no new comments."

@@ -1,0 +1,11 @@
+# Tenant-beta's note, titled exactly like tenant-alpha's
+# (a_streamed_alpha_note.yaml). An alpha caller streaming that title must
+# never see this row.
+method: tasks.TaskMutation.CreateTenantNote
+pre:
+    - auth/auth_beta_streamer.yaml
+input:
+    title: e2e streamed scoped note
+    body: tenant-beta's row — must not reach an alpha stream
+expect:
+    id: {capture: streamed.beta_id}

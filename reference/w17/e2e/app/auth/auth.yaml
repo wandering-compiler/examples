@@ -1,0 +1,11 @@
+method: auth.AuthService.SignUp
+input:
+    tenant_slug: tenant-alpha
+    email: user${seq}@example.com
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}
+    # `user_id` is captured, not asserted: the email carries `${seq}`, so
+    # a step that wants to look this account up in the database has no
+    # other way to name it. 0370 is the one consumer.
+    user_id: {capture: auth.user_id}

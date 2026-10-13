@@ -1,0 +1,17 @@
+# tenant-alpha again, as its own file.
+#
+# Byte-identical in effect to auth/auth.yaml, and that is the point: a
+# `pre` chain that has already pulled in auth/auth.yaml does NOT run it
+# a second time, so listing that same path again to switch back from
+# beta is a no-op and the step silently runs as beta. A distinct path
+# re-authenticates for real.
+#
+# Used by 0154, whose whole meaning depends on the final reader being
+# alpha rather than the tenant that wrote the link row.
+method: auth.AuthService.SignUp
+input:
+    tenant_slug: tenant-alpha
+    email: alpha-reader${seq}@example.com
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}

@@ -1,0 +1,32 @@
+# `(w17.db.table).raw_indexes[].unique` — the escape-hatch index
+# refusing, with its own message.
+#
+# The handle is the one 0364 just took, and this request differs from
+# that row in BOTH other axes the structured index cares about: a
+# different locale, and still unpublished. So the structured partial
+# unique index cannot be what refuses this — 0364 established that an
+# unpublished row is outside it entirely. Only the raw index, which
+# carries no predicate and no publication condition, is left.
+#
+# That separation is the whole reason the two indexes coexist in this
+# example: the pair distinguishes "escape hatch declared" from "escape
+# hatch enforced", and the messages distinguish WHICH one fired. Drop
+# `unique: true` and the raw index becomes an ordinary index — the DDL
+# still names it, the schema still applies, and this request quietly
+# succeeds.
+method: users.DirectoryCardMutation.CreateDirectoryCard
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    handle: Alpha-CS-Draft
+    headline: Backend engineer, Prague
+    locale: de
+    is_public: false
+    visible_from: "2026-01-01T00:00:00Z"
+    visible_until: "2026-12-31T00:00:00Z"
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - code: UNIQUE_VIOLATION
+          message: {matcher: eq, value: that handle is already taken}

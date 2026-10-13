@@ -1,0 +1,17 @@
+# The token 0381 reads back. Separate from `an_api_token.yaml` (which the
+# rotation revokes) so the two cases cannot affect each other's result
+# through shared state.
+method: cache.SessionCacheMutation.IssueApiToken
+pre:
+    - auth/auth.yaml
+input:
+    # 64 chars exactly — `CachedApiToken.token_hash` declares
+    # `type: CHAR, max_len: 64`, and on a KV dialect that limit is now
+    # enforced by the request validator (there is no VARCHAR behind it).
+    # This value was 66 and had been writing an over-long key into Redis
+    # since it was written; nothing refused it because nothing checked.
+    token_hash: e2e000000000000000000000000000000000000000000000000000standalone
+    user_id: 1
+    label: laptop
+    expires_at: '2030-06-01T00:00:00Z'
+expect: {}

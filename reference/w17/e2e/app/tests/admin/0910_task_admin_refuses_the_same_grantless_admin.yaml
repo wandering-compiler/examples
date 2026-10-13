@@ -1,0 +1,24 @@
+# The control for 0900 — the same grant-less admin, one page over.
+#
+# TaskAdmin renders the SAME model (`tasks.Task`) as TaskFeed and differs
+# in exactly one thing: its list method, tasks.TaskQuery.ListTasksPaged,
+# does NOT declare `(w17.admin_bypass_acl)`. So it must refuse the caller
+# 0900 just admitted.
+#
+# This step carries two claims at once. It proves the caller really is
+# permission-less — without it, 0900 would pass just as happily against a
+# seed that granted this admin everything, and the bypass would be
+# "proven" by a tautology. And it proves the bypass is scoped to the
+# method that declares it rather than having switched admin ACL off
+# wholesale, which is a failure mode no single generated artefact shows.
+#
+# The message names the permission the gate was looking for: a 403 from
+# some other check (auth, scope) would otherwise read as a pass.
+method: admin.TaskAdmin.List
+pre:
+    - auth/admin_nogrant.yaml
+input:
+    limit: 2
+expect_error:
+    code: PERMISSION_DENIED
+    message: {matcher: regex, pattern: "tasks\\.TaskQuery\\.ListTasksPaged"}

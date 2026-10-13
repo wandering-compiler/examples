@@ -1,0 +1,168 @@
+syntax = "proto3";
+
+package e2e.app.users;
+
+
+import "w17/field.proto";
+import "domains/app/workspace/users/types/models.proto";
+import "domains/app/workspace/users/queries/user_query.proto";
+import "domains/app/workspace/users/queries/directory_card_query.proto";
+import "domains/app/workspace/users/events/events.proto";
+
+// UsersService is the business-layer facade for the `app`
+// domain's users module. Hand-written: composes UserQuery /
+// UserMutation storage calls, runs business validation, owns
+// the REST surface for end-user-facing read operations.
+//
+// Codegen scope: the REST surface for these methods lives in
+// `proto/domains/app/rest.proto`; storage codegen
+// ignores this file (no `(w17.db.method)` anywhere — every
+// method is hand-implemented in the `app` domain's
+// grpcapi-business binary).
+//
+// Sign-up / sign-in moved to the activated `auth` plugin
+// (registered_as `auth`): SignUp + SignIn are served turnkey
+// by the plugin's AuthService (`/auth/register`, `/auth/login`).
+// The former hand-written SignUp (CreateUser + audit-log +
+// Redis session distributed-tx) is retired — the plugin owns
+// identity (users / tokens / rbac tables + token issuance).
+
+// ListUsersReq / UserSummary / ListUsersResp + GetUsersByIdsReq
+// live in the storage queries layer (queries/user_query.proto)
+// — same import-storage-types pattern as on the tasks side.
+// The facade body forwards the request to UserQuery directly.
+
+// EchoRequestContextReq is empty: everything this method reports
+// arrives as gRPC METADATA, not as request fields. That is the
+// whole point — `(w17.rest_api).metadata_propagation` and
+// `RestEndpoint.metadata_bindings` route HTTP headers / query
+// params into metadata keys, which never surface on a message.
+// A method taking a request field would prove the field binding
+// instead, which is a different feature (`fields[]`).
+message EchoRequestContextReq {}
+
+// EchoRequestContextResp reports which metadata keys reached the
+// backend. Five fields, one per ROUTE the value could have taken,
+// so a config that collapses two routes into one is legible:
+//
+//   request_id     — the W3C default set. Present only when
+//                    `extend_defaults: true` kept the defaults
+//                    alive next to the declared `headers[]`.
+//   client_version — the declared `headers[]` entry. Present only
+//                    when the surface declares its own list.
+//   trace_origin   — a per-ENDPOINT `metadata_bindings[]` HEADER
+//                    entry; surface-wide propagation cannot
+//                    produce it (the key is renamed).
+//   echo_channel   — a per-ENDPOINT `metadata_bindings[]`
+//                    QUERY_PARAM entry. A query param has no
+//                    header to propagate, so this one is
+//                    reachable through no other mechanism at all.
+//   language       — `w17-language`, which arrives either from the
+//                    surface's `default_language` stamp or from a
+//                    `header_renames[]` rule. 0500–0503 separate
+//                    those two.
+message EchoRequestContextResp {
+  string request_id     = 1;
+  string client_version = 2;
+  string trace_origin   = 3;
+  string echo_channel   = 4;
+  string language       = 5;
+}
+
+// IngestSignedWebhookReq is the raw-body shape: `payload` receives
+// the VERBATIM HTTP request body (`raw_body_field`), and
+// `signature` binds from a header, because a raw-body endpoint has
+// no JSON body left to carry anything else.
+message IngestSignedWebhookReq {
+  bytes  payload   = 1;
+  string signature = 2;
+}
+
+// IngestSignedWebhookResp reports what the handler saw, not what it
+// decided — a webhook receiver that answered "ok" would be green
+// against a body the gateway had re-marshaled.
+//
+// `internal_route` is the `response_omit_fields` host. It is set on
+// every call and is never empty on the gRPC contract; the REST
+// surface clears it. An omit list that silently did nothing would
+// leave a non-empty value in the JSON, which is what 0511 reads.
+message IngestSignedWebhookResp {
+  // sha256 of the bytes that landed in `payload`, lowercase hex.
+  string digest        = 1;
+  // Length of those bytes. Cheap corroboration: a re-marshaled
+  // JSON body differs in length from the one the caller sent.
+  int32  byte_len      = 2;
+  // Whether `signature` equalled the digest — the reason a
+  // real receiver needs the bytes unchanged.
+  bool   signature_ok  = 3;
+  // Internal dispatch target. Omitted from the REST response.
+  string internal_route = 4;
+}
+
+message StreamDirectoryUpdatesReq {}
+
+// DirectoryPlanAck is what a subscriber handler answers with. The bus
+// reads the ERROR, not the body — a nil error is the ack — so the
+// message is deliberately empty of meaning and non-empty of shape:
+// a gRPC method needs a response type, and a subscriber handler is an
+// ordinary gRPC method that non-bus callers may also invoke.
+message DirectoryPlanAck {}
+
+// REST surface registered in `proto/domains/app/rest.proto`.
+// UsersService stays a pure gRPC contract.
+service UsersService {
+  // ListUsers — Q8 bonus showcase. Body is empty: the gateway
+  // decodes top-level request fields from URL query params
+  // (`?cursor=42&limit=10`) before forwarding via gRPC.
+  // Cursor is presence-bearing (omit on first page); limit is
+  // required.
+  rpc ListUsers(ListUsersReq) returns (ListUsersResp) {}
+
+  // GetUsersByIds — Q8e IN-clause bind from a repeated
+  // field. Body carries the id list; gateway forwards
+  // unchanged. The storage handler emits PG `= ANY($1)`
+  // with `pq.Array(req.GetIds())` wrap (the only PG-
+  // compatible shape for collection bind).
+  rpc GetUsersByIds(GetUsersByIdsReq) returns (ListUsersResp) {}
+
+  // EchoRequestContext reports the gRPC metadata the gateway
+  // attached to this call. It is the only way a suite can see
+  // metadata propagation at all: headers routed to metadata never
+  // appear on a request message, and no generated storage handler
+  // reads them back — so without a backend that says what it
+  // received, every one of those knobs is configuration whose
+  // effect nothing observes.
+  rpc EchoRequestContext(EchoRequestContextReq) returns (EchoRequestContextResp) {}
+
+  // IngestSignedWebhook is the raw-body receiver. It hashes the
+  // bytes it was handed and compares them against the signature the
+  // caller sent out of band — the shape every upstream webhook
+  // (GitHub, Stripe, …) requires, and the reason a JSON transcode
+  // is not merely wasteful but wrong: a re-marshaled body has a
+  // different MAC than the one the sender computed.
+  rpc IngestSignedWebhook(IngestSignedWebhookReq) returns (IngestSignedWebhookResp) {}
+
+  // StreamDirectoryUpdates replays the public directory as a
+  // stream. Server-streaming, so the registry would auto-derive
+  // SSE; the registry forces WS instead, and drops auth, because
+  // the consumer is a public read-only feed a browser opens
+  // without a bearer.
+  rpc StreamDirectoryUpdates(StreamDirectoryUpdatesReq) returns (stream DirectoryCardSummary) {}
+
+  // OnDirectoryPlanRetired is a SUBSCRIBER handler: the app domain's
+  // subscriber surface (proto/domains/app/subscribers.proto) routes
+  // `directory.plan.*` deliveries here. A nil error acks the message and
+  // an error hands it back for redelivery under the channel's retry
+  // policy.
+  //
+  // It is also the surface's second handler service, in the domain's
+  // second module — which is what makes the bundle resolve the payload
+  // package per subscription rather than once for the file.
+  //
+  // It is a normal gRPC method with a normal request type — the
+  // subscriber tuple's contract is that the handler's request IS the
+  // event message, and nothing about the method says it came from a
+  // bus. That is deliberate: the same handler is callable by hand when
+  // a retirement has to be replayed.
+  rpc OnDirectoryPlanRetired(DirectoryPlanRetired) returns (DirectoryPlanAck) {}
+}

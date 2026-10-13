@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+// Flat module — demonstrates module-level prefix opt-out + the
+// per-table override that puts it back on.
+
+package e2e.app.flat;
+
+
+import "w17/db.proto";
+import "w17/field.proto";
+
+// Case D — module said `prefix: false`, this table inherits.
+// Auto-derived bare name `event` (lowercase of `Event`); no
+// prefix. Final SQL identifier: `event`.
+message Event {
+  option (w17.db.table) = {};
+
+  int64  id   = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string kind = 2 [(w17.field) = { type: CHAR, max_len: 64 }];
+}
+
+// Case E — per-table override puts the prefix BACK on (the
+// module opted everyone out, but THIS table wants the prefix).
+// Auto-derived `setting` + module prefix `flat_` (forced via
+// `prefix: true`) → `flat_setting`. Asymmetric overrides like
+// this are why both module-level and table-level knobs exist —
+// the module-level decision can be reversed for one row that
+// breaks from the rest.
+message Setting {
+  option (w17.db.table) = { prefix: true };
+
+  int64  id    = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string key   = 2 [(w17.field) = { type: CHAR, max_len: 64 }];
+  string value = 3;
+}

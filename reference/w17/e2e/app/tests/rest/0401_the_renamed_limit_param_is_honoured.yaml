@@ -1,0 +1,13 @@
+# `PagedConfig.limit_param` — the endpoint reads its page size from
+# `per_page`, not from `limit`.
+#
+# 3 rather than 2 so the answer differs from the default the previous
+# case just pinned: asking for the default value would prove only that
+# the endpoint answered.
+method: tasks.TaskQuery.ListTasksPagedTuned
+pre:
+    - auth/auth.yaml
+input:
+    per_page: 3
+expect:
+    items: {matcher: count, op: '==', value: 3}

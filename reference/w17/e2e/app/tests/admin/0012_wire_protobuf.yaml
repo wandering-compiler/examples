@@ -1,0 +1,20 @@
+# Wire proof, part 2 of 2 — the same admin call as 0011, this time
+# asking for binary protobuf. Before the encoder convergence the admin
+# surface was JSON-only and this step was impossible to write: it went
+# through a private admin encoder that ignored Accept entirely.
+#
+# The runner carries no proto descriptors, so it cannot decode the body
+# into fields — it reports the wire facts instead (runner.WireKey). Three
+# assertions together are the proof: the server chose the protobuf media
+# type, the payload is non-empty, and it is NOT JSON (so this cannot pass
+# on a JSON body mislabelled by a stray Content-Type).
+method: admin.UserAdmin.Read
+pre:
+    - auth/admin.yaml
+headers: {Accept: application/protobuf}
+input:
+    id: "900001"
+expect:
+    w17_wire.content_type: {matcher: eq, value: application/protobuf}
+    w17_wire.size: {matcher: not_empty}
+    w17_wire.json: {matcher: eq, value: false}

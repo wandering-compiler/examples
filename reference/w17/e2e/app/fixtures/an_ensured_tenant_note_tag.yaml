@@ -1,0 +1,20 @@
+# First `DO NOTHING` write of a link row. The tag is derived from the
+# note id rather than ${seq} so every step in a chain addresses the SAME
+# row — this form returns no ROW (RETURNING is refused on it), so there is
+# no id to capture and the tag has to be reconstructible instead.
+#
+# It does return a count, and here it is 1: this call inserts. Paired with
+# 0156, which repeats it and gets 0, that is the assertion that the number
+# comes off the statement rather than out of the emitter.
+#
+# Deriving it from the note id also keeps each chain's tag its own, so a
+# read filtered by it matches exactly one row no matter how many times
+# sibling scenarios re-run this fixture.
+method: tasks.TaskMutation.EnsureTenantNoteTag
+pre:
+    - fixtures/a_tenant_note.yaml
+input:
+    note_id: ${note.id}
+    tag: e2e-ensure-${note.id}
+expect:
+    written: 1

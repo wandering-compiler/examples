@@ -1,0 +1,20 @@
+# Overview STAT widget (item 5, INC-B) — LIVE proof.
+#
+# The admin overview declares one declarative STAT widget bound to the
+# cross-tenant COUNT(*) query users.UserQuery.CountUsers. The generated
+# admin bundle mounts GET /admin/api/widget/user_stats, which calls that
+# query and returns { total } as JSON — the runtime reads `total` off it
+# and renders a stat cell. This step drives that data route directly.
+#
+# At admin-scenario time the `users` table holds exactly the two seeded
+# rows (03_e2e_seed id=1 + 06_admin_e2e_seed id=900001) — the admin suite
+# runs before any REST row is created, the same determinism the TaskAdmin
+# paging + UserAdmin sort steps rely on. So COUNT(*) = 2. `total` is an
+# int64 → protojson renders it as a JSON string, so the expected value is
+# quoted.
+method: admin.Widget.user_stats
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    total: {matcher: eq, value: "2"}

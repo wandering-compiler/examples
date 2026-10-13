@@ -1,0 +1,32 @@
+# Overview DONUT widget over an ENUM — LIVE proof of the data route
+# behind the admin's axis display contract.
+#
+# The overview declares `task_statuses`, a donut bound to the GROUP BY
+# aggregation tasks.TaskQuery.CountTasksByStatus. The generated bundle
+# mounts GET /admin/api/widget/task_statuses, which returns
+# { rows: [{status, task_count}] } — and `status` comes back as the enum's
+# NUMBER, which is exactly why the spec has to carry the catalogue behind
+# it (`x_choices`, resolved through projection provenance since the row
+# field is a bare int32). The SPA runs in no live e2e stack, so the
+# rendering is proven one layer up: `make check-admin-i18n` runs the
+# shipped runtime over the COMMITTED spec, and the runtime's own unit
+# tests cover the legend.
+#
+# At admin-scenario time the `tasks` table holds exactly the five rows
+# seeded in fixtures/app/test.json (the admin suite runs
+# before any REST task is created — the same determinism 0036 relies on).
+# Their statuses are 1/1/2/2/3, and `ORDER BY t.status ASC` pins the row
+# order. `status` is int32 → a JSON number; `task_count` is int64 →
+# protojson renders it as a string, so its expected values are quoted.
+method: admin.Widget.task_statuses
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 3}
+    rows.0.status: {matcher: eq, value: 1}
+    rows.0.task_count: {matcher: eq, value: "2"}
+    rows.1.status: {matcher: eq, value: 2}
+    rows.1.task_count: {matcher: eq, value: "2"}
+    rows.2.status: {matcher: eq, value: 3}
+    rows.2.task_count: {matcher: eq, value: "1"}

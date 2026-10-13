@@ -1,0 +1,17 @@
+# Delete's own response is empty — by design, and therefore worthless as
+# evidence. Every failure mode returns exactly the same 204: deleting
+# nothing, deleting one row, deleting the parent's whole section.
+#
+# The inline is read back at the count it must have: the created row gone,
+# the two seeded ones still there and still reading as seeded. Restores
+# the fixture to its starting state, so nothing downstream inherits this
+# lifecycle's leftovers.
+method: admin.TaskAdmin.Inline.CommentAdmin.List
+pre:
+    - auth/admin.yaml
+expect:
+    comments: {matcher: count, op: '==', value: 2}
+    comments.0.id: {matcher: eq, value: "720001"}
+    comments.1.id: {matcher: eq, value: "720002"}
+input:
+    id: 700001

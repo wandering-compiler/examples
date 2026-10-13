@@ -1,0 +1,12 @@
+# The deleted field is a miss, and a miss on a bucketed read is NOT_FOUND
+# rather than an empty entity — Redis returns nil for an absent HASH
+# field, and the handler turns that into a status rather than a
+# zero-valued session a caller would have to inspect to distrust.
+method: cache.UserSessionQuery.GetUserSession
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    session_id: e2e-shared-device-token
+expect_error:
+    code: NOT_FOUND

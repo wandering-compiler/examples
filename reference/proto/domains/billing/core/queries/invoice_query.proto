@@ -1,0 +1,208 @@
+syntax = "proto3";
+
+package e2e.billing.core;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "domains/billing/core/types/models.proto";
+
+// InvoiceQuery — read side of the billing ledger.
+// Two queries
+// demonstrating the optimizer's strategy split on a domain
+// other than `app/tasks`:
+//
+//   - `GetInvoiceWithAccountAndPlan` — four-table single JOIN
+//     across Invoice → Account + Invoice → Subscription →
+//     Plan. Every joined relation is fixed-size (small lookup)
+//     → optimizer picks JOIN-strategy → one SQL round-trip.
+//     Response is flat-scalar — the storage codegen's
+//     submessage-routing path supports two nested submessages
+//     (parent + child / parent + repeated child) at most, so
+//     multi-table JOIN-with-projection lands as a flat DTO
+//     (same idiom as `GetActivePlanResp` in
+//     subscription_query.proto).
+//   - `GetInvoiceWithLineItems` — 1:N fan-out from Invoice
+//     to InvoiceLineItem. `description` is unannotated TEXT
+//     → 4 KiB carrier default → above the 1 KiB threshold →
+//     optimizer picks PREFETCH-strategy → two SELECTs (parent,
+//     then children keyed by parent id). Response uses the
+//     standard parent + repeated-child shape that the
+//     fan-out detector recognises.
+//
+// Mirrors the GetTaskWithCategory / GetTaskWithComments
+// pattern in app/tasks/queries/task_query.proto so the
+// two domains read in parallel.
+
+message GetInvoiceWithAccountAndPlanReq {
+  int64 id = 1;
+}
+
+// GetInvoiceWithAccountAndPlanResp — flat dashboard
+// projection across the four-table JOIN. Each field's name
+// matches its SELECT alias in the DQL below; the storage
+// codegen scans column-by-column into the response root
+// without prefix splitting (multi-table JOIN with nested
+// submessages isn't supported by the current codegen).
+message GetInvoiceWithAccountAndPlanResp {
+  // Invoice header
+  int64                                   invoice_id          = 1;
+  string                                  invoice_number      = 2;
+  e2e.billing.core.Invoice.Status         invoice_status      = 3;
+  int32                                   invoice_total_cents = 4;
+  google.protobuf.Timestamp               invoice_issued_at   = 5;
+  google.protobuf.Timestamp               invoice_due_at      = 6;
+
+  // Account (billed party)
+  int64  account_id    = 7;
+  string account_email = 8;
+
+  // Subscription (billing period link)
+  e2e.billing.core.Subscription.Status    subscription_status      = 9;
+  google.protobuf.Timestamp               subscription_period_end  = 10;
+
+  // Plan (commercial terms)
+  string plan_slug         = 11;
+  string plan_display_name = 12;
+  int32  plan_price_cents  = 13;
+}
+
+message GetInvoiceWithLineItemsReq {
+  int64 id = 1;
+}
+
+message SumInvoiceAdjustmentsReq {
+  int64 account_id = 1;
+}
+
+// SumInvoiceAdjustmentsResp — one row per invoice, so the enum
+// predicate on the JOINED alias decides which line items are
+// counted. If it were emitted as a string the statement would be
+// refused by the value validator before Postgres saw it, and the
+// totals would never be produced at all.
+message SumInvoiceAdjustmentsResp {
+  message Row {
+    int64  invoice_id           = 1;
+    string invoice_number       = 2;
+    int32  adjustment_cents     = 3;
+  }
+  repeated Row rows = 1;
+}
+
+// GetInvoiceWithLineItemsResp — parent + repeated-child
+// shape that the storage codegen's `detectJoinFanoutResponse`
+// recognises. Combined with the wide-text carrier on
+// InvoiceLineItem.description (unannotated TEXT, 4 KiB
+// default) the optimizer routes to PREFETCH.
+message GetInvoiceWithLineItemsResp {
+  e2e.billing.core.Invoice                  invoice    = 1;
+  repeated e2e.billing.core.InvoiceLineItem line_items = 2;
+}
+
+service InvoiceQuery {
+  // GetInvoiceWithAccountAndPlan — multi-table JOIN through
+  // forward FKs only:
+  //   Invoice.account     (FK, single)
+  //   Invoice.subscription (FK, single, nullable — INNER JOIN
+  //                         filters out invoices without a
+  //                         subscription, which is correct
+  //                         for this query's
+  //                         "subscription-tied invoice"
+  //                         semantic)
+  //   Subscription.plan    (FK, single)
+  //
+  // All three joined relations are fixed-size — Account /
+  // Subscription / Plan have only scalar columns well under
+  // the 1 KiB join-vs-prefetch threshold. Optimizer picks
+  // JOIN-strategy for the whole graph → one SELECT with three
+  // INNER JOINs.
+  rpc GetInvoiceWithAccountAndPlan(GetInvoiceWithAccountAndPlanReq) returns (GetInvoiceWithAccountAndPlanResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:
+          "SELECT inv.id           AS invoice_id, "
+          "       inv.number       AS invoice_number, "
+          "       inv.status       AS invoice_status, "
+          "       inv.total_cents  AS invoice_total_cents, "
+          "       inv.issued_at    AS invoice_issued_at, "
+          "       inv.due_at       AS invoice_due_at, "
+          "       acc.id           AS account_id, "
+          "       acc.email        AS account_email, "
+          "       sub.status              AS subscription_status, "
+          "       sub.current_period_end  AS subscription_period_end, "
+          "       pl.slug          AS plan_slug, "
+          "       pl.display_name  AS plan_display_name, "
+          "       pl.price_cents   AS plan_price_cents "
+          "FROM core.Invoice inv "
+          "JOIN inv.account acc "
+          "JOIN inv.subscription sub "
+          "JOIN sub.plan pl "
+          "WHERE inv.id = :id"
+      }
+    };
+  }
+
+  // GetInvoiceWithLineItems — fan-out via Invoice's reverse
+  // accessor `line_items` (driven by `related_name: "line_items"`
+  // on InvoiceLineItem.invoice_id). The repeated-child response
+  // shape + the unannotated `description` (TEXT, 4 KiB default
+  // carrier — above the optimizer's 1 KiB PREFETCH threshold)
+  // routes to PREFETCH: storage emits two SELECTs (parent
+  // invoice by id, then line items WHERE invoice_id = parent.id).
+  rpc GetInvoiceWithLineItems(GetInvoiceWithLineItemsReq) returns (GetInvoiceWithLineItemsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:
+          "SELECT inv.id AS inv_id, "
+          "       inv.account_id AS inv_account_id, "
+          "       inv.subscription_id AS inv_subscription_id, "
+          "       inv.number AS inv_number, "
+          "       inv.status AS inv_status, "
+          "       inv.period_start AS inv_period_start, "
+          "       inv.period_end AS inv_period_end, "
+          "       inv.total_cents AS inv_total_cents, "
+          "       inv.issued_at AS inv_issued_at, "
+          "       inv.due_at AS inv_due_at, "
+          "       li.id AS li_id, "
+          "       li.invoice_id AS li_invoice_id, "
+          "       li.quantity AS li_quantity, "
+          "       li.unit_cents AS li_unit_cents, "
+          "       li.cents AS li_cents, "
+          "       li.kind AS li_kind, "
+          "       li.description AS li_description "
+          "FROM core.Invoice inv "
+          "LEFT JOIN core.InvoiceLineItem li ON li.invoice_id = inv.id "
+          "WHERE inv.id = :id"
+      }
+    };
+  }
+
+  // SumInvoiceAdjustments — the enum-name literal idiom on a
+  // MODULE-QUALIFIED JOIN alias. Every other enum literal in this
+  // example sits on a SET clause or on the FROM entity, so the
+  // joined position had no example at all and the two positions
+  // were free to disagree: `li.kind = 'ADJUSTMENT'` kept its
+  // string while the identical predicate on a FROM entity lowered
+  // to the ordinal, and a string reached an integer column.
+  //
+  // Invoice is deliberately the FROM entity and InvoiceLineItem
+  // the joined one — putting the enum's own model in FROM is what
+  // hides the defect.
+  rpc SumInvoiceAdjustments(SumInvoiceAdjustmentsReq) returns (SumInvoiceAdjustmentsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:
+          "SELECT inv.id     AS invoice_id, "
+          "       inv.number AS invoice_number, "
+          "       SUM(li.cents) AS adjustment_cents "
+          "FROM core.Invoice inv "
+          "JOIN core.InvoiceLineItem li ON li.invoice_id = inv.id "
+          "WHERE inv.account_id = :account_id AND li.kind = 'ADJUSTMENT' "
+          "GROUP BY inv.id, inv.number "
+          "ORDER BY inv.id"
+      }
+    };
+  }
+}

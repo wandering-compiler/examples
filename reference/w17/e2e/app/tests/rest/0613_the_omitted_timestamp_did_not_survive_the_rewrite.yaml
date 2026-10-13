@@ -1,0 +1,18 @@
+# Leg 3, and the only one that can fail.
+#
+# `platform` proves the second write landed; `last_seen_at` proves it
+# REPLACED the entity rather than merging into it. Before the DEL joined
+# the HSET, this read returned 2026-08-07T10:00:00Z — a value no caller
+# had sent since, resurrected from a write two steps earlier, silently.
+#
+# Checking only `platform` would pass either way, which is exactly how
+# this survived: every KV case in this example wrote a key once.
+method: cache.DeviceProfileQuery.GetDeviceProfile
+pre:
+    - auth/auth.yaml
+input:
+    device_id: e2e-device-gamma
+expect:
+    device_id: {matcher: eq, value: e2e-device-gamma}
+    platform: {matcher: eq, value: android/chrome}
+    last_seen_at: {matcher: empty}

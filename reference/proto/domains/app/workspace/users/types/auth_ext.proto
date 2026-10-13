@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+// Plugin extension — this project adds a column to a table the auth
+// plugin owns, without forking the plugin.
+//
+// The file is separate from `models.proto` because an extension is not
+// a model: it declares no table of its own, and a reader who greps for
+// `(w17.db.table)` should not find it mixed in with the ones that do.
+
+package e2e.app.users;
+
+import "w17/contrib.proto";
+import "w17/field.proto";
+
+// AuthUserDirectoryOptIn — one column added onto the auth plugin's
+// `User`, recording whether the account agreed to be listed in the
+// public directory.
+//
+// It belongs on the plugin's identity row rather than on this module's
+// `UserDirectoryCard`: the answer survives deleting every card, and a
+// card row is exactly what it gates.
+//
+// TARGET IS PER-ACTIVATION, NOT PER-PLUGIN. `target` names the STAGED
+// message — the identity the plugin's protos get after being copied
+// into the activating domain (`e2e.app.<registered_as>.<Message>`), not
+// the wire package the plugin author wrote (`w17.contrib.auth.User`).
+// This project activates the SAME auth plugin twice, as `auth` (the
+// customer realm) and `admin_auth` (the staff realm), so the two are
+// not interchangeable: the FQN below picks one of the two tables and
+// leaves the other alone. A target keyed on the plugin's own package
+// would have to hit both realms or neither, and neither is what a
+// consuming project means when it extends a plugin.
+//
+// The customer realm is the one that gets it — a staff account has no
+// public directory presence to consent to.
+message AuthUserDirectoryOptIn {
+  option (w17.contrib.extends) = {
+    target: "e2e.app.auth.User"
+  };
+
+  // Whether the account consented to public directory listing:
+  // "unset" until asked, then "yes" or "no".
+  //
+  // Field numbers from 100 up by convention: the plugin owns 1-99, so
+  // a plugin that grows a field later doesn't collide with this one.
+  // The convention is hygiene, not enforcement — the IR merger refuses
+  // an actual collision on number, proto name, or resolved SQL name.
+  //
+  // DEFAULTED on purpose. The merged column lands in a table the
+  // PLUGIN writes: its own sign-up INSERT names its own columns and
+  // knows nothing about this one, so a NOT NULL column with no default
+  // would break every registration in a project that dared to use the
+  // extension mechanism. That failure is why the live sign-up step is
+  // part of this feature's evidence and not just of the plugin's.
+  //
+  // NOTE — `(w17.db.column)` is NOT available on this field, even
+  // though the field does become a column. An extension message
+  // carries no `(w17.db.table)`, and the guard that rejects column
+  // knobs on non-table messages does not exempt extensions, so `name`
+  // / `db_type` / `comment` / `fk` are all out of reach here. Only
+  // `(w17.field)` semantics reach the merged column. Nothing about the
+  // merge needs them, but it means an extension cannot adopt a legacy
+  // column name or point at a table of its own.
+  string directory_opt_in = 100 [(w17.field) = {
+    type: CHAR, max_len: 16, default_string: "unset"
+  }];
+}

@@ -1,0 +1,26 @@
+# The Sessions page (auth plugin, user_admin) — admin-only cursor-paged
+# like Users. Token rows grow with every authenticate in this very run
+# (each step re-signs in), so the count is a floor rather than a number.
+# Its DQL is a LEFT JOIN projecting the owner's email, with the keyset on
+# the token side (t.created_at DESC, t.id DESC) — the joined, nullable
+# side never carries the boundary.
+#
+# The floor is 1 and that is exactly what the growth argument buys: the
+# `pre` chain of this very step authenticates, so at least that token
+# exists by the time the list is read. The scaffold's `>= 0` turned the
+# one fact this step can rely on into no assertion at all.
+#
+# `tokens.0.owner` is the LEFT JOIN's projected column — the page's first
+# declared column, the owner's email handle rather than a raw user id.
+# Asserting it non-empty is what separates "the join produced a row" from
+# "the join produced a row with a null on the projected side" — the shape
+# that took the orphan-scan list down when a deleted user left a token
+# behind, and the reason the projection COALESCEs.
+method: admin.Sessions.List
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    tokens: {matcher: count, op: '>=', value: 1}
+    tokens.0.owner: {matcher: not_empty}
+    paging.total: {matcher: not_empty}

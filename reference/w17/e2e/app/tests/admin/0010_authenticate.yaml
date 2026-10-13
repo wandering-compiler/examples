@@ -1,0 +1,11 @@
+# The admin login route itself. Proves the admin bundle authenticates
+# against its OWN realm (admin_auth, seeded in
+# fixtures/app/test.json), which is not mounted on REST — no REST
+# test can reach this endpoint.
+method: admin.Authenticate
+input:
+    email: e2e-admin@example.com
+    password: e2eSecret!23
+expect:
+    user_id: {matcher: not_empty}
+    token: {matcher: not_empty}

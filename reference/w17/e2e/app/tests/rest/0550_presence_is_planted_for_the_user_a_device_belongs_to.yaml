@@ -1,0 +1,16 @@
+# The cross-op KV chain needs an observable target, and this plants it.
+#
+# `RevokeDeviceSession` reads a device profile and then deletes the
+# presence record of the user NAMED INSIDE the value it decoded. Redis
+# DEL on a key that was never written succeeds silently, so a chain that
+# resolved `:device.user_id` to zero and one that resolved it correctly
+# would both answer 200 against an empty store. Two records, two users,
+# and only one of them may survive.
+method: cache.UserPresenceMutation.SetUserPresence
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    online: true
+    current_route: /e2e/alpha
+expect: {}

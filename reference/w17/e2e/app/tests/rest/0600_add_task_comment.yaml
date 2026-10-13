@@ -1,0 +1,21 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The route's own case, written because the generated skeleton for it
+# posts `task_id: 0` against an FK column — it would have failed on a
+# constraint, or worse, passed while asserting only that SOME id came
+# back.
+#
+# Acts on its own fresh task rather than the one 0590–0593 used: those
+# steps end with a REDACTED parent whose comments were just purged, and
+# hanging a new child off that row would make this case's outcome
+# depend on the purge pair's ordering.
+method: tasks.TaskMutation.AddTaskComment
+pre:
+    - fixtures/a_task.yaml
+input:
+    task_id: ${task.id}
+    author_id: 1
+    body_text: a comment on its own task
+expect:
+    id: {matcher: not_empty}

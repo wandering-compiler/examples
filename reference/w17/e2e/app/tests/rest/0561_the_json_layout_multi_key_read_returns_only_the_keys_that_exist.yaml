@@ -1,0 +1,22 @@
+# `MGET api_tokens:<h1> api_tokens:<h2> …` — one round trip, each
+# returned value protojson-decoded into the response's single repeated
+# field. Same DQL as 0555 and a different body, because the table's
+# declared layout is what picks the emitter.
+#
+# The absent key sits in the middle for the same reason it does there: a
+# nil slot that is not skipped appends a zero entity, and a nil slot that
+# shifts the results shows up as the wrong label on the wrong row.
+method: cache.SessionCacheQuery.ListApiTokens
+pre:
+    - auth/auth.yaml
+input:
+    token_hashes:
+        - e2e-ttl-token-keep
+        - e2e-token-never-issued
+        - e2e-ttl-token-drop
+expect:
+    tokens: {matcher: count, op: '==', value: 2}
+    tokens.0.token_hash: {matcher: eq, value: e2e-ttl-token-keep}
+    tokens.0.label: {matcher: eq, value: ci-deploy}
+    tokens.1.token_hash: {matcher: eq, value: e2e-ttl-token-drop}
+    tokens.1.label: {matcher: eq, value: laptop}

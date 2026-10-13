@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package e2e.app.users;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/app/workspace/users/types/models.proto";
+
+message CreateUserReq {
+  string email         = 1;
+  string display_name  = 2;
+  // Already-hashed password. Storage stores the value
+  // verbatim into the PASSWORD-typed `User.password_hash`
+  // column; the project's business layer (or whichever
+  // service fronts UserMutation) computes the hash via
+  // `passwordhash.Settings.Hash` before calling.
+  string password_hash = 3 [(w17.field) = { type: PASSWORD }];
+}
+message CreateUserResp {
+  int64 id = 1;
+}
+
+message UpdateProfileReq {
+  int64  user_id      = 1;
+  string display_name = 2;
+}
+message UpdateProfileResp {
+  int64  id           = 1;
+  string display_name = 2;
+}
+
+// UserMutation — write side of the accounts domain.
+//
+// CreateUser is a pure INSERT (no read-side; the lock list is
+// empty so no FOR UPDATE suffix gets added).
+//
+// UpdateProfile loads the row, then UPDATEs it under
+// SELECT FOR UPDATE — the per-statement lock filter
+// applies the FOR UPDATE only to SELECTs whose FROM is `User`.
+service UserMutation {
+  rpc CreateUser(CreateUserReq) returns (CreateUserResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO users.User SET email = :email, display_name = :display_name, password_hash = :password_hash, status = 1 RETURNING id"
+      }
+    };
+  }
+
+  rpc UpdateProfile(UpdateProfileReq) returns (UpdateProfileResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "load",
+        dql:  "SELECT u.id FROM users.User u WHERE u.id = :user_id"
+      }
+      ops: {
+        name: "save",
+        dql:  "UPDATE users.User SET display_name = :display_name WHERE id = :user_id RETURNING id, display_name"
+      }
+    };
+    option (w17.db.lock) = {
+      locks: [
+        { resource: "User", kind: SELECT_FOR_UPDATE }
+      ]
+    };
+  }
+}

@@ -1,0 +1,10 @@
+# email is the only column UpdateUser writes; the PK rides the URL.
+method: admin.Users.Update
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b2
+    email: e2e-throwaway-admin-renamed@example.com
+expect:
+    user_id: {matcher: not_empty}
+    email: {matcher: not_empty}

@@ -1,0 +1,16 @@
+# The conflict path. Same (bucket, PK) pair as 0530, a different device.
+#
+# On a KV connection the UPSERT has no server-side conflict machinery
+# behind it — Redis SET overwrites, so the emitter runs the INSERT and
+# the "conflict" resolves itself. That is precisely why the compiler
+# insists the DO UPDATE arm assign the same values: an author who wrote
+# a different update arm would get the insert values applied and no
+# indication anywhere that their arm was ignored.
+method: cache.UserSessionMutation.UpsertUserSession
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    session_id: e2e-shared-device-token
+    device: web/chrome
+expect: {}

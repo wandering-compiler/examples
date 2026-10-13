@@ -1,0 +1,18 @@
+# The read-back for 0380, and the reason that write is worth a case.
+#
+# A KV write acks; it returns no row. So the only evidence that the
+# entity was marshalled correctly — every field, not just the key — is a
+# read that names each one. `expires_at` matters most: it is the field
+# whose Go type is not a scalar, so it is the one a layout change would
+# drop or mangle first, and a token with a lost expiry never expires.
+method: cache.SessionCacheQuery.GetApiToken
+pre:
+    - auth/auth.yaml
+    - fixtures/a_standalone_api_token.yaml
+input:
+    token_hash: e2e000000000000000000000000000000000000000000000000000standalone
+expect:
+    token_hash: {matcher: eq, value: e2e000000000000000000000000000000000000000000000000000standalone}
+    user_id: {matcher: eq, value: "1"}
+    label: {matcher: eq, value: laptop}
+    expires_at: {matcher: eq, value: '2030-06-01T00:00:00Z'}

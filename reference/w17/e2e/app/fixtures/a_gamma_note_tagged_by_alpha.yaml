@@ -1,0 +1,12 @@
+# tenant-ALPHA tags tenant-gamma's note. The link row carries gamma's
+# note_id and alpha's tenant_id — a row that gamma's own tag count must
+# not see.
+method: tasks.TaskMutation.AttachTenantNoteTag
+pre:
+    - fixtures/a_gamma_note.yaml
+    - auth/auth.yaml
+input:
+    note_id: ${note.id}
+    tag: e2e-foreign-${note.id}
+expect:
+    note_id: {matcher: not_empty}

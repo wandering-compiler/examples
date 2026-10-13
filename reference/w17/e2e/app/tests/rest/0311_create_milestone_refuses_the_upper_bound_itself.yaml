@@ -1,0 +1,26 @@
+# `(w17.field).lt` — the STRICT upper bound, at the one value that
+# tells it apart from `lte`.
+#
+# The mirror of 0310, and both halves are needed: the two bounds are
+# separate declarations on the same field and an emitter that dropped
+# one would still refuse the other, so a single case would report the
+# pair as working when half of it was gone.
+#
+# weight 10 is also the value the DB CHECK refuses
+# (`weight > 0 AND weight < 10` in db/init/app/01_schema.sql). What
+# this case pins is that the REQUEST rule answers first: a caller who
+# passes 10 gets INVALID_ARGUMENT naming `weight`, not a constraint
+# violation surfacing as a 500 with the column name buried in a driver
+# error.
+method: tasks.MilestoneMutation.CreateMilestone
+pre:
+    - auth/auth.yaml
+input:
+    name: upper bound release
+    weight: 10
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: weight
+          code: LT_VIOLATION
+          message: {matcher: regex, pattern: "must be less than 10"}

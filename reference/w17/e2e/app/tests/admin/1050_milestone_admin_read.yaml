@@ -1,0 +1,22 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# The detail read the update below writes against. The skeleton
+# addressed `id: e2e-value`, which is not an id.
+#
+# `status_note` is asserted at its SEEDED value — the column default,
+# since the seed omits it — because the two cases after this one change
+# it. Reading it here is what makes those changes provable rather than
+# merely plausible.
+method: admin.MilestoneAdmin.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 710001
+expect:
+    id: {matcher: eq, value: "710001"}
+    name: {matcher: eq, value: charlie release}
+    weight: {matcher: num, op: '==', value: 5}
+    status_note: {matcher: eq, value: not started}

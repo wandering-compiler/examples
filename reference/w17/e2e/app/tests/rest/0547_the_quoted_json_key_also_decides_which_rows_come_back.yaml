@@ -1,0 +1,19 @@
+# The same quoted key in the WHERE rather than in the projection.
+#
+# They are separate emits — a projection is a SELECT-list expression, a
+# predicate is a comparison the planner can use an index for — so one
+# working says nothing about the other. The pair mirrors 0521/0526 for
+# the bare-key case.
+#
+# Two of the three campaigns carry `partner`, which is what makes this an
+# assertion: a predicate the emitter dropped answers three, and one that
+# merely tested the key's presence also answers three.
+method: users.CampaignQuery.ListCampaignsFromSource
+pre:
+    - auth/auth.yaml
+input:
+    source: partner
+expect:
+    campaigns: {matcher: count, op: '==', value: 2}
+    campaigns.0.id: {matcher: eq, value: "720002"}
+    campaigns.1.id: {matcher: eq, value: "720003"}

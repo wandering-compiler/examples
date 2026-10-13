@@ -1,0 +1,19 @@
+# `(w17.admin_search)` — one debounced box over `m.name`.
+#
+# The assertion is the ROW SET, not the status code: a search field that
+# reached the request and was never bound in the DQL returns all three
+# rows with a 200, which is what "the box does nothing" looks like from
+# the outside. Asking for a term that matches exactly one seeded name is
+# what separates the two.
+#
+# The term carries no wildcards on purpose — the search box sends what
+# an operator typed, so the wrapping belongs in the query.
+method: admin.MilestoneAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    q: alpha
+expect:
+    items: {matcher: count, op: '==', value: 1}
+    items.0.id: {matcher: eq, value: "710002"}
+    items.0.name: {matcher: eq, value: alpha release}

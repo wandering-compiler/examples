@@ -1,0 +1,22 @@
+# `EXISTS c.flights.events(weight >= :min_weight)` — the same sugar with
+# TWO hops, which is a different arm of the expander rather than a longer
+# run of the same one.
+#
+# One hop synthesises a bare `SELECT 1 FROM <target>`. Every hop after
+# the first mints an explicit JOIN with a `1 = 1` placeholder ON and
+# pushes its own FK predicate into the shared WHERE, so what reaches
+# PostgreSQL is a two-table subquery with three ANDed predicates, none of
+# which the author wrote. The bare `weight` qualifies to the LAST
+# synthesised alias — the ground of the chain.
+#
+# Exactly one seeded event weighs 5 or more, and it hangs off a flight of
+# campaign 720001. A chain that lost either FK predicate answers all
+# three campaigns.
+method: users.CampaignQuery.ListCampaignsWithHeavyEvent
+pre:
+    - auth/auth.yaml
+input:
+    min_weight: 5
+expect:
+    campaigns: {matcher: count, op: '==', value: 1}
+    campaigns.0.id: {matcher: eq, value: "720001"}

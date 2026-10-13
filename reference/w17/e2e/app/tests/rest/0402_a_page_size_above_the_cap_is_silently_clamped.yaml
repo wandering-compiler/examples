@@ -1,0 +1,23 @@
+# `PagedConfig.max_limit` — and the reason it needs a live case rather
+# than a gate.
+#
+# The clamp is SILENT. A caller asking for 99 does not get an error and
+# does not get 99; it gets `max_limit` rows and a 200. There is no
+# symptom anywhere except the count, so a cap that stopped being applied
+# would look exactly like a cap that was never crossed — until someone
+# asked for a million rows and got them.
+#
+# 99 is well above the cap of 3 and also above the seeded row count, so
+# a missing clamp returns the whole table and the count separates the
+# two outcomes cleanly.
+method: tasks.TaskQuery.ListTasksPagedTuned
+pre:
+    - auth/auth.yaml
+input:
+    per_page: 99
+expect:
+    # 99 asked, 3 applied, 200 returned. The echo is the only place the
+    # clamp is visible at all — the status code and the shape are those
+    # of a request that was honoured.
+    paging.limit: {matcher: eq, value: 3}
+    items: {matcher: count, op: '==', value: 3}

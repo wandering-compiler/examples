@@ -1,0 +1,8 @@
+method: tasks.TaskMutation.UpdateTaskStatus
+pre:
+    - fixtures/a_task.yaml
+input:
+    task_id: ${task.id}
+    status: OPEN
+expect:
+    id: {matcher: not_empty}

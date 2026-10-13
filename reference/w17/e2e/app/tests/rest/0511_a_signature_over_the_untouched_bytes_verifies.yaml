@@ -1,0 +1,26 @@
+# Why `raw_body_field` exists, stated as behaviour rather than as a
+# digest: the handler recomputes the hash and compares it against the
+# value the sender supplied out of band, and they MATCH.
+#
+# This is the shape every signed-webhook integration has (GitHub's
+# X-Hub-Signature-256, Stripe's Stripe-Signature, …). 0510 proves the
+# bytes survived; this proves the survival is what makes the check
+# pass — a re-marshaled body produces a digest the sender never computed,
+# so `signature_ok` goes false while every status code stays 200 and
+# every log line stays quiet. That silence is the failure mode, and a
+# boolean is the only place it surfaces.
+#
+# The signature rides in a HEADER because the body is spent: a raw-body
+# endpoint has no JSON left to carry a second field, which is what makes
+# the `fields[]` HEADER binding on this endpoint load-bearing rather
+# than stylistic.
+method: users.UsersService.IngestSignedWebhook
+pre:
+    - auth/auth.yaml
+headers:
+    Content-Type: application/json
+    X-Signature: 3b4db1b7bf0d1d283854189e8fd3f6025c51216b08b383cbf61d4e6836d09eed
+input:
+    payload: '{"event":"card.published",  "id": 7}'
+expect:
+    signature_ok: {matcher: eq, value: true}

@@ -1,0 +1,17 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The BEFORE half of the purge pair, and the reason 0593's `== 0` means
+# anything. A count of zero after the redact proves the delete ran only
+# if a comment was there to begin with — asserted here rather than
+# assumed, because the fixture writing through a freshly exposed REST
+# route is exactly the kind of step that can quietly no-op.
+method: tasks.TasksService.GetTaskWithComments
+pre:
+    - fixtures/a_commented_task.yaml
+input:
+    id: ${task.id}
+expect:
+    task.title: {matcher: eq, value: e2e task}
+    comments: {matcher: count, op: '==', value: 1}
+    comments.0.body_text: {matcher: eq, value: e2e comment}

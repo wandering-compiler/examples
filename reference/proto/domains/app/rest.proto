@@ -1,0 +1,894 @@
+syntax = "proto3";
+
+// Domain-level REST registry. Replaces inline `(w17.http)`
+// annotations on each gRPC method. gRPC service definitions stay a pure
+// behavior contract; this file is the single point of truth
+// for which methods are exposed at which URLs.
+//
+// FastAPI / Django mental model: this is the `urls.py` of the
+// `app` domain.
+
+package e2e.app;
+
+import "w17/rest.proto";
+
+option (w17.rest_api) = {
+  name:        "public",
+  version:     "v1",
+  prefix:      "/api/v1",
+  description: "Customer-facing REST surface for the `app` domain — users + tasks modules.",
+
+  // Bearer auth via the activated `auth` plugin. The gateway
+  // calls the plugin's `AuthService.Authenticate` (bearer ->
+  // user + permissions + scopes) on every gated endpoint; the
+  // response's `permission_ids` slice drives the per-handler
+  // `acllock.HasPermission(ids, <id>)` check baked into every
+  // generated gateway handler, and `scopes["user_id"]` is
+  // threaded into outgoing gRPC metadata as `x-w17-scope-user_id`.
+  // `Authenticate` itself is auto-excluded from the middleware
+  // (would otherwise recurse). Adding a second method here (e.g.
+  // Basic for ops tooling) is purely additive — declare it + the
+  // gateway router fans out by Authorization scheme.
+  auth_methods: [
+    { ref: "auth.AuthService.Authenticate", token_types: [TOKEN_TYPE_BEARER] },
+    // The capability-link method, hand-written in this
+    // project (tasks/business/public_link_auth.proto) rather than
+    // supplied by the auth plugin. The two coexist on one surface:
+    // w17 owns the auth CONTRACT, the plugin is one implementation
+    // of it, and `ref` resolves to any RPC in the domain.
+    //
+    // URL_TOKEN is not a fourth Authorization scheme. The router
+    // reaches this method ONLY for endpoints declaring `credential`,
+    // never as a fall-through — so appending a stolen capability
+    // token to any other route on this surface authenticates nobody.
+    { ref: "tasks.PublicLinkAuthService.AuthenticatePublicLink", token_types: [TOKEN_TYPE_URL_TOKEN] },
+    // A third method, hand-written like the second but owning its REQUEST
+    // type and POPULATING `permission_ids` — see
+    // tasks/business/ops_auth.proto for why the difference is the point.
+    //
+    // BASIC, because it is the one scheme the other two do not claim: the
+    // router fans out by Authorization scheme, so this entry cannot
+    // shadow the bearer path and the bearer path cannot shadow it.
+    { ref: "tasks.OpsAuthService.AuthenticateOps", token_types: [TOKEN_TYPE_BASIC] }
+  ],
+
+  // The surface's fallback locale. `cs` and not `en`
+  // ON PURPOSE: `en` is what gettext falls back to at compile
+  // time, so a surface declaring `default_language: "en"` behaves
+  // identically to one declaring nothing, and no case could tell
+  // the two apart. Declaring the NON-default language is what
+  // makes the stamp observable — a request that names no locale
+  // gets Czech, and only because this line is here.
+  //
+  // What this line controls, and all it controls, is the metadata
+  // stamp: `w17-language: cs` on every outgoing call that named no
+  // locale. 0502-0505 read exactly that. Whether the RENDERED text
+  // then comes back Czech is a separate question with a separate
+  // answer — the project's `cs.po` is generated untranslated
+  // (every `msgstr` is its `msgid`), and no bundle in this stack
+  // bakes the catalogs into its image anyway (the emitted
+  // Dockerfile documents that COPY as a deploy-time step). So a
+  // case asserting Czech WORDS would be asserting a deployment,
+  // not this annotation.
+  //
+  // Setting this also AUTO-INSTALLS `Accept-Language →
+  // w17-language` into metadata_propagation.header_renames below,
+  // which is why that list only has to carry the custom entry.
+  default_language: "cs",
+
+  // HTTP → gRPC metadata propagation for the
+  // whole surface. Three mechanisms, and they are separate because
+  // they fail separately:
+  //
+  //   headers[]        — forward a header VERBATIM. The metadata
+  //                      key is the lowercased header name; no
+  //                      prefix is stripped (that is what
+  //                      header_renames is for).
+  //   extend_defaults  — keep the W3C default set (X-Request-Id,
+  //                      traceparent, tracestate, baggage) ALIVE
+  //                      next to the list above. Without it the
+  //                      list REPLACES the defaults, and a
+  //                      correlation id stops reaching the
+  //                      backend the moment a project declares
+  //                      its first custom header — silently, and
+  //                      only in production, where tracing is the
+  //                      thing you notice missing last.
+  //   header_renames[] — forward under a DIFFERENT key.
+  //
+  // `extend_defaults` needs a fixture that reads BOTH sides: with
+  // one header declared, "kept the defaults" and "replaced them
+  // with a set that happens to include this one" produce the same
+  // response. 0500 asserts the default set's X-Request-Id AND the
+  // declared X-Client-Version in the same call.
+  //
+  // The rename entry is a SECOND route to `w17-language`, next to
+  // the auto-installed Accept-Language one. A deployment behind a
+  // proxy that rewrites Accept-Language needs its own carrier, and
+  // the pair is also what makes the auto-install legible: 0501
+  // (Accept-Language) and 0502 (X-User-Locale) reach the same
+  // metadata key through different declarations.
+  metadata_propagation: {
+    headers:         [ "X-Client-Version" ],
+    extend_defaults: true,
+    header_renames: [
+      { http: "X-User-Locale", metadata: "w17-language" }
+    ]
+  },
+
+  groups: [
+    {
+      prefix:      "/auth",
+      description: "Identity surface served turnkey by the `auth` plugin — no hand-written handler. SignUp registers a fresh user + issues a bearer token; SignIn exchanges email+password for a token.",
+      endpoints: [
+        // SignUp + SignIn are unauthenticated — the caller has no
+        // token yet, so they opt out of the Bearer auth middleware.
+        // Both respond with `{ user_id, token }`; the e2e runner
+        // captures `token` and reuses it as the Bearer on every
+        // subsequent authenticated request. Served by the plugin's
+        // `sign_up_turnkey` / `sign_in_turnkey` features.
+        // URL-based tenancy: `{tenant_slug}` binds (PATH_VAR) into
+        // SignUpReq.tenant_slug, so POST /api/v1/auth/<slug>/register
+        // signs the new user up INTO that tenant — the plugin's SignUp
+        // handler resolves the slug to a tenant id + stamps it on the
+        // user (tenant_scope). Host-based tenancy would instead forward
+        // the Host header; this demo wires the URL form.
+        // SignIn checks a password, so only a failed attempt spends the
+        // gateway's per-address limit; SignUp, which creates an account,
+        // spends on every request (the default). Endpoints declared here
+        // rather than through the plugin's preset carry their own mode.
+        { ref: "auth.AuthService.SignUp", method: POST, path: "/{tenant_slug}/register", exclude_auth: true },
+        { ref: "auth.AuthService.SignIn", method: POST, path: "/login",    exclude_auth: true, public_limit: PUBLIC_LIMIT_FAILED_ONLY }
+      ]
+    },
+    {
+      prefix:      "/public",
+      description: "Capability links — routes a recipient opens from a share URL with no account and no session. Authenticated, not public: the credential is the path token, resolved by PublicLinkAuthService into the same AuthResp a signed-in principal produces, so scopes and ACL apply exactly as everywhere else.",
+      endpoints: [
+        // The pair exists because ONE endpoint could not prove the
+        // claim. `public_token` is globally unique (it has to be —
+        // the auth method is handed a token and must answer which
+        // tenant owns it), which makes the by-token read below
+        // self-isolating: delete the scope filter and its answer is
+        // unchanged. So it proves the link authenticates, nothing more.
+        //
+        // The related-notes list is the detector. Its DQL carries no
+        // token at all; the only thing between it and every other
+        // tenant is the auto-WHERE fed by the scope this link's auth
+        // method returned. That endpoint is also the feature's claim
+        // made concrete — an `exclude_auth` + hand-written-WHERE
+        // implementation of the same link could not offer it, because
+        // there would be no scope to filter by.
+        //
+        // Neither carries `exclude_auth`. The parser refuses that
+        // combination outright: `credential` says the request HAS an
+        // identity arriving in the URL, `exclude_auth` says it has
+        // none, and an endpoint claiming both would extract a token
+        // and then skip the call that consumes it.
+        { ref: "tasks.TaskQuery.GetTenantNoteByPublicToken", method: GET,
+          path: "/notes/{public_token}",
+          credential: { path_param: "public_token" } },
+        { ref: "tasks.TaskQuery.ListTenantNotesForPublicLink", method: GET,
+          path: "/notes/{public_token}/related",
+          credential: { path_param: "public_token" } },
+        // The QUERY-string form of the same credential. Both slots exist,
+        // so both are exercised: extraction runs through a different
+        // runtime helper per slot, and the vocabulary ratchet flags a
+        // declaration no example writes.
+        { ref: "tasks.TaskQuery.GetTenantNoteSummaryByPublicToken", method: GET,
+          path: "/note-summary",
+          credential: { query_param: "public_token" } }
+      ],
+      streams: [
+        // The same capability link on a STREAM.
+        //
+        // `credential` means here what it means on a unary endpoint, and
+        // the extraction is the shared helper. What had to land first was
+        // the RUNTIME POLICY: a stream authenticates ONCE at upgrade, so
+        // without periodic re-auth a revoked link kept feeding an open
+        // connection until the socket dropped. The watchdog covers EVERY
+        // authenticated stream on the surface, not just this one — the
+        // hole predated capability links, it was only survivable because
+        // session clients reconnect constantly and this one never does.
+        { ref: "tasks.TasksService.StreamPublicNoteUpdates",
+          path: "/notes/{public_token}/updates",
+          credential: { path_param: "public_token" } }
+      ]
+    },
+    {
+      prefix:      "/users",
+      description: "User accounts + sessions",
+      endpoints: [
+        // Storage-tier query proxied straight by the gateway —
+        // the one direct example per the e2e spec's facade-first
+        // rule (R6).
+        { ref: "users.UserQuery.GetUser",            method: GET,  path: "/{user_id}" },
+        { ref: "users.UserQuery.ListUsersWithTasks", method: GET,  path: "/with-tasks" },
+
+        // query_expand. The Filter
+        // submessage's leaf scalars (display_name_prefix,
+        // min_status) flatten into top-level URL query
+        // params:
+        //
+        //   GET /users?cursor=42&limit=10&display_name_prefix=foo&min_status=ACTIVE
+        //
+        // instead of forcing the caller to nest them inside
+        // the `filter` JSON shape. The gateway re-builds the
+        // submsg from the flat URL before forwarding to the
+        // storage layer; clients see a flat URL, the gRPC
+        // contract stays nested.
+        { ref: "users.UsersService.ListUsers",     method: GET,  path: "",
+          query_expand: ["filter"] },
+
+        { ref: "users.UsersService.GetUsersByIds", method: POST, path: "/by-ids" },
+
+        // The DDL surface. Exposed over REST because every claim the
+        // table's indexes and CHECK constraints carry is about which
+        // writes the DATABASE admits — a claim no emitted artefact can
+        // settle, only a live Postgres refusing one insert and taking
+        // the next.
+        //
+        // The read side is here for the same reason the write side is:
+        // a rejected insert and a rejected insert that also lost a
+        // sibling row produce the same error, so every refusal case
+        // reads the table back.
+        //
+        // Static path segments, so neither collides with the
+        // `/{user_id}` template above (`/with-tasks` already proves
+        // static beats param on this prefix).
+        { ref: "users.DirectoryCardMutation.CreateDirectoryCard", method: POST, path: "/directory-cards" },
+        { ref: "users.DirectoryCardQuery.ListDirectoryCards",     method: GET,  path: "/directory-cards" },
+        { ref: "users.DirectoryCardQuery.GetDirectoryCard",       method: GET,  path: "/directory-cards/{id}" },
+
+        // The one read of the column this project added to the auth
+        // plugin's own table. Exposed because a merged column nobody
+        // can read is the same shape of promise as an escape hatch
+        // nobody ran — and because the DEFAULT it comes back carrying
+        // is what says the plugin's sign-up INSERT, which knows nothing
+        // about the column, still left a usable row behind.
+        //
+        // BY-ID LOOKUP, DELIBERATELY. `auth.User.tenant_id` is a plain
+        // column the plugin SOURCES the tenant scope from, not a
+        // `(w17.db.scope)` axis, so a project query over `auth_user`
+        // gets no automatic tenant predicate — reading it by id reads
+        // across tenants. That is the right contract for THIS value and
+        // only for this value: it is a consent flag for a PUBLIC
+        // directory, so "is this account listable" is not tenant-private
+        // information by construction. The endpoint is still ACL-gated
+        // like every other one in this registry.
+        //
+        // Do not copy the shape for anything the tenant owns. A project
+        // column belongs on a project table with its own scope axis
+        // (see tasks.TenantNote); an extension message cannot declare
+        // one, which is another reason extensions are for columns the
+        // plugin's identity genuinely owns.
+        { ref: "users.DirectoryCardQuery.GetDirectoryOptIn",      method: GET,  path: "/{user_id}/directory-opt-in" },
+
+        // The per-column VALUE-RULE surface (users.UserDirectoryPlan).
+        // Exposed over REST for the same reason the card is: a value
+        // set, a regex and a digit budget are all claims about which
+        // writes the request rules and the DATABASE admit, and no
+        // emitted artefact settles that — only a live Postgres taking
+        // one insert and refusing the next.
+        //
+        // The read is here because two of those claims are about a
+        // value that was ACCEPTED: a JSON key navigated out of a
+        // document, and a fee stored at the declared scale.
+        { ref: "users.DirectoryPlanMutation.CreateDirectoryPlan", method: POST, path: "/directory-plans" },
+
+        // The whole-message write. Exposed because the value rules that
+        // travel from the COLUMN to the REQUEST reach it one message deep,
+        // and at one point they did not reach it at all — e2e 0518
+        // is the difference, and it needs a route to send through.
+        { ref: "users.DirectoryPlanMutation.ReplaceDirectoryPlan", method: PUT, path: "/directory-plans/{id}" },
+        { ref: "users.DirectoryPlanQuery.GetDirectoryPlan",       method: GET,  path: "/directory-plans/{id}" },
+        { ref: "users.DirectoryPlanQuery.ListDirectoryPlans",     method: GET,  path: "/directory-plans" },
+        { ref: "users.DirectoryPlanQuery.ListDirectoryPlansInRegion", method: GET, path: "/directory-plans/in-region" },
+
+        // The two emit hosts. Both are exposed because the emit TIER is
+        // what separates them and the tier is only observable from
+        // outside: a gateway emit fires for a request that came in
+        // through this surface and for nothing else, so the surface is
+        // where the difference is made.
+        { ref: "users.DirectoryPlanMutation.UpgradeDirectoryPlan",  method: POST, path: "/directory-plans/{id}/upgrade" },
+        { ref: "users.DirectoryPlanMutation.RetireDirectoryPlan",   method: POST, path: "/directory-plans/{id}/retire" }
+      ]
+    },
+    {
+      // The DQL-language surface. Six reads, each one spelling a
+      // construct this example had never written — the EXISTS chain
+      // shortcut in both its arms, a GROUP BY that leans on the primary
+      // key, an aggregate attributed to an enclosing query level, `%`
+      // over the numeric kinds, and a JSON key that needs quoting.
+      //
+      // They are REST-exposed rather than left to a shape assertion
+      // because the failure mode of every one of them is a WRONG NUMBER
+      // rather than an error. A dropped FK predicate in the expanded
+      // EXISTS still emits valid SQL; so does a modulo guard that
+      // refused the wrong operand and made someone rewrite the query
+      // around it. Only a seeded database answering the question settles
+      // which of those happened.
+      prefix:      "/campaigns",
+      description: "Directory campaigns — the DQL constructs no example had written",
+      endpoints: [
+        { ref: "users.CampaignQuery.ListCampaignsOnChannel",      method: GET, path: "/on-channel" },
+        { ref: "users.CampaignQuery.ListCampaignsWithHeavyEvent", method: GET, path: "/with-heavy-event" },
+        { ref: "users.CampaignQuery.CampaignActivity",            method: GET, path: "/activity" },
+        { ref: "users.CampaignQuery.ListFlightBuckets",           method: GET, path: "/flight-buckets" },
+        { ref: "users.CampaignQuery.FlightWeights",               method: GET, path: "/flight-weights" },
+        { ref: "users.CampaignQuery.ChannelBreakdown",            method: GET, path: "/channel-breakdown" },
+        { ref: "users.CampaignQuery.ListCampaignsFromSource",     method: GET, path: "/from-source" },
+        { ref: "users.CampaignQuery.GetCampaignAudienceSource",   method: GET, path: "/{id}/audience-source" }
+      ]
+    },
+    {
+      // The `kv_atomic` host. Nothing in the cache module reached REST
+      // before this group: its methods are called by the facade, and a
+      // facade-internal write is exactly the kind of surface a live
+      // suite cannot see. The annotation's claim is all-or-nothing
+      // across two Redis commands, and the only way to falsify it is to
+      // read BOTH keys afterwards — so the read has to be reachable too.
+      //
+      // Three endpoints, one per role in that argument: issue the token
+      // a rotation will revoke, rotate, then read either hash back.
+      prefix:      "/api-tokens",
+      description: "Redis-backed API token cache — the kv_atomic fixture",
+      endpoints: [
+        { ref: "cache.SessionCacheMutation.IssueApiToken", method: POST, path: "" },
+        { ref: "cache.SessionCacheMutation.RotateToken",   method: POST, path: "/rotate" },
+        { ref: "cache.SessionCacheQuery.GetApiToken",      method: GET,  path: "/{token_hash}" },
+
+        // The rest of the KV verb set. GET and DEL were the only Redis
+        // commands this example had ever emitted; MGET, EXPIRE, PERSIST
+        // and the cross-op handover are all reachable from here.
+        //
+        // Multi-key reads are POST rather than GET: the key list is a
+        // repeated field and a path segment cannot carry one. The two
+        // list endpoints differ only in the table's declared layout, so
+        // a live pair reads the layout dispatch and nothing else.
+        { ref: "cache.SessionCacheQuery.ListApiTokens",           method: POST, path: "/list" },
+        { ref: "cache.SessionCacheMutation.RefreshApiToken",      method: POST, path: "/refresh" },
+        { ref: "cache.SessionCacheMutation.PersistApiToken",      method: POST, path: "/persist" },
+        { ref: "cache.SessionCacheMutation.RevokeTokenPresence",  method: POST, path: "/revoke-presence" }
+      ]
+    },
+    {
+      // The HASH-layout side of the same verbs. It gets its own prefix
+      // because it is a different table, and its own endpoints because
+      // the layout — not the DQL — is what picks the emitted body: the
+      // JSON table's multi-key read is one MGET, this one is a pipeline
+      // of HGETALLs, and the same split runs through the cross-op
+      // handover. One endpoint per table is the only way a live case
+      // can tell the two apart.
+      // `CachedSession` is the obvious HASH table and deliberately NOT
+      // the one used here: it IS authentication state, and a public
+      // endpoint that writes one would let any caller mint a session
+      // for any user id. A fixture that has to be reachable from the
+      // outside gets its own table rather than a hole in the auth
+      // model.
+      prefix:      "/device-profiles",
+      description: "Redis-backed device profiles — the HASH-layout verb set",
+      endpoints: [
+        { ref: "cache.DeviceProfileMutation.SetDeviceProfile",        method: POST, path: "" },
+        { ref: "cache.DeviceProfileQuery.GetDeviceProfile",           method: GET,  path: "/{device_id}" },
+        { ref: "cache.DeviceProfileQuery.ListDeviceProfiles",         method: POST, path: "/list" },
+        { ref: "cache.DeviceProfileMutation.RevokeDeviceSession",     method: POST, path: "/revoke-session" }
+      ]
+    },
+    {
+      // The presence cache's own read/write pair. It is here for the
+      // cross-op chains and nothing else: they delete a presence record
+      // keyed by a user id that exists only INSIDE the value their first
+      // op decoded, and Redis DEL on a missing key succeeds silently.
+      // Without a way to plant a record and ask for it afterwards, a
+      // chain that bound zero and a chain that bound the right id are
+      // the same 200.
+      prefix:      "/presence",
+      description: "Redis-backed presence cache — the observable end of the cross-op chains",
+      endpoints: [
+        { ref: "cache.UserPresenceMutation.SetUserPresence", method: POST, path: "" },
+        { ref: "cache.UserPresenceQuery.GetUserPresence",    method: GET,  path: "/{user_id}" }
+      ]
+    },
+    {
+      // The HASH_BUCKETED host. `UserSession` declared the layout for a
+      // long time without anything ever ADDRESSING a bucket — the only
+      // read it had was the cross-capability fan-out, which HGETALLs the
+      // whole hash and never resolves a composite key.
+      //
+      // The three endpoints are the smallest set that can tell a correct
+      // composite key from a broken one, and the discriminating case is
+      // the SAME session id under two different users: with the bucket
+      // half dropped, those two are one entry and the second write eats
+      // the first. Nothing about the individual round-trip would say so
+      // — the write acks and the read returns a session either way.
+      prefix:      "/user-sessions",
+      description: "Redis HASH_BUCKETED sessions — one hash per user, one field per device",
+      endpoints: [
+        { ref: "cache.UserSessionMutation.UpsertUserSession", method: POST,   path: "" },
+        { ref: "cache.UserSessionQuery.GetUserSession",       method: GET,    path: "/{user_id}/{session_id}" },
+        { ref: "cache.UserSessionMutation.DeleteUserSession", method: DELETE, path: "/{user_id}/{session_id}" }
+      ]
+    },
+    {
+      prefix:      "/tasks",
+      description: "Task CRUD + listings + cache-aware composition",
+      endpoints: [
+        // Storage-tier reads exposed directly (the frontend
+        // developer's quick-win path).
+        { ref: "tasks.TaskQuery.CountTasksByCategory",       method: GET, path: "/by-category-counts" },
+
+        // The nullable-enum host. Exposed over REST because the fact it
+        // proves is only observable from OUTSIDE: `resolution IS NULL`
+        // answers a question about the COLUMN, and a proto3 enum read
+        // back through any surface reports 0 for a NULL and for a stored
+        // 0 alike.
+        { ref: "tasks.TaskQuery.GetTaskIfUnresolved",        method: GET, path: "/{id}/unresolved" },
+        // An enum-name literal against a scalar subquery — see the method.
+        { ref: "tasks.TaskQuery.ListCommentsWhileTaskOpen",  method: GET, path: "/{task_id}/comments-while-open" },
+        { ref: "tasks.TaskQuery.ListTasksByPriorityBucket",  method: GET, path: "/by-priority-bucket" },
+
+        // The cross-field-validation host. Its request is the one in
+        // this project carrying `(w17.validate)`, and it is exposed
+        // over REST so the refusals are provable end to end: every
+        // rule has a test file that asserts INVALID_ARGUMENT with the
+        // author's own message, which is the difference between "some
+        // guard fired" and "the rule under test fired".
+        { ref: "tasks.TaskQuery.ListTasksInPriorityRange",   method: GET, path: "/in-priority-range" },
+
+        // The ORDER BY-by-enum host. Exposed over REST because the
+        // per-value `sort_sql` fragments are spliced into SQL
+        // verbatim: a fragment that emits a syntax error, or a
+        // multi-key one the emitter fails to split, is a claim only a
+        // live database can settle. The three orderings it can serve
+        // are asserted one file each.
+        { ref: "tasks.TaskQuery.ListMilestonesSorted",       method: GET, path: "/milestones-sorted" },
+
+        // The milestone write + read-back pair. Both are exposed
+        // because the claims they carry — strict bounds refusing
+        // their own endpoints, and two column defaults landing on a
+        // row created without them — are claims about what a caller
+        // gets back, not about what the emitter wrote down.
+        { ref: "tasks.MilestoneMutation.CreateMilestone",    method: POST, path: "/milestones" },
+        { ref: "tasks.TaskQuery.GetMilestone",               method: GET,  path: "/milestones/{id}" },
+
+        // Cursor-paged listing. `paged: { enabled: true }`
+        // opts the gateway into base64 cursor handling: it
+        // reads `?cursor=…&limit=…`, decodes the cursor back
+        // into the storage request + keyset boundaries, runs
+        // COUNT(*) only on first page, and wraps the response
+        // with `w17.Paging`. Storage DQL is cursor-unaware.
+        { ref: "tasks.TaskQuery.ListTasksPaged",             method: GET, path: "/paged",
+          paged: { enabled: true } },
+
+        // Unpaged full list — the delivery-fallback poll source for
+        // TaskCompleted. The poller diffs whole snapshots and follows
+        // no cursor, so its source must return the working set in one
+        // response.
+        { ref: "tasks.TaskQuery.ListTasksLive",              method: GET, path: "/live" },
+
+        // Every PagedConfig knob overridden, over DQL byte-identical
+        // to `/paged` above. The duplication is forced — a method may
+        // appear in at most one endpoints[] entry — but it preserves
+        // what matters: the two endpoints differ in their paging
+        // config and in nothing a query can see, so any difference in
+        // what they return is attributable to the config.
+        //
+        // The values are chosen to be falsifiable rather than
+        // plausible:
+        //
+        //   cursor_param / limit_param — renamed off their
+        //     defaults, so a case can ask whether the DEFAULT names
+        //     still work. A rename that ADDED an alias instead of
+        //     replacing it would satisfy every test written against
+        //     the new name; only a test against the old one can
+        //     tell the two apart.
+        //   default_limit: 2 — smaller than the seeded row count,
+        //     so an endpoint ignoring it returns a different number
+        //     rather than the same one.
+        //   max_limit: 3 — the clamp is SILENT (the request is
+        //     answered, just with fewer rows than asked for), so it
+        //     has no symptom other than a count.
+        { ref: "tasks.TaskQuery.ListTasksPagedTuned", method: GET, path: "/paged-tuned",
+          paged: {
+            enabled:       true,
+            cursor_param:  "after",
+            limit_param:   "per_page",
+            default_limit: 2,
+            max_limit:     3
+          } },
+
+        // Same paging, but the storage read JOINs the category
+        // name into each row (the admin-list shape). Keyset +
+        // COUNT(*) both have to carry the JOIN — see
+        // ListTasksPagedWithCategoryReq in task_query.proto.
+        { ref: "tasks.TaskQuery.ListTasksPagedWithCategory",  method: GET, path: "/paged-with-category",
+          paged: { enabled: true } },
+
+        // Business facade — every other tasks endpoint flows
+        // through TasksService for cache-aware orchestration /
+        // distributed-tx coordination.
+        { ref: "tasks.TasksService.GetTask",             method: GET,  path: "/{task_id}" },
+        { ref: "tasks.TasksService.GetTaskWithCategory", method: GET,  path: "/{id}/with-category" },
+        { ref: "tasks.TasksService.GetTaskWithComments", method: GET,  path: "/{id}/with-comments" },
+
+        // HEADER binding for
+        // Idempotency-Key. The fields[] entry routes the
+        // request msg's `idempotency_key` field from the
+        // HTTP header rather than the JSON body (callers
+        // POST a clean payload; the dedup token rides
+        // alongside).
+        { ref: "tasks.TasksService.CreateTask",          method: POST, path: "",
+          fields: [
+            { ref: "idempotency_key", from: HEADER, http_name: "Idempotency-Key" }
+          ]
+        },
+
+        // Full bindings showcase.
+        //   - `id` auto-binds from the {id} path template.
+        //   - `if_match` HEADER for optimistic concurrency.
+        //   - `idempotency_key` HEADER for retry dedup.
+        //   - `body: "patch"` shortcut: the JSON body IS the
+        //     patch submessage's contents, unwrapped to
+        //     top-level JSON. Clients PATCH:
+        //
+        //       PATCH /api/v1/tasks/42
+        //       If-Match: 8a37c1
+        //       Idempotency-Key: 7f...
+        //       { "priority": 5 }
+        { ref: "tasks.TasksService.UpdateTaskAndInvalidate", method: PATCH, path: "/{id}",
+          body: "patch",
+          fields: [
+            { ref: "if_match",        from: HEADER, http_name: "If-Match" },
+            { ref: "idempotency_key", from: HEADER, http_name: "Idempotency-Key" }
+          ]
+        },
+
+        { ref: "tasks.TasksService.DeleteTask",          method: DELETE, path: "/{id}" },
+
+        // Delivery-fallback live-test surface. UpdateTaskStatus
+        // flips a task's status (emits TaskStatusChanged, NOT
+        // TaskCompleted) — the FE fallback poller reconstructs
+        // TaskCompleted from the DONE transition it observes via
+        // ListTasksPaged. CompleteTask emits TaskCompleted itself
+        // (server-tier) — push + poll then dedup to one delivery.
+        // The one SERVICE-MANAGED upload. `multipart: true` switches the
+        // gateway from JSON-body parsing to multipart, and the
+        // `fields[]` entry is the binding under test: the form part
+        // named `file` fills the message field `stored_path`.
+        //
+        // The two halves fail differently and both fail quietly.
+        // Without `multipart: true` the gateway reads a JSON body and a
+        // caller-supplied string lands in a column meant to hold a key
+        // the service derived. Without the FILE_PART binding — or with
+        // the wrong `http_name` — the file arrives and is dropped, the
+        // insert succeeds with an empty handle, and every status code
+        // is the one you expect.
+        { ref: "tasks.TaskMutation.UploadAttachment", method: POST, path: "/{task_id}/uploads",
+          multipart: true,
+          fields: [
+            { ref: "stored_path", from: FILE_PART, http_name: "file" }
+          ]
+        },
+        { ref: "tasks.TaskQuery.GetTaskUpload",       method: GET,  path: "/uploads/{id}" },
+
+        { ref: "tasks.TaskMutation.UpdateTaskStatus", method: POST, path: "/{task_id}/status" },
+        { ref: "tasks.TaskMutation.CompleteTask",     method: POST, path: "/{task_id}/complete" },
+        // This example's `on_empty` endpoint: an unknown email is refused as the
+        // caller's mistake (INVALID_ARGUMENT on assignee_email), not as a
+        // missing task.
+        { ref: "tasks.TaskMutation.AssignTaskByEmail", method: POST, path: "/{task_id}/assign-by-email" },
+        // This example's write guards: a correlated `NOT EXISTS` on an aliased
+        // UPDATE target, and an `on_present` op before an INSERT.
+        { ref: "tasks.TaskMutation.RetitleTask",       method: POST, path: "/{task_id}/retitle" },
+        { ref: "tasks.TaskMutation.CommentOnTask",     method: POST, path: "/{task_id}/guarded-comments" },
+        // Reachable over REST on purpose: the zero-row defect this
+        // covers is only observable end-to-end, as a status code. At
+        // the storage tier it is a wrapped sql.ErrNoRows that a shape
+        // assertion reads as "an error is returned" either way.
+        { ref: "tasks.TaskMutation.RedactTask",       method: POST, path: "/{id}/redact" },
+        // Exposed so the REST suite can BUILD a parent that has
+        // children. Without it the only comment writes in this example
+        // were the admin scenario's inline steps against a seeded
+        // parent, so a REST case could observe "no children" and
+        // never "children, then none" — which is the half that proves
+        // a tolerated zero-row op still EXECUTES rather than being
+        // skipped.
+        { ref: "tasks.TaskMutation.AddTaskComment",   method: POST, path: "/{task_id}/comments" },
+
+        // The bounded-materialization hosts. Every claim the
+        // `materialize` block makes is about what happens BETWEEN the
+        // narrow step and the fetch — window boundaries, the order the
+        // results are assembled in, the intermediate-row ceiling — and
+        // none of it is visible until a real database has produced a
+        // response. The two differ in exactly one field, so together
+        // they read that field and nothing else.
+        { ref: "tasks.TaskQuery.GetTaskAuditsBatched", method: GET, path: "/{id}/audits-batched" },
+        { ref: "tasks.TaskQuery.GetTaskAuditsCapped",  method: GET, path: "/{id}/audits-capped" },
+
+        // The cost-model hosts. Which execution strategy the
+        // optimizer picks is a static property — the generated body
+        // either keeps the JOIN or decomposes — so the assertion that
+        // reads it is a static one. What these endpoints add is the
+        // other half: that a decomposed method and a DB-planned one
+        // return the SAME rows. A strategy split that changed the
+        // answer would be a bug no static comparison could see.
+        // The locked read. Outside a caller's transaction it takes the
+        // unlocked variant, which is what an HTTP request gets — so the
+        // endpoint proves the fallback arm runs and returns the row, and
+        // the static gate proves the OTHER arm exists at all.
+        { ref: "tasks.TaskQuery.GetTaskForUpdate",     method: GET,  path: "/{id}/for-update" },
+
+        // The two nullable-through-a-JOIN reads. Both project
+        // `TaskCategory.parent_id` — NULL on every seeded row — into a
+        // DTO that declares no presence, so the SCHEMA is the only
+        // thing that knows. The INNER arm proves the value scans; the
+        // LEFT arm proves the row is still THERE, which is the half no
+        // error message would have reported.
+        { ref: "tasks.TaskQuery.GetTaskCategoryRow",   method: GET,  path: "/{id}/category-row" },
+        { ref: "tasks.TaskQuery.GetTaskCategoryRowOptional", method: GET, path: "/{id}/category-row-optional" },
+
+        { ref: "tasks.TaskQuery.GetTaskAuditByEntry",  method: GET,  path: "/{id}/audit-entry/{audit_id}" },
+        { ref: "tasks.TaskQuery.GetTaskAuditsForTask", method: GET,  path: "/{id}/audits-for-task" },
+        { ref: "tasks.TaskQuery.GetTaskAuditsFuzzy",   method: POST, path: "/{id}/audits-fuzzy" },
+
+        // The multi-row INSERT host. One request, N tuples, and the
+        // only way to tell a working splat from one that wrote the
+        // first row N times is to read the rows back.
+        { ref: "tasks.TaskMutation.AppendTaskAudits",  method: POST, path: "/{task_id}/audits" },
+
+        // The scalar-subquery-as-written-value host. An omitted
+        // `category_id` makes the subquery match nothing, and the NOT
+        // NULL column refuses the write — which is the behaviour, not a
+        // bug, and the reason codegen no longer warns about this shape.
+        // Reachable over REST so the refusal can be read the way a
+        // caller reads it.
+        { ref: "tasks.TaskMutation.SnapshotComment",   method: POST, path: "/{task_id}/snapshot-comment" },
+
+        // The transaction-knob host. `tx_isolation` and `timeout_ms`
+        // are pinned in the static gate — an isolation level is visible
+        // only under contention, a deadline only when it fires — so
+        // what this endpoint buys is the negative: with both knobs on,
+        // the method still archives the rows it names and no others.
+        { ref: "tasks.TaskMutation.ArchiveTaskBatch",  method: POST, path: "/archive-batch" }
+      ],
+      // The static-asset read path, over the same `app-uploads` kvfs
+      // connection the upload endpoint writes to. Same gateway hosts
+      // both, which is the ordinary deploy shape.
+      //
+      // TWO endpoints, because a download endpoint's settings apply per
+      // ENDPOINT and the two halves of this project's blobs want
+      // different ones — and because with a single endpoint the field
+      // SELECTOR is unobservable: `include: ["*"]` minus nothing looks
+      // exactly like no selector at all.
+      //
+      // Whichever endpoint covers a field is what rewrites it: the
+      // gateway replaces the raw storage handle in a response with a URL
+      // under that endpoint's prefix. So the selector's result is
+      // legible from the value a caller receives, and 0350 reads both.
+      downloads: [
+        {
+          // Public assets. `exclude_auth` because a URL under this
+          // prefix is handed to a browser, which will not be carrying
+          // the caller's bearer — a public asset route that demanded one
+          // would 401 every image the SPA renders.
+          path: "/files"
+          include: ["tasks.*"]
+          exclude: ["tasks.GetTaskUploadResp.storage_key"]
+          exclude_auth: true
+          // The object key IS the sha256 of the content, so the URL
+          // changes whenever the bytes do — which is exactly the
+          // condition under which `immutable` is safe.
+          cache_control: "public, max-age=31536000, immutable"
+          content_disposition: CONTENT_DISPOSITION_INLINE
+          // RELATIVE: the SPA is served from this same host, so it
+          // composes the absolute URL itself and the deployment does not
+          // need to know its own public name.
+          url_form: URL_FORM_RELATIVE
+        },
+        {
+          // The internal blob route. Same objects, different contract:
+          // addressed by key by tooling that is not a browser.
+          path: "/blobs"
+          include: ["tasks.GetTaskUploadResp.storage_key"]
+          cache_control: "no-store"
+          content_disposition: CONTENT_DISPOSITION_ATTACHMENT
+          // ETag off. The default is on and free, because the object key
+          // is the content's sha256 — and that is precisely the problem
+          // here: a strong ETag over a content hash answers "is THIS
+          // exact file stored" to anyone who can guess the bytes. On a
+          // public-asset route that is a feature; on an internal one it
+          // is a fingerprint oracle.
+          disable_etag: true
+          // Range off. These objects are small and read whole; honouring
+          // partial reads buys nothing and widens the surface a
+          // malformed Range header can reach.
+          disable_range: true
+          // ABSOLUTE: the consumers are out-of-band tools that do not
+          // share an origin with this gateway and cannot compose a
+          // relative path. Requires <PREFIX>_PUBLIC_HOST at boot.
+          url_form: URL_FORM_ABSOLUTE
+        }
+      ],
+      streams: [
+        // server-stream → SSE (auto)
+        { ref: "tasks.TasksService.StreamTasks",  path: "/stream" },
+        // bidi-stream → WS (auto)
+        { ref: "tasks.TasksService.LiveSearch",   path: "/live-search" },
+        // client-stream → WS (auto)
+        { ref: "tasks.TasksService.BulkCreateTasks", path: "/bulk" }
+      ]
+    },
+    {
+      prefix:      "/categories",
+      description: "Task-category lookups",
+      endpoints: [
+        { ref: "tasks.TaskQuery.ListCategoriesWithTaskCounts", method: GET, path: "" },
+
+        // The ACL-cascade override pair. Same group on purpose: the two
+        // sit next to each other in the generated handler file, and one
+        // of them has a permission check while the other does not.
+        { ref: "tasks.TaskLookupQuery.ListTaskCategories",    method: GET, path: "/lookup" },
+        { ref: "tasks.TaskLookupQuery.CountTasksPerCategory", method: GET, path: "/lookup/counts" }
+      ]
+    },
+    {
+      // Multi-tenant scoped notes demo. Every
+      // method on this group lives behind the data-scope
+      // auto-WHERE / INSERT auto-stamp / fail-closed guard
+      // emitted by the storage codegen for `TenantNote`
+      // (see proto/domains/app/workspace/tasks/types/models.proto).
+      // The B7 e2e suite exercises tenant isolation through
+      // these endpoints; existing /tasks coverage stays
+      // unaffected because `Task` itself is not scoped.
+      prefix:      "/tenant-notes",
+      description: "Scoped multi-tenant notes (data-scope fixture)",
+      endpoints: [
+        { ref: "tasks.TaskMutation.CreateTenantNote", method: POST, path: "" },
+        // Mints a note that carries a share-link capability.
+        // Authenticated and scoped like every other write here: the
+        // tenant comes from the caller's scope, never from the payload,
+        // so nobody can mint a link into another tenant.
+        { ref: "tasks.TaskMutation.CreateTenantNoteWithPublicLink", method: POST, path: "/with-public-link" },
+        { ref: "tasks.TaskQuery.GetTenantNote",       method: GET,  path: "/{id}" },
+        { ref: "tasks.TaskQuery.ListTenantNotes",     method: GET,  path: "" },
+
+        // The scope-BYPASSED twin of the list above
+        // (`(w17.db.bypass_scope)` on the method). Routed here so the
+        // e2e suite can prove the bypass from the outside: the same
+        // caller, the same credentials, one endpoint returning its own
+        // tenant's notes and the other returning every tenant's.
+        { ref: "tasks.TaskQuery.ListAllTenantNotes",  method: GET,  path: "/all" },
+
+        // The service-level bypass (`(w17.db.bypass_scope_service) =
+        // "*"`), whose whole service exists to work across scopes.
+        { ref: "tasks.TenantOpsQuery.CountAllTenantNotes", method: GET, path: "/all/count" },
+
+        // Scoped M:N surface. The read reaches TenantNoteTag through a
+        // JOIN, so its tenant predicate is injected onto the JOIN's ON
+        // clause rather than the WHERE; the write is the idempotent
+        // link UPSERT. Both are storage-tier methods, exposed here
+        // because the e2e suite drives them over REST.
+        { ref: "tasks.TaskMutation.AttachTenantNoteTag", method: POST, path: "/tags" },
+        { ref: "tasks.TaskMutation.EnsureTenantNoteTag", method: POST, path: "/tags/ensure" },
+        { ref: "tasks.TaskMutation.AttachTenantNoteLink", method: POST, path: "/links" },
+        { ref: "tasks.TaskMutation.BookmarkTenantNote", method: POST, path: "/bookmarks" },
+        { ref: "tasks.TaskQuery.ListTenantNotesByTag",   method: GET,  path: "/by-tag/{tag}" },
+        { ref: "tasks.TaskQuery.GetTenantNoteWithTag",   method: GET,  path: "/{id}/with-tag" },
+        { ref: "tasks.TaskQuery.ListTenantNotesPagedWithTagCount", method: GET, path: "/paged-with-tag-count",
+          paged: { enabled: true } },
+
+        // Same scoped INSERT, but routed THROUGH the business facade
+        // (TasksService) instead of straight to storage. This is the
+        // one endpoint that crosses gateway → business → storage with a
+        // scoped storage method at the end, so it proves the business
+        // tier relays `x-w17-scope-tenant_id` onward to storage over the
+        // wire. Without that relay the storage scope guard fails closed
+        // (403) even though the direct CreateTenantNote endpoint above
+        // still passes — see the facade method's doc.
+        { ref: "tasks.TasksService.CreateTenantNoteViaService", method: POST, path: "/via-service" }
+      ],
+      streams: [
+        // The scoped server stream with a validated request (SSE) — the
+        // shape that generated a handler which did not compile. Exposed
+        // straight from storage, as a consumer would.
+        { ref: "tasks.TaskQuery.StreamTenantNotes", path: "/stream" }
+      ]
+    },
+    {
+      // The request-plumbing group. Everything under it is about
+      // what the GATEWAY does to a request before the backend sees
+      // it — metadata routing, a body it must not touch, a
+      // response field it must remove — so the methods are
+      // deliberately thin: a handler that did real work would let a
+      // failure be attributed to the work instead of to the
+      // plumbing.
+      prefix:      "/context",
+
+      // `name` — the explicit group identifier. Without it the
+      // token is derived from the prefix, so this group would be
+      // `session.context.…` in the generated client and `context`
+      // as the OpenAPI tag. "context" is the wrong noun for a
+      // client facade (it collides with the language's own idea of
+      // one in every target this compiler emits), which is exactly
+      // the case the field exists for. Derived and declared differ
+      // here, which is what makes the field readable at all — a
+      // `name` equal to the derived value proves nothing.
+      name:        "requestContext",
+
+      description: "Request-plumbing surface — what the gateway attaches, preserves and removes on the way through.",
+      endpoints: [
+        // The metadata mirror. Its `metadata_bindings[]` are the
+        // PER-ENDPOINT half of the story the surface-wide
+        // `metadata_propagation` above tells: same destination
+        // (outgoing gRPC metadata), different declaration site, and
+        // one source — a query parameter — that the surface-wide
+        // mechanism cannot reach at all, since it only ever reads
+        // headers.
+        //
+        // `operation_id` renames the operation the generated client
+        // and the OpenAPI document expose. Derived would be
+        // `echoRequestContext`; a caller reading `session.
+        // requestContext.read()` does not need the method name
+        // repeated back at it.
+        { ref: "users.UsersService.EchoRequestContext", method: GET, path: "",
+          operation_id: "read",
+          metadata_bindings: [
+            { ref: "X-Trace-Origin", from: HEADER,      metadata: "w17-trace-origin" },
+            { ref: "channel",        from: QUERY_PARAM, metadata: "w17-echo-channel" }
+          ] },
+
+        // The raw-body receiver.
+        //
+        // `raw_body_field` hands the handler the request body byte
+        // for byte. Every other endpoint on this surface gets a
+        // JSON→proto transcode, and for a signed webhook that
+        // transcode is not an optimisation detail: re-marshaling
+        // reorders keys and drops insignificant whitespace, so the
+        // bytes the handler would hash are not the bytes the sender
+        // signed, and every HMAC check fails for a reason no log
+        // line explains.
+        //
+        // The signature rides in a HEADER because the body is spent
+        // — a raw-body endpoint has no JSON left to carry a second
+        // field, which is why `fields[]` is not optional here.
+        //
+        // `response_omit_fields` removes the internal dispatch
+        // target from the REST answer while leaving it on the gRPC
+        // contract. The handler always sets it, so an omit list
+        // that did nothing would be visible as a value rather than
+        // as an absence.
+        { ref: "users.UsersService.IngestSignedWebhook", method: POST, path: "/webhooks",
+          raw_body_field:       "payload",
+          response_omit_fields: ["internal_route"],
+          fields: [
+            { ref: "signature", from: HEADER, http_name: "X-Signature" }
+          ] }
+      ],
+      streams: [
+        // The public directory feed — the one stream on this
+        // surface that is not a task stream, and the host for all
+        // three RestStream knobs that had no example.
+        //
+        //   transport_override — the method is server-streaming, so
+        //     the auto-derivation would pick SSE. WS is forced
+        //     because the consumer is a long-lived dashboard that
+        //     also sends filter frames back; an SSE route would
+        //     have no uplink to send them on. Forcing SSE on a
+        //     non-server-stream is the parse error; this direction
+        //     is the legal one, and it is the only one whose effect
+        //     is visible (leaving the field unset on a
+        //     server-stream emits SSE, which is also what the
+        //     default emits).
+        //   exclude_auth — a browser opening a public feed carries
+        //     no bearer. Without this the route 401s every consumer
+        //     it exists for.
+        //   operation_id — same reason as the unary endpoint above:
+        //     the derived name repeats the group noun.
+        { ref: "users.UsersService.StreamDirectoryUpdates", path: "/directory-feed",
+          transport_override: STREAM_TRANSPORT_WS,
+          exclude_auth:       true,
+          operation_id:       "watchDirectory" }
+      ]
+    }
+  ]
+};

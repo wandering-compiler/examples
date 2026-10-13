@@ -1,0 +1,22 @@
+# `tx_isolation` + `timeout_ms` on ArchiveTaskBatch.
+#
+# Neither knob is directly observable from a response: an isolation
+# level shows up only under contention, a deadline only when it fires.
+# Both are pinned in the static gate. What a live case CAN prove is that
+# the method still does its job with them on — a wrong `TxOptions` value
+# or a mis-scaled deadline surfaces here as a call that fails or hangs
+# rather than as a wrong number.
+#
+# Category 3 holds exactly one seeded task (700005, status 3 = DONE), so
+# the archive has a definite row to move and 0376 reads it back. The
+# other seeded tasks are status 1 and 2 in categories 1 and 2 — outside
+# both terms of the predicate — which is what makes the read-back in
+# 0377 a statement about the WHERE rather than about the archive having
+# run at all.
+method: tasks.TaskMutation.ArchiveTaskBatch
+pre:
+    - auth/auth.yaml
+input:
+    category_id: 3
+expect:
+    id: {matcher: eq, value: "700005"}

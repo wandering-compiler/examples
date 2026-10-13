@@ -1,0 +1,22 @@
+# The same gated read the REST suite exercises in 0180, over MCP.
+#
+# Its value is the COMPARISON: one method, one permission, two
+# transports. A tool that answers here and in 0180 proves MCP reaches the
+# same handler through the same gate, rather than a parallel path that
+# happens to work. If MCP ever diverges — a different permission, a
+# different backend tier, a stale registration — this case and 0180 stop
+# agreeing, and neither alone would show it.
+#
+# `user_id: 1` mirrors 0180 deliberately. The seeded user is addressed by
+# its own int64 key; `${auth.user_id}` is the AUTH PLUGIN's UUID for the
+# account that just signed up, a different identity space entirely — the
+# proto refuses it as "invalid value for int64 field userId", which is
+# the compiler being right and this comment being the record of it.
+method: users.UserQuery.GetUser
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+expect:
+    id: {matcher: not_empty}
+    email: {matcher: not_empty}

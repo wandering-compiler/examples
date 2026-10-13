@@ -1,0 +1,17 @@
+# The KV-only read, addressed by BOTH key halves —
+# `HGET user_sessions:1 e2e-shared-device-token`.
+#
+# `device` is the whole assertion. Both entries exist, both are reachable
+# and both carry the same field name, so the only thing that can be wrong
+# is WHICH hash was opened. A dropped bucket half returns whatever the
+# last writer put under that field, which is 0531's value.
+method: cache.UserSessionQuery.GetUserSession
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    session_id: e2e-shared-device-token
+expect:
+    user_id: {matcher: eq, value: "1"}
+    session_id: {matcher: eq, value: e2e-shared-device-token}
+    device: {matcher: eq, value: web/firefox}

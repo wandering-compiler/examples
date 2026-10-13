@@ -1,0 +1,22 @@
+# ADMIN-ONLY cursor paging, page 2 — resumes TaskFeed from the cursor 0045
+# captured. Captures are scenario-wide, so `${task_feed.next_cursor}` flows
+# in from the previous file.
+#
+# The handler DecodeCursor's it with the same per-boot HMAC key that
+# encoded it, seeks the keyset past id 700004 (DESCending, so "past" means
+# BELOW it) and returns the next two rows. Exact ids prove this is the
+# successor page and not a repeat of page 1. `limit` is re-sent because the
+# cursor carries the boundary + total + direction but NOT the page size —
+# omitting it would fall back to the admin default of 50 and pull the rest
+# of the table (same reasoning as 0041).
+method: admin.TaskFeed.List
+pre:
+    - auth/admin.yaml
+input:
+    limit: 2
+    cursor: ${task_feed.next_cursor}
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    paging.total: {matcher: eq, value: "5"}
+    items.0.id: {matcher: eq, value: "700003"}
+    items.1.id: {matcher: eq, value: "700002"}

@@ -1,0 +1,12 @@
+# One HGETALL, decoded field by field. It is here so the multi-key case
+# below has a baseline: if this one is wrong the list case tells us
+# nothing about pipelining, only that the write was broken.
+method: cache.DeviceProfileQuery.GetDeviceProfile
+pre:
+    - auth/auth.yaml
+input:
+    device_id: e2e-device-alpha
+expect:
+    device_id: {matcher: eq, value: e2e-device-alpha}
+    user_id: {matcher: eq, value: "1"}
+    platform: {matcher: eq, value: web/firefox}

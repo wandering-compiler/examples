@@ -1,0 +1,16 @@
+# The OrgMemberships page (auth plugin, org_membership) — admin-only
+# cursor-paged over a LEFT JOIN projection (member email + org name), the
+# shape that used to be misread as a JOIN fan-out. The keyset stays on the
+# membership side (m.created_at DESC, m.id DESC), never on a joined
+# nullable column.
+method: admin.OrgMemberships.List
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    memberships: {matcher: count, op: '>=', value: 1}
+    # Prove the list projects the member's EMAIL (via LEFT JOIN User),
+    # not a raw user_id UUID, and carries the org id for the FK link.
+    memberships.0.member: {matcher: regex, pattern: '@'}
+    memberships.0.organization: {matcher: not_empty}
+    paging.total: {matcher: not_empty}

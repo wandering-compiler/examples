@@ -1,0 +1,39 @@
+# What the upload response cannot say: WHERE the file went.
+#
+# `expected_objects: 100000` over `max_per_bucket: 100` derives
+#
+#   depth = ceil( log256( 100000 / 100 ) ) = ceil( log256(1000) ) = 2
+#
+# so the handle is `<bucket_path>/<2 hex>/<2 hex>/<object key>`. The base
+# is 256, not max_per_bucket: one sub-bucket level is one BYTE of the
+# hash. The numbers land between the powers on purpose — depth is 2 and
+# not 1 or 3 — so a derivation that dropped the ceiling, or took
+# max_per_bucket as the base, yields a different number of path segments
+# and the regex below counts them.
+#
+# 🔴 The first version of this case expected THREE segments, because
+# `field.proto` documented the derivation as
+# `ceil(log_max_per_bucket(expected_objects))` — a formula the
+# implementation does not use. The numbers here were chosen from that
+# doc, and the live run is what disagreed. The doc is fixed; this
+# comment stays as the reason the assertion is spelled out rather than
+# copied.
+#
+# The object key is the sha256 of the uploaded body, so the shape below
+# also proves the gateway stored a FILE rather than nothing — a dropped
+# file part still yields a handle, and every status code on the way
+# stays the one you expect.
+method: tasks.TaskQuery.GetTaskUpload
+pre:
+    - auth/auth.yaml
+input:
+    id: ${task_upload.id}
+# 🔴 The handle is no longer what this endpoint RETURNS. Declaring the
+# `/files` download endpoint made the gateway rewrite every covered
+# UPLOADED_* response field into a URL, so the raw key now appears only
+# inside one. That is the feature working, not a regression — and it is
+# why the pattern below is anchored on the PREFIX plus the key rather
+# than on the key alone. 0350 is what asserts the rewriting itself.
+expect:
+    task_id: {matcher: eq, value: "700001"}
+    stored_path: {matcher: regex, pattern: "^/api/v1/tasks/files/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}$"}

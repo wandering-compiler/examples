@@ -1,0 +1,21 @@
+# Formatting never touches the JSON wire — the contract the JSON dialect
+# states and display formatting depends on.
+#
+# `created_at` IS a formatted column: the admin spec carries a `datetime`
+# template for it, so the SPA renders `26.07.2026 14:03` for a Czech viewer
+# and `26/07/2026 14:03` for an English one. This step asserts the SERVER
+# still sends RFC 3339 — the moment it does not, sorting and filtering break
+# for every consumer and the "presentation only" guarantee is gone.
+#
+# The rendered half of the same claim — that the committed spec and the
+# shipped runtime turn this exact wire shape into different text per locale —
+# is `make check-admin-i18n`. Together they are the whole proof: raw on the
+# wire, localized on the screen.
+method: admin.Users.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b2
+expect:
+    id: {matcher: not_empty}
+    created_at: {matcher: regex, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"}

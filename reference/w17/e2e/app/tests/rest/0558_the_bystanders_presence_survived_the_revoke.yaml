@@ -1,0 +1,11 @@
+# The other half, and the reason 0557 is not enough by itself: a chain
+# that bound the wrong field, or that flushed rather than deleted, would
+# also make user 1 disappear. Only the pair says the right key went.
+method: cache.UserPresenceQuery.GetUserPresence
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 2
+expect:
+    user_id: {matcher: eq, value: "2"}
+    current_route: {matcher: eq, value: /e2e/bystander}

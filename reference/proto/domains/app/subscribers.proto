@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+// Subscriber-registry sentinel
+// for the `app/tasks` module. Drives the eventbus codegen
+// to emit `cmd/app-subscribers/dispatch.go` (one surface
+// per domain).
+//
+// Three subscriptions across two logical subscribers:
+//
+//   Subscriber 1 — counter maintenance
+//     TaskCompleted → TasksBusiness.OnTaskCompletedCounter
+//
+//   Subscriber 2 — Redis cache invalidation
+//     TaskStatusChanged → TasksBusiness.OnTaskStatusChangedCacheInvalidate
+//     TaskCompleted    → TasksBusiness.OnTaskCompletedCacheInvalidate
+//
+//   Subscriber 3 — directory placements
+//     DirectoryPlanRetired → UsersService.OnDirectoryPlanRetired
+//
+// The third one is the domain's SECOND event PACKAGE (`app/users`
+// alongside `app/tasks`) and its second handler service — see its
+// comment at the entry itself.
+//
+// `TaskViewed` (telemetry channel) is intentionally NOT
+// subscribed here — its channel is TRANSPORT_MEMORY which
+// the standalone subscriber surface refuses by design (see
+// eventbus-fixture's same comment); a future co-located
+// subscriber would consume it. Same applies to TaskCreated /
+// TaskAssigned / TaskCommentAdded: registered events
+// without subscribers are valid — open hooks for the next
+// iteration.
+
+package e2e.app.tasks;
+
+
+import "w17/event_subscribers.proto";
+
+option (w17.event_subscribers) = {
+  subscriptions: [
+    {
+      event:   "TaskCompleted"
+      channel: "tasks"
+
+      // `topic_filter` — the glob the runtime matches an emitted
+      // event's topic against, pushed down to the transport where the
+      // transport supports it.
+      //
+      // The default is `**`, every topic on the channel, and that stopped
+      // being a harmless default the moment the `users` module started
+      // shipping `directory.plan.*` on this same channel: an unfiltered
+      // consumer asks NATS for every message the domain produces and
+      // then discards the ones whose envelope tag it does not handle.
+      // The filter keeps the wire traffic proportional to what this
+      // surface reacts to.
+      //
+      // `task.*` and not the exact topic on purpose — the next task
+      // event should reach the same consumer without re-provisioning
+      // it, and a one-topic filter has to be edited every time the
+      // module grows.
+      topic_filter: "task.*"
+
+      // `retry` — the SUBSCRIBER-side override, applied on top of the
+      // channel + per-event cascade.
+      //
+      // It goes on THIS subscription and not on the two cache-
+      // invalidation ones because the counter is the handler whose
+      // failure is permanent: a dropped increment is a number that
+      // stays wrong forever, while an invalidation that never ran is
+      // undone by the next write or by the entry expiring. The event's
+      // own retry (10 deliveries / 60s) is already the aggressive end
+      // of what the channel carries; this asks for more still, because
+      // the consumer's need outlives the event's.
+      //
+      // ⚠️ THE ROLLUP IS max(), NOT per-subscriber. Today's broker
+      // consumer model is per-CHANNEL, so the generated
+      // `ChannelRetries()` aggregates every event and subscription on
+      // a channel through max(MaxDeliver, AckWait) — per-subscriber
+      // strictness is parked (see the generated channels.go). The
+      // practical consequence is one-directional and worth writing
+      // down: a subscription can only ever ASK FOR MORE. A value below
+      // the channel's rolled-up figure is accepted, changes nothing,
+      // and says so nowhere — so an author reaching for this field to
+      // make one consumer give up EARLIER is writing a comment, not a
+      // config.
+      retry: {
+        max_deliver:      20
+        ack_wait_seconds: 120
+      }
+
+      handler: "tasks.TasksBusiness.OnTaskCompletedCounter"
+    },
+    {
+      event:   "TaskStatusChanged"
+      channel: "tasks"
+      topic_filter: "task.*"
+      handler: "tasks.TasksBusiness.OnTaskStatusChangedCacheInvalidate"
+    },
+    {
+      event:   "TaskCompleted"
+      channel: "tasks"
+      topic_filter: "task.*"
+      handler: "tasks.TasksBusiness.OnTaskCompletedCacheInvalidate"
+    },
+    {
+      // The domain's other MODULE, on both halves of the tuple: the
+      // event is declared in `app/users`, and so is the service that
+      // handles it. Every subscription above names an `app/tasks` event
+      // handled by an `app/tasks` service, which is one Go package for
+      // the whole surface.
+      //
+      // That is the case this entry adds, and it is not decoration. The
+      // subscriber bundle's app.go used to derive ONE event-package
+      // alias — from the first subscription — and render every handler
+      // signature with it, so the moment a domain's second module got a
+      // subscription the bundle named a type in a package that does not
+      // declare it: codegen exited 0 and `go build` failed in the
+      // consumer's project. dispatch.go beside it resolved the package
+      // per subscription all along, and app.go implements dispatch.go's
+      // interface, so the two views MUST agree. An example where every
+      // surface has one event package cannot tell them apart.
+      //
+      // The handler itself is older than this entry: it was written for
+      // a co-located surface, which is refused at parse time (see
+      // proto/domains/billing/subscribers.proto), and had been sitting
+      // in the business binary with nothing able to reach it.
+      event:   "DirectoryPlanRetired"
+      channel: "tasks"
+
+      // Its own topic prefix, and the reason the `task.*` filters above
+      // exist: both modules ship on the `tasks` channel, so an
+      // unfiltered consumer would receive the other module's traffic
+      // and discard it by envelope tag.
+      topic_filter: "directory.plan.*"
+
+      handler: "users.UsersService.OnDirectoryPlanRetired"
+    }
+  ]
+};

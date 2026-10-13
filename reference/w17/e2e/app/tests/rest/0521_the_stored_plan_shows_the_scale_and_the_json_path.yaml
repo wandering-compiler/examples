@@ -1,0 +1,27 @@
+# `(w17.field).precision` / `.scale` and `(w17.field).json`, read back
+# off the row 0520 wrote. Both are claims about a value that was
+# ACCEPTED, which is why they need a read rather than a refusal.
+#
+# `monthly_fee` was sent as 19.90 and comes back unchanged — the value
+# survives the round trip through NUMERIC(10,2) bit for bit, which is
+# what `scale: 2` is for. The other half of the claim is 0519: one decimal
+# further and the request is REFUSED rather than quietly rounded. Read
+# together they say the column neither loses nor invents a digit.
+# `precision: 10` bounds the digits BEFORE the point; it is asserted where
+# it is legible — in the emitted DDL, by the static gate.
+#
+# `placement_region` is one key lifted out of the JSON document. The
+# column stores the whole document; the DQL names `p.placement.region`,
+# and without `json: true` that same text is read as an FK hop to a
+# table called `placement` and the build fails. So the value coming back
+# as `eu-central` — rather than as the document, or as nothing — is the
+# annotation and the per-dialect extraction emit together.
+method: users.DirectoryPlanQuery.GetDirectoryPlan
+pre:
+    - auth/auth.yaml
+input:
+    id: ${plan.id}
+expect:
+    monthly_fee: {matcher: eq, value: "19.90"}
+    placement_region: {matcher: eq, value: eu-central}
+    tier: {matcher: eq, value: FEATURED}
