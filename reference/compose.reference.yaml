@@ -12,8 +12,9 @@ services:
     build:
       context: .
       dockerfile: w17/services/app-storage/Dockerfile
-    env_file:
-      - w17/services/app-storage/.env
+    environment:
+      # The database a `fixtures apply` seeds is the connection's target.
+      W17_TARGET_APP_POSTGRES: postgres://app:${W17_APP_POSTGRES_DB_PASSWORD:-app}@app-postgres:5432/app?sslmode=disable
     command: ["fixtures", "apply", "--connection", "app-postgres", "--fixtures", "/w17/fixtures"]
     restart: "no"
     volumes:
