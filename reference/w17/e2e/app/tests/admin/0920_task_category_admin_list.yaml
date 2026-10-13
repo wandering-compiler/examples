@@ -9,7 +9,7 @@
 # the first row is named.
 #
 # What this proves about ACL: the page IS reachable by the wildcard
-# admin, which the endpoint permission (85) gates. The model axis is
+# admin, which the endpoint permission gates. The model axis is
 # absent by declaration.
 method: admin.TaskCategoryAdmin.List
 pre:

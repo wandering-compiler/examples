@@ -11,7 +11,7 @@
 // This method does that. It reads a BASIC credential, decides which of
 // this domain's permissions the caller holds, and returns them; the
 // generated REST handler then runs
-// `acllock.HasPermission(ids, 104 /* users.DirectoryCardQuery.ListDirectoryCards */)`
+// `acllock.HasPermission(ids, 149 /* users.DirectoryCardQuery.ListDirectoryCards */)`
 // against the slice. No hand-written check anywhere on the path.
 //
 // ⚠️ The ids are PER DOMAIN. A number that means "list directory cards"
@@ -42,8 +42,8 @@ import (
 // AclPermission enum is the catalogue. They are written here as numbers
 // because authored code has no supported way to read that lock at
 // runtime — the generated storage bundle embeds it, the project's own
-// module does not — so a gate test asserts these against the committed
-// lock instead. That test is the reconciliation step any consumer
+// module does not — so ops_auth_lock_test.go asserts these against the
+// committed lock instead. That test is the reconciliation step any consumer
 // holding stored permission references needs: an id is stable against
 // re-allocation (retired ones go to `reserved` and are never reused), but
 // a RENAME is a removal plus an addition, so both the name and the number
@@ -60,7 +60,7 @@ var opsPermissionIDs = map[string][]int32{
 	// regression that widens authority shows up as a 200 where the
 	// suite expects a 403.
 	"directory-reader": {
-		104, // users.DirectoryCardQuery.ListDirectoryCards
+		149, // users.DirectoryCardQuery.ListDirectoryCards
 	},
 	// Authenticates successfully and grants NOTHING. The negative case
 	// has to be a caller the gate REFUSES, not a caller the auth method

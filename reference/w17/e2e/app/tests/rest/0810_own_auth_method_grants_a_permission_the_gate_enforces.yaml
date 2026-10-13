@@ -2,7 +2,7 @@
 # GENERATED gate enforcing them. No hand-written permission check on the
 # path: `tasks.OpsAuthService.AuthenticateOps` returns the ids and the
 # emitted handler runs
-# `acllock.HasPermission(ids, 104 /* users.DirectoryCardQuery.ListDirectoryCards */)`.
+# `acllock.HasPermission(ids, 149 /* users.DirectoryCardQuery.ListDirectoryCards */)`.
 #
 # This is the half this example was missing. The other hand-written method
 # here (PublicLinkAuthService) proves a project can author an auth METHOD,
