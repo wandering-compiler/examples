@@ -1,0 +1,23 @@
+# The decomposed arm of the cost model, against a real database.
+#
+# `a.task_id` is indexed and not the primary key, so the optimizer
+# estimates ten times as many surviving rows as it does for a PK hit,
+# decides the fields do not fit the connection's 100 KiB budget, and
+# emits a narrowing SELECT feeding a second fetch. WHICH strategy it
+# picked is a compile-time fact; what only a live run can
+# say is that the decomposition returns the same rows a plain JOIN would.
+#
+# Five, the full seeded set for task 700005. A narrow step that lost its
+# predicate returns every audit in the table; one that kept a stale bind
+# returns none. Both are valid SQL.
+method: tasks.TaskQuery.GetTaskAuditsForTask
+pre:
+    - auth/auth.yaml
+input:
+    id: 700005
+    audit_task_id: 700005
+expect:
+    task.id: {matcher: eq, value: "700005"}
+    audits: {matcher: count, op: '==', value: 5}
+    audits.0.body_text: {matcher: eq, value: audit one}
+    audits.4.body_text: {matcher: eq, value: audit five}

@@ -1,0 +1,506 @@
+syntax = "proto3";
+
+package e2e.app.users;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+
+// User — base account record. Single-PK on the autoincrement id;
+// email is unique (data-level UNIQUE INDEX synthesised by ir.Build
+// from `(w17.field).unique`). status is a small enum for the
+// active / disabled / deleted lifecycle states.
+message User {
+  option (w17.db.table) = { name: "users" };
+
+  int64                       id            = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string                      email         = 2 [(w17.field) = {
+    type: EMAIL, unique: true,
+    validation_messages: [
+      { type: VALIDATION_UNIQUE, message: "this email address is already registered" }
+    ]
+  }];
+  string                      display_name  = 3 [(w17.field) = { type: CHAR, max_len: 120 }];
+  // Auto-hashed credential. Storage codegen wraps
+  // every assignment through passwordhash.Hash (argon2id +
+  // OWASP-2024 defaults); plain text
+  // never reaches the DB. Verify via the hand-written Login
+  // RPC's call to passwordhash.Verify(stored, plain, ...).
+  string                      password_hash = 6 [(w17.field) = { type: PASSWORD }];
+  Status                      status        = 4;
+  google.protobuf.Timestamp   created_at    = 5 [(w17.field) = { default_auto: NOW, immutable: true }];
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    ACTIVE             = 1;
+    DISABLED           = 2;
+    DELETED            = 3;
+  }
+}
+
+// LoginAuditLog — append-only PG ledger of authentication
+// events . Sessions THEMSELVES live in Redis
+// (see proto/domains/app/cache/types/models.proto:CachedSession);
+// this PG-side row is the persistent audit trail —
+// a regulator-friendly record of "who logged in / out from
+// where" that survives Redis flushes / TTL expiry.
+//
+// The pair (LoginAuditLog write + CachedSession write)
+// constitutes the canonical D41 non-atomic mutation in the
+// app domain: app.users.business.UsersService.LoginUser
+// orchestrates them sequentially, PG first (audit truth
+// wins), Redis second (best-effort; reconciliation job
+// catches missed sessions).
+message LoginAuditLog {
+  option (w17.db.table) = { name: "login_audit_log" };
+
+  int64                     id         = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  // user_id — explicit related_name, so
+  // `User u JOIN u.audit_log a`
+  // is the natural DQL.
+  int64                     user_id    = 2 [
+    (w17.field)     = { related_name: "audit_log" },
+    (w17.db.column) = { fk: "users.User", deletion_rule: CASCADE, index: true }
+  ];
+  Action                    action     = 3;
+  string                    ip_address = 4 [(w17.field) = { type: IP }];
+  string                    user_agent = 5 [(w17.field) = { type: CHAR, max_len: 512 }];
+  google.protobuf.Timestamp created_at = 6 [
+    (w17.field)     = { default_auto: NOW, immutable: true },
+    (w17.db.column) = { index: true }
+  ];
+
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    LOGIN              = 1;
+    LOGOUT             = 2;
+    SIGNUP             = 3;
+  }
+}
+
+// UserDirectoryPlan — the paid placement behind a directory card.
+//
+// A SECOND table rather than more columns on UserDirectoryCard, for the
+// same reason that one is its own table: `user_directory_cards` already
+// has steps asserting its exact contents, and every claim below is
+// about which VALUES a column will accept.
+//
+// What it carries is the half of `(w17.field)` that has no example —
+// the per-column value RULES, as opposed to the length / nullability /
+// default knobs the rest of this file already covers. Each one is
+// enforced in two places at once (a request-side check and a DDL
+// constraint), and they are chosen so a live database can tell them
+// apart:
+//
+//   choices    — a value set, from an enum's names
+//   pattern    — a regex that REPLACES the one the type implies
+//   precision  — how many digits a number may carry…
+//   scale      — …and how many of them after the point
+//   json       — the column's contents are navigable from DQL
+//   format     — how the value renders to a human
+//
+// `format` is the odd one out: it constrains nothing and is the only
+// entry here whose effect is invisible to the database.
+message UserDirectoryPlan {
+  option (w17.db.table) = {
+    name:    "user_directory_plans"
+    comment: "Paid placement for a directory card: which tier, what it costs, and where it renders."
+
+    // Two of the constraints below are emitted from `(w17.field)` value
+    // rules rather than written here, and both refuse a write with the
+    // generic default ("value violates constraint") unless named. That
+    // default is the problem this block solves for the SUITE as much as
+    // for a user: two refusals carrying the same text are two refusals
+    // a case cannot tell apart, so a test for the value SET would pass
+    // just as happily when the REGEX was what fired.
+    validation_messages: [
+      {
+        constraint: "user_directory_plans_tier_choices"
+        message:    "that placement tier is not on sale"
+      },
+      {
+        constraint: "user_directory_plans_invoice_reference_format"
+        message:    "an invoice reference looks like INV-000123"
+      }
+    ]
+  };
+
+  int64 id      = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64 user_id = 2 [
+    (w17.field)     = { related_name: "directory_plans" },
+    (w17.db.column) = { fk: "users.User", deletion_rule: CASCADE }
+  ];
+
+  // Which placement tier this plan buys.
+  //
+  // `choices` names an ENUM and the IR reads its VALUE NAMES, so the
+  // set lives in one place and the column holds names rather than
+  // numbers — a proto enum renumbered in a later revision keeps its
+  // names, and it is the names that are already in the database. One
+  // declaration produces two guards: a request-side refusal naming the
+  // field, and a `CHECK (tier IN (…))` that also refuses a write
+  // arriving from anywhere else.
+  //
+  // The emitted set OMITS the zero value: `TIER_UNSPECIFIED` is
+  // proto3's absence-of-a-choice, not a tier a plan can be sold at, so
+  // a row can never carry it.
+  string tier = 3 [(w17.field) = {
+    type: CHAR, max_len: 16,
+    choices: "e2e.app.users.UserDirectoryPlan.Tier"
+  }];
+
+  // The invoice this placement was billed on.
+  //
+  // `pattern` REPLACES the regex the type implies, and SLUG is the type
+  // on purpose: it already means `^[a-z0-9-]+$`, so the override is
+  // legible from both sides — `INV-000123` is what this pattern accepts
+  // and what SLUG's own regex refuses (uppercase), and `inv-000123` is
+  // the reverse. A pattern that merely narrowed the implied one would
+  // be satisfiable by either, and one the emitter silently dropped
+  // would leave SLUG's default in place, which the uppercase value is
+  // chosen to detect.
+  string invoice_reference = 4 [(w17.field) = {
+    type: SLUG, max_len: 32,
+    pattern: "^INV-[0-9]{6}$"
+  }];
+
+  // What the placement costs per month.
+  //
+  // Carried as a string so the wire is lossless — a JSON number would
+  // round-trip through a double and lose the guarantee the column
+  // exists to make. `precision` + `scale` are what make it different
+  // from a bare NUMERIC: ten digits, two of them after the point. The
+  // difference is only observable ON A VALUE THAT DOES NOT FIT: 19.90
+  // behaves identically under both, 19.905 is REFUSED (e2e 0519) where a
+  // bare NUMERIC would have kept all three decimals — and where the
+  // declared column, left to itself, would have silently rounded to
+  // 19.91. The refusal is emitted into the request validation, not the
+  // DDL: PostgreSQL coerces the value to the column type before any CHECK
+  // runs, so by then the digit is already gone.
+  //
+  // `format` renders it for a human and constrains nothing. The
+  // template is deliberately NOT the preset a DECIMAL already gets
+  // (`{value|decimal:2}`, derived from `scale`) — a template equal to
+  // the preset is indistinguishable from declaring none. The
+  // surrounding text becomes a msgid of its own, so a translator can
+  // put the slot where their language wants it.
+  string monthly_fee = 5 [(w17.field) = {
+    type: DECIMAL, precision: 10, scale: 2,
+    format: "{value|decimal:2} per month"
+  }];
+
+  // Where the placement renders — a document, because which surfaces a
+  // campaign buys grows per campaign and has no business being a column
+  // each.
+  //
+  // `json` leaves the STORAGE untouched (still a text column) and
+  // changes how DQL READS it: `p.placement.region` is a path into the
+  // document instead of an attempted FK hop, emitted through whichever
+  // extraction primitive the dialect has.
+  //
+  // Because that read casts `::jsonb` — in the LIST arm inside a WHERE,
+  // i.e. across every row — the annotation also constrains the WRITE: the
+  // column carries a `CHECK (placement IS JSON)` and the request refuses
+  // a non-JSON body with INVALID_JSON. Without both, one poisoned row
+  // failed every JSON-path read of this table for every caller, and the
+  // engine's 22P02 came back as a 400 blaming the reader.
+  string placement = 6 [(w17.field) = { type: TEXT, json: true }];
+
+  google.protobuf.Timestamp created_at = 7 [(w17.field) = { default_auto: NOW, immutable: true }];
+
+  enum Tier {
+    TIER_UNSPECIFIED = 0;
+    BASIC            = 1;
+    FEATURED         = 2;
+    SPOTLIGHT        = 3;
+  }
+}
+
+// UserDirectoryCard — an account's opt-in public directory entry.
+//
+// This model exists to carry the DDL surface: the table-level escape
+// hatches, the structured index vocabulary, and the column overrides.
+// It is a real shape (a user publishes one card per language, visible
+// for a window, discoverable by handle) rather than a scratch table,
+// because every claim below is settled by a live Postgres — DDL is the
+// one artefact whose correctness the compiler cannot check for itself.
+//
+// It is deliberately a NEW table. Every index / CHECK claim here is
+// about which rows a write may add, and `users` / `tasks` already have
+// steps asserting their exact contents.
+//
+// NOTE ON AUTHORED NAMES. This table sets `(w17.db.table).name`
+// explicitly, so it takes NO module prefix — and neither does anything
+// named on it. `directory_cards_window_ordered` lands in SQL under
+// exactly that name, and `validation_messages[].constraint` (which
+// matches `pg_constraint.conname`, what the database reports back at
+// write time) names the same string. A table whose name is DERIVED is
+// the other case: there the module prefix applies to the table and to
+// every name authored on it alike.
+//
+// It used to be asymmetric — the prefix reached the constraint names of
+// a table that had declined it — and getting the two halves out of step
+// was SILENT: a validation_messages entry that matches no constraint
+// simply never fired, leaving the generic default ("already exists" /
+// "value violates constraint") in place of the message written here.
+// That is now a build-time refusal that lists the table's real
+// constraint names, so this block cannot rot unnoticed again.
+message UserDirectoryCard {
+  option (w17.db.table) = {
+    name: "user_directory_cards"
+
+    // `comment` — the DB-facing description. It overrides the leading
+    // proto comment above, which is written for whoever maintains this
+    // file and says nothing a DBA reading \d+ would want.
+    comment: "Opt-in public directory entry. One published card per (account, language); handle is globally unique under C collation."
+
+    // ---- Structured indexes -------------------------------------
+    //
+    // Four entries, because each of them renders a DIFFERENT clause of
+    // CREATE INDEX and a wrong one is valid SQL that indexes the wrong
+    // thing.
+    indexes: [
+      // BRIN over the append-ordered timestamp. `method:` is the whole
+      // point of the entry — BRIN is a block-range summary, so it is
+      // the one method whose emitted `USING brin` cannot be confused
+      // with the default (an omitted method emits no USING clause at
+      // all, which is why the default is not evidence of anything).
+      {
+        name:   "directory_cards_created_brin"
+        method: BRIN
+        fields: [{ name: "created_at" }]
+      },
+
+      // The per-field modifiers, all three on ONE entry so their
+      // ORDER in the emitted column list is observable:
+      // `<col> <opclass> DESC NULLS LAST`.
+      //
+      // `nulls: NULLS_LAST` is chosen against a DESC key on purpose.
+      // PG's default for DESC is NULLS FIRST, so this is the one
+      // combination that must be rendered explicitly — pairing DESC
+      // with NULLS_FIRST would emit a clause indistinguishable from
+      // leaving `nulls` unset.
+      //
+      // `text_pattern_ops` is the built-in comparator for prefix
+      // matching under a non-C collation; it needs no extension.
+      {
+        name:    "directory_cards_handle_pattern_idx"
+        fields:  [{ name: "handle", opclass: "text_pattern_ops", desc: true, nulls: NULLS_LAST }]
+        storage: { key: "fillfactor", value: "70" }
+      },
+
+      // Partial + covering + composite unique in one index — the rule
+      // "one PUBLISHED card per account per language". All three parts
+      // are load-bearing and fail differently:
+      //
+      //   `where`   — without it this is a full unique index, and a
+      //               user could never keep a second DRAFT card in the
+      //               same language. That is the half a live insert
+      //               proves; the DDL alone cannot.
+      //   `include` — headline rides along as a stored payload so the
+      //               lookup needs no heap fetch. Wrong side of the
+      //               clause (a key column instead) silently changes
+      //               WHICH tuples collide.
+      //   composite — two fields, which is what makes the violation
+      //               attributable to no single request field, and so
+      //               what makes the table-level message below the
+      //               only place a user-facing message can come from.
+      {
+        name:    "directory_cards_public_locale_uidx"
+        unique:  true
+        fields:  [{ name: "user_id" }, { name: "locale" }]
+        where:   "is_public = TRUE"
+        include: ["headline"]
+      },
+
+      // Expression index + the transactionality escape hatch.
+      //
+      // `concurrent: false` is the interesting half. Postgres is the
+      // one dialect that defaults `concurrent` to TRUE, so every other
+      // index on this table is peeled out of the CREATE TABLE
+      // transaction and lands after COMMIT. This one asks to stay
+      // inside it — legitimate on a table that starts empty, and the
+      // only value of the field that is observable at all, since
+      // `true` is what an unset field already means here.
+      {
+        name:       "directory_cards_lower_headline_idx"
+        fields:     [{ expr: "lower(headline)" }]
+        concurrent: false
+      }
+    ]
+
+    // ---- Structured cross-column CHECK (DQL) --------------------
+    //
+    // The window must not be inverted. Authored as `checks:` rather
+    // than `raw_checks:` because the predicate is spellable in DQL, so
+    // it gets parsed at build time: a typo here is a compile error
+    // with a position, not a database refusing the whole schema at
+    // apply time.
+    checks: [
+      {
+        name:      "directory_cards_window_ordered"
+        predicate: "visible_from <= visible_until"
+      }
+    ]
+
+    // ---- Escape-hatch CHECK (opaque SQL) ------------------------
+    //
+    // A published card may not advertise confidential work. This is
+    // the escape hatch earning its keep rather than demonstrating
+    // itself: `!~*` (negated case-insensitive regex) is outside the
+    // DQL grammar, which has no regex operator and therefore no way to
+    // express "must NOT match". `(w17.field).pattern` is the positive
+    // direction only, and it is per-column, so it could not see
+    // `is_public` either.
+    //
+    // Being opaque, nothing between the annotation and the database
+    // inspects the body — which is exactly why the live case matters. A
+    // body PG rejects takes the whole schema down at apply, which is at
+    // least loud; a body PG accepts that means something OTHER than
+    // what the author intended stays invisible until a write gets
+    // through it.
+    raw_checks: [
+      {
+        name: "directory_cards_public_not_confidential"
+        expr: "is_public = FALSE OR headline !~* 'confidential'"
+      }
+    ]
+
+    // ---- Escape-hatch indexes (opaque body) ---------------------
+    //
+    // Both bodies use constructs the structured vocabulary cannot
+    // reach, and the pair differs in exactly one field so `unique` is
+    // legible: same table, same escape hatch, one emits CREATE INDEX
+    // and the other CREATE UNIQUE INDEX.
+    raw_indexes: [
+      {
+        // A partial index whose PREDICATE needs the regex operator.
+        // Structured `where` is DQL-validated, so this predicate could
+        // not be authored there — the same gap as the raw_check above,
+        // reached from the index side.
+        name: "directory_cards_senior_partial_idx"
+        body: "(user_id) WHERE headline ~* 'senior'"
+      },
+      {
+        // Handle uniqueness under an explicit collation. `COLLATE` has
+        // no slot anywhere in the structured index vocabulary, and it
+        // is not a detail: it fixes which comparison decides that two
+        // handles are the same, independently of whatever collation the
+        // database happens to be created with.
+        name:   "directory_cards_handle_c_uidx"
+        unique: true
+        body:   "(handle_slug COLLATE \"C\")"
+      }
+    ]
+
+    // ---- User-facing messages for the multi-column constraints ---
+    //
+    // Every constraint above is multi-column or expression-based, so
+    // none of them maps to a single request field and none can take a
+    // `(w17.field).validation_messages` entry. Without an entry the
+    // refusal still arrives, and still arrives as INVALID_ARGUMENT, but
+    // carrying the generic default — "value violates constraint" /
+    // "already exists" — which tells a user that something is wrong and
+    // nothing about what.
+    //
+    // Names as emitted; see the note on the message. A name that
+    // matches no constraint on this table is refused at build time.
+    validation_messages: [
+      {
+        constraint: "directory_cards_public_locale_uidx"
+        message:    "you already have a published card in this language"
+      },
+      {
+        constraint: "directory_cards_handle_c_uidx"
+        message:    "that handle is already taken"
+      },
+      {
+        constraint: "directory_cards_window_ordered"
+        message:    "the visible-from date must not be later than the visible-until date"
+      },
+      {
+        constraint: "directory_cards_public_not_confidential"
+        message:    "a published card cannot advertise confidential work"
+      }
+    ]
+  };
+
+  int64 id      = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64 user_id = 2 [
+    (w17.field)     = { related_name: "directory_cards" },
+    (w17.db.column) = { fk: "users.User", deletion_rule: CASCADE }
+  ];
+
+  // The handle a visitor types. Proto callers keep saying `handle`;
+  // storage calls the column something else.
+  string handle = 3 [
+    (w17.field)     = { type: CHAR, max_len: 64 },
+    // `name` — the SQL identifier, decoupled from the proto field.
+    // Not cosmetic here: the generated column and the raw index body
+    // below both reference `handle_slug` directly, because opaque SQL
+    // is resolved by nobody. Drop the override and the schema stops
+    // applying rather than quietly renaming a column.
+    //
+    // `comment` — the DB-facing text, overriding the field's leading
+    // comment above (which talks about proto callers, a distinction
+    // that means nothing at the database).
+    (w17.db.column) = {
+      name:    "handle_slug"
+      comment: "URL slug of the card. Unique across all cards under C collation, not per account."
+    }
+  ];
+
+  // One-line summary shown on the card. Capped at 400 characters.
+  string headline = 4 [
+    (w17.field)     = { type: CHAR, max_len: 400 },
+    // `db_type` — storage decoupled from semantics. The 400-char cap
+    // is a product rule and stays enforced as a CHECK; the STORAGE is
+    // TEXT because this column is also an INCLUDE payload on the
+    // unique index above, and a declared VARCHAR(400) buys nothing PG
+    // does not already do with TEXT.
+    //
+    // The pair is the claim: TEXT column AND the length CHECK still
+    // there. Either one alone is a different feature.
+    (w17.db.column) = { db_type: TEXT }
+  ];
+
+  // Case-folded handle the directory search matches against.
+  string search_key = 5 [
+    // `generated_expr` — computed by the database, never written by a
+    // caller. It references the SQL name `handle_slug`, not the proto
+    // name `handle`: the body is opaque SQL that nothing resolves, so
+    // this is the one place the `name` override above has to be
+    // spelled by hand.
+    (w17.db.column) = { generated_expr: "lower(handle_slug)" }
+  ];
+
+  // BCP-47 language tag. Part of the published-card uniqueness key.
+  string locale = 6 [(w17.field) = { type: CHAR, max_len: 8 }];
+
+  // Whether the card is published. Read by three of the constraints
+  // above, which is why none of them could live on a single column.
+  bool is_public = 7;
+
+  // Publication window. Both bounds are required; the ordering between
+  // them is the table-level CHECK above.
+  google.protobuf.Timestamp visible_from  = 8;
+  google.protobuf.Timestamp visible_until = 9;
+
+  google.protobuf.Timestamp created_at = 10 [(w17.field) = { default_auto: NOW, immutable: true }];
+
+  // Relevance score a search response carries. Derived per query.
+  double match_score = 11 [
+    // `exclude` — a field of the model that is NOT a column. There is
+    // nothing to persist: the value only exists relative to a query.
+    //
+    // Its proof is an ABSENCE, so it is only worth anything next to a
+    // sibling that IS there. `locale` above is an ordinary declared
+    // column on the same message, so "no column named match_score"
+    // cannot be satisfied by the whole table having gone missing.
+    //
+    // The opt-out is exclusive: pairing it with any other column knob
+    // (fk / index / db_type / generated_expr / comment / name /
+    // deletion_rule) is a build failure rather than a silent drop.
+    (w17.db.column) = { exclude: true }
+  ];
+}

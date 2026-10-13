@@ -1,0 +1,29 @@
+# The compound child-side predicate, over the rows 0572 appended.
+#
+# `(body_text LIKE '%rror%' OR body_text IS NULL) AND NOT (task_id IN
+# (:excluded))` is the first child predicate in this example that is not a
+# single bare comparison — the fan-out WHERE is partitioned by alias
+# before the optimizer estimates it, so a compound conjunct had never
+# reached the estimator at all. It also decides which rows come back,
+# which is what this case reads.
+#
+# Two of the three. `clean sweep` fails the LIKE, so a count of 3 means
+# the predicate was dropped somewhere between the DQL and the narrowing
+# SELECT — and dropping it produces valid SQL that returns a superset,
+# never an error.
+#
+# The exclusion list names a task that owns none of these rows, so the
+# negation may not change the answer. That is the point: it is on the
+# path for the estimator's sake, and an implementation that inverted the
+# negation would return zero rows here.
+method: tasks.TaskQuery.GetTaskAuditsFuzzy
+pre:
+    - auth/auth.yaml
+input:
+    id: 700001
+    excluded_task_ids: [999999]
+expect:
+    task.id: {matcher: eq, value: "700001"}
+    audits: {matcher: count, op: '==', value: 2}
+    audits.0.body_text: {matcher: eq, value: parse error alpha}
+    audits.1.body_text: {matcher: eq, value: parse error beta}

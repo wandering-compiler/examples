@@ -1,0 +1,20 @@
+# The positive case of the scoped LEFT JOIN, completing the matrix its
+# siblings start: 0158 reads a note with NO tag, 0159 a note tagged only
+# by another tenant, and this one a note carrying the caller's OWN tag.
+#
+# Without it the other two would be satisfied by a join that never
+# matches anything — an empty `tag` is the expected answer in both.
+# Here the tag must come back.
+#
+# (Auto-scaffolded when the endpoint was declared, then filled in; it
+# keeps the number the generator gave it rather than the 015x block of
+# its siblings.)
+method: tasks.TaskQuery.GetTenantNoteWithTag
+pre:
+    - fixtures/a_tenant_note_tag.yaml
+input:
+    id: ${note.id}
+expect:
+    id: {matcher: not_empty}
+    title: {matcher: not_empty}
+    tag: {matcher: eq, value: "${tag.value}"}

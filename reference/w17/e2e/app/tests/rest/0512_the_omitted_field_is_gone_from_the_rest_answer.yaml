@@ -1,0 +1,27 @@
+# `RestEndpoint.response_omit_fields`.
+#
+# `internal_route` is set on EVERY call by the handler — it is a literal
+# in the facade, not a value that depends on the request — so on the
+# gRPC contract it is never empty. The REST answer must not carry it.
+#
+# That constant is what makes `empty` an assertion here rather than a
+# tautology. `empty` matches an absent field and a zero-valued one
+# alike, so over a field the handler might legitimately leave blank it
+# would prove nothing; over one that is always populated upstream, the
+# only way it can be blank at the client is the gateway having cleared
+# it.
+#
+# The sibling assertion is not decoration either: a gateway that had
+# cleared the WHOLE response would satisfy the first line on its own.
+# `digest` says the response is otherwise intact, so the absence is
+# attributable to the omit list and to nothing else.
+method: users.UsersService.IngestSignedWebhook
+pre:
+    - auth/auth.yaml
+headers:
+    Content-Type: application/json
+input:
+    payload: '{"event":"card.published",  "id": 7}'
+expect:
+    internal_route: {matcher: empty}
+    digest: {matcher: eq, value: 3b4db1b7bf0d1d283854189e8fd3f6025c51216b08b383cbf61d4e6836d09eed}

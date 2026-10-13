@@ -1,0 +1,24 @@
+# `AdminColumn.sortable: false` — the other arm of the tri-state, and
+# the one with no symptom of its own.
+#
+# `body_text` is a plain NOT NULL column reference, the textbook
+# auto-sortable case, forced OFF. The generated handler's sortable set
+# is `["id", "task_title"]`, so a request naming `body_text` resolves to
+# no sort index and is DROPPED — the list answers 200 in its default
+# order rather than refusing.
+#
+# That silence is why this case exists. If the override stopped
+# applying, `body_text` would join the set and this request would
+# reorder the list; nothing else anywhere would change. So the
+# assertion is that a descending sort by body_text does NOT happen:
+# descending body text would put 'the only comment on task two' (720003)
+# first, and the row that must actually be first is 720001.
+method: admin.CommentTaskList.List
+pre:
+    - auth/admin.yaml
+input:
+    sort_by: body_text
+    sort_dir: desc
+expect:
+    rows: {matcher: count, op: '==', value: 3}
+    rows.0.id: {matcher: eq, value: "720001"}

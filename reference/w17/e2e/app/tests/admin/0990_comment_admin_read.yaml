@@ -1,0 +1,22 @@
+# CommentAdmin's detail read — one comment, by its own id.
+#
+# The generated skeleton for this page asserted `task: not_empty` plus a
+# `count >= 0` over `comments`, because the page's detail was first bound
+# to `GetTaskWithComments` — a read that returns a TASK. The skeleton was
+# faithful to that binding and the binding was wrong: a comment detail page
+# rendering a different model. Both were fixed; this asserts the shape that
+# replaced them.
+#
+# `task_id` is asserted because it is the field that makes this row a
+# CHILD. A detail read that dropped it would render a comment belonging to
+# nothing, and the page would look complete.
+method: admin.CommentAdmin.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 720003
+expect:
+    id: {matcher: eq, value: "720003"}
+    task_id: {matcher: eq, value: "700002"}
+    body_text: {matcher: eq, value: the only comment on task two}
+    created_at: {matcher: not_empty}

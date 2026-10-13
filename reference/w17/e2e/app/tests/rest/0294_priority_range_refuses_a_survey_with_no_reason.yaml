@@ -1,0 +1,21 @@
+# REQUIRED_UNLESS — `unless_field`.
+#
+# The mirror of the case before it, over the SAME target field: there,
+# `reason` became required because a flag was set; here it is required
+# because a filter was NOT. A report not narrowed to one title is a
+# survey of the whole backlog, and surveys get audited.
+#
+# The two together are why `when_field` and `unless_field` are separate
+# slots rather than one negatable dependency.
+method: tasks.TaskQuery.ListTasksInPriorityRange
+pre:
+    - auth/auth.yaml
+input:
+    min_priority: 0
+    max_priority: 9
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: reason
+          code: REQUIRED_VIOLATION
+          message: {matcher: regex, pattern: "not narrowed to one title"}

@@ -1,0 +1,22 @@
+# The read-back for 0375's positive half.
+#
+# A write response cannot distinguish "archived the right row" from
+# "archived everything in the category": the mutation returns an id, and
+# the caller already knew which row it asked about.
+#
+# 700005 was status 3 (DONE) and category 3, so it satisfies both terms
+# of the archive's predicate and must now be 4 (ARCHIVED).
+#
+# Two encoding facts, both of which cost a suite run to learn: an int64
+# arrives as a STRING (hence the quotes on the id) while an enum arrives
+# as its NUMBER, not its name. The two are inconsistent with each other
+# and neither matches what the proto reads like, so assert against what
+# the wire actually carries.
+method: tasks.TasksService.GetTask
+pre:
+    - auth/auth.yaml
+input:
+    task_id: 700005
+expect:
+    task.id: {matcher: eq, value: "700005"}
+    task.status: {matcher: eq, value: 4}

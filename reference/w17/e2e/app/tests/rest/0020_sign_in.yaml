@@ -1,0 +1,9 @@
+method: auth.AuthService.SignIn
+pre:
+    - fixtures/signin_account.yaml
+input:
+    email: e2e-signin@example.com
+    password: e2eSecret!23
+expect:
+    user_id: {matcher: not_empty}
+    token: {matcher: not_empty}

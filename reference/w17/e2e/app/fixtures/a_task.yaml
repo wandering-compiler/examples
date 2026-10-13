@@ -1,0 +1,16 @@
+# Creates a task and captures its id, so the get/update/delete tests can
+# act on a real row (clickable create — owner + category are seeded
+# reference data, ids 1/1).
+method: tasks.TasksService.CreateTask
+pre:
+    - auth/auth.yaml
+headers:
+    Idempotency-Key: "e2e-create-${random:uuid}"
+input:
+    user_id: 1
+    category_id: 1
+    title: e2e task
+    body_text: e2e task body
+    priority: 1
+expect:
+    id: {capture: task.id}

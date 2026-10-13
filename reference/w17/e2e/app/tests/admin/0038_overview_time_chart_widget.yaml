@@ -1,0 +1,33 @@
+# Overview AREA widget over TIME — LIVE proof of the data route behind
+# the axis display contract's other half.
+#
+# The overview declares `tasks_over_time`, an area chart bound to the
+# GROUP BY aggregation tasks.TaskQuery.CountTasksPerDay. The generated
+# bundle mounts GET /admin/api/widget/tasks_over_time, which returns
+# { rows: [{day, task_count}] } — and `day` comes back as a wire
+# timestamp, which is exactly why the spec has to carry the `datetime`
+# format behind it (`x_format`). The SPA runs in no live e2e stack, so
+# the rendering is proven one layer up: `make check-admin-i18n` runs the
+# shipped runtime over the COMMITTED spec, and the runtime's own unit
+# tests cover the axis.
+#
+# At admin-scenario time the `tasks` table holds exactly the five rows
+# seeded in fixtures/app/test.json (the admin suite runs
+# before any REST task is created — the same determinism 0036/0037 rely
+# on). Their created_at values are seeded explicitly as three fixed
+# instants (2/2/1 rows), and `ORDER BY t.created_at ASC` pins the row
+# order. `task_count` is int64 → protojson renders it as a string, so
+# its expected values are quoted; `day` is a Timestamp → an RFC-3339
+# string.
+method: admin.Widget.tasks_over_time
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 3}
+    rows.0.day: {matcher: eq, value: "2026-01-01T00:00:00Z"}
+    rows.0.task_count: {matcher: eq, value: "2"}
+    rows.1.day: {matcher: eq, value: "2026-01-02T00:00:00Z"}
+    rows.1.task_count: {matcher: eq, value: "2"}
+    rows.2.day: {matcher: eq, value: "2026-01-03T00:00:00Z"}
+    rows.2.task_count: {matcher: eq, value: "1"}

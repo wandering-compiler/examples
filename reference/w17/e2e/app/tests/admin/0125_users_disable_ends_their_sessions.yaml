@@ -1,0 +1,15 @@
+# Disabling an account ends its sessions (auth rc.19): the admin's Disable is
+# AuthMutation.DisableUsers, which deletes every token of the disabled
+# accounts in the same transaction as the flag.
+#
+# b3 is b2's seeded session and 0120 has just disabled b2, so the session row
+# is gone. Before rc.19 it survived the disable and this read found it; the
+# control that the row existed and was readable is 0150's shape, run against
+# b7's session, which no step disables.
+method: admin.Sessions.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b3
+expect_error:
+    code: NOT_FOUND

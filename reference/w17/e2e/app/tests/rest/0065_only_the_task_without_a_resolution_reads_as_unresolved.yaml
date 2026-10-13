@@ -1,0 +1,40 @@
+# Asks the COLUMN, for both rows 0063 and 0064 created, and gets opposite
+# answers. This is where the difference is actually observed — the two CreateTask
+# steps above only produce the rows; neither can see what was stored,
+# because a proto3 enum reports 0 for a NULL column and for a 0 column
+# alike.
+#
+# `GetTaskIfUnresolved` is `WHERE t.id = :id AND t.resolution IS NULL`, so
+# the row comes back exactly when the write left no resolution behind:
+#
+#   - old behaviour (unset enum stored 0): the first lookup returns
+#     nothing and this step fails;
+#   - "every enum write binds NULL": the second lookup returns a row and
+#     this step fails;
+#   - correct: one row, then none.
+#
+# Keyed by captured ids, so it does not depend on anything else the suite
+# has written.
+#
+# WHERE THE OLD COMPILER ACTUALLY DIES, measured by reverting the fix and
+# re-running this suite: not here — at step 7, the first fixture that
+# creates a task, with `400 INVALID_ARGUMENT: check violation`. The enum's
+# generated choices CHECK is `resolution IN (1, 2, 3)` with the ZERO value
+# absent (that is how the migrator renders an int-carrier enum), and it
+# admits NULL for free, since `NULL IN (...)` is NULL and a CHECK treats
+# NULL as satisfied. So binding 0 for an unset field does not quietly
+# store the wrong value on a nullable column — it makes the column
+# UNUSABLE, and every write that leaves it unset fails.
+#
+# This step still states the semantic, and it is the leg that fails on a
+# schema whose CHECK is absent or wider. Do not "simplify" the suite down
+# to the fixture failure: what that one proves is that something broke,
+# not what.
+method: tasks.TaskQuery.GetTaskIfUnresolved
+pre:
+    - auth/auth.yaml
+input:
+    id: "${task.unresolved_id}"
+expect:
+    rows: {matcher: count, op: '==', value: 1}
+    rows.0.title: {matcher: eq, value: e2e-unresolved}

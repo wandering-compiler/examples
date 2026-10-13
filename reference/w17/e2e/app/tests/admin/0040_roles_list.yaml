@@ -1,0 +1,22 @@
+# The Roles page (auth plugin, rbac) — cursor-paged like every other
+# admin list. The catalogue is seeded from `(w17.acl_roles)` and fits in
+# one page, so the SPA renders no pager at all (its footer appears only
+# once a second page exists); the envelope is still filled, which is what
+# this asserts.
+#
+# A FLOOR, not an exact count, and for the same reason 05_admin_auth.sql
+# stopped enumerating its permission rows: the role set grows with
+# `(w17.acl_roles)` and shrinks again at 0100, which deletes the seeded
+# throwaway. An exact number would turn "codegen declared another role"
+# into a red step about something else entirely. `>= 1` is still a real
+# claim — the placeholder it replaces (`>= 0`) held against a page that
+# came back empty, the one answer a role list must never give.
+method: admin.Roles.List
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    roles: {matcher: count, op: '>=', value: 1}
+    roles.0.name: {matcher: not_empty}
+    # uint64 → protojson renders it as a JSON string.
+    paging.total: {matcher: not_empty}

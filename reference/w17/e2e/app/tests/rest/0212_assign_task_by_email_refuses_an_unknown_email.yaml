@@ -1,0 +1,17 @@
+# An email nobody registered is the caller's mistake, and the lookup op's
+# `on_empty` says so: INVALID_ARGUMENT on `assignee_email`, a code a client can
+# branch on, and the address in the sentence. Without it the op's miss read
+# NOT_FOUND, "The item you asked for does not exist" — about a task that does
+# (the same task 0211 assigns).
+method: tasks.TaskMutation.AssignTaskByEmail
+pre:
+    - fixtures/a_task.yaml
+input:
+    task_id: ${task.id}
+    assignee_email: nobody@example.com
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: assignee_email
+          code: UNKNOWN_ASSIGNEE
+          message: "Nobody is registered with the email nobody@example.com."

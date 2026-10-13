@@ -1,0 +1,12 @@
+method: tasks.TasksService.UpdateTaskAndInvalidate
+pre:
+    - fixtures/a_task.yaml
+# `idempotency_key` is bound from the Idempotency-Key header , so it
+# travels under headers: — in input: the runner dropped it.
+headers:
+    Idempotency-Key: e2e-update
+input:
+    id: ${task.id}
+    patch: {priority: 5}
+expect:
+    id: {matcher: not_empty}

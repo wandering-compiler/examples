@@ -1,0 +1,606 @@
+syntax = "proto3";
+
+package e2e.app.tasks;
+
+import "google/protobuf/timestamp.proto";
+import "w17/acl.proto";
+import "w17/admin.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+import "w17/client.proto";
+
+// Task — primary item in the tasks domain. body_text carries an
+// explicit estimated_avg_bytes hint so the query
+// optimizer sees it as a "large variable" relation
+// when it lands. body_text size is intentionally an order of
+// magnitude above the unhinted-default of 4 KiB used for plain
+// text columns.
+//
+// Reverse-accessor demo: Task carries TWO FKs to User
+// (user_id = owner, assignee_id = assignee). Both declare an
+// explicit `related_name` so the User side has unambiguous DQL
+// reverse accessors `owned_tasks` + `assigned_tasks` — without
+// the overrides both would default to `task_set` and IR.Build
+// would refuse with the default-collision diagnostic.
+message Task {
+  option (w17.db.table) = { name: "tasks" };
+  // Model-level row title. Every surface that has to NAME a task row
+  // without being a task page reads this one: the FK picker, an
+  // inline's section heading, a breadcrumb on a page that declared no
+  // title of its own.
+  //
+  // It is deliberately NOT what `TaskAdmin` shows. That page overrides
+  // it (see admin.proto), and the pair is the only way to tell the two
+  // apart: with one template both surfaces render the same string, so
+  // a page override that stopped being applied — or a model title that
+  // was never consulted — would look exactly like success. The spec
+  // carries them in two different places (`title_templates` keyed by
+  // model ref vs. the page's own `title`), and `TaskFeed` is the third
+  // arm: same model, NO override, so it is the page that proves the
+  // model-level template is what a page falls back to.
+  option (w17.admin_title) = "#{id} {title}";
+
+  int64                       id          = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }, (w17.entity_id) = true];
+  // user_id — task owner. Explicit related_name
+  // disambiguates from assignee_id below (both → users.User).
+  int64                       user_id     = 2 [
+    (w17.field)     = { related_name: "owned_tasks" },
+    (w17.db.column) = { fk: "users.User", deletion_rule: CASCADE }
+  ];
+  // category_id — forward FK to TaskCategory drives
+  // `GetTaskWithCategory` (FK-aliased JOIN `t.category`).
+  // Optimizer picks JOIN: TaskCategory has only fixed-size
+  // columns → "small lookup".
+  // No related_name → default `task_set` lands on
+  // TaskCategory (the only Task → TaskCategory FK, no collision).
+  int64                       category_id = 3 [(w17.db.column) = { fk: "tasks.TaskCategory", deletion_rule: CASCADE, index: true }];
+  string                      title       = 4 [(w17.field) = { type: CHAR, max_len: 200 }];
+  string                      body_text   = 5 [(w17.field) = { estimated_avg_bytes: 8000 }];
+  Status                      status      = 6;
+  int32                       priority    = 7 [(w17.field) = { type: SMALL_INTEGER }];
+  google.protobuf.Timestamp   created_at  = 8 [(w17.field) = { default_auto: NOW, immutable: true }];
+  // assignee_id — multi-FK demo. Nullable (a task may
+  // be unassigned). Pairs with user_id above to exercise the
+  // "two FKs from the same source to the same target with
+  // distinct explicit related_names" pattern.
+  int64                       assignee_id = 9 [
+    (w17.field)     = { null: true, related_name: "assigned_tasks" },
+    (w17.db.column) = { fk: "users.User", deletion_rule: ORPHAN }
+  ];
+  // project_id — M:1 link to Project. Nullable: a
+  // task may be unassigned to any project (top-level
+  // standalone tasks). Reverse-accessor `tasks` reads
+  // naturally on Project (`Project p JOIN p.tasks t`).
+  int64                       project_id  = 10 [
+    (w17.field)     = { null: true, related_name: "tasks" },
+    (w17.db.column) = { fk: "tasks.Project", deletion_rule: ORPHAN, index: true }
+  ];
+
+  // resolution — a NULLABLE enum, and the only one in this example.
+  //
+  // A task that is still open has no resolution at all, which is a
+  // different fact from "resolved, and the resolution is the zero value".
+  // A proto3 enum cannot carry that difference on the wire (an absent
+  // field and RESOLUTION_UNSPECIFIED are both 0), so the column is where
+  // it has to live — and `WHERE t.resolution IS NULL` is the only way to
+  // ask it back.
+  //
+  // It exists because the compiler once stored 0 here:
+  // `dqlbind.NullIfEmpty` is a no-op on an int32, so the wrap that
+  // READS as null-safety did nothing, and this example had no nullable enum
+  // in a WRITE position to notice. The e2e pair 0063/0064 is the live
+  // proof; without a declaration like this one the fix is unfalsifiable.
+  optional Resolution         resolution  = 11 [(w17.field) = { null: true }];
+
+  // ARCHIVED is the one value carrying `(w17.value_display)`, and it
+  // carries the two fields of it that have a visible effect:
+  //
+  //   * `deprecated` — the value stays readable (existing rows are
+  //     valid and stay valid) but every surface that offers it flags
+  //     it, so an operator is not quietly steered into a status the
+  //     project is retiring. It is the only field of the annotation
+  //     whose effect is on WRITES rather than on rendering.
+  //   * `description` — the tooltip line. Absent by default: unlike
+  //     `label`, which falls back to a humanised value name, a
+  //     description that is not written simply does not render, so
+  //     nothing supplies it implicitly and a lost one is invisible.
+  //
+  // `label` is deliberately left OFF all five values: the humanised
+  // fallback (`IN_PROGRESS` → "In Progress") is what the catalogue
+  // already shows, and overriding it here would replace the fallback
+  // this project also relies on with a literal.
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    OPEN               = 1;
+    IN_PROGRESS        = 2;
+    DONE               = 3;
+    ARCHIVED           = 4 [(w17.value_display) = {
+      description: "Kept for rows that already carry it; new tasks should be closed as Done instead.",
+      deprecated: true
+    }];
+  }
+
+  // Resolution — how a task ended, for tasks that ended. Deliberately
+  // small: its job is to be a nullable enum, not to model a workflow.
+  enum Resolution {
+    RESOLUTION_UNSPECIFIED = 0;
+    FIXED                  = 1;
+    WONTFIX                = 2;
+    DUPLICATE              = 3;
+  }
+}
+
+// Comment — child of Task. body_text intentionally LEAVES
+// estimated_avg_bytes unset; the optimizer's default for unhinted
+// variable-size carriers (4096 bytes) drives B1's prefetch-vs-
+// join decision against the Task ⋈ Comment join later.
+message Comment {
+  option (w17.db.table) = { name: "comments" };
+
+  int64                       id         = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  // task_id — NO related_name → default
+  // `comment_set` lands on Task (the only Comment → Task FK,
+  // no collision). Demonstrates the zero-config path.
+  int64                       task_id    = 2 [(w17.db.column) = { fk: "tasks.Task", deletion_rule: CASCADE }];
+  string                      body_text  = 3;
+  google.protobuf.Timestamp   created_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// TaskCategory — small lookup table (~10 rows). Every column is
+// fixed-size; the optimizer treats the relation as "small"
+// regardless of estimated_avg_bytes hints.
+//
+// Self-FK demo: parent_id references this same table to
+// model a category hierarchy (e.g. "Engineering > Backend >
+// Database"). Explicit `related_name: "children"` is the
+// canonical Django override for tree-shaped self-FKs — the
+// default `task_category_set` would read poorly in DQL.
+message TaskCategory {
+  option (w17.db.table) = { name: "task_categories" };
+
+  // The one model in this project that leaves the model ACL axis.
+  // The domain sentinel (`domains/app/w17.proto`) declares
+  // `(w17.acl_models) = true` for everything, so this explicit
+  // `false` BREAKS an inherited cascade rather than merely leaving
+  // it unset — the only value of this option that is observable.
+  //
+  // The reason it is defensible here: TaskCategory is a reference
+  // catalogue — an id, a display name, a colour, a counter. It
+  // carries no user data, so what may be seen is decided by which
+  // ENDPOINT the caller may reach, and a per-model `#view` on top of
+  // that would be a permission nobody ever grants separately. The
+  // page over it (TaskCategoryAdmin) keeps the endpoint axis, so it
+  // is gated — just not twice.
+  //
+  // Sibling control: `Task` right above inherits the same cascade
+  // and keeps `tasks.Task#view`.
+  option (w17.acl_model) = false;
+
+  int64  id        = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string name      = 2 [(w17.field) = { type: CHAR, max_len: 64, unique: true }];
+  string color     = 3 [(w17.field) = { type: CHAR, max_len: 7 }];
+  // parent_id — self-FK with explicit related_name.
+  // Nullable: top-level categories have no parent.
+  int64  parent_id = 4 [
+    (w17.field)     = { null: true, related_name: "children" },
+    (w17.db.column) = { fk: "tasks.TaskCategory", deletion_rule: ORPHAN, index: true }
+  ];
+  // completed_count — denormalized counter,
+  // maintained by the in-domain subscriber that
+  // listens for `TaskCompleted`. Default 0 so newly-created
+  // categories start with no completed tasks.
+  int32  completed_count = 5 [(w17.field) = { default_int: 0 }];
+  // slug — this example's only `blank: true` on a field that also carries
+  // a FORMAT pattern, and it is here for that reason.
+  //
+  // Nothing wrote that combination before, so nothing exercised it: the
+  // emitted CHECK enforced the slug pattern while `blank: true` dropped
+  // the `<> ''` guard and (NOT NULL) supplied `DEFAULT ''`. The column
+  // was unsatisfiable by its own default — every INSERT omitting it
+  // failed with a constraint violation on a value the author never
+  // wrote. Now the check reads `(slug = '' OR slug ~ …)`.
+  //
+  // A category with no slug is the ordinary state here, which is what
+  // makes the empty default the right one to keep.
+  string slug = 6 [(w17.field) = { type: SLUG, max_len: 64, blank: true }];
+}
+
+// Project — join showcase. Many-to-one with User
+// (owner_id FK), many-to-one with Task (each Task may belong
+// to one Project, optional). Holds project-level metadata
+// the listing surfaces benefit from (name + color).
+//
+// The related_name `projects` reads naturally in DQL
+// (`User u JOIN u.projects p`) — the default `project_set`
+// would land on User's reverse accessor and clash poorly
+// with prose.
+message Project {
+  option (w17.db.table) = { name: "projects" };
+
+  int64                       id         = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64                       owner_id   = 2 [
+    (w17.field)     = { related_name: "projects" },
+    (w17.db.column) = { fk: "users.User", deletion_rule: CASCADE, index: true }
+  ];
+  string                      name       = 3 [(w17.field) = { type: CHAR, max_len: 200 }];
+  string                      color      = 4 [(w17.field) = { type: CHAR, max_len: 7 }];
+  google.protobuf.Timestamp   created_at = 5 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// Tag — M:N join showcase. Global tag catalog;
+// individual tasks reference tags through the TaskTag pivot
+// table below. Slug is the URL-stable identifier (`backend`,
+// `frontend`, `bug`, `feature`); display_name is the
+// human-readable label.
+message Tag {
+  option (w17.db.table) = { name: "tags" };
+
+  int64  id           = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string slug         = 2 [(w17.field) = { type: SLUG, max_len: 64, unique: true }];
+  string display_name = 3 [(w17.field) = { type: CHAR, max_len: 120 }];
+  string color        = 4 [(w17.field) = { type: CHAR, max_len: 7 }];
+}
+
+// TaskTag — M:N pivot between Task and Tag. The composite
+// PK `(task_id, tag_id)` enforces "one tag once per task";
+// the secondary index on tag_id powers the reverse lookup
+// (find every task with a given tag).
+//
+// Explicit related_name on both FKs distinguishes
+// the pivot's two parents in DQL. `Task t JOIN t.tag_links tl`
+// names the pivot rows; from there `JOIN tl.tag` reaches the
+// Tag itself. Same shape from the Tag side via
+// `tag.tag_links`.
+message TaskTag {
+  option (w17.db.table) = { name: "task_tags" };
+
+  int64 task_id = 1 [
+    (w17.field)     = { pk: true, related_name: "tag_links" },
+    (w17.db.column) = { fk: "tasks.Task", deletion_rule: CASCADE }
+  ];
+  int64 tag_id  = 2 [
+    (w17.field)     = { pk: true, related_name: "tag_links" },
+    (w17.db.column) = { fk: "tasks.Tag", deletion_rule: CASCADE, index: true }
+  ];
+}
+
+// TaskAuditLog — child of Task. LateMaterialize fixture
+// host. `estimated_row_count: 10000` opts the table into the
+// optimizer's WHERE-aware decision path; with `body_text`
+// unhinted (4096 default) the per-row carrier is wide enough
+// (~4 KiB) that even an aggressively narrowed slice (30% per
+// the range-predicate default) exceeds the connection's 100
+// KiB budget — Strategy 2 (LateMaterialize) fires. The PK-only
+// ID set (3000 × 8 B = 24 KiB) fits comfortably, which is
+// what makes the strategy applicable. Same FK shape as
+// Comment so the e2e test surface stays uniform.
+message TaskAuditLog {
+  option (w17.db.table) = { name: "task_audit_log", estimated_row_count: 10000 };
+
+  int64                       id         = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64                       task_id    = 2 [(w17.db.column) = { fk: "tasks.Task", deletion_rule: CASCADE, index: true }];
+  string                      body_text  = 3;
+  google.protobuf.Timestamp   created_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// TenantNote — data-scope fixture. Deliberately
+// isolated from the Task hierarchy so the existing fullstack
+// test surface (priority buckets, fan-out joins, bulk inserts,
+// streaming) stays untouched by the scope auto-WHERE / INSERT
+// auto-stamp / fail-closed guard. Methods on this model live
+// alongside the Task ops in TaskQuery / TaskMutation but
+// operate on their own table.
+//
+// `(w17.db.scope)` declares `tenant_id` as the scope axis;
+// path "tenant_id" is the direct column on this table. Every
+// SELECT / UPDATE / DELETE / INSERT on TenantNote gets the
+// per-request `x-w17-scope-tenant_id` metadata threaded by
+// the gateway; missing metadata → 403 PERMISSION_DENIED;
+// INSERT auto-stamps from metadata regardless of payload.
+//
+// tenant_id is UUID-typed but nullable in proto terms — the
+// generator-emitted INSERT omits the column from the
+// hand-supplied SET, the auto-stamp adds it, and the SELECT
+// auto-WHERE filters by it. NULL never lands in a row because
+// the auto-stamp always supplies a value (the fail-closed
+// guard refuses the request before the INSERT runs).
+message TenantNote {
+  option (w17.db.table) = { name: "tenant_notes" };
+  option (w17.db.scope) = {
+    entries: [{ name: "tenant_id", path: "tenant_id" }]
+  };
+
+  int64                       id         = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  // tenant_id — scope axis column. Auto-stamped by the
+  // generator on INSERT from gRPC metadata; auto-filtered on
+  // every SELECT / UPDATE / DELETE. Hand-written request
+  // payloads do NOT carry tenant_id (the auto-stamp is the
+  // single source of truth — preserves the "payload field
+  // can't cross tenants" invariant from the spec).
+  string                      tenant_id  = 2 [(w17.field) = { type: UUID }];
+  string                      title      = 3 [(w17.field) = { type: CHAR, max_len: 200 }];
+  string                      body       = 4;
+  google.protobuf.Timestamp   created_at = 5 [(w17.field) = { default_auto: NOW, immutable: true }];
+
+  // public_token — the capability this row's share link
+  // carries. A recipient with no account opens
+  // `/public/notes/{public_token}` and the gateway authenticates
+  // them from that value alone.
+  //
+  // GLOBALLY unique, not unique-per-tenant, and that is forced by
+  // the direction of the lookup: the auth backend is handed a token
+  // and has to answer WHICH TENANT it belongs to, before any scope
+  // exists to narrow by. A token that repeated across tenants would
+  // have no single answer.
+  //
+  // Which is also why the by-token read is a weak proof of scope
+  // isolation and the sibling list is the real one — see
+  // `ListTenantNotesForPublicLink` in task_query.proto. Global
+  // uniqueness makes `WHERE public_token = :token` self-isolating,
+  // so removing the scope filter would not change its answer.
+  //
+  // Nullable: almost every note has no share link, and a blank
+  // token must never be a valid capability. The gateway refuses an
+  // empty credential before the auth call runs, and the resolver
+  // below re-checks, because a NULL column and an empty request
+  // parameter are one careless SQL comparison apart.
+  string                      public_token = 6 [(w17.field) = { type: CHAR, max_len: 64, unique: true, null: true }];
+}
+
+// TenantNoteTag — scoped M:N link fixture. Tags a TenantNote,
+// and carries the SAME scope axis as the note it links, so a
+// read that joins the two is a plain many-to-many read entirely
+// inside one tenant — the shape any project modelling M:N under
+// a tenant scope hits on day one.
+//
+// It exists to prove the JOIN-side scope injection end to end:
+// `ListTenantNotesByTag` reads TenantNote FROM and reaches this
+// table through a JOIN, so the joined alias gets its own
+// `AND nt.tenant_id = $<scope>` on the JOIN's ON clause. Without
+// that predicate the join would admit another tenant's link rows
+// — which is why this is proven against a live PG, not only
+// against the emitted SQL string.
+//
+// Composite PK (note_id, tag) is also the ON CONFLICT arbiter
+// for AttachTenantNoteTag's idempotent UPSERT.
+message TenantNoteTag {
+  option (w17.db.table) = { name: "tenant_note_tags" };
+  option (w17.db.scope) = {
+    entries: [{ name: "tenant_id", path: "tenant_id" }]
+  };
+
+  // Deliberately NO `fk:` — this pair carries the FK-LESS shape.
+  //
+  // Both models are scoped by `tenant_id`, so declaring an fk here would
+  // make the compiler emit a scope-preserving COMPOSITE foreign key and the
+  // cross-tenant link row could no longer be written at all. That is the
+  // right outcome, and 0155 proves it on TenantNoteLink — but it would also
+  // remove the only scenario in which the JOIN-side scope predicate is the
+  // sole defence, which is what 0154 / 0159 exist to pin.
+  //
+  // The shape is not contrived: many projects reference rows by plain
+  // id with no fk at all, so a project reaching the joined
+  // row through a predicate rather than a constraint is the ordinary case,
+  // not the exotic one.
+  int64  note_id   = 1 [(w17.field) = { type: ID, pk: true }];
+  string tag       = 2 [(w17.field) = { type: CHAR, max_len: 64, pk: true }];
+  // Scope axis column — auto-stamped from metadata on write,
+  // auto-filtered on read, exactly like TenantNote.tenant_id.
+  string tenant_id = 3 [(w17.field) = { type: UUID }];
+}
+
+// TenantNoteLink — the same M:N link shape as TenantNoteTag, but WITH the
+// `fk:` declaration, so the compiler emits a scope-preserving composite
+// foreign key over `tenant_id`.
+//
+// The two models exist as a PAIR and differ in exactly one line. That is the
+// point: TenantNoteTag proves the read-side predicate still holds where no
+// constraint backs it, and this one proves the database refuses the write
+// outright once both ends declare the same scope and a reference between
+// them (0155). Same tables, same tenants, one declaration apart.
+message TenantNoteLink {
+  option (w17.db.table) = { name: "tenant_note_links" };
+  option (w17.db.scope) = {
+    entries: [{ name: "tenant_id", path: "tenant_id" }]
+  };
+
+  int64  note_id   = 1 [
+    (w17.field)     = { type: ID, pk: true },
+    (w17.db.column) = { fk: "tasks.TenantNote", deletion_rule: CASCADE }
+  ];
+  string label     = 2 [(w17.field) = { type: CHAR, max_len: 64, pk: true }];
+  string tenant_id = 3 [(w17.field) = { type: UUID }];
+}
+
+// TenantNoteBookmark — the ESCAPE HATCH, and the exact counterpart of
+// TenantNoteLink.
+//
+// Same two models, same tenants, same `fk:` — and the opposite outcome,
+// because this one declares `fk_cross_scope`. Bookmarking is the case the
+// hatch exists for: a tenant marking a note another tenant published is the
+// point of the feature, not a leak. 0164 writes the row 0163 is refused.
+//
+// The reference still holds: opting out of the tenancy half does not opt out
+// of referential integrity, so a bookmark of a note that does not exist is
+// still rejected.
+message TenantNoteBookmark {
+  option (w17.db.table) = { name: "tenant_note_bookmarks" };
+  option (w17.db.scope) = {
+    entries: [{ name: "tenant_id", path: "tenant_id" }]
+  };
+
+  int64  note_id   = 1 [
+    (w17.field)     = { type: ID, pk: true },
+    (w17.db.column) = { fk: "tasks.TenantNote", deletion_rule: CASCADE, fk_cross_scope: true }
+  ];
+  string note      = 2 [(w17.field) = { type: CHAR, max_len: 64, pk: true }];
+  string tenant_id = 3 [(w17.field) = { type: UUID }];
+}
+
+// TaskUpload — a file a user actually uploaded through the API, as
+// opposed to Attachment above, which records metadata about a file the
+// project got hold of some other way.
+//
+// The pair is the point. `Attachment.filename` is FILE_PATH: a PASSIVE
+// path, validated for shape and extension, that some other process is
+// responsible for putting somewhere. `TaskUpload.stored_path` is
+// UPLOADED_FILE: SERVICE-MANAGED, which means the gateway owns the write.
+// It receives the multipart part, enforces the size cap while streaming,
+// hashes as it writes, and moves the result under a key it derives —
+// then stores that key here. The column holds a storage HANDLE, not a
+// filesystem path anyone chose, and business code reads the bytes back
+// through the same handle.
+//
+// The `upload` submessage is required for the type and is where the
+// derivation lives:
+//
+//   depth = ceil( log256( expected_objects / max_per_bucket ) )
+//   key   = <bucket_path>/<2 hex>/…(depth levels)…/<object_key>
+//
+// The base is 256, not max_per_bucket: one sub-bucket level is one BYTE
+// of the hash, so each level multiplies the leaf count by 256, and
+// max_per_bucket is the leaf CAPACITY the depth keeps you under.
+//
+// 100000 objects at 100 per bucket gives a ratio of 1000, and
+// ceil(log256(1000)) = 2 — so a stored handle reads
+// `/task-attachments/ab/cd/<hash>`. The numbers are chosen to land
+// between the powers: depth is 2 and not 1 or 3, so a derivation that
+// dropped the ceiling, or took max_per_bucket as the base, produces a
+// DIFFERENT number of path segments and the live case counts them.
+//
+// (The base was worth pinning down. `field.proto` documented this as
+// `ceil(log_max_per_bucket(expected_objects))`, which for these numbers
+// gives a different answer — the doc was wrong and is now fixed. An
+// author picking numbers from it gets a layout they did not choose.)
+message TaskUpload {
+  option (w17.db.table) = { name: "task_uploads" };
+
+  int64 id      = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64 task_id = 2 [
+    (w17.field)     = { related_name: "uploads" },
+    (w17.db.column) = { fk: "tasks.Task", deletion_rule: CASCADE, index: true }
+  ];
+  // The storage handle the gateway produces. `extensions` is the
+  // allow-list the UPLOADED_* types enforce on the uploaded filename —
+  // the one rule that can refuse a file for what it IS rather than for
+  // how big it is.
+  string stored_path = 3 [(w17.field) = {
+    type: UPLOADED_FILE,
+    extensions: ["txt", "md"],
+    upload: {
+      connection:       "app-uploads",
+      bucket_path:      "/task-attachments",
+      expected_objects: 100000,
+      max_per_bucket:   100,
+      max_size_bytes:   65536
+    }
+  }];
+  google.protobuf.Timestamp uploaded_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// Milestone — a named checkpoint the tasks in a category are
+// working towards. Small reference-shaped table, like TaskCategory:
+// no create endpoint on this surface, rows come from the seed.
+//
+// It exists as its own model rather than as more `tasks` rows
+// because it is the host of the ORDER BY-by-enum surface
+// (`ListMilestonesSorted` / `MilestoneSortField` in
+// task_query.proto), and that surface asserts the ORDER of a fixed
+// row set. The `tasks` table cannot supply one: seven steps across
+// the admin and REST scenarios assert its exact COUNT(*) and its
+// exact first page, and two of them sort it by `priority DESC` — a
+// fixture row added there to tie on a sort key would land on page
+// one of an unrelated proof.
+//
+// The columns are shaped by what an ordering has to be able to
+// distinguish:
+//   * `weight` TIES across rows, so a sort fragment's second key is
+//     observable — with a single-key sort those rows fall back to
+//     the query's trailing `id ASC` instead.
+//   * `target_count` is NULLABLE, so a fragment can wrap it in
+//     `coalesce(...)` and a NULL row has a defined place in the
+//     order rather than a dialect-dependent one.
+message Milestone {
+  option (w17.db.table) = { name: "milestones" };
+
+  int64  id     = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string name   = 2 [(w17.field) = { type: CHAR, max_len: 120, unique: true }];
+  // How much of the category's plan this checkpoint accounts for.
+  // Deliberately coarse, so ties are the normal case rather than a
+  // coincidence the fixture arranges.
+  //
+  // The bounds are STRICT on both sides, and that is the point of
+  // spelling them `gt`/`lt` rather than `gte`/`lte`: a checkpoint
+  // worth nothing is not a checkpoint, and one worth the whole plan
+  // is the plan. Both endpoints are excluded by the same declaration
+  // that admits everything between them, so the difference from the
+  // inclusive pair is visible at exactly two values — which is where
+  // CreateMilestoneReq's refusal cases sit.
+  int32  weight = 3 [(w17.field) = { type: SMALL_INTEGER, gt: 0, lt: 10 }];
+  // Target number of completed tasks. NULL = "no target agreed
+  // yet", which is a different statement from a target of zero —
+  // hence nullable rather than defaulted.
+  int32  target_count = 4 [(w17.field) = { null: true }];
+  // Where the checkpoint stands, in the operator's words. Defaulted
+  // rather than nullable: every milestone has a status, and a
+  // freshly created one has not been started.
+  //
+  // The default is what makes it assertable. The column is NOT NULL,
+  // so an INSERT that omits it either lands the declared string or
+  // fails outright — there is no third outcome in which the
+  // declaration was ignored and the row still exists.
+  string status_note = 5 [(w17.field) = { type: CHAR, max_len: 64, default_string: "not started" }];
+  // Multiplier applied to `weight` when milestones are rolled up.
+  // Default 1 = "counts as declared", which is deliberately NOT the
+  // zero value: a default that coincides with the carrier's zero
+  // cannot be told apart from no default at all.
+  double weight_factor = 6 [(w17.field) = { type: NUMBER, default_double: 1 }];
+
+  // The two columns whose CARRIER cannot express "empty" separately
+  // from "absent", and the reason they are here rather than on a model
+  // that wanted them.
+  //
+  // A repeated field and a `bytes` field both arrive as a NIL Go slice
+  // when the caller sends nothing — proto3 gives neither presence — and
+  // a nil slice is what a driver turns into SQL NULL. Both columns are
+  // NOT NULL, because the model's claim is "always a value, possibly an
+  // empty one". So an INSERT of an empty list, or of an empty payload,
+  // is refused by the database unless the generated binding coerces the
+  // slice non-nil first.
+  //
+  // That coercion shipped twice as a DEFECT before it was a rule
+  // (`dqlbind.Arr` / `dqlbind.Bytes`), and both times this example was
+  // silent: every `pq.Array` in it was a `= ANY($n)` FILTER, where NULL
+  // and `{}` match nothing equally, so no example had ever WRITTEN
+  // either kind of column. The first consumer that did was the
+  // console's own registry, in production code, against a real
+  // database.
+  //
+  // Milestone carries them because it already has the one thing this
+  // needs: a create path whose request the e2e suite controls field by
+  // field, so a case can send an EMPTY list and an EMPTY payload and
+  // watch the row land.
+  repeated string tags = 8;
+  bytes attachment = 9;
+
+  google.protobuf.Timestamp created_at = 7 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// Attachment — 1:N join showcase. Tasks may have
+// many attachments (think uploaded files); the FK lives on
+// the child side so adding attachments doesn't require a
+// task UPDATE. Holds enough metadata for the listing to
+// render a useful preview without fetching the file body.
+message Attachment {
+  option (w17.db.table) = { name: "attachments" };
+
+  int64                       id           = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64                       task_id      = 2 [
+    (w17.field)     = { related_name: "attachments" },
+    (w17.db.column) = { fk: "tasks.Task", deletion_rule: CASCADE, index: true }
+  ];
+  string                      filename     = 3 [(w17.field) = { type: FILE_PATH, max_len: 255, extensions: ["pdf", "png", "jpg", "jpeg", "txt", "md", "doc", "docx"] }];
+  string                      content_type = 4 [(w17.field) = { type: CHAR, max_len: 120 }];
+  int64                       size_bytes   = 5;
+  google.protobuf.Timestamp   uploaded_at  = 6 [(w17.field) = { default_auto: NOW, immutable: true }];
+}

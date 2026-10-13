@@ -1,0 +1,18 @@
+# The inline's `update`. Routes at the CHILD path
+# (/api/inline/TaskAdmin/{id}/CommentAdmin/{child_id}), and the SQL keys
+# on the child's id — `WHERE id = :id`, not the parent's.
+#
+# That distinction is the whole risk in this field. A method keyed on the
+# parent would compile, route identically, return a plausible id, and
+# rewrite the wrong row — or every row under that parent. Both URL
+# segments are supplied here, so the case only passes if the endpoint
+# used the second one.
+method: admin.TaskAdmin.Inline.CommentAdmin.Update
+pre:
+    - auth/admin.yaml
+input:
+    id: 700001
+    child_id: ${inline_comment.id}
+    body_text: edited through the inline
+expect:
+    id: {matcher: eq, value: "${inline_comment.id}"}

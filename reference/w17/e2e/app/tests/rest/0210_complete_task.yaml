@@ -1,0 +1,9 @@
+method: tasks.TaskMutation.CompleteTask
+pre:
+    - fixtures/a_task.yaml
+input:
+    task_id: ${task.id}
+    completed_by: 1
+expect:
+    id: {matcher: not_empty}
+    category_id: {matcher: not_empty}

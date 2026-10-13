@@ -1,0 +1,27 @@
+# The counterpart of 0163, and the reason the escape hatch exists.
+#
+# Identical setup: alpha creates a note, beta writes a link row pointing at
+# it. 0163 is REFUSED — TenantNoteLink declares `fk:` between two models
+# scoped by the same axis, so the composite foreign key forbids it. This one
+# SUCCEEDS, because TenantNoteBookmark declares `fk_cross_scope` on the same
+# reference.
+#
+# Two cases, one declaration apart, opposite outcomes. Without this pair the
+# hatch would be a flag with no evidence that it does anything — and a flag
+# nobody exercises is how the compiler's own vocabulary ratchet describes a
+# feature that shipped without an example.
+#
+# Bookmarking is what the hatch is FOR: a tenant marking a note another
+# tenant published is the point, not a leak. The reference is still checked —
+# opting out of the tenancy half does not opt out of referential integrity —
+# which 0165 pins by bookmarking a note id that does not exist.
+method: tasks.TaskMutation.BookmarkTenantNote
+pre:
+    - fixtures/a_tenant_note.yaml
+    - auth/auth_beta.yaml
+input:
+    note_id: ${note.id}
+    note: e2e-xbookmark-${seq}
+expect:
+    note_id: {matcher: eq, value: "${note.id}"}
+    note: {matcher: not_empty}

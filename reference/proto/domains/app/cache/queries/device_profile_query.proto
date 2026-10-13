@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package e2e.app.cache;
+
+import "w17/db.proto";
+import "domains/app/cache/types/models.proto";
+
+// DeviceProfileQuery — the HASH-layout read surface.
+//
+// Redis has no multi-key HGETALL, so the same DQL that becomes a
+// single `MGET` against a JSON table becomes a pipeline of
+// `HGETALL`s here, decoded field-by-field instead of from one
+// protojson blob. Both emitters were dark until this example wrote
+// the `IN` form at all; putting the two layouts behind two
+// otherwise identical endpoints is what lets a live case tell them
+// apart.
+
+message GetDeviceProfileReq {
+  string device_id = 1;
+}
+
+message ListDeviceProfilesReq {
+  repeated string device_ids = 1;
+}
+message ListDeviceProfilesResp {
+  repeated e2e.app.cache.CachedDeviceProfile profiles = 1;
+}
+
+service DeviceProfileQuery {
+  // GetDeviceProfile — single-key HASH read. Present so a case can
+  // establish what one key holds before asking for several.
+  rpc GetDeviceProfile(GetDeviceProfileReq) returns (e2e.app.cache.CachedDeviceProfile) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:  "SELECT c FROM cache.CachedDeviceProfile c WHERE c.device_id = :device_id"
+      }
+    };
+  }
+
+  // ListDeviceProfiles — the multi-key read. A key that is absent
+  // yields an empty hash and is skipped, so the response length is
+  // the number of keys that EXIST rather than the number asked
+  // for — which is what makes a partial hit assertable, and what
+  // separates "the emitter dropped a key" from "the key was never
+  // written".
+  rpc ListDeviceProfiles(ListDeviceProfilesReq) returns (ListDeviceProfilesResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:  "SELECT c FROM cache.CachedDeviceProfile c WHERE c.device_id IN (:device_ids)"
+      }
+    };
+  }
+}

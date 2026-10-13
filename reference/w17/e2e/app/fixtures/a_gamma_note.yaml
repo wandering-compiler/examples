@@ -1,0 +1,15 @@
+# A note owned by tenant-GAMMA, the tenant that exists for this chain
+# alone. Gamma creates notes nowhere else in the suite, so its list
+# holds exactly this one and a paged read of it can assert on `items.0`
+# by index.
+#
+# Not beta: 0225 reads beta's EMPTY note list as the baseline of the
+# scope-bypass proof, so giving beta a note of its own would break it.
+method: tasks.TaskMutation.CreateTenantNote
+pre:
+    - auth/auth_gamma.yaml
+input:
+    title: e2e gamma note
+    body: e2e gamma note body
+expect:
+    id: {capture: note.id}

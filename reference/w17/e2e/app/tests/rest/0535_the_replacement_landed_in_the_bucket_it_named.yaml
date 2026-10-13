@@ -1,0 +1,9 @@
+# 0534's overwrite, read back where it was aimed.
+method: cache.UserSessionQuery.GetUserSession
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    session_id: e2e-shared-device-token
+expect:
+    device: {matcher: eq, value: web/chrome}

@@ -1,0 +1,24 @@
+# The refusal this whole shape rests on.
+#
+# `category_id` is omitted, so it binds SQL NULL, the subquery matches no
+# rows, the scalar is NULL, and `body_text` is NOT NULL — the write is
+# REFUSED. Codegen does not warn about this shape for exactly that
+# reason: there is no plausible wrong answer to receive.
+#
+# That argument is only worth anything if the refusal ARRIVES and NAMES
+# something, which is what this case exists to prove. It used to read
+# `DocumentMutation.CreateDocument: not_null violation` — no column, no
+# field, a database word in an API whose callers see fields. A consumer
+# reported that on 2026-08-30 and it was fixed; this is the case that
+# keeps it fixed, because the suppression above now depends on it.
+method: tasks.TaskMutation.SnapshotComment
+pre:
+    - fixtures/a_task.yaml
+input:
+    task_id: ${task.id}
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: body_text
+          code: REQUIRED_VIOLATION
+          message: is required

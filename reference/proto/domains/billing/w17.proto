@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+// Domain-level cascade config for the `billing` domain.
+//
+// Every .proto file under proto/domains/billing/<...>/*.proto
+// inherits this `(w17.module)` option — the billing PG
+// connection lives on its OWN database instance (compose
+// service `postgres-billing`, port 5433) so the storage tier
+// can be operated independently from the app database. Story:
+// the app is a product the user can buy + run self-hosted;
+// billing tracks subscriptions / usage and is run by the
+// vendor (or by a separate operator in a multi-tenant setup).
+// Self-hosted deploys can opt out by leaving billing offline —
+// the app's facade soft-warns when billing is unreachable
+// instead of failing.
+//
+// File is a SENTINEL — it carries options only, no messages.
+
+package e2e.billing;
+
+import "w17/domain.proto";
+import "w17/module.proto";
+
+// **The other half of the connection-alias fixture.** The same
+// `auditsink` plugin the `app` domain activates, mapped to a DIFFERENT
+// connection.
+//
+// That is what makes `(w17.domain).plugins[].connections` legible: with
+// one activation the map is indistinguishable from the default binding
+// every plugin already gets, because the value it names IS the domain
+// default. Two activations of one plugin, each naming its own domain's
+// store, put the plugin's single table into two different databases —
+// and nothing else about the two activations differs.
+//
+// Billing is also the honest place for the second one: it is a separate
+// database operated by whoever sells the product, so "the audit sink
+// follows the data it is auditing" is the reason a project would reach
+// for the alias in the first place.
+option (w17.domain) = {
+  plugins: [
+    {
+      source_name:   "auditsink"
+      // A DISTINCT slot name, and it has to be: the ref shape a REST /
+      // MCP registry resolves is `<module>.<Service>.<Method>`, where
+      // module is the activation's `registered_as` — and the service
+      // index is built over the whole loaded proto set rather than per
+      // domain, so two activations of one plugin under one name collide
+      // across domains even though no registry could ever address the
+      // wrong one (refs are domain-scoped). Renaming the slot is what
+      // `registered_as` is for and what this project already does for
+      // the two `auth` realms.
+      registered_as: "billing_auditsink"
+      connections:   [ { key: "store", value: "billing-postgres" } ]
+      features:      { names: [ "sink" ] }
+    }
+  ]
+};
+
+// `schema` is the PG-native namespace qualifier: every identifier this
+// domain emits is written `<schema>.<table>` instead of landing in
+// `public`.
+//
+// It belongs here rather than on `app` for the reason the domain exists
+// at all. Billing runs on its own database, operated by whoever sells
+// the product, and a vendor-run database is exactly the one that ends
+// up sharing an instance with something else — a reporting replica, an
+// analytics load, a second tenant of the same operator. A schema is
+// what keeps `invoices` from being a name two of them argue over, and
+// it costs nothing to declare up front and a migration to add later.
+//
+// Orthogonal to the module table-name prefix: `billing_invoices` stays
+// `billing_invoices`, it just lives in the `billing` schema now. Both
+// can apply, and here both do.
+option (w17.module) = {
+  schema: "billing",
+  connection: { name: "billing-postgres", dialect: POSTGRES, version: "18", used_capability: RELATIONAL },
+
+  // One channel, and the domain's whole event surface. Billing emits
+  // exactly one signal — an invoice was issued — and exactly one thing
+  // reacts to it (see subscribers.proto).
+  //
+  // NATS rather than MEMORY: an issued invoice is a financial fact, and
+  // the consumer being two lines of bookkeeping is no reason for the
+  // delivery to be lost. MEMORY is fire-and-forget with no redelivery;
+  // this channel keeps a durable one. (It is also the only transport a
+  // subscriber can consume at all today — a MEMORY channel would need
+  // the co-located surface shape, which is refused; see
+  // w17/event_subscribers.proto.)
+  channels: [
+    {
+      name: "billing"
+      transport: TRANSPORT_NATS
+      retry: {
+        max_deliver: 5
+        ack_wait_seconds: 30
+        backoff: BACKOFF_EXPONENTIAL
+      }
+      drain_timeout_seconds: 30
+    }
+  ]
+};

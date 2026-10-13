@@ -1,0 +1,25 @@
+# rest/0691 read in Czech: a sentence a HAND-WRITTEN handler raises reaches
+# the caller translated.
+#
+# It could not, until 2026-10-06. The catalog scaffold harvested every
+# sentence the compiler owns and none from the project's own Go, so
+# `grpcerr.ForUser`'s sentence was in no `.po` — and the merge drops every
+# msgid the harvest does not know, so a translation added by hand vanished
+# on the next codegen. Codegen now harvests the hand-written tree the client
+# already uploads; the sentence is in `w17/languages/app/*.po` because
+# StreamTasks raises it, and its Czech msgstr survives every regen.
+#
+# On a stream, too: the refusal arrives as an `event: error` frame, so this
+# also proves the gateway's SSE error path carries the request's locale.
+method: tasks.TasksService.StreamTasks
+pre:
+    - auth/auth.yaml
+headers:
+    Accept-Language: cs
+input:
+    user_id: 0
+expect_error:
+    code: INVALID_ARGUMENT
+    message: Vyberte, čí úkoly se mají streamovat.
+    details:
+        - code: STREAM_USER_REQUIRED

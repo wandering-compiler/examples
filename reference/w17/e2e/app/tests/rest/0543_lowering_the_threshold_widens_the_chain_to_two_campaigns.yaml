@@ -1,0 +1,16 @@
+# The same two-hop chain with a threshold every seeded event clears.
+#
+# The answer is TWO campaigns, not three: the third has no flights at
+# all, so no chain reaches it. That is the number a broken chain cannot
+# produce — dropping the predicate gives two as well, but dropping either
+# FK predicate gives three, and this is the case where "all campaigns"
+# and "the campaigns with events" finally differ.
+method: users.CampaignQuery.ListCampaignsWithHeavyEvent
+pre:
+    - auth/auth.yaml
+input:
+    min_weight: 1
+expect:
+    campaigns: {matcher: count, op: '==', value: 2}
+    campaigns.0.id: {matcher: eq, value: "720001"}
+    campaigns.1.id: {matcher: eq, value: "720002"}

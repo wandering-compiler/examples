@@ -1,0 +1,214 @@
+syntax = "proto3";
+
+package e2e.app.cache;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/app/cache/types/models.proto";
+
+// SessionCacheMutation — write side of the Redis-backed
+// session store. KV mutations: INSERT
+// becomes a Redis SET (idempotent overwrite); DELETE is a
+// Redis DEL.
+//
+// Used by the app's UsersService facade to issue a session
+// after SignUp / LoginUser succeeds and to revoke one on
+// LogoutUser.
+
+message SetSessionReq {
+  string                      token_hash = 1;
+  int64                       user_id    = 2;
+  google.protobuf.Timestamp   expires_at = 3;
+}
+// Redis SET returns an ack, not a row — a KV INSERT has no RETURNING, so
+// there is nothing to project here. The caller already holds the token hash
+// it just wrote; an echo field would only ever carry a zero value.
+message SetSessionResp {}
+
+message DeleteSessionReq {
+  string token_hash = 1;
+}
+message DeleteSessionResp {}
+
+message IssueApiTokenReq {
+  string                      token_hash = 1;
+  int64                       user_id    = 2;
+  string                      label      = 3;
+  google.protobuf.Timestamp   expires_at = 4;
+}
+message IssueApiTokenResp {}
+
+message RotateTokenReq {
+  string                      old_token_hash = 1;
+  string                      new_token_hash = 2;
+  int64                       user_id        = 3;
+  string                      label          = 4;
+  google.protobuf.Timestamp   expires_at     = 5;
+}
+// Same reasoning as SetSessionResp: MULTI/EXEC returns a queued
+// placeholder for every command until EXEC, so there is nothing to
+// project even if the ops were reads.
+message RotateTokenResp {}
+
+// RefreshApiTokenReq / PersistApiTokenReq — the TTL surface.
+//
+// `UPDATE <entity> SET ttl_seconds = <expr> WHERE <pk> = :<bind>`
+// is the only UPDATE a KV connection accepts, and it is the only
+// place `ttl_seconds` exists at all: it is not a column on the
+// model, it is the name the compiler reserves for the key's
+// expiry. Which Redis command comes out is decided by the VALUE:
+// a literal zero is the documented "no expire" sentinel and emits
+// PERSIST, anything else emits EXPIRE. Two methods differing only
+// in that one token are what make the sentinel visible — a single
+// method could not show that zero is special.
+//
+// Nothing in this example had ever set a TTL after the write, so
+// both arms were dark.
+message RefreshApiTokenReq {
+  string token_hash  = 1;
+  // The window the sentinel lives in, stated rather than implied.
+  // `-1` is Redis's "already expired" and is the ONE negative value
+  // this surface means; anything below it is a caller bug, and a year
+  // is the ceiling above which a refreshable token stops being one.
+  //
+  // The 64-bit carrier is the reason the bounds sit HERE and not on
+  // one of the int32 fields that already carry `gt`/`lt` (see
+  // CreateMilestoneReq.weight). A seconds count is int64, and the
+  // generated client compares an int64 bound with BigInt rather than
+  // Number — the two agree only past 2^53, where a Number comparison
+  // silently rounds both sides. Nothing in this example had a bounded
+  // 64-bit request field, so that comparison was emitted by nothing.
+  int64  ttl_seconds = 2 [(w17.field) = { type: NUMBER, gte: -1, lte: 31536000 }];
+}
+message RefreshApiTokenResp {}
+
+message PersistApiTokenReq {
+  string token_hash = 1;
+}
+message PersistApiTokenResp {}
+
+// RevokeTokenPresenceReq — the JSON-layout half of the cross-op KV
+// chain (the HASH half is `DeviceProfileMutation.RevokeDeviceSession`,
+// which carries the full reasoning).
+//
+// Read the token, then drop the presence record belonging to the
+// user it names. The caller cannot do this itself: it holds a token
+// hash, and the user id only exists inside the value the first op
+// decodes.
+message RevokeTokenPresenceReq {
+  string token_hash = 1;
+}
+message RevokeTokenPresenceResp {}
+
+
+service SessionCacheMutation {
+  rpc SetSession(SetSessionReq) returns (SetSessionResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:  "INSERT INTO cache.CachedSession SET token_hash = :token_hash, user_id = :user_id, expires_at = :expires_at"
+      }
+    };
+  }
+
+  rpc DeleteSession(DeleteSessionReq) returns (DeleteSessionResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:  "DELETE FROM cache.CachedSession WHERE token_hash = :token_hash"
+      }
+    };
+  }
+
+  // IssueApiToken — single-op write on the token cache. It exists so a
+  // rotation has something to revoke: Redis DEL on a missing key is a
+  // no-op rather than an error, so without a prior token the revoke
+  // half of RotateToken would pass whether it ran or not.
+  rpc IssueApiToken(IssueApiTokenReq) returns (IssueApiTokenResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:  "INSERT INTO cache.CachedApiToken SET token_hash = :token_hash, user_id = :user_id, label = :label, expires_at = :expires_at"
+      }
+    };
+  }
+
+  // RotateToken — API-token rotation, and the `kv_atomic` fixture.
+  //
+  // Rotation is the case that NEEDS the guarantee rather than
+  // merely benefiting from it. Issue the new token, revoke the
+  // old one: without atomicity a partial failure leaves either
+  // two live tokens for one user (the DEL was lost) or zero
+  // (the SET was lost), and both are security-relevant states a
+  // caller cannot detect from the ack. `kv_atomic` makes the
+  // sequential shape impossible — the server commits both or
+  // neither.
+  //
+  // It also fits every constraint the field documents, which is
+  // why rotation and not something else: two ops (a single op is
+  // already atomic, so the annotation would be a no-op), SET +
+  // DEL only (GET / MGET / EXPIRE refuse — MULTI/EXEC cannot read
+  // inside the transaction), and no `:opName.col` cross-op
+  // reference for the same reason.
+  rpc RotateToken(RotateTokenReq) returns (RotateTokenResp) {
+    option (w17.db.method) = {
+      kv_atomic: true,
+      ops: [
+        {
+          name: "issue",
+          dql:  "INSERT INTO cache.CachedApiToken SET token_hash = :new_token_hash, user_id = :user_id, label = :label, expires_at = :expires_at"
+        },
+        {
+          name: "revoke",
+          dql:  "DELETE FROM cache.CachedApiToken WHERE token_hash = :old_token_hash"
+        }
+      ]
+    };
+  }
+
+  // RefreshApiToken — TTL refresh. The bound value is a request
+  // field, so the emitter cannot know it is non-zero and takes the
+  // EXPIRE arm on the shape alone.
+  rpc RefreshApiToken(RefreshApiTokenReq) returns (RefreshApiTokenResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:  "UPDATE cache.CachedApiToken SET ttl_seconds = :ttl_seconds WHERE token_hash = :token_hash"
+      }
+    };
+  }
+
+  // PersistApiToken — the literal-zero sentinel. Written as `0` and
+  // not as a bound parameter on purpose: the branch keys on the
+  // literal, so passing zero through a param would still emit
+  // EXPIRE (with a zero TTL, which Redis reads as "expire now" —
+  // the opposite of what the caller asked for).
+  rpc PersistApiToken(PersistApiTokenReq) returns (PersistApiTokenResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:  "UPDATE cache.CachedApiToken SET ttl_seconds = 0 WHERE token_hash = :token_hash"
+      }
+    };
+  }
+
+  // RevokeTokenPresence — GET-into-var over the JSON layout.
+  // Op `tok` decodes the token entity into a Go var; op `presence`
+  // binds `:tok.user_id` out of it as the key of the DEL.
+  rpc RevokeTokenPresence(RevokeTokenPresenceReq) returns (RevokeTokenPresenceResp) {
+    option (w17.db.method) = {
+      ops: [
+        {
+          name: "tok",
+          dql:  "SELECT c FROM cache.CachedApiToken c WHERE c.token_hash = :token_hash"
+        },
+        {
+          name: "presence",
+          dql:  "DELETE FROM cache.UserPresenceCache WHERE user_id = :tok.user_id"
+        }
+      ]
+    };
+  }
+
+}

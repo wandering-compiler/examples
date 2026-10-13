@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package e2e.billing.core;
+
+import "w17/db.proto";
+import "domains/billing/core/events/events.proto";
+
+message OnInvoiceIssuedResp {
+  int64 id = 1;
+}
+
+// InvoiceNoticeMutation — the CO-LOCATED subscriber's handler tier.
+//
+// One method, and its request type IS the event message. That is the
+// whole subscriber contract: the dispatcher decodes the envelope, calls
+// this RPC over the in-process bus, and a nil error acks the delivery.
+// Nothing about the method says it came from a bus, which is deliberate
+// — the same handler is callable by hand when a notice has to be
+// replayed for one invoice.
+service InvoiceNoticeMutation {
+  // Queue the customer notice for an invoice that was just issued.
+  //
+  // Idempotency is deliberately NOT enforced here: the table records one
+  // row per attempt, so a redelivery (the channel allows five) produces
+  // a second notice row rather than swallowing the second attempt. That
+  // is the honest shape for a send log — "we told them twice" is a fact
+  // worth keeping, and collapsing it would hide a retry storm.
+  rpc OnInvoiceIssued(InvoiceIssued) returns (OnInvoiceIssuedResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO core.InvoiceNotice "
+          "SET invoice_id = :invoice_id, channel = 'email' "
+          "RETURNING id"
+      }
+    };
+  }
+}
+
+message OnInvoiceIssuedAuditResp {
+  int64 id = 1;
+}
+
+// InvoiceAuditMutation — the SECOND service this domain's subscriber
+// surface dispatches into, and the reason it exists is the capability
+// rather than the row it writes.
+//
+// A domain used to get exactly one handler service, forever: the bundle
+// built a single typed client, so whoever wrote the first subscription
+// chose the service every later event would have to fit into. The
+// billing domain spent its slot on InvoiceNoticeMutation, and a second
+// reaction to the same fact had nowhere to go without either moving into
+// a service it does not belong to or splitting the domain (which changes
+// deployment topology and loses cross-module access, since cross-domain
+// subscribe is refused).
+//
+// So this is the proof that the bundle now builds one client per
+// service: two services, two subscriptions, one domain, one subscriber
+// process. Both sit on the storage tier here; the cross-tier render — a
+// storage Mutation and a business Service dialed at two addresses — is
+// pinned in the compiler's own suite, because this example has no
+// business tier in `billing` to write it with.
+//
+// The row it writes is consistent with what InvoiceNotice already models:
+// "one row per attempt per channel", so an audit-channel entry alongside
+// the email one is the table's own shape, not a fixture bent to fit.
+service InvoiceAuditMutation {
+  // Record that the issue event was observed, on its own channel.
+  //
+  // Deliberately a DIFFERENT service from InvoiceNoticeMutation rather
+  // than a second method on it: what is under test is that two SERVICES
+  // in one domain each get their own client, and a second method would
+  // prove only what the first already did.
+  rpc OnInvoiceIssuedAudit(InvoiceIssued) returns (OnInvoiceIssuedAuditResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO core.InvoiceNotice "
+          "SET invoice_id = :invoice_id, channel = 'audit' "
+          "RETURNING id"
+      }
+    };
+  }
+}

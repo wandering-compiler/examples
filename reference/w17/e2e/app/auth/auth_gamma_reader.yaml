@@ -1,0 +1,10 @@
+# tenant-gamma again, as its own file — a `pre` chain runs each fixture
+# PATH at most once, so re-listing auth_gamma.yaml to switch back would
+# be a silent no-op and the step would run as whoever authed last.
+method: auth.AuthService.SignUp
+input:
+    tenant_slug: tenant-gamma
+    email: gamma-reader${seq}@example.com
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}

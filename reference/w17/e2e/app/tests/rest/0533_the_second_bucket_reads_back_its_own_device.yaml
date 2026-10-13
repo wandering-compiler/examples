@@ -1,0 +1,15 @@
+# The mirror of 0532, and the half that makes the pair an assertion
+# rather than a round-trip.
+#
+# One read proves a session comes back. Two reads that disagree prove
+# the bucket half of the key decided which one — and they can only
+# disagree if it did.
+method: cache.UserSessionQuery.GetUserSession
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 2
+    session_id: e2e-shared-device-token
+expect:
+    user_id: {matcher: eq, value: "2"}
+    device: {matcher: eq, value: ios/safari}

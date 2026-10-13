@@ -1,0 +1,21 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# The unfiltered baseline for the filter/search pair below. Written over
+# a skeleton that asserted `count >= 0`, which an empty response also
+# satisfies — and emptiness is this page's plausible failure, since its
+# list method is the only one in this example whose WHERE clause is built
+# from request fields. A filter predicate that mis-binds returns zero
+# rows and a 200.
+#
+# The three seeded milestones (fixtures/app/test.json).
+method: admin.MilestoneAdmin.List
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    items: {matcher: count, op: '==', value: 3}
+    items.0.id: {matcher: eq, value: "710001"}
+    items.2.id: {matcher: eq, value: "710003"}

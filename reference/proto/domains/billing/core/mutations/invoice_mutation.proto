@@ -1,0 +1,324 @@
+syntax = "proto3";
+
+package e2e.billing.core;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+import "w17/event.proto";
+import "domains/billing/core/events/events.proto";
+import "domains/billing/core/types/models.proto";
+
+// InvoiceMutation — write side of the billing ledger.
+// Five mutations
+// covering the invoice + ledger lifecycle. Every multi-op
+// mutation runs on the single `billing-postgres` connection
+// → same-connection distributed transaction → fully atomic.
+//
+// A first design had three mutations
+// (CreateInvoice / RecordPayment / VoidInvoice). The shipped
+// surface splits header + line-item insertion + status
+// transitions across five primitives because:
+//
+//   1. DQL doesn't expand `repeated InvoiceLineInput`
+//      into multi-row INSERT today — each line item lands
+//      via its own atomic call.
+//   2. Multi-op mutations populate the response from the
+//      FINAL op's RETURNING. Header-first multi-op flows
+//      that need the header's id back to the caller have to
+//      either chain the header through the final op's
+//      RETURNING (dotted aliases) or expose the
+//      header insert as its own single-row mutation. The
+//      latter reads cleaner here and keeps each primitive's
+//      response shape obvious.
+//
+// Status state machine the mutations enforce:
+//
+//   DRAFT  ─(IssueInvoice)→  OPEN   ─(RecordPayment)→ ...
+//     ↓                       ↓
+//   (CreateInvoice)         VOID (VoidInvoice)
+//
+// Line items: append-only on a DRAFT invoice via
+// AddInvoiceLineItem; after IssueInvoice the invoice should
+// be considered frozen at the application layer (no enforce
+// in DQL today).
+
+// ── CreateInvoice ─────────────────────────────────────────
+
+message CreateInvoiceReq {
+  // account_id — the invoice's owner, and this example position for
+  // `required` on a PRESENCE-BEARING field.
+  //
+  // `optional` makes absence expressible; `required: true` refuses it by
+  // NAME. Without the pair, an omitted account is caught downstream — the
+  // insert fails on a NOT NULL column, or a lookup returns nothing — and the
+  // message names whatever broke second instead of the parameter the caller
+  // left out.
+  //
+  // Contrast `subscription_id` below: genuinely optional, and the reason the
+  // two sit next to each other. `null` describes the COLUMN, `required` the
+  // INPUT, and this message needs both readings at once.
+  optional int64              account_id      = 1 [(w17.field) = { required: true }];
+  // subscription_id — optional (0 = no subscription, e.g.
+  // for credit-note / adjustment invoices).
+  int64                       subscription_id = 2;
+  string                      number          = 3;
+  google.protobuf.Timestamp   period_start    = 4;
+  google.protobuf.Timestamp   period_end      = 5;
+  google.protobuf.Timestamp   due_at          = 6;
+}
+
+message CreateInvoiceResp {
+  int64 id = 1;
+}
+
+// ── AddInvoiceLineItem ────────────────────────────────────
+
+message AddInvoiceLineItemReq {
+  int64                                 invoice_id  = 1;
+  int32                                 quantity    = 2;
+  int32                                 unit_cents  = 3;
+  // cents = quantity * unit_cents; caller computes the
+  // product and passes both. DQL doesn't expose arithmetic
+  // on bound params in SET expressions today
+  // (`SET cents = :quantity * :unit_cents` would either
+  // typecheck-fail or generate a runtime expression — keep
+  // the demo straightforward and let the caller multiply).
+  int32                                 cents       = 4;
+  e2e.billing.core.InvoiceLineItem.Kind kind        = 5;
+  string                                description = 6;
+}
+
+message AddInvoiceLineItemResp {
+  int64 id = 1;
+}
+
+// ── IssueInvoice ──────────────────────────────────────────
+
+message IssueInvoiceReq {
+  int64 id = 1;
+}
+
+// IssueInvoiceResp returns the LedgerEntry id (the FINAL
+// op's RETURNING) — the entry's existence is the audit
+// trail of issuance. Caller already has the invoice id.
+message IssueInvoiceResp {
+  int64 id = 1;
+}
+
+// ── RecordPayment ─────────────────────────────────────────
+
+message RecordPaymentReq {
+  int64                            account_id   = 1;
+  // invoice_id — 0 for account-credit topups (un-targeted
+  // CREDIT payments).
+  int64                            invoice_id   = 2;
+  int32                            amount_cents = 3;
+  e2e.billing.core.Payment.Method  method       = 4;
+  string                           external_ref = 5;
+}
+
+// RecordPaymentResp returns the LedgerEntry id (the FINAL
+// op's RETURNING) for the same reason as IssueInvoice.
+message RecordPaymentResp {
+  int64 id = 1;
+}
+
+// ── VoidInvoice ───────────────────────────────────────────
+
+message VoidInvoiceReq {
+  int64  id     = 1;
+  string reason = 2;
+}
+
+message VoidInvoiceResp {
+  int64 id = 1;
+}
+
+service InvoiceMutation {
+  // CreateInvoice — single-row INSERT, DRAFT status. Line
+  // items added via AddInvoiceLineItem; transitions to OPEN
+  // via IssueInvoice.
+  rpc CreateInvoice(CreateInvoiceReq) returns (CreateInvoiceResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO core.Invoice SET "
+          "  account_id      = :account_id, "
+          "  subscription_id = :subscription_id, "
+          "  number          = :number, "
+          "  status          = 'DRAFT', "
+          "  period_start    = :period_start, "
+          "  period_end      = :period_end, "
+          "  total_cents     = 0, "
+          "  due_at          = :due_at "
+          "RETURNING id"
+      }
+    };
+  }
+
+  // AddInvoiceLineItem — two-op atomic write: bump the
+  // invoice's denormalized total_cents, then INSERT the
+  // line. UPDATE first so the INSERT's RETURNING populates
+  // the response (final op = response producer).
+  //
+  // Order matters semantically too — the UPDATE's row lock
+  // pins the parent invoice across the per-item write, so
+  // a concurrent AddInvoiceLineItem on the same invoice
+  // can't race on total_cents.
+  rpc AddInvoiceLineItem(AddInvoiceLineItemReq) returns (AddInvoiceLineItemResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "bump_total",
+        dql:
+          "UPDATE core.Invoice SET total_cents = total_cents + :cents "
+          "WHERE id = :invoice_id"
+      },
+      ops: {
+        name: "insert_line",
+        dql:
+          "INSERT INTO core.InvoiceLineItem SET "
+          "  invoice_id  = :invoice_id, "
+          "  quantity    = :quantity, "
+          "  unit_cents  = :unit_cents, "
+          "  cents       = :cents, "
+          "  kind        = :kind, "
+          "  description = :description "
+          "RETURNING id"
+      }
+    };
+  }
+
+  // IssueInvoice — DRAFT → OPEN transition with FOR UPDATE
+  // lock. Three ops: SELECT the row under exclusive lock to
+  // freeze status + read total_cents, UPDATE to OPEN, then
+  // INSERT a DEBIT LedgerEntry of kind INVOICE_ISSUED
+  // recording the obligation. All atomic on the single
+  // billing-postgres connection.
+  //
+  // Status-machine enforcement (only DRAFT → OPEN is valid)
+  // is the application layer's responsibility today — DQL
+  // doesn't expose conditional UPDATE-or-fail. The caller
+  // reads `load.status` from the response of a separate
+  // GetInvoiceWithAccountAndPlan first if they care to
+  // gate it.
+  rpc IssueInvoice(IssueInvoiceReq) returns (IssueInvoiceResp) {
+    // SERVER-tier emit. Issuance is a fact about the row: a batch job
+    // closing a billing period must produce the same signal a
+    // hand-triggered issuance does, and neither enters through a
+    // gateway — billing has no REST surface at all, which is exactly
+    // why the gateway tier would be the wrong one here.
+    //
+    // The payload reads `$request.id` and not the response's, because
+    // IssueInvoiceResp carries the LEDGER ENTRY's id (the final op's
+    // RETURNING), not the invoice's.
+    option (w17.event_emit) = {
+      event: "InvoiceIssued"
+      payload: {
+        fields: [
+          { key: "invoice_id", value: "$request.id" }
+        ]
+      }
+    };
+
+    option (w17.db.method) = {
+      ops: {
+        name: "load",
+        dql:
+          "SELECT i.account_id, i.total_cents FROM core.Invoice i WHERE i.id = :id"
+      },
+      ops: {
+        name: "open",
+        dql:  "UPDATE core.Invoice SET status = 'OPEN' WHERE id = :id"
+      },
+      ops: {
+        name: "ledger",
+        dql:
+          "INSERT INTO core.LedgerEntry SET "
+          "  account_id   = :load.account_id, "
+          "  direction    = 'DEBIT', "
+          "  amount_cents = :load.total_cents, "
+          "  ref_kind     = 'INVOICE_ISSUED', "
+          "  ref_id       = :id "
+          "RETURNING id"
+      }
+    };
+    option (w17.db.lock) = {
+      locks: [
+        { resource: "Invoice", kind: SELECT_FOR_UPDATE }
+      ]
+    };
+  }
+
+  // RecordPayment — two-op atomic write recording money in.
+  // INSERT Payment first, then INSERT LedgerEntry tied to
+  // the payment's id via cross-op alias. LedgerEntry is the
+  // final op → its RETURNING populates the response.
+  //
+  // No FOR UPDATE — both ops are inserts; nothing to lock.
+  rpc RecordPayment(RecordPaymentReq) returns (RecordPaymentResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "payment",
+        dql:
+          "INSERT INTO core.Payment SET "
+          "  account_id   = :account_id, "
+          "  invoice_id   = :invoice_id, "
+          "  amount_cents = :amount_cents, "
+          "  method       = :method, "
+          "  external_ref = :external_ref "
+          "RETURNING id"
+      },
+      ops: {
+        name: "ledger",
+        dql:
+          "INSERT INTO core.LedgerEntry SET "
+          "  account_id   = :account_id, "
+          "  direction    = 'CREDIT', "
+          "  amount_cents = :amount_cents, "
+          "  ref_kind     = 'PAYMENT_RECEIVED', "
+          "  ref_id       = :payment.id "
+          "RETURNING id"
+      }
+    };
+  }
+
+  // VoidInvoice — flip status to VOID + post a reversing
+  // CREDIT LedgerEntry of kind ADJUSTMENT. The CREDIT
+  // cancels the original INVOICE_ISSUED DEBIT in the
+  // running-balance trail so the account's balance reverts
+  // to where it was before issuance.
+  //
+  // SELECT FOR UPDATE prevents concurrent VoidInvoice +
+  // IssueInvoice races on the same invoice.
+  rpc VoidInvoice(VoidInvoiceReq) returns (VoidInvoiceResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "load",
+        dql:
+          "SELECT i.account_id, i.total_cents FROM core.Invoice i WHERE i.id = :id"
+      },
+      ops: {
+        name: "void",
+        dql:  "UPDATE core.Invoice SET status = 'VOID' WHERE id = :id"
+      },
+      ops: {
+        name: "ledger",
+        dql:
+          "INSERT INTO core.LedgerEntry SET "
+          "  account_id   = :load.account_id, "
+          "  direction    = 'CREDIT', "
+          "  amount_cents = :load.total_cents, "
+          "  ref_kind     = 'ADJUSTMENT', "
+          "  ref_id       = :id "
+          "RETURNING id"
+      }
+    };
+    option (w17.db.lock) = {
+      locks: [
+        { resource: "Invoice", kind: SELECT_FOR_UPDATE }
+      ]
+    };
+  }
+}

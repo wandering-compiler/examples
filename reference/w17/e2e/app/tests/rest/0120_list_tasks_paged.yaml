@@ -1,0 +1,17 @@
+# The plain paged list, with no page size named. The five seeded tasks
+# make the floor of 1 safe (0025 pins their visibility to this principal
+# exactly), and a floor rather than a count because every fixture run
+# adds one.
+#
+# `paging.total` is the reason a floor is enough: an unpaged response
+# leaves the envelope nil, and that is a different failure from an empty
+# page. int64/uint64 cross the JSON wire quoted, so not_empty rather than
+# a numeric matcher — the same shape 0025 pins by equality.
+method: tasks.TaskQuery.ListTasksPaged
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    items: {matcher: count, op: '>=', value: 1}
+    items.0.id: {matcher: not_empty}
+    paging.total: {matcher: not_empty}

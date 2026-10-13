@@ -1,0 +1,14 @@
+# The derived `bucket` column — a CASE expression over priority, which is
+# the whole subject of this endpoint.
+#
+# `rows.0.bucket` is therefore the assertion that matters: the row count
+# says the query ran, but only a non-empty bucket says the CASE produced
+# a label rather than a null. The scaffold's `>= 0` asserted neither, and
+# an endpoint that lost the computed column entirely would have passed it.
+method: tasks.TaskQuery.ListTasksByPriorityBucket
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    rows: {matcher: count, op: '>=', value: 1}
+    rows.0.bucket: {matcher: not_empty}

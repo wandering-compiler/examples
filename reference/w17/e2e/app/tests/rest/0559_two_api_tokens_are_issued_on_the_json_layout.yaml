@@ -1,0 +1,12 @@
+# The JSON-layout half of the same verb set starts here. `CachedApiToken`
+# takes the protojson default, so a write is one SET of one blob and a
+# multi-key read is one MGET — a different emitter from the pipelined
+# HGETALLs the HASH table needs for the identical DQL.
+method: cache.SessionCacheMutation.IssueApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e-ttl-token-keep
+    user_id: 3
+    label: ci-deploy
+expect: {}

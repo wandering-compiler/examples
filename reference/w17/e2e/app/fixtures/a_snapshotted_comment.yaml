@@ -1,0 +1,15 @@
+# Writes a Comment whose body_text comes from a SCALAR SUBQUERY over
+# another table — the mutation-value shape no example carried before
+# 2026-09-19.
+#
+# Category 1 is seeded reference data, the same row `a_task.yaml`
+# attaches to, so the name the subquery lifts is known and a later case
+# can compare against it rather than merely asserting "not empty".
+method: tasks.TaskMutation.SnapshotComment
+pre:
+    - fixtures/a_task.yaml
+input:
+    task_id: ${task.id}
+    category_id: 1
+expect:
+    id: {capture: snapshot.comment_id, match: {matcher: not_empty}}

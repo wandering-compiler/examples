@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+// Module-level cascade config for the `showcase` module.
+//
+// This file carries module-wide defaults; combined with the
+// domain-level config in `proto/domains/app/w17.proto`, every
+// per-table file gets a fully-resolved Module without restating
+// the connection. Author-overridable per-file via the file's own
+// `option (w17.module) = { ... };`.
+//
+// This particular module leaves the cascade as-is — connection
+// inherits from domain, prefix defaults to applying (the module
+// dir name `showcase` becomes the prefix on every auto-derived
+// table here). The file-level types files demonstrate the four
+// table-side combinations.
+
+package e2e.app.showcase;
+
+import "w17/db.proto";
+import "w17/module.proto";
+
+// Empty — but the file is recognised as a module-level w17.proto
+// sentinel. Adding `option (w17.module) = { schema: "...",
+// prefix: false, connection: {...} };` here would override the
+// inherited domain options for every table in the module.
+option (w17.module) = {};

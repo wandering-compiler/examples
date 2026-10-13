@@ -1,0 +1,13 @@
+# … and did NOT land in the other one.
+#
+# Without this step 0535 is satisfied by an implementation that ignores
+# the bucket entirely: one hash, one field, last write wins. The two
+# steps together are what require the writes to have gone to two places.
+method: cache.UserSessionQuery.GetUserSession
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 2
+    session_id: e2e-shared-device-token
+expect:
+    device: {matcher: eq, value: ios/safari}

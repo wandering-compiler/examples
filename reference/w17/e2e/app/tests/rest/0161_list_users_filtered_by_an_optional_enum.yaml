@@ -1,0 +1,31 @@
+# An `optional <Enum>` in a `?` skip-on-null conjunct, set, over REST.
+#
+# This step and 0162 are a pair, and 0160 is the third leg: 0160 leaves
+# `status_exact` ABSENT and still expects a row, this one SETS it to a
+# value that matches, and 0162 sets it to one that does not. Any one of
+# the three alone is satisfied by a broken endpoint — all three together
+# are not:
+#
+#   - a filter that is silently DROPPED (the REST layer never bound the
+#     query param) passes 0160 and 0161 and fails 0162;
+#   - a filter whose absent value binds the enum's ZERO instead of SQL
+#     NULL makes `(u.status = $1 OR $1 IS NULL)` false for every row, so
+#     it fails 0160 with an empty list and a 200;
+#   - an endpoint that ignores the filter entirely fails 0162.
+#
+# Both defects were real and shipped together. The seeded users are
+# status 1 (fixtures/app/test.json), so `1` is the matching value.
+method: users.UsersService.ListUsers
+pre:
+    - auth/auth.yaml
+input:
+    limit: 10
+    status_exact: 1
+#
+# On its own this step is VACUOUS — an ignored filter returns the same
+# rows and passes it. It passed exactly that way once, while the facade
+# hop was dropping `filter` on the floor. Read it only as the positive
+# half of the pair; 0162 is the half that can fail.
+expect:
+    users: {matcher: count, op: '>=', value: 1}
+    users.0.status: {matcher: eq, value: 1}

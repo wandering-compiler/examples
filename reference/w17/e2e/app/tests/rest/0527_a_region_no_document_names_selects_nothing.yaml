@@ -1,0 +1,13 @@
+# The other half of 0526. Same query, a region no stored placement
+# document carries.
+#
+# It is what rules out the predicate having been dropped: an emitter
+# that lowered `p.placement.region = :region` into nothing would return
+# the whole table here and satisfy 0526 by accident.
+method: users.DirectoryPlanQuery.ListDirectoryPlansInRegion
+pre:
+    - auth/auth.yaml
+input:
+    region: ap-southeast
+expect:
+    plans: {matcher: count, op: '==', value: 0}

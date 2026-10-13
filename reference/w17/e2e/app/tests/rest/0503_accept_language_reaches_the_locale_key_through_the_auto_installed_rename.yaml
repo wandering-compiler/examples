@@ -1,0 +1,20 @@
+# The AUTO-INSTALLED `Accept-Language → w17-language` rename.
+#
+# Nothing in this project's registry declares that mapping: declaring
+# `default_language` installs it. So this case reads a
+# `header_renames[]` entry the author never wrote, which is the only
+# reason a browser's standard header reaches a w17-namespaced metadata
+# key at all.
+#
+# `en` and not `cs`, on purpose. The surface's default IS `cs` (0502),
+# so asserting `cs` here would pass with the rename gone — the default
+# stamp would supply the same answer. Naming the OTHER language is what
+# separates "the header was read" from "the fallback fired".
+method: users.UsersService.EchoRequestContext
+pre:
+    - auth/auth.yaml
+headers:
+    Accept-Language: en
+input: {}
+expect:
+    language: {matcher: eq, value: en}

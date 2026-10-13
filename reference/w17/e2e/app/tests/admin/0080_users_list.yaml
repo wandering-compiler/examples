@@ -1,0 +1,21 @@
+# The Users page is the auth plugin's turnkey admin list — ADMIN-ONLY
+# cursor-paged: `ListUsersResp` carries `w17.Paging`, and no REST endpoint
+# publishes that method. `paging.total` is what proves the envelope is
+# actually filled instead of left nil — the exact symptom of an unpaged
+# admin list.
+#
+# The count stays a FLOOR because the realm's user set is not this step's
+# subject (the throwaway admin b2 is deleted by 0170 later in this run) —
+# but a floor of 1, not the scaffold's 0. The caller of this very step is
+# a seeded admin account, so a Users page that answers with no rows at
+# all is broken by definition, and `>= 0` could not say so.
+method: admin.Users.List
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    users: {matcher: count, op: '>=', value: 1}
+    users.0.email: {matcher: not_empty}
+    # uint64 → protojson renders it as a JSON string, so not_empty rather
+    # than a numeric matcher.
+    paging.total: {matcher: not_empty}

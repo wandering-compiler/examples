@@ -1,0 +1,32 @@
+# A SECOND gated tool reached over MCP, so "the surface is wired" is not
+# proven on one tool and assumed for the rest — a permission stamp missed
+# on one tool is invisible in a suite that only exercises another.
+#
+# WHY THE EXPECTED COUNT IS ZERO, and why nothing is created first:
+#
+# `ListDirectoryCards` is UNSCOPED — `SELECT ... FROM UserDirectoryCard
+# ORDER BY id` returns every row in the table. The REST suite's 0369 pins
+# that table at exactly four cards to prove a refused write left it
+# untouched, so a card created here would be counted there and break it.
+# Two drafts tried: same (user, locale) collided with 0360 on the
+# published-card unique key, and a distinct locale still made 0369 count
+# five. There is no card this case can create that the REST suite does
+# not see.
+#
+# Scenarios run mcp before rest (Go orders them by test name), so at this
+# point the table is empty and zero is the honest answer. That ordering
+# is a real dependency and it is written down rather than left implicit:
+# if the order ever flips, this case fails loudly and says why, which
+# beats an assertion that quietly starts passing for a different reason.
+#
+# `count == 0` is not vacuous — it is falsifiable in the direction that
+# matters. A tool that never registered answers `tool not found` at the
+# transport; a tool that answers a well-formed empty list has been
+# registered, permitted and dispatched. `count >= 0` WOULD be vacuous,
+# and the assertion gate refused an earlier draft that said so.
+method: users.DirectoryCardQuery.ListDirectoryCards
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    cards: {matcher: count, op: '==', value: 0}

@@ -1,0 +1,39 @@
+# ORDER BY-by-enum, arm 3 of 3 — a `sort_sql` fragment whose column is
+# a FUNCTION CALL (`coalesce(m.target_count, 0) DESC`).
+#
+# The fragment therefore contains a comma that must NOT be treated as a
+# key separator, and a trailing direction that must still be lifted out
+# of the `CASE ... THEN <expr>` branch. Splitting on that comma
+# truncates the statement mid-call (`THEN coalesce(m.target_count`);
+# leaving the direction inside the branch is a syntax error too. Either
+# way the regression arrives as a 500 from the database, which is why
+# this arm is asserted against a live one rather than against the
+# emitted string.
+#
+# What the ordering proves:
+#
+#   id 2  target_count 12    ← highest
+#   id 3  target_count 4
+#   id 1  target_count NULL  ← coalesced to 0, so it lands LAST
+#
+# The NULL row is the point of the coalesce: without it, where a NULL
+# sorts under DESC is a dialect default rather than a stated one. This
+# sequence differs from BOTH other arms (1,2,3 unsorted / 3,2,1 by
+# weight), so it cannot be satisfied by an ordering that ignored the
+# selector.
+#
+# target_count is not projected — the response carries id, name and
+# weight only. The order therefore has to come out of the SQL; it is not
+# re-derivable from anything in the payload.
+#
+# POSITION IS LOAD-BEARING — see 0300.
+method: tasks.TaskQuery.ListMilestonesSorted
+pre:
+    - auth/auth.yaml
+input:
+    sort_by: MILESTONE_SORT_BY_TARGET
+expect:
+    items: {matcher: count, op: '==', value: 3}
+    items.0.id: {matcher: eq, value: "710002"}
+    items.1.id: {matcher: eq, value: "710003"}
+    items.2.id: {matcher: eq, value: "710001"}

@@ -1,0 +1,27 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# The regression pin for the zero-row abort.
+#
+# RedactTask is two ops in one transaction: delete the task's comments,
+# then redact the task. `fixtures/a_task.yaml` creates a task and adds
+# NO comments, so the first op legitimately matches nothing — and that
+# is the entire point of running it against this fixture rather than a
+# commented one. Before the fix the DELETE's unread `RETURNING id` was
+# scanned with QueryRow().Scan, sql.ErrNoRows aborted the transaction
+# and this call answered 404.
+#
+# `title` is asserted by value, not `not_empty`. The response producer
+# is the SECOND op, so a 200 carrying an unredacted title would mean
+# the method returned before its final op ran — which `not_empty`
+# (satisfied by the original "e2e task") could not tell from success.
+method: tasks.TaskMutation.RedactTask
+pre:
+    - fixtures/a_task.yaml
+input:
+    id: ${task.id}
+expect:
+    id: {matcher: eq, value: '${task.id}'}
+    title: {matcher: eq, value: '(redacted)'}

@@ -1,0 +1,20 @@
+# `Index.unique` over TWO fields — the permit direction.
+#
+# The unique index covers (user_id, locale), so the same account may
+# publish once per language. Without this step 0363's refusal would be
+# satisfied by an index on user_id alone, which would refuse this
+# request too — and an account that can hold exactly one card in total
+# is a different product.
+method: users.DirectoryCardMutation.CreateDirectoryCard
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    handle: Alpha-EN
+    headline: Backend engineer, Prague
+    locale: en
+    is_public: true
+    visible_from: "2026-01-01T00:00:00Z"
+    visible_until: "2026-12-31T00:00:00Z"
+expect:
+    id: {capture: card_en.id, match: {matcher: not_empty}}

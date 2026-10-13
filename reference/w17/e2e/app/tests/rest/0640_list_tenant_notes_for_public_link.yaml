@@ -1,0 +1,47 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# step 3 of 3 — THE proof, and the only step here that can fail
+# when the scope filter breaks.
+#
+# `ListTenantNotesForPublicLink` has no token in its DQL. The single
+# thing standing between this response and every other tenant's notes
+# is the auto-WHERE fed by the scope that the capability token's auth
+# method returned. That is why the chain seeds a note under ALPHA first:
+# without another tenant holding rows, an unscoped read and a scoped one
+# answer identically and the case proves nothing.
+#
+# The `distinct` assertion is the detector. Strip the scope filter and
+# alpha's note joins the result, so the number of distinct `tenant_id`
+# values goes from 1 to 2 and this fails. A `count >= 1` — the shape the
+# scaffold would have produced — passes in both worlds.
+#
+# It is also the feature's claim stated as a test: once a URL credential
+# authenticates, tenant isolation carries into reads that never mention
+# the token. An `exclude_auth` + hand-written-WHERE implementation of the
+# same link could not offer this endpoint at all — there would be no
+# scope for it to be filtered by, only whatever predicate the author
+# remembered to repeat.
+method: tasks.TaskQuery.ListTenantNotesForPublicLink
+pre:
+    # Alpha's note is the decoy: a row in a DIFFERENT tenant that a
+    # broken scope filter would let through.
+    - fixtures/a_tenant_note.yaml
+    - fixtures/a_gamma_note_with_public_link.yaml
+input:
+    public_token: ${publiclink.token}
+expect:
+    # One distinct tenant_id across the whole list — not `count >= 1`,
+    # which would pass with alpha's row sitting right there in the
+    # response. (Only one `notes:` key: YAML would silently keep the
+    # last of two and the earlier assertion would never run.)
+    notes: {matcher: distinct, field: tenant_id, op: '==', value: 1}
+    # …and that one tenant is gamma's, the tenant the link was minted
+    # in. `distinct == 1` alone would also hold if the list came back
+    # containing only ALPHA's rows — one tenant, wrong tenant. Indexing
+    # notes.0 additionally requires the list to be non-empty, so an
+    # empty answer (the shape a fail-closed scope bug produces) fails
+    # here rather than passing as "one distinct value among none".
+    notes.0.tenant_id: {matcher: eq, value: '33333333-3333-3333-3333-333333333333'}

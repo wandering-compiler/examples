@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+// Module-level cascade config for the `flat` module.
+//
+// Demonstrates case D — MODULE-LEVEL PREFIX OPT-OUT. Setting
+// `table_prefix: false` here drops the module prefix (`flat_`) from
+// EVERY auto-derived table name in the module. Per-table
+// override (`(w17.db.table).prefix: true`) can force the prefix
+// back on for a specific table.
+//
+// Use case: a "well-known" module where every table is meant to
+// stand on its own (`event`, `setting`, `feature_flag`, …) and
+// the module name doesn't carry useful semantics for SQL
+// readers. The connection still inherits from the domain-level
+// cascade.
+
+package e2e.app.flat;
+
+import "w17/db.proto";
+import "w17/module.proto";
+
+option (w17.module) = {
+  table_prefix: false
+};

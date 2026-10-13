@@ -1,0 +1,36 @@
+# `(w17.RestGroup).downloads` — the field selector and the URL form,
+# both read off ONE response.
+#
+# `stored_path` and `storage_key` hold the SAME stored handle: the
+# read's DQL selects the column twice. Everything that differs between
+# them below was decided by the download endpoints, not by the data.
+#
+#   stored_path — `/files` includes `tasks.*`        → RELATIVE URL
+#   storage_key — `/files` EXCLUDES it, `/blobs`
+#                 includes it exactly                → ABSOLUTE URL
+#
+# Three declarations are each refuted by a different half of this:
+#
+#   * `include` — a selector resolving to nothing would leave both
+#     fields carrying the raw handle, with no prefix at all.
+#   * `exclude` — ignored, `tasks.*` covers storage_key too and BOTH
+#     values come back under `/files`. The two prefixes are the only
+#     way to tell that apart, which is why there are two endpoints:
+#     with one, `include: ["*"]` minus nothing is indistinguishable
+#     from no selector.
+#   * `url_form` — the two endpoints declare different forms, so a
+#     renderer that ignored the field would emit the same shape twice.
+#     RELATIVE starts at `/`; ABSOLUTE carries the origin the gateway
+#     read from APP_GATEWAY_PUBLIC_HOST at boot.
+#
+# The trailing key is the same in both, and asserting it twice is the
+# point: the rewrite must change the PREFIX and leave the object
+# identity alone.
+method: tasks.TaskQuery.GetTaskUpload
+pre:
+    - auth/auth.yaml
+input:
+    id: ${task_upload.id}
+expect:
+    stored_path: {matcher: regex, pattern: "^/api/v1/tasks/files/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}
+    storage_key: {matcher: regex, pattern: "^http://[^/]+/api/v1/tasks/blobs/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}

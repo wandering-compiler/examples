@@ -1,0 +1,34 @@
+# The escape hatch drops the TENANCY half of the constraint, not the whole
+# constraint.
+#
+# 0164 proves a bookmark may cross the tenant boundary. This proves it may
+# not point at nothing: the ordinary single-column foreign key survives, so a
+# note id no row carries is still refused.
+#
+# Without this case, `fk_cross_scope` would be indistinguishable from
+# "dropped the foreign key entirely" — and a hatch that quietly permits a
+# dangling id is worse than one that refuses too much, because nothing ever
+# reports it.
+method: tasks.TaskMutation.BookmarkTenantNote
+pre:
+    - auth/auth_beta.yaml
+input:
+    note_id: 9223372036854775807
+    note: e2e-xdangling-${seq}
+expect_error:
+    code: INVALID_ARGUMENT
+    # The refusal has to NAME the field. A message that only classified the
+    # failure ("fk violation") told the caller which database concept was
+    # upset and nothing they could act on; anchoring on `note_id` is what
+    # makes this case fail if the field ever drops back out.
+    #
+    # It anchors on the DETAIL rather than the message, because that is where
+    # the field-level half travels now: `message` carries the one sentence
+    # written for a person and reads the same for every InvalidArgument, while
+    # `details[]` carries what a form can act on. The constraint registry the
+    # codegen emits is what turns a PG constraint name into this entry, so the
+    # case still fails if that mapping is lost.
+    details:
+        - field: note_id
+          code: INVALID_VALUE
+          message: {matcher: regex, pattern: "referenced record does not exist"}

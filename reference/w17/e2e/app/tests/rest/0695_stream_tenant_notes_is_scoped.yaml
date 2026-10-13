@@ -1,0 +1,31 @@
+# A SERVER STREAM over a SCOPED model whose request carries a VALIDATED field.
+#
+# That shape generated a storage handler which did not compile (a consumer,
+# 2026-10-01): the validation block reads `ctx` for its translated messages,
+# and a streaming handler has no `ctx` parameter. `codegen` exited 0 and
+# `go build` failed two steps later. This case is where the fixed shape is
+# BUILT and RUN, not just generated.
+#
+# Two tenants hold a note with the same title; the caller is tenant-alpha.
+# `frames` is exhaustive, so a stream that dropped the tenant predicate fails
+# on the second frame (beta's), and one that sent nothing fails on the first.
+#
+# NUMBERED AFTER 0640 ON PURPOSE: it writes a note as tenant-beta, and 0225
+# asserts tenant-beta owns none while it runs. Every exact-count tenant-note
+# case is numbered at or below 0640.
+#
+# ORDER IN `pre` IS THE IDENTITY: beta's note first, alpha's last, so the
+# step runs as the alpha principal that wrote the last fixture. Each fixture
+# authenticates through its OWN auth path (auth_*_streamer.yaml) because a
+# path that already ran in this suite does not re-authenticate — this case's
+# first run wrote its "alpha" note as beta that way.
+method: tasks.TaskQuery.StreamTenantNotes
+pre:
+    - fixtures/a_streamed_beta_note.yaml
+    - fixtures/a_streamed_alpha_note.yaml
+input:
+    title: e2e streamed scoped note
+expect_stream:
+    frames:
+        - id: {matcher: eq, value: "${streamed.alpha_id}"}
+          title: {matcher: eq, value: "e2e streamed scoped note"}

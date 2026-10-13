@@ -1,0 +1,12 @@
+# The role is a real ORG-SCOPED role of this project (admin_auth's org-auditor).
+# A membership's role label and its org grant change together since auth rc.11
+#, so an update resolves the label to a role — "admin" named none here
+# and is refused now, where it used to be written as a bare label.
+method: admin.OrgMemberships.Update
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b5
+    role: org-auditor
+expect:
+    membership_id: {matcher: not_empty}

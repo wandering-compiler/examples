@@ -1,0 +1,977 @@
+syntax = "proto3";
+
+package e2e.app.tasks;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/event.proto";
+import "w17/field.proto";
+import "domains/app/workspace/tasks/types/models.proto";
+import "domains/app/workspace/tasks/events/events.proto";
+
+message TaskInput {
+  int64  user_id     = 1;
+  int64  category_id = 2;
+  string title       = 3;
+  string body_text   = 4;
+  int32  priority    = 5;
+}
+message BulkInsertResp {
+  int32 inserted = 1;
+}
+
+message UpdateTaskReq {
+  int64 id       = 1;
+  int32 priority = 2;
+}
+message UpdateTaskResp {
+  int64 id = 1;
+}
+
+message RedactTaskReq {
+  int64 id = 1;
+}
+// title rides back so the e2e case can assert the parent was
+// actually redacted. Asserting only the status code would pass on an
+// endpoint that returned 200 without running its final op — which is
+// the shape a generated skeleton produces on its own.
+message RedactTaskResp {
+  int64  id    = 1;
+  string title = 2;
+}
+
+// TaskPatch — body-shortcut payload. The
+// REST registry's `body: "patch"` shortcut on PATCH
+// /tasks/{id} points at this submessage; the JSON body IS
+// `patch` unwrapped to top-level (`{ "priority": 5 }`)
+// instead of `{ "patch": { "priority": 5 } }`.
+message TaskPatch {
+  int32 priority = 1 [(w17.field) = { type: NUMBER, gte: 0, lte: 9 }];
+}
+
+message DeleteTaskReq {
+  int64 id = 1;
+}
+message DeleteTaskResp {}
+
+// CreateTaskReq — single-row INSERT pro Q8 bonus showcase
+// (Q8c cross-module FK + Q8f INSERT RETURNING). Vyžaduje
+// platné user_id (FK → app.users.id) i category_id (FK →
+// app.tasks.task_categories.id) — obě referují tabulky v
+// jiném proto modulu téže domény (cross-module within app).
+message CreateTaskReq {
+  int64  user_id     = 1;
+  int64  category_id = 2;
+  string title       = 3 [(w17.field) = { type: CHAR, max_len: 200, min_len: 1 }];
+  string body_text   = 4;
+  int32  priority    = 5 [(w17.field) = { type: NUMBER, gte: 0, lte: 9 }];
+  // Idempotency-Key HEADER binding
+  // target. Unannotated → not a DB column; the gateway
+  // populates it from the request header and the storage
+  // handler ignores it at insert time. Real flows would
+  // pair with an idempotency-record table that dedups
+  // retried POSTs by (user_id, idempotency_key); the e2e
+  // fixture surfaces only the binding shape, not the dedup
+  // bookkeeping.
+  string idempotency_key = 6;
+  // resolution — absent means the task ends up with NO resolution, which
+  // must reach the column as SQL NULL rather than as the enum's zero.
+  // `optional` is what makes "absent" expressible at all;
+  // the write path reads the field's presence, not its value.
+  optional e2e.app.tasks.Task.Resolution resolution = 7;
+}
+message CreateTaskResp {
+  int64 id = 1;
+}
+
+// AssignTask — lifecycle mutation. Sets a new
+// assignee on an existing task; emits TaskAssigned.
+message AssignTaskReq {
+  int64 task_id     = 1;
+  int64 assignee_id = 2;
+  int64 assigned_by = 3;
+  // Source for TaskAssigned.priority, which is proto3-`optional`. The
+  // source is a PLAIN int32 on purpose: a getter returns a value whatever
+  // the source's own presence is, so the pointer wrap has to come from the
+  // TARGET's shape. Making this optional too would hide that.
+  int32 priority    = 4;
+}
+message AssignTaskResp {
+  int64 id = 1;
+}
+
+// AssignTaskByEmail — assign a task to the user an EMAIL names. This example's
+// `on_empty` case: the lookup op misses for a reason that is the caller's —
+// an address nobody registered — not "the task does not exist".
+message AssignTaskByEmailReq {
+  int64  task_id        = 1;
+  string assignee_email = 2 [(w17.field) = { type: EMAIL }];
+}
+message AssignTaskByEmailResp {
+  int64 id = 1;
+}
+
+// RetitleTask — this example's correlated write guard: an urgent task's title is
+// frozen. The guard reads the TASK's own category, which the request does not
+// carry, so it needs a name for the row being written (`UPDATE … t`).
+message RetitleTaskReq {
+  int64  task_id = 1;
+  string title   = 2 [(w17.field) = { type: CHAR, max_len: 200, min_len: 1 }];
+}
+message RetitleTaskResp {
+  int64 id = 1;
+}
+
+// CommentOnTask — this example's `on_present` case: an INSERT has no WHERE to
+// guard in, so "an urgent task takes no new comments" is an op of its own that
+// refuses when it FINDS the row.
+message CommentOnTaskReq {
+  int64  task_id   = 1;
+  string body_text = 2 [(w17.field) = { type: TEXT, max_len: 2000 }];
+}
+message CommentOnTaskResp {
+  int64 id = 1;
+}
+
+// UpdateTaskStatus — status-transition mutation.
+// Emits TaskStatusChanged. The event's from_status slot is
+// left unmapped (zero value) — capturing the prior status
+// would require a load-then-update multi-op that response-
+// routes the old value through, which today's codegen
+// doesn't expose to the emit annotation (payload mapping
+// reads `$request.*` / `$response.*` only). Subscribers
+// that care about the prior state read it from their own
+// projection.
+message UpdateTaskStatusReq {
+  int64                     task_id = 1;
+  // `type: ENUM` on a field that is ALREADY a proto enum is not a
+  // tautology — it is what opts the field into domain validation. A
+  // bare enum field carries no `(w17.field)` at all, so the request
+  // validator has nothing to check and the number goes straight to the
+  // UPDATE; the column's CHECK then answers an out-of-domain value with
+  // a constraint violation (a 500) instead of a named refusal.
+  //
+  // With the annotation the choice set comes from the enum descriptor —
+  // no `choices:` list to keep in sync — with the `_UNSPECIFIED = 0`
+  // sentinel stripped, because 0 is "unset", never a status a task is
+  // in. The generated client mirrors the same set, so the FE refuses
+  // pre-flight what the server would refuse anyway.
+  e2e.app.tasks.Task.Status status  = 2 [(w17.field) = { type: ENUM }];
+}
+message UpdateTaskStatusResp {
+  int64 id = 1;
+}
+
+// CompleteTask — completion shortcut. Flips status
+// to DONE + returns category_id for downstream subscribers
+// (the counter handler increments
+// TaskCategory.completed_count keyed off category_id).
+message CompleteTaskReq {
+  int64 task_id      = 1;
+  int64 completed_by = 2;
+}
+message CompleteTaskResp {
+  int64 id          = 1;
+  int64 category_id = 2;
+}
+
+// AddTaskComment — INSERT into Comment + emit
+// TaskCommentAdded. author_id is REQUEST-only — Comment
+// table doesn't have an author column; the event carries
+// it through from the caller's input.
+message AddTaskCommentReq {
+  int64  task_id   = 1;
+  int64  author_id = 2;
+  string body_text = 3;
+}
+message AddTaskCommentResp {
+  int64 id = 1;
+}
+
+// The inline's update/delete payloads. Both key on the COMMENT's id — the
+// child — which is what the admin's `{child_id}` route segment carries.
+message UpdateTaskCommentReq {
+  int64  id        = 1;
+  string body_text = 2 [(w17.field) = { type: TEXT, max_len: 2000 }];
+}
+message UpdateTaskCommentResp {
+  int64 id = 1;
+}
+
+// The upload request. `stored_path` carries the same `(w17.field)`
+// declaration as the column it lands in — the type and its upload
+// config are properties of the FIELD, and the gateway reads them off
+// the request to know what to enforce while streaming.
+message UploadAttachmentReq {
+  int64  task_id     = 1;
+  string stored_path = 2 [(w17.field) = {
+    type: UPLOADED_FILE,
+    extensions: ["txt", "md"],
+    upload: {
+      connection:       "app-uploads",
+      bucket_path:      "/task-attachments",
+      expected_objects: 100000,
+      max_per_bucket:   100,
+      max_size_bytes:   65536
+    }
+  }];
+
+  // The caption the uploader types next to the file. It is the one
+  // field on this request that is NEITHER routed (task_id is the path
+  // variable) NOR a file part (stored_path is), and that is precisely
+  // what it is here to be: a `multipart: true` endpoint carries its
+  // ordinary scalar fields as string form parts, and until this field
+  // existed no request in this example had one — every multipart request
+  // was routed-plus-file and the "remaining scalars become form parts"
+  // half of the contract was emitted by nothing.
+  //
+  // Like `reason` on ListTasksInPriorityRange it reaches no SQL. What it
+  // does reach is validation: `max_len` is enforced on the request, so an
+  // over-long caption is an INVALID_ARGUMENT naming the field.
+  //
+  // This field once showed a disagreement. All three surfaces the compiler
+  // generates from one declaration have to agree, and one did not: the
+  // TS/JS client appended it as a form part and the OpenAPI published it
+  // under `multipart/form-data`, while the gateway handler bound only
+  // path variables and FILE_PARTs — so it arrived, was dropped, and the
+  // `max_len` check below ran against the zero value forever. 0333 is the
+  // live case that would have caught it on day one.
+  string caption = 3 [(w17.field) = { type: CHAR, max_len: 40, null: true }];
+}
+message UploadAttachmentResp {
+  int64 id = 1;
+}
+
+message DeleteTaskCommentReq {
+  int64 id = 1;
+}
+message DeleteTaskCommentResp {}
+
+// IncrementCategoryCompleted — counter-bump
+// primitive. Called by the TasksBusiness.OnTaskCompletedCounter
+// subscriber on every delivered TaskCompleted event. UPDATE
+// arithmetic on a denormalized column; no read-then-write,
+// just `SET completed_count = completed_count + 1` for the
+// matching category row.
+message IncrementCategoryCompletedReq {
+  int64 category_id = 1;
+}
+message IncrementCategoryCompletedResp {
+  int64 id = 1;
+}
+
+// ArchiveTaskBatch — bulk archive of a category's completed
+// tasks. Carries the two transaction knobs (`tx_isolation`,
+// `timeout_ms`); see the RPC for why this shape and not another.
+message ArchiveTaskBatchReq {
+  int64 category_id = 1;
+}
+message ArchiveTaskBatchResp {
+  int64 id = 1;
+}
+
+// SnapshotCommentReq — the mutation-value SUBQUERY, which no example
+// carried until now.
+//
+// `category_id` is OPTIONAL and sits inside a scalar subquery that feeds
+// `body_text`, a NOT NULL column. That combination is the one a consumer
+// reported seven times a run: when the field is omitted the param binds
+// NULL, the subquery matches no rows, the scalar is NULL, and the write is
+// REFUSED. The refusal is the point — a comment with no category must not
+// be written — and it is why codegen does not warn here: there is no
+// plausible wrong answer to receive, only an error naming the field.
+//
+// The nullable version of this shape is a different verdict and still
+// warns (the row WOULD be written, with the value silently missing). That
+// pair lives in the compiler's own tests; this is the half a live database
+// has to prove, because the suppression rests on the refusal actually
+// arriving and naming something.
+message SnapshotCommentReq {
+  int64          task_id     = 1;
+  optional int64 category_id = 2;
+}
+message SnapshotCommentResp {
+  int64 id = 1;
+}
+
+// AppendTaskAuditsReq — the multi-row INSERT's request.
+//
+// `entries` is the splatted field: its element message names the
+// columns each tuple supplies, and the field names have to be the
+// model's column names because that is how the splat resolves —
+// there is no per-column mapping to write. `task_id` sits outside
+// it and is shared by every row.
+message TaskAuditEntry {
+  string body_text = 1;
+}
+message AppendTaskAuditsReq {
+  int64                   task_id = 1;
+  repeated TaskAuditEntry entries = 2;
+}
+// `inserted` is the multi-row INSERT's row count. A write without
+// RETURNING is emitted as an Exec, and the count is the one thing an Exec
+// can report — the same summary the client-streaming BulkInsert returns.
+// It used to be reported by that streaming shape ALONE, so this message
+// could not carry the field: declaring it on a unary write was refused.
+message AppendTaskAuditsResp {
+  int32 inserted = 1;
+}
+
+
+// TenantNote scope-fixture write side.
+//
+// `tenant_id` is OPTIONAL on the wire (payload-vs-metadata
+// equality check). Three behaviours per request:
+//
+//   - Empty / unset payload tenant_id → storage codegen's
+//     INSERT auto-stamp pulls the scope value from gRPC
+//     metadata. The persisted row matches the caller's
+//     scope no matter what JSON would have said. Canonical
+//     happy path.
+//   - Non-empty payload matching metadata → auto-stamp
+//     proceeds; equality check passes (no diagnostic, no
+//     overhead beyond a string compare).
+//   - Non-empty payload mismatched against metadata → 403
+//     PERMISSION_DENIED with "scope mismatch: payload
+//     tenant_id does not match caller's scope". Catches the
+//     schema-author mistake of exposing tenant_id on the
+//     wire AND the attacker pattern of trying to write
+//     across tenants by spoofing the JSON.
+//
+// The auto-stamp is the primary protection (the SQL's
+// tenant_id column ALWAYS comes from metadata, never from
+// the payload). The equality check is defense-in-depth +
+// clear error feedback when the schema and the wire
+// disagree.
+message CreateTenantNoteReq {
+  string title     = 1 [(w17.field) = { type: CHAR, max_len: 200, min_len: 1 }];
+  string body      = 2;
+  string tenant_id = 3;
+}
+message CreateTenantNoteWithPublicLinkReq {
+  string title        = 1 [(w17.field) = { type: CHAR, max_len: 200, min_len: 1 }];
+  string body         = 2;
+  // The capability itself. Globally unique — the auth backend is
+  // handed this value and has to answer which tenant owns it, before
+  // any scope exists to narrow by.
+  string public_token = 3 [(w17.field) = { type: CHAR, max_len: 64, min_len: 1 }];
+}
+message CreateTenantNoteWithPublicLinkResp {
+  int64 id = 1;
+  // The minted capability, echoed back. A mint operation returning
+  // what it minted is not just convenience: the token is the ONLY
+  // handle on the new link, and a caller that had to remember what
+  // it sent could not distinguish "the link exists" from "the write
+  // silently dropped the column".
+  string public_token = 2;
+}
+
+message CreateTenantNoteResp {
+  int64 id = 1;
+}
+
+// AttachTenantNoteTag — idempotent M:N link write. DQL has no
+// `DO NOTHING`, so the update side is a no-op assignment of a
+// conflict column: re-attaching a tag the note already carries
+// is a no-op instead of a primary-key violation.
+message AttachTenantNoteTagReq {
+  int64  note_id = 1;
+  string tag     = 2 [(w17.field) = { type: CHAR, max_len: 64, min_len: 1 }];
+}
+message AttachTenantNoteTagResp {
+  int64  note_id = 1;
+  string tag     = 2;
+}
+
+// AttachTenantNoteLink — the same link write as AttachTenantNoteTag, on the
+// pair that DOES declare an fk. Exists so 0155 can prove the composite
+// foreign key refuses a row pointing at another tenant's note.
+message AttachTenantNoteLinkReq {
+  int64  note_id = 1;
+  string label   = 2 [(w17.field) = { type: CHAR, max_len: 64, min_len: 1 }];
+}
+message AttachTenantNoteLinkResp {
+  int64  note_id = 1;
+  string label   = 2;
+}
+
+// BookmarkTenantNote — the escape-hatch write. Same shape as
+// AttachTenantNoteLink; the target model declares fk_cross_scope, so this
+// one succeeds across tenants where that one is refused.
+message BookmarkTenantNoteReq {
+  int64  note_id = 1;
+  string note    = 2 [(w17.field) = { type: CHAR, max_len: 64, min_len: 1 }];
+}
+message BookmarkTenantNoteResp {
+  int64  note_id = 1;
+  string note    = 2;
+}
+
+// EnsureTenantNoteTag — the same idempotent link write spelled with
+// `DO NOTHING` instead of a no-op update. It returns nothing: on a
+// conflict the action writes no row, so PG has none to hand back, and
+// the compiler refuses `RETURNING` on this form rather than let a
+// duplicate write surface as NotFound.
+message EnsureTenantNoteTagReq {
+  int64  note_id = 1;
+  string tag     = 2 [(w17.field) = { type: CHAR, max_len: 64, min_len: 1 }];
+}
+// `written` is 1 when the row was inserted and 0 when the conflict path
+// took DO NOTHING — the count comes off the statement, so the same
+// endpoint reports different numbers for the same input depending on what
+// the database already held. RETURNING is refused on this form (on a
+// conflict there is no row to return), which is exactly why the count is
+// the only summary available here.
+//
+// `optional` is load-bearing and not style: proto3 omits a zero from the
+// wire, so without presence the DO NOTHING answer — 0 rows written, the
+// whole point of this endpoint — would be indistinguishable from an
+// endpoint that said nothing at all. With it the field is emitted as 0 and
+// a caller can act on it.
+message EnsureTenantNoteTagResp {
+  optional int32 written = 1;
+}
+
+// TaskMutation — write side of the tasks module (storage
+// tier — gRPC-only; REST surface is on `TasksService` per
+// the facade-first rule).
+//
+// BulkInsert is a client-streaming RPC: the server
+// reads N TaskInput frames and runs an INSERT per frame inside
+// one tx, returning a summary.
+//
+// UpdateTask is the relational half of the R7 mutation
+// crossing PG ↔ Redis — facade composes this UPDATE with
+// CacheMutation.DeleteCachedTask to invalidate the cached
+// copy. Non-atomic per D41 (cross-domain).
+service TaskMutation {
+  rpc BulkInsert(stream TaskInput) returns (BulkInsertResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO tasks.Task SET user_id = :user_id, category_id = :category_id, title = :title, body_text = :body_text, priority = :priority, status = 1"
+      }
+    };
+  }
+
+  rpc UpdateTask(UpdateTaskReq) returns (UpdateTaskResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "UPDATE tasks.Task SET priority = :priority WHERE id = :id RETURNING id"
+      }
+    };
+  }
+
+  rpc DeleteTask(DeleteTaskReq) returns (DeleteTaskResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "DELETE FROM tasks.Task WHERE id = :id"
+      }
+    };
+  }
+
+  // RedactTask — "purge the children, then redact the parent", the
+  // multi-op shape whose FIRST op legitimately matches nothing.
+  //
+  // This is this example's only intermediate mutation that CAN affect
+  // zero rows and whose RETURNING no later op reads. Every other one
+  // is an INSERT feeding the next statement (billing accounts +
+  // payments, for example), and an
+  // INSERT always writes exactly one row — so the emitter's zero-row
+  // path existed for four examples without any of them being able to
+  // reach it. A task with no comments was therefore answered with
+  // NotFound: the DELETE's `RETURNING id` was scanned with
+  // QueryRow().Scan, sql.ErrNoRows aborted the transaction, and the
+  // whole method 404'd. A consuming project hit it on GDPR erasure,
+  // where it meant the endpoint worked only on records that happened
+  // to have a child row attached.
+  //
+  // Keep `purge_comments` UNREFERENCED — a cross-op reference to it
+  // (`:purge_comments.id`) is precisely what makes zero rows a real
+  // precondition failure again, and would quietly turn this back into
+  // a test of the case that always worked.
+  rpc RedactTask(RedactTaskReq) returns (RedactTaskResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "purge_comments",
+        dql:  "DELETE FROM tasks.Comment WHERE task_id = :id RETURNING id"
+      }
+      ops: {
+        name: "main",
+        dql:  "UPDATE tasks.Task SET title = '(redacted)' WHERE id = :id RETURNING id, title"
+      }
+    };
+  }
+
+  // CreateTask — single-row INSERT s cross-module FK
+  // (Q8c) na users.id + task_categories.id, RETURNING id
+  // (Q8f). Title má (w17.field) max/min length aby
+  // generated handler validoval; status default 1 (OPEN)
+  // baked do DQL.
+  //
+  // Emits TaskCreated after the INSERT commits.
+  // created_at flows from the response RETURNING; user_id /
+  // category_id / title come from the request.
+  rpc CreateTask(CreateTaskReq) returns (CreateTaskResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO tasks.Task SET "
+          "user_id = :user_id, "
+          "category_id = :category_id, "
+          "title = :title, "
+          "body_text = :body_text, "
+          "priority = :priority, "
+          "resolution = :resolution, "
+          "status = 1 "
+          "RETURNING id"
+      }
+    };
+    option (w17.event_emit) = {
+      event: "TaskCreated"
+      payload: {
+        fields: [
+          { key: "task_id",     value: "$response.id" },
+          { key: "user_id",     value: "$request.user_id" },
+          { key: "category_id", value: "$request.category_id" },
+          { key: "title",       value: "$request.title" }
+        ]
+      }
+    };
+  }
+
+  // AssignTask — lifecycle mutation. UPDATE Task
+  // SET assignee_id. Emits TaskAssigned; every payload
+  // slot binds straight from the request (assignee +
+  // assigner are caller-supplied; task_id confirms via
+  // $response.id).
+  rpc AssignTask(AssignTaskReq) returns (AssignTaskResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "UPDATE tasks.Task SET assignee_id = :assignee_id WHERE id = :task_id RETURNING id"
+      }
+    };
+    option (w17.event_emit) = {
+      event: "TaskAssigned"
+      payload: {
+        fields: [
+          { key: "task_id",     value: "$response.id" },
+          { key: "assignee_id", value: "$request.assignee_id" },
+          { key: "assigned_by", value: "$request.assigned_by" },
+          { key: "priority",    value: "$request.priority" }
+        ]
+      }
+    };
+  }
+
+  // AssignTaskByEmail — resolve the email to a user (op "u"), then assign.
+  //
+  // A miss on "u" is the caller's mistake, so it says so: INVALID_ARGUMENT on
+  // `assignee_email`, the address in the sentence. Without `on_empty` it read
+  // NOT_FOUND — "The item you asked for does not exist" — about a task that
+  // does. A missing TASK is the response producer's miss and stays NOT_FOUND.
+  rpc AssignTaskByEmail(AssignTaskByEmailReq) returns (AssignTaskByEmailResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "u",
+        dql:  "SELECT u.id AS id FROM users.User u WHERE u.email = :assignee_email"
+        on_empty: {
+          code:       ON_EMPTY_INVALID_ARGUMENT
+          error_code: "UNKNOWN_ASSIGNEE"
+          field:      "assignee_email"
+          message:    "Nobody is registered with the email {assignee_email}."
+        }
+      }
+      ops: {
+        name: "main",
+        dql:  "UPDATE tasks.Task SET assignee_id = :u.id WHERE id = :task_id RETURNING id"
+      }
+    };
+  }
+
+  // UpdateTaskStatus — status-transition mutation.
+  // Emits TaskStatusChanged with to_status mapped; the
+  // from_status slot is intentionally unmapped (see
+  // UpdateTaskStatusReq comment).
+  rpc UpdateTaskStatus(UpdateTaskStatusReq) returns (UpdateTaskStatusResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "UPDATE tasks.Task SET status = :status WHERE id = :task_id RETURNING id"
+      }
+    };
+    option (w17.event_emit) = {
+      event: "TaskStatusChanged"
+      payload: {
+        fields: [
+          { key: "task_id",   value: "$response.id" },
+          { key: "to_status", value: "$request.status" }
+        ]
+      }
+    };
+  }
+
+  // CompleteTask — completion shortcut. Flips
+  // status to DONE (= 3). RETURNING includes category_id
+  // so the TaskCompleted emit can pass it to the
+  // counter-increment subscriber.
+  rpc CompleteTask(CompleteTaskReq) returns (CompleteTaskResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "UPDATE tasks.Task SET status = 3 WHERE id = :task_id RETURNING id, category_id"
+      }
+    };
+    option (w17.event_emit) = {
+      event: "TaskCompleted"
+      payload: {
+        fields: [
+          { key: "task_id",      value: "$response.id" },
+          { key: "completed_by", value: "$request.completed_by" },
+          { key: "category_id",  value: "$response.category_id" }
+        ]
+      }
+    };
+  }
+
+  // ArchiveTaskBatch — the transactional-knob fixture:
+  // `tx_isolation` + `timeout_ms` on one method.
+  //
+  // Both are transaction properties, so both need a method that
+  // actually owns a transaction, and the pairing is not
+  // arbitrary. A bulk archive reads a status and writes it back
+  // across many rows; at the driver default (READ COMMITTED on
+  // PG) a concurrent writer can flip a row between the two
+  // statements, so this is the shape where SERIALIZABLE is the
+  // correct answer rather than a decoration. And a serializable
+  // bulk write is exactly the shape that can block for a long
+  // time, which is why the deadline belongs on the same method:
+  // without it the statement holds its locks for as long as the
+  // caller's ctx allows, which for a background caller may be
+  // unbounded.
+  //
+  // 2500 ms is chosen to be visible in the emitted
+  // `context.WithTimeout` without being short enough to make the
+  // live case flaky on a loaded CI box.
+  rpc ArchiveTaskBatch(ArchiveTaskBatchReq) returns (ArchiveTaskBatchResp) {
+    option (w17.db.method) = {
+      tx_isolation: SERIALIZABLE,
+      timeout_ms: 2500,
+      ops: {
+        name: "main",
+        dql:  "UPDATE tasks.Task SET status = 4 WHERE category_id = :category_id AND status = 3 RETURNING id"
+      }
+    };
+  }
+
+  // IncrementCategoryCompleted — counter primitive
+  // called by the OnTaskCompletedCounter subscriber. Pure
+  // UPDATE arithmetic on the denormalized counter.
+  rpc IncrementCategoryCompleted(IncrementCategoryCompletedReq) returns (IncrementCategoryCompletedResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "UPDATE tasks.TaskCategory SET completed_count = completed_count + 1 WHERE id = :category_id RETURNING id"
+      }
+    };
+  }
+
+  // CreateTenantNote — scoped INSERT. The DQL SET
+  // clause carries only title + body; the storage codegen
+  // appends `tenant_id = :__scope_tenant_id` from metadata,
+  // so the persisted row's tenant_id matches the caller's
+  // scope no matter what the JSON payload would have said.
+  // CreateTenantNoteWithPublicLink — the same scoped INSERT
+  // as CreateTenantNote, plus the share-link capability.
+  //
+  // A separate RPC rather than a nullable field on the existing one,
+  // for the reason a capability differs from an ordinary attribute:
+  // minting one is a deliberate act ("this row becomes reachable
+  // without a login"), and folding it into the general create path
+  // would make every caller a potential minter by omission.
+  //
+  // tenant_id is NOT in the SET here either — the scope auto-stamp
+  // supplies it, so a caller cannot mint a link into someone else's
+  // tenant by supplying a payload field.
+  rpc CreateTenantNoteWithPublicLink(CreateTenantNoteWithPublicLinkReq) returns (CreateTenantNoteWithPublicLinkResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO tasks.TenantNote SET "
+          "title = :title, "
+          "body = :body, "
+          "public_token = :public_token "
+          "RETURNING id, public_token"
+      }
+    };
+  }
+
+  rpc CreateTenantNote(CreateTenantNoteReq) returns (CreateTenantNoteResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO tasks.TenantNote SET "
+          "title = :title, "
+          "body = :body "
+          "RETURNING id"
+      }
+    };
+  }
+
+  // AttachTenantNoteTag — idempotent scoped UPSERT on the M:N
+  // link table. Two things are on trial here:
+  //
+  //   - The no-op update idiom. DQL has no `DO NOTHING`, so
+  //     `DO UPDATE SET tag = :tag` makes a repeat attach a no-op
+  //     rather than a PK violation. The e2e attaches the same
+  //     tag twice and expects both calls to succeed.
+  //   - The scope auto-stamp on BOTH sides of an UPSERT — the
+  //     insert set and the conflict-update set each get
+  //     `tenant_id = :__scope_tenant_id`, so a link row can
+  //     neither be created in nor moved to another tenant.
+  rpc AttachTenantNoteTag(AttachTenantNoteTagReq) returns (AttachTenantNoteTagResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "UPSERT INTO tasks.TenantNoteTag SET "
+          "note_id = :note_id, "
+          "tag = :tag "
+          "ON CONFLICT (note_id, tag) DO UPDATE SET tag = :tag "
+          "RETURNING note_id, tag"
+      }
+    };
+  }
+
+  rpc AttachTenantNoteLink(AttachTenantNoteLinkReq) returns (AttachTenantNoteLinkResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "UPSERT INTO tasks.TenantNoteLink SET "
+          "note_id = :note_id, "
+          "label = :label "
+          "ON CONFLICT (note_id, label) DO UPDATE SET label = :label "
+          "RETURNING note_id, label"
+      }
+    };
+  }
+
+  rpc BookmarkTenantNote(BookmarkTenantNoteReq) returns (BookmarkTenantNoteResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "UPSERT INTO tasks.TenantNoteBookmark SET "
+          "note_id = :note_id, "
+          "note = :note "
+          "ON CONFLICT (note_id, note) DO UPDATE SET note = :note "
+          "RETURNING note_id, note"
+      }
+    };
+  }
+
+  // EnsureTenantNoteTag — the `DO NOTHING` form of the same write, on
+  // the same scoped link table. What it proves that AttachTenantNoteTag
+  // does not:
+  //
+  //   - the conflict path writes NOTHING (a plain INSERT would raise a
+  //     unique violation on the second call, so the e2e calling it
+  //     twice is the assertion), and
+  //   - a scoped DO NOTHING carries no conflict-action WHERE, because
+  //     there is no write to restrict — only the INSERT-side scope
+  //     stamp applies.
+  //
+  // No RETURNING: the compiler refuses it here, since on a conflict
+  // there is no row to return.
+  rpc EnsureTenantNoteTag(EnsureTenantNoteTagReq) returns (EnsureTenantNoteTagResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "UPSERT INTO tasks.TenantNoteTag SET "
+          "note_id = :note_id, "
+          "tag = :tag "
+          "ON CONFLICT (note_id, tag) DO NOTHING"
+      }
+    };
+  }
+
+  // RetitleTask — the guard compares a column of the row being written
+  // (`t.category_id`) with another table. Unqualified inside the subquery,
+  // `category_id` would bind to TaskCategory, as it does in SQL, hence the
+  // alias on the write target. A frozen task matches no row, so RETURNING
+  // finds nothing and the method answers NOT_FOUND.
+  rpc RetitleTask(RetitleTaskReq) returns (RetitleTaskResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "UPDATE tasks.Task t SET title = :title "
+          "WHERE t.id = :task_id "
+          "AND NOT EXISTS (SELECT c.id FROM tasks.TaskCategory c "
+          "WHERE c.id = t.category_id AND c.name = 'urgent') "
+          "RETURNING id"
+      }
+    };
+  }
+
+  // CommentOnTask — op "frozen" refuses when it finds the task in the urgent
+  // category, with the author's sentence (`on_present`); otherwise the INSERT
+  // runs. Both ops share the method's transaction.
+  rpc CommentOnTask(CommentOnTaskReq) returns (CommentOnTaskResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "frozen",
+        dql:
+          "SELECT t.id AS id FROM tasks.Task t "
+          "WHERE t.id = :task_id "
+          "AND t.category_id IN (SELECT c.id FROM tasks.TaskCategory c WHERE c.name = 'urgent')"
+        on_present: {
+          code:       ON_PRESENT_FAILED_PRECONDITION
+          error_code: "TASK_FROZEN"
+          field:      "task_id"
+          message:    "Task {task_id} is urgent and takes no new comments."
+        }
+      }
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO tasks.Comment SET "
+          "task_id = :task_id, "
+          "body_text = :body_text "
+          "RETURNING id"
+      }
+    };
+  }
+
+  // AddTaskComment — INSERT into Comment + emit
+  // TaskCommentAdded.
+  rpc AddTaskComment(AddTaskCommentReq) returns (AddTaskCommentResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO tasks.Comment SET "
+          "task_id = :task_id, "
+          "body_text = :body_text "
+          "RETURNING id"
+      }
+    };
+    option (w17.event_emit) = {
+      event: "TaskCommentAdded"
+      payload: {
+        fields: [
+          { key: "task_id",    value: "$request.task_id" },
+          { key: "comment_id", value: "$response.id" },
+          { key: "author_id",  value: "$request.author_id" }
+        ]
+      }
+    };
+  }
+
+  // UploadAttachment — the project's one SERVICE-MANAGED upload.
+  //
+  // The request's `stored_path` is not something a caller sends. The
+  // REST registry binds it `from: FILE_PART`, so the gateway fills it
+  // with the handle it produced after streaming the multipart part to
+  // storage — by the time this DQL runs, the file is already written
+  // and the field holds its key. That is why the INSERT can treat it
+  // like any other column.
+  //
+  // It is also why the endpoint has to be `multipart: true`: without
+  // that the gateway parses a JSON body, finds a string where a file
+  // part belongs, and writes a caller-chosen value into a column that
+  // is supposed to hold a key the SERVICE derived.
+  rpc UploadAttachment(UploadAttachmentReq) returns (UploadAttachmentResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO tasks.TaskUpload SET "
+          "task_id = :task_id, "
+          "stored_path = :stored_path "
+          "RETURNING id"
+      }
+    };
+  }
+
+  // UpdateTaskComment / DeleteTaskComment — the write half of the
+  // TaskAdmin ⇄ CommentAdmin inline (see admin.proto).
+  //
+  // They exist as their own methods rather than reusing the task-level ones
+  // because an inline's `update` and `delete_` address a CHILD by its own
+  // id: the admin routes them at
+  // `/api/inline/TaskAdmin/{id}/CommentAdmin/{child_id}`, and the child id
+  // is what the SQL has to key on. A method keyed on the parent would edit
+  // or remove the wrong row while every URL still looked right.
+  rpc UpdateTaskComment(UpdateTaskCommentReq) returns (UpdateTaskCommentResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "UPDATE tasks.Comment SET "
+          "body_text = :body_text "
+          "WHERE id = :id "
+          "RETURNING id"
+      }
+    };
+  }
+
+  rpc DeleteTaskComment(DeleteTaskCommentReq) returns (DeleteTaskCommentResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql: "DELETE FROM tasks.Comment WHERE id = :id"
+      }
+    };
+  }
+
+  // SnapshotComment — a scalar subquery as the VALUE a mutation writes.
+  //
+  // `?category_id` would be the WRONG fix here and the compiler says so:
+  // dropping the predicate leaves `(SELECT c.name FROM TaskCategory c)`
+  // unrestricted, which returns every row where the write needs one.
+  rpc SnapshotComment(SnapshotCommentReq) returns (SnapshotCommentResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO tasks.Comment SET task_id = :task_id, body_text = (SELECT c.name FROM tasks.TaskCategory c WHERE c.id = :category_id) RETURNING id"
+      }
+    };
+  }
+
+  // AppendTaskAudits — the multi-row INSERT.
+  //
+  // `SET :entries[*]` is the splat: one INSERT whose VALUES list
+  // is built from a REPEATED request field, one tuple per element,
+  // expanded at call time. Every other INSERT in this example binds
+  // a fixed tuple, so the whole multi-row emit path — the splat
+  // resolution, the per-row binding renderer, the placeholder
+  // expansion — had never run.
+  //
+  // The mixed form (`:entries[*], task_id = :task_id`) rather than
+  // the bare splat, because the two halves render differently and
+  // only the mixed form has both: columns inside the splat are read
+  // off the ROW being appended, while `task_id` is read off the
+  // REQUEST and repeats identically in every tuple. A bare splat
+  // could not tell a per-row binding from a shared one.
+  //
+  // The empty list is not an error — it short-circuits before the
+  // driver call, because a zero-row VALUES is invalid SQL on every
+  // dialect and a round trip that can only fail is worth skipping.
+  rpc AppendTaskAudits(AppendTaskAuditsReq) returns (AppendTaskAuditsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO tasks.TaskAuditLog SET :entries[*], task_id = :task_id"
+      }
+    };
+  }
+}

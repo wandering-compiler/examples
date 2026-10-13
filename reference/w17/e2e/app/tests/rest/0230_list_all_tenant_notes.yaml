@@ -1,0 +1,36 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# THE method-level `(w17.db.bypass_scope)` proof, stated directly: the
+# response carries notes belonging to more than one tenant. Nothing else
+# can produce that — the scoped twin filters on the caller's tenant, so
+# a second distinct `tenant_id` IS the crossing.
+#
+# It used to say `count >= 1` and lean on 0225 to establish that the
+# caller owned zero notes, because no matcher could express "more than
+# one tenant is represented" and `contains` would have had to name a
+# foreign tenant the scenario has no way to know. `distinct` removed
+# that crutch; 0225 stays because the scoped twin returning nothing for
+# this caller is worth pinning on its own, but this case no longer
+# depends on it.
+#
+# Writing it directly immediately exposed what the old form hid: EVERY
+# TenantNote in the suite belonged to tenant-alpha, so the data set could
+# not have told a working bypass from one broken on tenant_id. The `pre`
+# chain now writes a note as the second tenant — see
+# fixtures/a_beta_tenant_note.yaml. That fixture runs HERE and not
+# earlier on purpose: 0225 asserts tenant-beta owns no notes, which is
+# true until this step's chain gives it one.
+#
+# The generated shape differs: the
+# scoped twin carries the fail-closed metadata guard and
+# `WHERE n.tenant_id = $1`, this one carries neither.
+method: tasks.TaskQuery.ListAllTenantNotes
+pre:
+    - fixtures/a_tenant_note.yaml
+    - fixtures/a_beta_tenant_note.yaml
+input: {}
+expect:
+    notes: {matcher: distinct, field: tenant_id, op: '>=', value: 2}

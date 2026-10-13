@@ -1,0 +1,171 @@
+syntax = "proto3";
+
+// Event registry for the `app/users` module — the directory-plan
+// lifecycle.
+//
+// It exists for the halves of the eventbus vocabulary the tasks module
+// does not reach. `app/tasks` already covers the emit side and one
+// delivery fallback; what has no example anywhere is:
+//
+//   - the GATEWAY emit tier (`(w17.event_emit_gateway)`), which fires
+//     only for requests that came in through a gateway,
+//   - a fallback's fixed request arguments and its `from` guard,
+//   - the hand-written reconstructor escape hatch,
+//   - an explicit dedup key.
+//
+// Three events, because two of those are mutually exclusive on one
+// declaration: a fallback either diffs with the built-in engine
+// (`from` / `to` / `payload`) or hands the job to `reconstruct_fn`,
+// which makes the built-in fields inert. One event cannot show both.
+//
+// Channel + retry catalogue lives in proto/domains/app/w17.proto.
+
+package e2e.app.users;
+
+import "w17/event.proto";
+
+// DirectoryPlanUpgraded — a placement moved up a tier.
+//
+// The INTENT event of the pair: it is bound to somebody asking for an
+// upgrade through the public API, not to the row changing. Which is why
+// it is emitted at the GATEWAY (see UpgradeDirectoryPlan) — a nested
+// business call or a subscriber loopback that happened to write the
+// same row is not a customer upgrading a plan, and must not produce
+// this signal.
+message DirectoryPlanUpgraded {
+  option (w17.event) = {
+    channel: "tasks"
+    topic:   "directory.plan.upgraded"
+
+    // Browser-facing: the account screen shows the current tier, and
+    // the fallback below exists to survive an SSE OUTAGE — which
+    // presupposes a push to lose.
+    public:  true
+
+    delivery: {
+      expected_seconds: 1
+      max_seconds:      3
+      give_up_seconds:  30
+
+      // `dedup_key` — which payload fields converge the pushed event
+      // and its polled twin onto one subscriber callback.
+      //
+      // Declared rather than inherited, and the difference is not
+      // cosmetic. The default is the entity's own id plus a per-DiffKind
+      // discriminator, which keys an upgrade by WHICH PLAN — so a plan
+      // upgraded twice in one polling window dedups down to one
+      // callback and the second upgrade is lost. Keying by (plan, tier)
+      // makes the two transitions distinct while still collapsing the
+      // push and the poll of the SAME transition, which is the only
+      // pair that must collapse.
+      dedup_key: [ "plan_id", "tier" ]
+
+      fallback: {
+        // A domain-local query the generated client polls and diffs.
+        query:  "DirectoryPlanQuery.ListDirectoryPlansInRegion"
+
+        // `request` — the FIXED arguments of that poll. There is no
+        // triggering RPC at poll time, so `$request` / `$response` do
+        // not exist here and the sources are a literal or
+        // `$principal.*`; a literal is what a per-region board needs.
+        //
+        // Without it the poll would have to be a query taking no
+        // arguments, which is the shape that forces every fallback
+        // query to be an unfiltered list — i.e. the whole table, on a
+        // timer, from every connected browser.
+        request: {
+          fields: [
+            { key: "region", value: "eu-central" }
+          ]
+        }
+
+        entity: "$response.plans"
+        diff:   DIFF_TRANSITION
+        watch_field: "tier"
+
+        // `from` + `to` — the transition GUARD, and `from` is the half
+        // that no example had.
+        //
+        // With `to` alone the poller fires on any row that arrives at
+        // SPOTLIGHT, including one that was already SPOTLIGHT before the
+        // window and briefly dropped out of the polled set (a region
+        // edit, a page of results moving). Naming the origin makes it
+        // an upgrade FROM BASIC and nothing else — which is what the
+        // event says on the tin.
+        from:   "BASIC"
+        to:     "SPOTLIGHT"
+
+        payload: {
+          fields: [
+            { key: "plan_id", value: "$entity.id" },
+            { key: "tier",    value: "$entity.tier" }
+          ]
+        }
+      }
+    }
+  };
+
+  int64  plan_id = 1;
+  string tier    = 2;
+}
+
+// DirectoryPlanPublished — a placement was bought and is now live.
+//
+// Its fallback uses the ESCAPE HATCH. The built-in diff keys rows by
+// entity id and reports what changed on a surviving one; "a plan
+// appeared AND the account now has more of them than its tier allows"
+// is a statement about the SET, not about a row, and the DSL has no
+// way to say it. `reconstruct_fn` hands the prev/curr pair to a
+// hand-written function instead, and with it set the `diff` /
+// `watch_field` / `from` / `to` / `payload` fields are inert — which is
+// why this is a second event rather than another block on the first.
+message DirectoryPlanPublished {
+  option (w17.event) = {
+    channel: "tasks"
+    topic:   "directory.plan.published"
+    public:  true
+
+    // No thresholds. They come from the DOMAIN default
+    // (`(w17.module).event_defaults.delivery`, tier 2 of the cascade),
+    // and their absence here is what makes that tier readable at all:
+    // DirectoryPlanUpgraded above sets its own, task.completed sets its
+    // own, so with every event declaring thresholds the domain default
+    // would be a value nothing in the project ever resolves to.
+    delivery: {
+      fallback: {
+        query:  "DirectoryPlanQuery.ListDirectoryPlansInRegion"
+        request: {
+          fields: [
+            { key: "region", value: "eu-central" }
+          ]
+        }
+        entity: "$response.plans"
+
+        // Names a hand-written `(prev, curr) => payload[]` the
+        // generated client calls instead of the built-in diff. The
+        // compiler does not reflect it — the name travels into the
+        // client's fallback table verbatim and the application supplies
+        // the implementation, which is what makes this an escape hatch
+        // rather than another DSL feature.
+        reconstruct_fn: "reconstructDirectoryPlanPublished"
+      }
+    }
+  };
+
+  int64  plan_id = 1;
+  string tier    = 2;
+}
+
+// DirectoryPlanRetired — a placement stopped rendering.
+//
+// No delivery block: nothing in a browser reacts to it. It exists for
+// the SUBSCRIBER side — it is what the co-located surface in
+// proto/domains/app/subscribers_directory.proto consumes.
+message DirectoryPlanRetired {
+  option (w17.event) = {
+    channel: "tasks"
+    topic:   "directory.plan.retired"
+  };
+
+  int64 plan_id = 1;
+}

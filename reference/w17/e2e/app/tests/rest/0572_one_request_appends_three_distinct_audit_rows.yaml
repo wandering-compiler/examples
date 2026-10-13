@@ -1,0 +1,35 @@
+# The multi-row INSERT. `SET :entries[*]` builds the VALUES list from a
+# REPEATED request field — one tuple per element, placeholders expanded
+# at call time — and no example had ever written the splat, so nothing in
+# this example had exercised the resolution, the per-row binding renderer
+# or the expansion.
+#
+# The mixed form: `body_text` comes off the ROW being appended,
+# `task_id` off the REQUEST and repeats in every tuple. Those render
+# differently (`_row.GetBodyText()` vs `req.GetTaskId()`), and a bare
+# splat could not tell the two apart.
+#
+# Task 700001 and not 700005: the seeded audits belong to 700005 and
+# 0371 asserts their exact count. A fixture that has to append rows picks
+# a parent nothing else counts.
+#
+# THREE entries, and the third is deliberately not a match for the filter
+# 0573 applies. A splat that wrote element [0] three times would still
+# insert three rows, still answer 200, and still be caught — by the
+# count, which would come back 3 instead of 2.
+method: tasks.TaskMutation.AppendTaskAudits
+pre:
+    - auth/auth.yaml
+input:
+    task_id: 700001
+    entries:
+        - {body_text: parse error alpha}
+        - {body_text: parse error beta}
+        - {body_text: clean sweep}
+# THREE, from the database's own count of the rows the one Exec wrote.
+# A splat that wrote element [0] three times would also answer 3 here —
+# 0573 is the case that catches that by reading the rows back. What this
+# number catches is the other half: a write that reports nothing, or
+# reports a constant. It read 0 for three million rows once.
+expect:
+    inserted: 3

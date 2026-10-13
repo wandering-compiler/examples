@@ -1,0 +1,171 @@
+syntax = "proto3";
+
+package e2e.app.tasks;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/app/workspace/tasks/types/models.proto";
+
+// MilestoneMutation — the write side of `tasks.Milestone`.
+//
+// It exists so three column-level declarations on that model can be
+// proven the only way they are worth proving: through a request that a
+// caller actually sends and a row that actually lands.
+//
+//   * `gt` / `lt` on `weight` — STRICT bounds. What separates them from
+//     the inclusive pair is a refusal at exactly the two endpoint
+//     values, so there is a case for each endpoint, and nothing else
+//     about them is observable.
+//   * `default_string` / `default_double` on `status_note` /
+//     `weight_factor` — the request carries NEITHER field, so the
+//     values on the created row can only have come from the defaults
+//     the schema declares.
+//   * `custom_validator` on `name` — the escape hatch. It is the one
+//     rule here whose logic lives in hand-written Go in the project's
+//     own `srcgo/`, so it also proves the generated bundle can reach
+//     that code at all.
+//
+// Its own service rather than another method on TaskMutation: the
+// milestones table is the fixed row set the ORDER BY-by-enum cases
+// assert over, and keeping the one thing that can add a row on a named
+// surface is what makes "who can perturb this table" answerable by
+// reading the proto.
+service MilestoneMutation {
+  // CreateMilestone takes ONLY the two columns a caller decides. The
+  // remaining ones are the point: `status_note` and `weight_factor`
+  // are absent from the request AND from the INSERT, so whatever the
+  // created row carries came from the column defaults.
+  rpc CreateMilestone(CreateMilestoneReq) returns (CreateMilestoneResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO tasks.Milestone SET "
+          "name = :name, "
+          "weight = :weight, "
+          "tags = :tags, "
+          "attachment = :attachment "
+          "RETURNING id"
+      }
+    };
+  }
+
+  // UpdateMilestone — the admin detail form's write, and the reason it
+  // has THREE settable columns rather than one.
+  //
+  // `AdminDetail.fields` declares which of an update request's fields
+  // the form renders, in what order, and its default is "all of them in
+  // proto declaration order". With a single-column update the only
+  // legal declaration IS that default (the admin guard requires
+  // the declared set to cover every persisted field), so the annotation
+  // cannot be told apart from its absence — the emitted spec is
+  // byte-identical either way. Three columns give the declaration
+  // something to say that the default does not.
+  rpc UpdateMilestone(UpdateMilestoneReq) returns (UpdateMilestoneResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "UPDATE tasks.Milestone SET "
+          "name = :name, "
+          "status_note = :status_note, "
+          "weight = :weight "
+          "WHERE id = :id "
+          "RETURNING id"
+      }
+    };
+  }
+
+  // MarkMilestonesReviewed — the bulk action behind
+  // `(w17.AdminPage).actions`. The wire contract is fixed: the request
+  // must carry `repeated string ids`, matched BY NAME, and the response
+  // is status-only (v1 renders success or failure, never a body).
+  //
+  // `note` is the bulk EXTRA — everything beyond `ids` — and it is what
+  // makes `AdminAction.fields` observable: with an ids-only action the
+  // field is an empty list whether or not anything reads it.
+  //
+  // `ids` is `repeated int64` because Milestone's PK is — the element
+  // type has to ADDRESS the key, and the bind is emitted as
+  // `id = ANY($n)` over `pq.Array(req.GetIds())`. Declared as
+  // `repeated string` (which the vocabulary docstring used to mandate,
+  // and the auth plugin can use because its PK is a UUID) this sends a
+  // `text[]` at a `bigint` column and Postgres refuses the comparison at
+  // execution. The parser now refuses that pairing at build time.
+  rpc MarkMilestonesReviewed(MarkMilestonesReviewedReq) returns (MarkMilestonesReviewedResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "UPDATE tasks.Milestone SET "
+          "status_note = :note "
+          "WHERE id IN (:ids)"
+      }
+    };
+  }
+}
+
+message UpdateMilestoneReq {
+  int64  id          = 1;
+  // Declaration order here is name, status_note, weight — and the admin
+  // page deliberately declares its `fields` in a DIFFERENT order, which
+  // is the only thing distinguishing a read declaration from the
+  // default expansion.
+  string name        = 2 [(w17.field) = { type: CHAR, max_len: 120 }];
+  string status_note = 3 [(w17.field) = { type: CHAR, max_len: 64 }];
+  int32  weight      = 4 [(w17.field) = { type: SMALL_INTEGER, gt: 0, lt: 10 }];
+}
+message UpdateMilestoneResp {
+  int64 id = 1;
+}
+
+message MarkMilestonesReviewedReq {
+  repeated int64 ids = 1;
+  string note         = 2 [(w17.field) = { type: CHAR, max_len: 64 }];
+}
+// Status-only, per the AdminAction contract: v1 shows success or
+// failure for an action and never renders a result body.
+message MarkMilestonesReviewedResp {}
+
+message CreateMilestoneReq {
+  // The bounds are repeated from the model column deliberately, not
+  // by oversight: the column's `gt`/`lt` become a DB CHECK, which
+  // answers a constraint violation, while the request's become a
+  // validation refusal, which answers INVALID_ARGUMENT with the field
+  // named. A caller passing 10 should be told which field is wrong,
+  // not handed a 500 from the database — so the same statement has to
+  // be made on both surfaces, and the live cases assert the request
+  // one fires FIRST.
+  string name   = 1 [(w17.field) = {
+    type: CHAR, max_len: 120,
+    // The escape hatch. The rule is "not one of the headings the
+    // rollup report already uses", compared after normalising case
+    // and punctuation — so `Total`, `sub-total` and `TOTAL!` are all
+    // refused. Neither `choices` (a closed set of ALLOWED values,
+    // matched exactly) nor `pattern` (no normalisation step) can say
+    // that, which is what makes this the right rule to hang the hatch
+    // on: an example that used the hatch for something the annotations
+    // already express would prove the hatch runs, not that it is
+    // needed.
+    custom_validator: "github.com/wandering-compiler/examples/reference/domains/app/validators:RejectReservedMilestoneName"
+  }];
+  int32  weight = 2 [(w17.field) = { type: SMALL_INTEGER, gt: 0, lt: 10 }];
+
+  // Both settable, and both able to arrive EMPTY — which is the whole
+  // reason they are on the request rather than defaulted like
+  // `status_note`. See the columns on tasks.Milestone: proto3 gives
+  // neither carrier presence, so an empty list and an empty payload
+  // reach the server as nil and a nil binds SQL NULL into a NOT NULL
+  // column unless the generated code coerces it.
+  //
+  // A caller sending neither is the case that used to fail. It is
+  // asserted in the suite, alongside one that sends both — without
+  // that pair the empty case could pass because the columns are
+  // ignored rather than because they are written.
+  repeated string tags = 3;
+  bytes attachment = 4;
+}
+
+message CreateMilestoneResp {
+  int64 id = 1;
+}

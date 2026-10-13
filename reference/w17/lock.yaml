@@ -1,0 +1,80 @@
+admin_languages:
+    - cs
+    - en
+admin_wire: CLIENT_WIRE_UNSPECIFIED
+connections:
+    - default: true
+      name: app-postgres
+      target_content_sha256: ""
+      target_migration_id: ""
+    - default: false
+      name: app-redis
+      target_content_sha256: ""
+      target_migration_id: ""
+    - default: false
+      name: billing-postgres
+      target_content_sha256: ""
+      target_migration_id: ""
+formats:
+    cs:
+        date: ""
+        datetime: ""
+        decimal: ""
+        number: de
+        percent: ""
+        time: ""
+generated_code:
+    binaries: []
+    business_bundles: []
+    ci_configs:
+        - provider: azure
+        - provider: bitbucket
+        - provider: circleci
+        - provider: generic
+        - provider: github
+        - provider: gitlab
+        - provider: jenkins
+    clients:
+        - framework: CLIENT_FRAMEWORK_CORE
+          language: CLIENT_LANGUAGE_TYPESCRIPT
+          output_root: w17/web-client
+          rest_surface: ""
+          wire: CLIENT_WIRE_UNSPECIFIED
+        - framework: CLIENT_FRAMEWORK_CORE
+          language: CLIENT_LANGUAGE_JAVASCRIPT
+          output_root: w17/js-client
+          rest_surface: ""
+          wire: CLIENT_WIRE_UNSPECIFIED
+    deploy_targets: []
+    e2e: true
+    grpc_clients:
+        - language: go
+          output_root: ""
+    pb_stubs:
+        - language: go
+          output_root: ""
+          package: ""
+    proto_dir: proto
+    replicas: []
+    stubs: srcgo/gen
+infra: null
+languages:
+    - cs
+    - en
+languages_dir: w17/languages
+org_id: 01a08faa-bba7-7f3c-bc4b-962c69e23b74
+org_slug: wandering-compiler
+plugins:
+    - git: null
+      name: auth
+      source: local
+      version: 0.1.0-rc.23
+project: examples-reference
+project_id: dceefc0e-edfb-477a-a230-ed461733de9a
+sdk_version: v0.1.0-rc.17.0.20261013055440-1f854286d8e7
+secrets: null
+signature:
+    alg: ed25519/v1
+    body: dad2d538963f8c65e1a83414f2655a0ad9ecaa0e0a49060f79b721527b8788b4f6168e3648220352b34031af45eed056fde056a42fb999f32134f46143d4400b
+    key_id: ed25519:d1f1f31adf965af1
+w17_url: grpcs://api.w17.app:50051

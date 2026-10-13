@@ -1,0 +1,28 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The composite-key admin page, end to end.
+#
+# TaskTag is identified by (task_id, tag_id), so it can declare no detail —
+# a detail is keyed by a single-column row id. The parser used to refuse the
+# whole page for that, taking every join-table-with-payload out of the
+# console; it now refuses a missing detail only for models that HAVE a
+# single-column identity. This case is the half that decides whether that
+# relaxation was worth anything: the parser accepting the page proves nothing
+# about the admin actually SERVING it, and a list whose rows render nowhere
+# would be a worse answer than the old refusal.
+#
+# The generated skeleton asserted `count >= 0`, which is true of every
+# possible response and cannot fail. The rows come from
+# fixtures/app/test.json precisely so this can name them: three
+# pivot rows, ordered by (task_id, tag_id), asserted by value.
+method: admin.TaskTagAdmin.List
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    links: {matcher: count, op: '==', value: 3}
+    links.0.task_id: {matcher: eq, value: "700001"}
+    links.0.tag_id: {matcher: eq, value: "730001"}
+    links.2.task_id: {matcher: eq, value: "700002"}
+    links.2.tag_id: {matcher: eq, value: "730001"}

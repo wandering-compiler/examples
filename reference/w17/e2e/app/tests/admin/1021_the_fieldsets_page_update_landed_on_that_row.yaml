@@ -1,0 +1,18 @@
+# The half 1020 cannot see. Its response is the id it sent, which is also
+# what an UPDATE keyed on the wrong column — or on nothing — returns. So
+# the row is read back.
+#
+# `task_id` is asserted UNCHANGED alongside the new text: the update
+# request carries only `id` and `body_text`, so a mutation that bound the
+# wrong request field would either rewrite a different column or move the
+# comment to another parent, and the write-then-read-the-same-field pair
+# would not notice either.
+method: admin.CommentTaskList.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 720001
+expect:
+    id: {matcher: eq, value: "720001"}
+    task_id: {matcher: eq, value: "700001"}
+    body_text: {matcher: eq, value: edited through the fieldsets page}

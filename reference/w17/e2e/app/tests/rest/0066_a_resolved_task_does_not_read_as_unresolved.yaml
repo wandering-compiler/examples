@@ -1,0 +1,13 @@
+# The negative half of 0065, against the row 0064 created WITH a
+# resolution. An empty result here is the assertion: the value the caller
+# sent was written, so `resolution IS NULL` does not match.
+#
+# Split from 0065 rather than folded into it because the runner is
+# fail-fast per step — two separate steps name which direction broke.
+method: tasks.TaskQuery.GetTaskIfUnresolved
+pre:
+    - auth/auth.yaml
+input:
+    id: "${task.resolved_id}"
+expect:
+    rows: {matcher: count, op: '==', value: 0}

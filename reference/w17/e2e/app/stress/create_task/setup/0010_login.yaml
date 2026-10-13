@@ -1,0 +1,6 @@
+# Runs ONCE before the load: logs in and captures auth.token. The
+# auth-required load op (CreateTask) reuses it — concurrent workers all
+# share this one token.
+method: auth.AuthService.SignUp
+input: {tenant_slug: tenant-alpha, email: "load-${seq}@example.com", password: e2eSecret!23}
+expect: {token: {capture: auth.token}}

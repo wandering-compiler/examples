@@ -1,0 +1,31 @@
+# The scalar form part is VALIDATED, not merely carried.
+#
+# 0331 refuses the request for the file; this one refuses it for a field
+# that is not a file at all — the `max_len: 40` on `caption`. The file part
+# is byte-identical to 0330's, so the only thing that can have changed the
+# answer is the form field, which is what makes this the case that says the
+# gateway decoded it.
+#
+# Without a form-value binder in the gateway this request SUCCEEDED: the part was
+# parsed by ParseMultipartForm and dropped, `req.GetCaption()` stayed "",
+# and the emitted `max_len` check compared the zero value. A rule that
+# cannot fire looks exactly like a rule nobody violates.
+#
+# The assertion goes through `details`: request validation answers
+# "validation failed" for every rule, and only the field + code name which
+# one fired.
+method: tasks.TaskMutation.UploadAttachment
+pre:
+    - auth/auth.yaml
+input:
+    task_id: 700001
+    caption: this caption is deliberately longer than the forty characters the field allows
+files:
+    - part: file
+      filename: probe.txt
+      content: "hello from the e2e upload"
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: caption
+          code: MAX_LEN_VIOLATION

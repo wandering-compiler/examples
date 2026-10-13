@@ -1,0 +1,17 @@
+# The SECOND of the two rows 0690 streams back — created after the first,
+# so its id is higher and the storage query's `ORDER BY t.id` puts it in
+# frame 1. Without that ORDER BY neither this file nor 0690 could say
+# which frame is which.
+method: tasks.TasksService.CreateTask
+pre:
+    - auth/auth.yaml
+headers:
+    Idempotency-Key: "e2e-stream-2-${random:uuid}"
+input:
+    user_id: 900001
+    category_id: 2
+    title: stream frame two
+    body_text: the second frame of the streamed sequence
+    priority: 2
+expect:
+    id: {capture: stream.second_id}

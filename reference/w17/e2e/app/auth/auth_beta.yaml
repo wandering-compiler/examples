@@ -1,0 +1,17 @@
+# A SECOND tenant's identity. Mirrors auth/auth.yaml but signs up
+# under `tenant-beta` (seeded alongside tenant-alpha in
+# fixtures/app/test.json), so the token it captures carries a
+# different `x-w17-scope-tenant_id`.
+#
+# It captures the same reserved `auth.token` slot, so listing it AFTER
+# another auth fixture in a step's `pre` chain re-authenticates the
+# step as beta while leaving that fixture's other captures (note ids,
+# tags) in scope — which is exactly what a cross-tenant read needs:
+# tenant-alpha's row identifiers, asked for with tenant-beta's token.
+method: auth.AuthService.SignUp
+input:
+    tenant_slug: tenant-beta
+    email: beta${seq}@example.com
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}

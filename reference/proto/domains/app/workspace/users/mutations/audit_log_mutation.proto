@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package e2e.app.users;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "domains/app/workspace/users/types/models.proto";
+
+// AuditLogMutation — write side of the LoginAuditLog table.
+//
+// Sessions live in Redis (proto/domains/app/cache/), so the PG side
+// keeps only the persistent audit trail. The lock-resource
+// demo from the original SessionMutation lives on:
+// RecordLogin SELECTs the parent User FOR SHARE while
+// INSERTing the audit row — prevents a concurrent admin from
+// flipping the user to DELETED status while the login is
+// being recorded.
+//
+// The same-domain distributed-tx (DT) showcase moves with
+// it: UsersService.SignUp now does CreateUser +
+// RecordLogin (both PG, same `main` connection) in one DT,
+// then a non-atomic SetSession against Redis. Two distinct
+// orchestration patterns demonstrated by the same RPC:
+// atomic same-conn write set + non-atomic cross-conn
+// follow-up.
+
+message RecordLoginReq {
+  int64                     user_id    = 1;
+  e2e.app.users.LoginAuditLog.Action action = 2;
+  string                    ip_address = 3;
+  string                    user_agent = 4;
+}
+message RecordLoginResp {
+  int64 id = 1;
+}
+
+service AuditLogMutation {
+  rpc RecordLogin(RecordLoginReq) returns (RecordLoginResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "load_user",
+        dql:  "SELECT u.id FROM users.User u WHERE u.id = :user_id"
+      }
+      ops: {
+        name: "insert",
+        dql:
+          "INSERT INTO users.LoginAuditLog SET user_id = :user_id, action = :action, "
+          "ip_address = :ip_address, user_agent = :user_agent RETURNING id"
+      }
+    };
+    option (w17.db.lock) = {
+      locks: [
+        { resource: "User", kind: SELECT_FOR_SHARE }
+      ]
+    };
+  }
+}

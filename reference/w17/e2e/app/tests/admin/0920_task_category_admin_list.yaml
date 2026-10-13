@@ -1,0 +1,21 @@
+# The reference-catalogue admin list — the page whose model declares
+# `(w17.acl_model) = false`.
+#
+# Hand-written over the generated skeleton, which asserted
+# `count >= 0`: that passes on an EMPTY response, so it would have
+# stayed green with the page returning nothing at all. The three
+# categories below are seeded by fixtures/app/test.json and
+# nothing in the suite adds or removes one, so the count is exact and
+# the first row is named.
+#
+# What this proves about ACL: the page IS reachable by the wildcard
+# admin, which the endpoint permission gates. The model axis is
+# absent by declaration.
+method: admin.TaskCategoryAdmin.List
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    categories: {matcher: count, op: '==', value: 3}
+    categories.0.id: {matcher: eq, value: "1"}
+    categories.0.name: {matcher: eq, value: work}

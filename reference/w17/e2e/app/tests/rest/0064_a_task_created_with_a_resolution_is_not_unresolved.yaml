@@ -1,0 +1,22 @@
+# The other half of 0063: a resolution that WAS sent still gets written.
+#
+# Without this leg, a compiler that bound SQL NULL for every enum write —
+# unset or not — would pass 0063 and silently drop every resolution the
+# caller ever sends. The fix is "absent writes NULL", not "enums write
+# NULL", and only the two legs together say that.
+#
+# 1 is FIXED (Task.Resolution).
+method: tasks.TasksService.CreateTask
+pre:
+    - auth/auth.yaml
+headers:
+    Idempotency-Key: "e2e-create-resolved-${random:uuid}"
+input:
+    user_id: 1
+    category_id: 1
+    title: e2e-resolved
+    body_text: e2e-value
+    priority: 1
+    resolution: 1
+expect:
+    id: {capture: task.resolved_id, match: {matcher: not_empty}}

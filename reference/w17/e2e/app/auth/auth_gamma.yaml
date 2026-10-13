@@ -1,0 +1,14 @@
+# tenant-gamma — the third seeded tenant, used by the paged tag-count
+# scenario alone.
+#
+# It exists because that scenario needs a tenant whose TenantNote list
+# holds exactly its own note, and neither alpha nor beta can supply
+# that: alpha accumulates notes across the run, and beta is depended on
+# for owning NONE (0225's scope-bypass baseline reads its empty list).
+method: auth.AuthService.SignUp
+input:
+    tenant_slug: tenant-gamma
+    email: gamma${seq}@example.com
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}

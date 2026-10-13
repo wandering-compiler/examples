@@ -1,0 +1,33 @@
+# `GROUPING SETS ((campaign_id, channel), (campaign_id))` — more than one
+# grouping set, which no example had ever written.
+#
+# The rule it exercises is about which columns stay functionally
+# determined once the sets differ: only a key present in EVERY set
+# qualifies, so an exemption may rest on the INTERSECTION of the sets and
+# never on their union. Computing that intersection is the step that had
+# never run, and it needs at least two sets to be a step at all.
+#
+# The third row is the rollup: it has no channel, and that absence IS the
+# row's meaning ("every channel"), not a value that failed to arrive.
+# `channel` is `optional` in the response for that reason, and it is not
+# cosmetic — a non-optional string field makes the generated handler scan
+# a NULL into a plain `string`, which fails at the row rather than
+# returning it. What identifies the row here is `flight_count: 2`: no
+# per-channel set produces that number, so the rollup cannot be confused
+# with either of the rows above it. (The `empty` matcher alone would not
+# settle it — it passes for an absent field and for an empty string
+# alike.)
+method: users.CampaignQuery.ChannelBreakdown
+pre:
+    - auth/auth.yaml
+input:
+    campaign_id: 720001
+expect:
+    rows: {matcher: count, op: '==', value: 3}
+    rows.0.channel: {matcher: eq, value: search}
+    rows.0.flight_count: {matcher: eq, value: "1"}
+    rows.1.channel: {matcher: eq, value: social}
+    rows.1.flight_count: {matcher: eq, value: "1"}
+    rows.2.channel: {matcher: empty}
+    rows.2.flight_count: {matcher: eq, value: "2"}
+    rows.2.campaign_id: {matcher: eq, value: "720001"}

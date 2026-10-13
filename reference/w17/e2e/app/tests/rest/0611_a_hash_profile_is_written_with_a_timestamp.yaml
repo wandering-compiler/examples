@@ -1,0 +1,17 @@
+# Leg 1 of 3 for the HASH-overwrite shape.
+#
+# `last_seen_at` is a Timestamp, so it is presence-bearing and
+# kvhash.MarshalEntity omits it when unset. This write sets it; 0557
+# re-writes the same key WITHOUT it, and 0558 checks it is gone.
+#
+# Its own device id, because 0554/0555 pin exact values for alpha/beta
+# and a third key keeps this case from moving them.
+method: cache.DeviceProfileMutation.SetDeviceProfile
+pre:
+    - auth/auth.yaml
+input:
+    device_id: e2e-device-gamma
+    user_id: 3
+    platform: web/chrome
+    last_seen_at: "2026-08-07T10:00:00Z"
+expect: {}

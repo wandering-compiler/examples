@@ -1,0 +1,705 @@
+{
+  "rows": [
+    {
+      "model": "auth.Tenant",
+      "pk": [
+        "11111111-1111-1111-1111-111111111111"
+      ],
+      "fields": {
+        "name": "tenant-alpha"
+      }
+    },
+    {
+      "model": "auth.Tenant",
+      "pk": [
+        "22222222-2222-2222-2222-222222222222"
+      ],
+      "fields": {
+        "name": "tenant-beta"
+      }
+    },
+    {
+      "model": "auth.Tenant",
+      "pk": [
+        "33333333-3333-3333-3333-333333333333"
+      ],
+      "fields": {
+        "name": "tenant-gamma"
+      }
+    },
+    {
+      "model": "auth.User",
+      "pk": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+      ],
+      "fields": {
+        "email": "alice@example.com",
+        "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk",
+        "tenant_id": "11111111-1111-1111-1111-111111111111"
+      }
+    },
+    {
+      "model": "auth.User",
+      "pk": [
+        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      ],
+      "fields": {
+        "email": "bob@example.com",
+        "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk",
+        "tenant_id": "22222222-2222-2222-2222-222222222222"
+      }
+    },
+    {
+      "model": "auth.User",
+      "pk": [
+        "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+      ],
+      "fields": {
+        "email": "e2e-nogrant@example.com",
+        "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk",
+        "tenant_id": "11111111-1111-1111-1111-111111111111"
+      }
+    },
+    {
+      "model": "auth.UserToken",
+      "pk": [
+        "cccccccc-cccc-cccc-cccc-cccccccccccc"
+      ],
+      "fields": {
+        "token": "tok-alice",
+        "user_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+      }
+    },
+    {
+      "model": "auth.UserToken",
+      "pk": [
+        "dddddddd-dddd-dddd-dddd-dddddddddddd"
+      ],
+      "fields": {
+        "token": "tok-bob",
+        "user_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      }
+    },
+    {
+      "model": "auth.UserRole",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000f1"
+      ],
+      "fields": {
+        "user_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "role_id": "e6289651-217c-852c-a54d-8d35f3aae2dc"
+      }
+    },
+    {
+      "model": "auth.UserRole",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000f2"
+      ],
+      "fields": {
+        "user_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "role_id": "e6289651-217c-852c-a54d-8d35f3aae2dc"
+      }
+    },
+    {
+      "model": "auth.Role",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000b1"
+      ],
+      "fields": {
+        "name": "e2e-throwaway-role",
+        "description": "admin e2e: safe to edit and delete"
+      }
+    },
+    {
+      "model": "users.User",
+      "pk": [
+        1
+      ],
+      "fields": {
+        "email": "e2e-owner@example.com",
+        "display_name": "E2E Owner",
+        "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk",
+        "status": 1
+      }
+    },
+    {
+      "model": "users.User",
+      "pk": [
+        900001
+      ],
+      "fields": {
+        "email": "e2e-admin-page@example.com",
+        "display_name": "E2E Admin Page User",
+        "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk",
+        "status": 1
+      }
+    },
+    {
+      "model": "tasks.TaskCategory",
+      "pk": [
+        1
+      ],
+      "fields": {
+        "name": "work",
+        "color": "#FF5733"
+      }
+    },
+    {
+      "model": "tasks.TaskCategory",
+      "pk": [
+        2
+      ],
+      "fields": {
+        "name": "personal",
+        "color": "#33C3FF"
+      }
+    },
+    {
+      "model": "tasks.TaskCategory",
+      "pk": [
+        3
+      ],
+      "fields": {
+        "name": "urgent",
+        "color": "#C70039"
+      }
+    },
+    {
+      "model": "tasks.Task",
+      "pk": [
+        700001
+      ],
+      "fields": {
+        "user_id": 1,
+        "category_id": 1,
+        "title": "admin paged task 1",
+        "body_text": "admin paged seed body 1",
+        "status": 1,
+        "priority": 1,
+        "created_at": "2026-01-01T00:00:00Z"
+      }
+    },
+    {
+      "model": "tasks.Task",
+      "pk": [
+        700002
+      ],
+      "fields": {
+        "user_id": 1,
+        "category_id": 1,
+        "title": "admin paged task 2",
+        "body_text": "admin paged seed body 2",
+        "status": 1,
+        "priority": 2,
+        "created_at": "2026-01-01T00:00:00Z"
+      }
+    },
+    {
+      "model": "tasks.Task",
+      "pk": [
+        700003
+      ],
+      "fields": {
+        "user_id": 1,
+        "category_id": 2,
+        "title": "admin paged task 3",
+        "body_text": "admin paged seed body 3",
+        "status": 2,
+        "priority": 3,
+        "created_at": "2026-01-02T00:00:00Z"
+      }
+    },
+    {
+      "model": "tasks.Task",
+      "pk": [
+        700004
+      ],
+      "fields": {
+        "user_id": 1,
+        "category_id": 2,
+        "title": "admin paged task 4",
+        "body_text": "admin paged seed body 4",
+        "status": 2,
+        "priority": 4,
+        "created_at": "2026-01-02T00:00:00Z"
+      }
+    },
+    {
+      "model": "tasks.Task",
+      "pk": [
+        700005
+      ],
+      "fields": {
+        "user_id": 1,
+        "category_id": 3,
+        "title": "admin paged task 5",
+        "body_text": "admin paged seed body 5",
+        "status": 3,
+        "priority": 5,
+        "created_at": "2026-01-03T00:00:00Z"
+      }
+    },
+    {
+      "model": "tasks.Comment",
+      "pk": [
+        720001
+      ],
+      "fields": {
+        "task_id": 700001,
+        "body_text": "first comment on the paged task",
+        "created_at": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "model": "tasks.Comment",
+      "pk": [
+        720002
+      ],
+      "fields": {
+        "task_id": 700001,
+        "body_text": "second comment on the paged task",
+        "created_at": "2026-03-01T01:00:00Z"
+      }
+    },
+    {
+      "model": "tasks.Comment",
+      "pk": [
+        720003
+      ],
+      "fields": {
+        "task_id": 700002,
+        "body_text": "the only comment on task two",
+        "created_at": "2026-03-01T02:00:00Z"
+      }
+    },
+    {
+      "model": "tasks.Tag",
+      "pk": [
+        730001
+      ],
+      "fields": {
+        "slug": "admin-pivot-alpha",
+        "display_name": "Admin Pivot Alpha",
+        "color": "#101010"
+      }
+    },
+    {
+      "model": "tasks.Tag",
+      "pk": [
+        730002
+      ],
+      "fields": {
+        "slug": "admin-pivot-beta",
+        "display_name": "Admin Pivot Beta",
+        "color": "#202020"
+      }
+    },
+    {
+      "model": "tasks.TaskTag",
+      "pk": [
+        700001,
+        730001
+      ],
+      "fields": {}
+    },
+    {
+      "model": "tasks.TaskTag",
+      "pk": [
+        700001,
+        730002
+      ],
+      "fields": {}
+    },
+    {
+      "model": "tasks.TaskTag",
+      "pk": [
+        700002,
+        730001
+      ],
+      "fields": {}
+    },
+    {
+      "model": "tasks.TaskAuditLog",
+      "pk": [
+        730101
+      ],
+      "fields": {
+        "task_id": 700005,
+        "body_text": "audit one",
+        "created_at": "2020-01-01T00:00:01Z"
+      }
+    },
+    {
+      "model": "tasks.TaskAuditLog",
+      "pk": [
+        730102
+      ],
+      "fields": {
+        "task_id": 700005,
+        "body_text": "audit two",
+        "created_at": "2020-01-01T00:00:02Z"
+      }
+    },
+    {
+      "model": "tasks.TaskAuditLog",
+      "pk": [
+        730103
+      ],
+      "fields": {
+        "task_id": 700005,
+        "body_text": "audit three",
+        "created_at": "2020-01-01T00:00:03Z"
+      }
+    },
+    {
+      "model": "tasks.TaskAuditLog",
+      "pk": [
+        730104
+      ],
+      "fields": {
+        "task_id": 700005,
+        "body_text": "audit four",
+        "created_at": "2020-01-01T00:00:04Z"
+      }
+    },
+    {
+      "model": "tasks.TaskAuditLog",
+      "pk": [
+        730105
+      ],
+      "fields": {
+        "task_id": 700005,
+        "body_text": "audit five",
+        "created_at": "2020-01-01T00:00:05Z"
+      }
+    },
+    {
+      "model": "tasks.Milestone",
+      "pk": [
+        710001
+      ],
+      "fields": {
+        "name": "charlie release",
+        "weight": 5,
+        "tags": [],
+        "attachment": "",
+        "created_at": "2026-02-01T00:00:00Z"
+      }
+    },
+    {
+      "model": "tasks.Milestone",
+      "pk": [
+        710002
+      ],
+      "fields": {
+        "name": "alpha release",
+        "weight": 5,
+        "target_count": 12,
+        "tags": [],
+        "attachment": "",
+        "created_at": "2026-02-01T00:00:00Z"
+      }
+    },
+    {
+      "model": "tasks.Milestone",
+      "pk": [
+        710003
+      ],
+      "fields": {
+        "name": "bravo release",
+        "weight": 9,
+        "target_count": 4,
+        "tags": [],
+        "attachment": "",
+        "created_at": "2026-02-01T00:00:00Z"
+      }
+    },
+    {
+      "model": "users.DirectoryCampaign",
+      "pk": [
+        720001
+      ],
+      "fields": {
+        "name": "spring-launch",
+        "audience": {
+          "utm.source": "newsletter",
+          "tier": "paid"
+        }
+      }
+    },
+    {
+      "model": "users.DirectoryCampaign",
+      "pk": [
+        720002
+      ],
+      "fields": {
+        "name": "winter-hold",
+        "audience": {
+          "utm.source": "partner",
+          "tier": "paid"
+        }
+      }
+    },
+    {
+      "model": "users.DirectoryCampaign",
+      "pk": [
+        720003
+      ],
+      "fields": {
+        "name": "idle-brief",
+        "audience": {
+          "utm.source": "partner",
+          "tier": "house"
+        }
+      }
+    },
+    {
+      "model": "users.CampaignFlight",
+      "pk": [
+        720101
+      ],
+      "fields": {
+        "campaign_id": 720001,
+        "channel": "search",
+        "impressions": 100,
+        "spend": "10.5000",
+        "click_rate": 0.25
+      }
+    },
+    {
+      "model": "users.CampaignFlight",
+      "pk": [
+        720102
+      ],
+      "fields": {
+        "campaign_id": 720001,
+        "channel": "social",
+        "impressions": 300,
+        "spend": "20.2500",
+        "click_rate": 0.75
+      }
+    },
+    {
+      "model": "users.CampaignFlight",
+      "pk": [
+        720201
+      ],
+      "fields": {
+        "campaign_id": 720002,
+        "channel": "search",
+        "impressions": 50,
+        "spend": "5.0000",
+        "click_rate": 0.5
+      }
+    },
+    {
+      "model": "users.FlightEvent",
+      "pk": [
+        720301
+      ],
+      "fields": {
+        "flight_id": 720102,
+        "kind": "click",
+        "weight": 3
+      }
+    },
+    {
+      "model": "users.FlightEvent",
+      "pk": [
+        720302
+      ],
+      "fields": {
+        "flight_id": 720102,
+        "kind": "conversion",
+        "weight": 4
+      }
+    },
+    {
+      "model": "users.FlightEvent",
+      "pk": [
+        720303
+      ],
+      "fields": {
+        "flight_id": 720101,
+        "kind": "conversion",
+        "weight": 9
+      }
+    },
+    {
+      "model": "users.FlightEvent",
+      "pk": [
+        720304
+      ],
+      "fields": {
+        "flight_id": 720201,
+        "kind": "click",
+        "weight": 1
+      }
+    },
+    {
+      "model": "admin_auth.Role",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000a1"
+      ],
+      "fields": {
+        "name": "admin-all",
+        "description": "e2e all-permissions admin role",
+        "all_permissions": true
+      }
+    },
+    {
+      "model": "admin_auth.User",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000a2"
+      ],
+      "fields": {
+        "email": "e2e-admin@example.com",
+        "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      }
+    },
+    {
+      "model": "admin_auth.User",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000a3"
+      ],
+      "fields": {
+        "email": "e2e-admin-nogrant@example.com",
+        "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      }
+    },
+    {
+      "model": "admin_auth.User",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000b2"
+      ],
+      "fields": {
+        "email": "e2e-throwaway-admin@example.com",
+        "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      }
+    },
+    {
+      "model": "admin_auth.UserRole",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000a4"
+      ],
+      "fields": {
+        "user_id": "00000000-0000-0000-0000-0000000000a2",
+        "role_id": "00000000-0000-0000-0000-0000000000a1"
+      }
+    },
+    {
+      "model": "admin_auth.UserToken",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000b3"
+      ],
+      "fields": {
+        "token": "e2e-throwaway-session-token-b3",
+        "user_id": "00000000-0000-0000-0000-0000000000b2",
+        "expires_at": "2099-01-01T00:00:00Z"
+      }
+    },
+    {
+      "model": "admin_auth.User",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000b7"
+      ],
+      "fields": {
+        "email": "e2e-sessions-admin@example.com",
+        "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      }
+    },
+    {
+      "model": "admin_auth.UserToken",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000b8"
+      ],
+      "fields": {
+        "token": "e2e-throwaway-session-token-b8",
+        "user_id": "00000000-0000-0000-0000-0000000000b7",
+        "expires_at": "2099-01-01T00:00:00Z"
+      }
+    },
+    {
+      "model": "admin_auth.Organization",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000b4"
+      ],
+      "fields": {
+        "slug": "e2e-throwaway-org",
+        "name": "E2E Throwaway Org",
+        "kind": "company"
+      }
+    },
+    {
+      "model": "admin_auth.Organization",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000b6"
+      ],
+      "fields": {
+        "slug": "e2e-membership-org",
+        "name": "E2E Membership Org",
+        "kind": "company"
+      }
+    },
+    {
+      "model": "admin_auth.OrgMembership",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000b5"
+      ],
+      "fields": {
+        "user_id": "00000000-0000-0000-0000-0000000000a2",
+        "org_id": "00000000-0000-0000-0000-0000000000b6",
+        "role": "member"
+      }
+    },
+    {
+      "model": "admin_auth.User",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000c1"
+      ],
+      "fields": {
+        "email": "e2e-admin-members@example.com",
+        "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      }
+    },
+    {
+      "model": "admin_auth.UserRole",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000c2"
+      ],
+      "fields": {
+        "user_id": "00000000-0000-0000-0000-0000000000c1",
+        "role_id": "00000000-0000-0000-0000-000000000000"
+      },
+      "resolve": {
+        "role_id": {
+          "model": "admin_auth.Role",
+          "match": {
+            "preset_key": "membership-editor"
+          }
+        }
+      }
+    },
+    {
+      "model": "admin_auth.User",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000c3"
+      ],
+      "fields": {
+        "email": "e2e-plain-member@example.com",
+        "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      }
+    },
+    {
+      "model": "admin_auth.OrgMembership",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000c4"
+      ],
+      "fields": {
+        "user_id": "00000000-0000-0000-0000-0000000000c3",
+        "org_id": "00000000-0000-0000-0000-0000000000b6",
+        "role": "member"
+      }
+    }
+  ]
+}

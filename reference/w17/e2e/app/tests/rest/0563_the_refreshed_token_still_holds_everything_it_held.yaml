@@ -1,0 +1,12 @@
+# The value survived its own expiry being set. An EXPIRE that reached
+# Redis as anything else — a SET, a DEL, a PERSIST on the wrong key —
+# shows up here and nowhere else.
+method: cache.SessionCacheQuery.GetApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e-ttl-token-keep
+expect:
+    token_hash: {matcher: eq, value: e2e-ttl-token-keep}
+    user_id: {matcher: eq, value: "3"}
+    label: {matcher: eq, value: ci-deploy}

@@ -1,0 +1,11 @@
+# Creates a tenant note and captures its id for the get test. tenant_id
+# is omitted on purpose — it's auto-stamped from the caller's auth scope
+# (decoded from the token), never sent in the payload.
+method: tasks.TaskMutation.CreateTenantNote
+pre:
+    - auth/auth.yaml
+input:
+    title: e2e note
+    body: e2e note body
+expect:
+    id: {capture: note.id}

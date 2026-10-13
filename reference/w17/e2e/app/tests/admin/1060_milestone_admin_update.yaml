@@ -1,0 +1,25 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# The detail form's write — the page whose `detail.fields` declares an
+# editable set of three, which is what makes that annotation provable at
+# all (with one settable column the declaration and its default are the
+# same list).
+#
+# `name` and `weight` are sent UNCHANGED, deliberately: the milestone
+# sort cases (rest/0301, rest/0302) assert an order computed from both,
+# so moving either would break assertions that have nothing to do with
+# this page. `status_note` is the discriminator — nothing else asserts
+# it, which is why the admin fixture was hosted on this model.
+method: admin.MilestoneAdmin.Update
+pre:
+    - auth/admin.yaml
+input:
+    id: 710001
+    name: charlie release
+    weight: 5
+    status_note: edited on the detail form
+expect:
+    id: {matcher: eq, value: "710001"}

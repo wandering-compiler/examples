@@ -1,0 +1,50 @@
+# Pins that the JSON dialect has NO 64-bit exception: every 64-bit integer
+# travels as a quoted decimal string, `w17.Paging.total` included
+# (the JSON dialect's rule for 64-bit integers).
+#
+# The whole proof is the pair of assertions below sitting side by side:
+#
+#   items.0.id   int64  → "700005"   QUOTED
+#   paging.total uint64 → "5"        QUOTED — the same shape
+#
+# For two days `total` was the dialect's one carve-out and rendered
+# unquoted; this step pinned that. It was removed because a single-field
+# exception has to be re-applied on every path that renders the field, and
+# three of them forgot: the pb codec (admin lists reported 0 rows on the
+# default wire), formatCount (StatWidget rendered 0), and the JSON leg's own
+# fast path, which returns BEFORE the unquoting step — so this REST surface
+# was already sending the string while the spec said otherwise, and this
+# step's `eq: 5` passed only because the matcher had a number on both sides.
+#
+# So the assertion is now the stronger one: both 64-bit fields quoted, no
+# exception to re-apply. The matcher does not coerce string↔number (only
+# numeric types among themselves — `looseEqual` / `toFloat`), so a
+# regression in EITHER direction is a hard failure, not a silent pass.
+#
+# POSITION IS LOAD-BEARING. It sits at 0025 because `total` is a COUNT(*)
+# and only an exact `eq` proves the type — `not_empty` would be satisfied
+# by a quoted "5" just as well and would prove nothing. The count is only
+# deterministic BEFORE any task is created: the admin scenario runs
+# earlier and creates none, so the only rows are the five seeded in
+# fixtures/app/test.json (700001..700005). The very next step
+# (0030) pulls in the `a_task` fixture, and from there the count climbs
+# with every fixture run — at 0055 it is already 8. Same reasoning, and
+# the same load-bearing placement, as admin/0040_task_admin_paged.
+#
+# If a new step that creates a task is ever inserted ahead of this one,
+# the fix is to move THIS step earlier, not to bump the expected count.
+#
+# The REST twin of admin/0045, which pins the same shape on the admin
+# surface. When both were written the two surfaces encoded responses
+# through DIFFERENT paths, so one passing said nothing about the other;
+# now they share restgw.WriteResponse. The twin is kept anyway — it is what
+# would CATCH admin diverging again, and the only thing it costs is one step.
+method: tasks.TaskQuery.ListTasksPagedWithCategory
+pre:
+    - auth/auth.yaml
+input:
+    limit: 2
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    items.0.id: {matcher: eq, value: "700005"}
+    paging.total: {matcher: eq, value: "5"}

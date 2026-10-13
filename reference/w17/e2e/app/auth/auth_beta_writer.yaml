@@ -1,0 +1,19 @@
+# tenant-beta, as its own fixture path.
+#
+# Byte-identical in effect to auth/auth_beta.yaml, and that is the point
+# — the same reason auth/auth_alpha_reader.yaml exists. A `pre` chain
+# that has already pulled in auth/auth_beta.yaml does NOT run it a
+# second time, so listing that path again to switch back to beta is a
+# no-op and the step silently runs as whoever authenticated last. A
+# distinct path re-authenticates for real.
+#
+# Used by fixtures/a_beta_tenant_note.yaml, whose whole job is to write
+# a row AS beta — a step that ran as the wrong tenant would write the
+# row under the wrong scope and quietly defeat the case that reads it.
+method: auth.AuthService.SignUp
+input:
+    tenant_slug: tenant-beta
+    email: beta-writer${seq}@example.com
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}

@@ -1,0 +1,22 @@
+# Admin auto-sort (item 2, INC-1) — LIVE reordering proof, descending.
+#
+# Companion to 0021 (ascending). Same UserAdmin page + two deterministic
+# seeded rows; here `sort_dir=desc` must FLIP the order relative to 0021,
+# proving direction handling (the handler folds direction into the sort
+# index: email is column i=1, so desc → x-w17-sort-by=4 = 2*1+2, and
+# storage runs `... CASE WHEN :__sort_by=4 THEN u.email END DESC, u.id`).
+#
+# GET /admin/api/list/UserAdmin?sort_by=email&sort_dir=desc. Descending
+# email order puts 'e2e-owner@…' before 'e2e-admin-page@…' — the exact
+# reverse of 0021 — so 0021+0022 together prove BOTH that email sort is
+# applied AND that sort_dir reverses it.
+method: admin.UserAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    sort_by: email
+    sort_dir: desc
+expect:
+    users: {matcher: count, op: '==', value: 2}
+    users.0.email: {matcher: eq, value: e2e-owner@example.com}
+    users.1.email: {matcher: eq, value: e2e-admin-page@example.com}

@@ -1,0 +1,17 @@
+# The default (unsorted) read of the hand-declared UserAdmin page. Its
+# sorted siblings 0021/0022 issue the SAME query with an ORDER BY bolted
+# on, so the row SET is identical and the count they pin holds here too —
+# what this step adds is that the page answers without a sort at all.
+#
+# The count is exact rather than a floor on purpose: `>= 0` was the
+# regenerated scaffold's placeholder and held against an empty page,
+# which is precisely the symptom a broken list has. Order is deliberately
+# NOT asserted here (that is 0021/0022's subject), so the row-0
+# assertion names a field rather than a value.
+method: admin.UserAdmin.List
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    users: {matcher: count, op: '==', value: 2}
+    users.0.email: {matcher: not_empty}

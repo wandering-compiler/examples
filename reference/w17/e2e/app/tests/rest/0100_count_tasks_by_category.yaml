@@ -1,0 +1,23 @@
+# GROUP BY category with a COUNT — the aggregate's shape, not its
+# arithmetic.
+#
+# The floor is 1 because a GROUP BY only emits a group that has rows: the
+# five tasks seeded in fixtures/app/test.json guarantee at
+# least one, and 0025 already proves they are visible to this principal.
+# An exact number is deliberately avoided — every fixture run adds a task
+# and would move it.
+#
+# `task_count` is the aggregate itself, and asserting it `>= 1` is what
+# makes this a test of the COUNT rather than of the GROUP BY alone: a
+# projection that dropped the aggregate column would answer 0 (or absent)
+# and pass anything looser. int64 crosses the JSON wire as a quoted
+# string, which is why `num` and not `eq` — `num` coerces the numeric
+# string by the wire spec, `eq` deliberately does not.
+method: tasks.TaskQuery.CountTasksByCategory
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    rows: {matcher: count, op: '>=', value: 1}
+    rows.0.category_id: {matcher: not_empty}
+    rows.0.task_count: {matcher: num, op: '>=', value: 1}

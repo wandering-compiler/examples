@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+// Event registry for the `billing` domain — one event.
+//
+// It exists so the domain can have a SUBSCRIBER SURFACE of its own — a
+// SECOND one in this project, which is the point. The compiler renders
+// exactly one subscriber bundle per domain, so anything to be said about
+// subscriber surfaces as a class needs two domains to say it, and `app`
+// already had the only one. Billing is the natural host: it is a
+// separate database operated by whoever sells the product, and its one
+// event has exactly one consumer.
+//
+// It was originally added to carry `(w17.event_subscribers).colocated`
+// beside `app`'s default shape. That flag is now refused at parse time
+// (see subscribers.proto in this domain's root for the whole story), so
+// both surfaces render the same standalone shape — and the second one
+// still earns its place: it is what makes the per-domain bundle, the
+// per-domain channel and the cross-domain emit path readable at all.
+
+package e2e.billing.core;
+
+import "w17/event.proto";
+
+// InvoiceIssued — a draft invoice became an obligation.
+//
+// Emitted SERVER-tier from `InvoiceMutation.IssueInvoice`, because
+// issuance is a fact about the row: a batch job closing a billing period
+// must produce the same signal a hand-triggered issuance does, and
+// neither of them enters through a gateway (billing has no REST surface
+// at all).
+//
+// The payload is the invoice id and nothing else. Everything a consumer
+// needs beyond it is a read away, and a wider payload is a second copy
+// of the invoice that goes stale the moment it is emitted.
+message InvoiceIssued {
+  option (w17.event) = {
+    channel: "billing"
+    topic:   "billing.invoice.issued"
+  };
+
+  int64 invoice_id = 1;
+}

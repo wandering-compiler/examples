@@ -1,0 +1,28 @@
+# `(w17.db.table).checks[]` — the STRUCTURED cross-column CHECK.
+#
+# `visible_from <= visible_until` is authored in DQL, so it is parsed at
+# build time; what a live insert adds is that the parsed predicate
+# reached the table as a constraint rather than being validated and then
+# dropped. An emitter that lowered `checks:` into nothing at all would
+# leave a schema that applies cleanly, a build with no diagnostic, and
+# this request succeeding.
+#
+# Unpublished and a fresh handle, so the two escape-hatch constraints
+# and both unique indexes are all satisfied: the window is the only
+# thing wrong with this request.
+method: users.DirectoryCardMutation.CreateDirectoryCard
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    handle: Alpha-Backwards
+    headline: Backend engineer, Prague
+    locale: sk
+    is_public: false
+    visible_from: "2027-01-01T00:00:00Z"
+    visible_until: "2026-01-01T00:00:00Z"
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - code: INVALID_VALUE
+          message: {matcher: eq, value: the visible-from date must not be later than the visible-until date}

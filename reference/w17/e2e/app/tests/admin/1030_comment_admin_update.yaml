@@ -1,0 +1,22 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# The FLAT-`fields` page's update, over the same model and the same
+# mutation the fieldsets page above uses. Two pages, two renderings of one
+# editable set — `fields: ["body_text"]` here, grouped sections there —
+# because the parser refuses a detail that declares both, so proving
+# either shape exists takes two pages.
+#
+# Restoring 720001 to its seeded text is deliberate double duty: it
+# exercises this page's write AND leaves the fixture as 1020 found it.
+# A dedicated restore case would assert nothing this one does not.
+method: admin.CommentAdmin.Update
+pre:
+    - auth/admin.yaml
+input:
+    id: 720001
+    body_text: first comment on the paged task
+expect:
+    id: {matcher: eq, value: "720001"}

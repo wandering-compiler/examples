@@ -1,0 +1,20 @@
+# The half 0960 cannot see. It got back the id it sent, which is also what
+# an UPDATE keyed on the PARENT would return — that statement would edit
+# all three of this task's comments and still answer with one id.
+#
+# So the siblings are asserted UNCHANGED. The two seeded comments must
+# still read exactly as seeded, and only the created row may carry the new
+# text. That is the difference between "an update ran" and "the update hit
+# one row".
+#
+# Index order is created-row-LAST — see 0951 for why.
+method: admin.TaskAdmin.Inline.CommentAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    id: 700001
+expect:
+    comments: {matcher: count, op: '==', value: 3}
+    comments.0.body_text: {matcher: eq, value: first comment on the paged task}
+    comments.1.body_text: {matcher: eq, value: second comment on the paged task}
+    comments.2.body_text: {matcher: eq, value: edited through the inline}

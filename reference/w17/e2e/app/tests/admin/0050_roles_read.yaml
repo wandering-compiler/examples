@@ -1,0 +1,9 @@
+method: admin.Roles.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b1
+expect:
+    id: {matcher: not_empty}
+    name: {matcher: not_empty}
+    created_at: {matcher: not_empty}

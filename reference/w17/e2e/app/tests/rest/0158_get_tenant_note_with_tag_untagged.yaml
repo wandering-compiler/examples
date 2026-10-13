@@ -1,0 +1,18 @@
+# The plain outer-join case: a note carrying no tag at all.
+#
+# This is the step that fails if the joined model's scope predicate is
+# put in the WHERE instead of on the ON. There, the NULL-extended row is
+# discarded, the LEFT JOIN quietly behaves as an INNER one, and an
+# untagged note becomes unreadable — a 404 for a row the caller owns.
+#
+# On the ON, the note comes back with an empty tag, which is what a
+# hand-written scoped LEFT JOIN says.
+method: tasks.TaskQuery.GetTenantNoteWithTag
+pre:
+    - fixtures/a_tenant_note.yaml
+input:
+    id: ${note.id}
+expect:
+    id: {matcher: not_empty}
+    title: {matcher: not_empty}
+    tag: {matcher: empty}

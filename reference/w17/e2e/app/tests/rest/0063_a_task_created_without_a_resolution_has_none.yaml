@@ -1,0 +1,29 @@
+# An unset NULLABLE ENUM must reach the column as SQL NULL, not as the
+# enum's zero.
+#
+# This is the leg that fails on the old behaviour. `CreateTask` is called
+# with `resolution` ABSENT; the compiler used to bind `int32(GetResolution())`
+# — 0 — wrapped in `dqlbind.NullIfEmpty`, whose type switch covers string
+# and []byte only, so the wrap READ as null-safety and did nothing. The row
+# then carried RESOLUTION_UNSPECIFIED, and `IS NULL` never found it.
+#
+# Reading the field back cannot show any of this: a proto3 enum answers 0
+# whether the column holds NULL or 0. Only a question asked of the COLUMN
+# can, which is what `GetTaskIfUnresolved` exists for.
+#
+# Pairs with 0064. Alone this step is satisfied by a compiler that binds
+# NULL for EVERY enum write, which would be a different bug of the same
+# size — 0064 is the half that catches it.
+method: tasks.TasksService.CreateTask
+pre:
+    - auth/auth.yaml
+headers:
+    Idempotency-Key: "e2e-create-unresolved-${random:uuid}"
+input:
+    user_id: 1
+    category_id: 1
+    title: e2e-unresolved
+    body_text: e2e-value
+    priority: 1
+expect:
+    id: {capture: task.unresolved_id, match: {matcher: not_empty}}

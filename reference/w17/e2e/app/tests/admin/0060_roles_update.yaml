@@ -1,0 +1,14 @@
+# The role PK rides the URL — the handler stamps {id} over the request,
+# so the body carries only the editable columns. (The scaffolder drops
+# the stamped PK for exactly this reason; it resolves the field through
+# the admin codegen's own resolver, since the request names it role_id
+# rather than id.)
+method: admin.Roles.Update
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b1
+    name: e2e-role-renamed
+    description: renamed by the admin e2e suite
+expect:
+    role_id: {matcher: not_empty}

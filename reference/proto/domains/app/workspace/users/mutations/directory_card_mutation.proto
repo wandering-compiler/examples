@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package e2e.app.users;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "domains/app/workspace/users/types/models.proto";
+
+// CreateDirectoryCardReq is the whole write surface of the card.
+//
+// It names EVERY column a caller may set and no others. That is what
+// makes the DDL claims provable from here: `search_key` is absent
+// because the database computes it, `created_at` is absent because the
+// column defaults it, and `match_score` is absent because it is not a
+// column at all.
+message CreateDirectoryCardReq {
+  int64                     user_id       = 1;
+  string                    handle        = 2;
+  string                    headline      = 3;
+  string                    locale        = 4;
+  bool                      is_public     = 5;
+  google.protobuf.Timestamp visible_from  = 6;
+  google.protobuf.Timestamp visible_until = 7;
+}
+message CreateDirectoryCardResp {
+  int64 id = 1;
+}
+
+// DirectoryCardMutation — the write side of the directory card.
+//
+// One method on purpose. Every constraint on the table is enforced on
+// INSERT, so a single write path is enough to reach all of them, and a
+// second one would only add a place for the next author to forget a
+// column.
+service DirectoryCardMutation {
+  // Publish or draft one directory card. Responds with the new card's
+  // id. Refused when the card would duplicate a published card in the
+  // same language, reuse a handle, invert its visibility window, or
+  // advertise confidential work while published.
+  //
+  // (An rpc's leading comment becomes the endpoint's OpenAPI
+  // `description`, so it is written for a caller. The reasoning about
+  // WHY the constraints are shaped this way lives on the model.)
+  rpc CreateDirectoryCard(CreateDirectoryCardReq) returns (CreateDirectoryCardResp) {
+    // The DQL names `handle`, the PROTO field. The emitted SQL has to
+    // say `handle_slug`, because that is the column; the two differ
+    // only for this one field on this one table, which is what makes
+    // the `(w17.db.column).name` resolution observable rather than
+    // assumed.
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO users.UserDirectoryCard "
+          "SET user_id = :user_id, handle = :handle, headline = :headline, "
+          "locale = :locale, is_public = :is_public, "
+          "visible_from = :visible_from, visible_until = :visible_until "
+          "RETURNING id"
+      }
+    };
+  }
+}

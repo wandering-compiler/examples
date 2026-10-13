@@ -1,0 +1,25 @@
+# The permit direction of the raw CHECK, and the reason it is authored
+# at the TABLE rather than on `headline`.
+#
+# Byte-for-byte the same headline 0367 was refused for. The only
+# difference is `is_public: false`, which satisfies the predicate's first
+# disjunct — so the rule is genuinely about the PAIR of columns, not
+# about the headline.
+#
+# A per-column check on `headline` would refuse this too, and that is
+# the wrong product: an unpublished draft is nobody's business but the
+# author's. Without this step the constraint would be indistinguishable
+# from the per-column rule it deliberately is not.
+method: users.DirectoryCardMutation.CreateDirectoryCard
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    handle: Alpha-Discreet
+    headline: Confidential systems work for undisclosed clients
+    locale: de
+    is_public: false
+    visible_from: "2026-01-01T00:00:00Z"
+    visible_until: "2026-12-31T00:00:00Z"
+expect:
+    id: {capture: card_discreet.id, match: {matcher: not_empty}}

@@ -1,0 +1,15 @@
+# An admin page whose list source is a BUSINESS service — users.UsersService,
+# the hand-written facade served by app-business — answers with the rows.
+#
+# Until 2026-10-04 the admin reached only the storage binary, so this call
+# would have gone to app-storage, which does not serve UsersService, and
+# answered Unimplemented; codegen then refused the binding outright. The
+# admin now dials both tiers and gives each client the conn of the tier that
+# serves it (APP_ADMIN_BUSINESS_BACKEND_ADDR → app-business). Same seeded
+# users UserAdmin lists, reached through the other tier.
+method: admin.UserDirectory.List
+pre:
+    - auth/admin.yaml
+expect:
+    users: {matcher: count, op: '>=', value: 2}
+    users.0.email: {matcher: not_empty}

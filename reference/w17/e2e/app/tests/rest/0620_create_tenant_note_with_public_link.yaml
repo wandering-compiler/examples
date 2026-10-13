@@ -1,0 +1,27 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# step 1 of 3 — minting a share link.
+#
+# An ordinary authenticated, tenant-scoped write: the caller is signed
+# in, and `tenant_id` is NOT in the mutation's SET, so the scope
+# auto-stamp supplies it. That matters for a capability specifically —
+# if the payload could name a tenant, any signed-in user could mint a
+# public link into somebody else's data.
+#
+# The echoed `public_token` is asserted, not just captured: an INSERT
+# that silently dropped the column would still RETURN an id, and every
+# step after this one would then fail with "invalid capability token"
+# pointing at the auth method rather than at the write that lost it.
+method: tasks.TaskMutation.CreateTenantNoteWithPublicLink
+pre:
+    - auth/auth_gamma.yaml
+input:
+    title: e2e minted link note
+    body: e2e minted link note body
+    public_token: e2e-mint-${seq}
+expect:
+    id: {matcher: not_empty}
+    public_token: {matcher: regex, pattern: '^e2e-mint-[0-9]+$'}

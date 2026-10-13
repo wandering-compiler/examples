@@ -1,0 +1,6 @@
+method: admin.Users.Action.disable
+pre:
+    - auth/admin.yaml
+input:
+    ids: ["00000000-0000-0000-0000-0000000000b2"]
+expect: {}

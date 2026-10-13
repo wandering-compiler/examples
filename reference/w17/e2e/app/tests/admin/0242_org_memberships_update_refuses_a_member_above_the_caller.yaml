@@ -1,0 +1,16 @@
+# The role ceiling, the half about what a member LOSES. A role change revokes
+# every role the member holds in the organization, and after 0240 the member of
+# b5 holds org-auditor there. This caller may edit memberships but covers none
+# of org-auditor's permissions, so it may not take that role away — even to
+# hand out one it could grant. Refused before anything is written: 0250 still
+# finds b5 to delete.
+method: admin.OrgMemberships.Update
+pre:
+    - auth/admin_members.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b5
+    role: org-auditor
+expect_error:
+    code: PERMISSION_DENIED
+    details:
+        - code: MEMBER_ABOVE_CALLER

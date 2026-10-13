@@ -1,0 +1,21 @@
+# The fallback arm of the locked read.
+#
+# `(w17.db.lock)` on a QUERY emits two SQL variants and a branch: adopt
+# the caller's transaction and run `FOR UPDATE`, or fall back to the pool
+# and run the plain SELECT. An HTTP request opens no transaction, so this
+# case exercises the second arm — and that is the one worth exercising
+# live, because the first is unreachable without a caller that holds a tx
+# and the second is the one a wrong emitter would break by handing
+# `FOR UPDATE` to a pooled connection.
+#
+# That BOTH variants are emitted, and which is which, is a property of
+# the generated code — a response cannot show
+# whether a lock was taken.
+method: tasks.TaskQuery.GetTaskForUpdate
+pre:
+    - auth/auth.yaml
+input:
+    id: 700005
+expect:
+    id: {matcher: eq, value: "700005"}
+    title: {matcher: eq, value: admin paged task 5}

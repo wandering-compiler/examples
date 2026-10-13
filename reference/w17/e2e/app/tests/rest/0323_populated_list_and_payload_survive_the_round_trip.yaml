@@ -1,0 +1,19 @@
+# The read half of 0321: the values that went in come back out.
+#
+# Without this, 0321 proves only that a create carrying those fields
+# does not fail — which a generated INSERT that dropped both columns
+# would also satisfy. Reading them back is what makes 0322's silence
+# mean "the empty value was written" rather than "the column is not
+# there".
+#
+# `attachment` asserts the base64 protojson renders a `bytes` field as,
+# not the decoded bytes — the suite speaks the wire format.
+method: tasks.TaskQuery.GetMilestone
+pre:
+    - auth/auth.yaml
+input:
+    id: ${tagged_milestone.id}
+expect:
+    name: {matcher: eq, value: tagged release}
+    tags: {matcher: count, value: 2}
+    attachment: {matcher: eq, value: dzE3}

@@ -1,0 +1,26 @@
+# The counted read that makes 0522 and 0523 mean something.
+#
+# A refused INSERT and a refused INSERT that also left a row behind
+# produce the same error, so a refusal case on its own says only that
+# the request failed. This is the table afterwards: ONE row, the one
+# 0520 wrote, and no others.
+#
+# The exact count is the assertion. `>= 1` would be satisfied by a
+# database that admitted every request in this block, which is exactly
+# the failure the two refusals exist to detect. The table is new to
+# this project and nothing seeds it, so its whole content is what these
+# six cases put there.
+#
+# POSITION IS LOAD-BEARING, on the same terms as 0369: a plan written
+# outside 0519-0524 breaks this count, and the answer is to extend this
+# case rather than loosen it. 0519 (the over-scale fee) counts as one of
+# the refusals this guards — it runs before 0520 precisely so a
+# request-side check that let the row through would show up here.
+method: users.DirectoryPlanQuery.ListDirectoryPlans
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    plans: {matcher: count, op: '==', value: 1}
+    plans.0.tier: {matcher: eq, value: FEATURED}
+    plans.0.monthly_fee: {matcher: eq, value: "19.90"}

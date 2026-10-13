@@ -1,0 +1,21 @@
+# The read's refusal path, kept from the generated skeleton rather than
+# deleted.
+#
+# The skeleton asserted `not_empty` on all three fields for `id: 0` — a
+# row that cannot exist — so it demanded a successful response from a
+# call that correctly 404s. Rewritten to assert what the endpoint
+# actually promises: an unknown id is a refusal, not an empty row.
+#
+# That distinction is worth a file. A single-row read that answered 200
+# with a zero-valued message would look identical to a successful read
+# of a row whose fields happen to be empty, and the caller has no way to
+# tell them apart.
+#
+# The happy path, including the derived storage key, is 0332.
+method: tasks.TaskQuery.GetTaskUpload
+pre:
+    - auth/auth.yaml
+input:
+    id: 0
+expect_error:
+    code: NOT_FOUND

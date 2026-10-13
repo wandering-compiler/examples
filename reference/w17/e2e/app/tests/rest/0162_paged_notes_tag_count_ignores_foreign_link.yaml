@@ -1,0 +1,24 @@
+# The per-row count must be the CALLER'S, not everyone's.
+#
+# Setup: gamma creates a note, ALPHA tags it, then GAMMA tags it too, and
+# gamma reads its own paged list. Two link rows point at that one note,
+# one per tenant.
+#
+# Gamma owns the note, so the outer WHERE lets the row through — the
+# subquery is the only place alpha's link row can be excluded, and it
+# carries its own tenant predicate for exactly that. Gamma must see 1.
+# Without the nested predicate the badge reads 2.
+#
+# Asserting a concrete 1 rather than a 0 is deliberate: proto3 JSON
+# omits zero values, so "expected 0" reads as "field absent" and would
+# pass for reasons that have nothing to do with scoping.
+#
+# Gamma exists for this chain alone and creates notes nowhere else, so
+# its list is this one note and `items.0` is addressable.
+method: tasks.TaskQuery.ListTenantNotesPagedWithTagCount
+pre:
+    - fixtures/a_gamma_note_tagged_by_both.yaml
+input: {}
+expect:
+    items: {matcher: count, op: '==', value: 1}
+    items.0.tag_count: {matcher: eq, value: "1"}

@@ -1,0 +1,20 @@
+# `materialize.max_intermediate_rows` — the fail-closed half.
+#
+# Same fan-out, same fixture, same five rows as 0371. The only
+# difference between the two methods is `max_intermediate_rows: 2`, so
+# this case and its neighbour together read that one field and nothing
+# else: one returns five rows, the other must refuse.
+#
+# The ceiling guards the NARROW step — the id slice the app accumulates
+# before fetching — which is the memory the knob exists to bound. Its
+# docstring promises RESOURCE_EXHAUSTED rather than unbounded growth,
+# and a ceiling that no case crosses is an untested branch: it would
+# behave identically to no ceiling at all.
+method: tasks.TaskQuery.GetTaskAuditsCapped
+pre:
+    - auth/auth.yaml
+input:
+    id: 700005
+    since: '2019-01-01T00:00:00Z'
+expect_error:
+    code: RESOURCE_EXHAUSTED

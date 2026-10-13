@@ -1,0 +1,24 @@
+# The lower bound on a 64-bit request field.
+#
+# `-1` is the sentinel Redis reads as "already expired" (0564 rides on
+# it), so the floor cannot be 0 — it has to be exactly -1, and -2 is the
+# only value that tells a `gte: -1` apart from no bound at all.
+#
+# It sits after the KV block rather than beside 0564 because it refuses
+# BEFORE any op runs: nothing is written, nothing is expired, and no
+# later case reads state this one could have moved.
+#
+# The generated client checks the same bound with BigInt rather than
+# Number — the int64 carrier is why the pre-flight cannot simply
+# compare doubles — and this case is the server half of that pair.
+method: cache.SessionCacheMutation.RefreshApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e-ttl-token-drop
+    ttl_seconds: -2
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: ttl_seconds
+          code: GTE_VIOLATION

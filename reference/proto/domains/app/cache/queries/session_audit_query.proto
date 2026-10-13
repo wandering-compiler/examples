@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package e2e.app.cache;
+
+import "w17/db.proto";
+import "domains/app/cache/types/models.proto";
+import "domains/app/workspace/users/types/models.proto";
+
+// SessionAuditQuery — reverse fan-out cross-capability
+// e2e fixture. Closes the cross-capability matrix on the e2e-
+// project surface:
+//
+//   | direction        | single-row              | fan-out                 |
+//   |------------------|-------------------------|-------------------------|
+//   | SQL→KV forward   | UserPresenceQuery (R6)  | UserSessionQuery (R8)   |
+//   | KV→SQL reverse   | SessionCacheQuery (R7)  | SessionAuditQuery (R9)  |
+//
+// Canonical use case: an authenticated request arrives with a
+// bearer token; the gateway looks up the session in Redis
+// (cheap entry-point HGETALL) + needs the user's recent audit
+// trail from PG (security audit, "show me all login events
+// for this user"). Single RPC, single round-trip-per-store —
+// no facade orchestration, no two-stage client round-trip.
+//
+// DQL: `FROM CachedSession s JOIN LoginAuditLog a ON
+// a.user_id = s.user_id WHERE s.token_hash = :token_hash`.
+// Dispatch detects KV-parent + SQL-children + fan-out shape
+// and routes through the KV-parent fan-out primitive:
+//   1. HGETALL `sessions:<token_hash>` on s.dbRedis → empty-
+//      hash short-circuit to NotFound → kvhash.UnmarshalEntity
+//      into resp.Session.
+//   2. QueryContext on s.dbPostgres `WHERE a.user_id = $1`
+//      bound to resp.Session.UserId → row iterate + per-row
+//      scan + append to resp.Audits.
+//
+// Read-only fixture: LoginAuditLog mutations go through the
+// existing app.users.AuditLogMutation service (unchanged); no
+// new mutation surface added here. Cross-package: this file
+// imports userspb for the `LoginAuditLog` response field
+// type — one-way cachepb→userspb dependency, following the
+// consolidation pattern (cachepb is the canonical
+// home for cross-cap RPCs).
+
+message ListSessionAuditTrailReq {
+  string token_hash = 1;
+}
+
+message ListSessionAuditTrailResp {
+  e2e.app.cache.CachedSession           session = 1;
+  repeated e2e.app.users.LoginAuditLog  audits  = 2;
+}
+
+service SessionAuditQuery {
+  rpc ListSessionAuditTrail(ListSessionAuditTrailReq) returns (ListSessionAuditTrailResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:
+          "SELECT s.token_hash AS s_token_hash, s.user_id AS s_user_id, "
+          "       s.expires_at AS s_expires_at, s.created_at AS s_created_at, "
+          "       a.id AS a_id, a.user_id AS a_user_id, a.action AS a_action, "
+          "       a.ip_address AS a_ip_address, a.user_agent AS a_user_agent, "
+          "       a.created_at AS a_created_at "
+          "FROM cache.CachedSession s "
+          "LEFT JOIN users.LoginAuditLog a ON a.user_id = s.user_id "
+          "WHERE s.token_hash = :token_hash"
+      }
+    };
+  }
+}

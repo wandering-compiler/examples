@@ -1,0 +1,181 @@
+syntax = "proto3";
+
+// Eventbus event registry for
+// the `app/tasks` module. Six events, five lifecycle on the
+// durable `tasks` channel + one telemetry-shaped fire-and-
+// forget on the in-process `telemetry` channel.
+//
+// Emit annotations live on the RPCs in
+// `app/tasks/mutations/task_mutation.proto`, which carry
+// `(w17.event_emit)` to wire each lifecycle action to its
+// signal. Subscribers are in-domain handlers consuming
+// TaskCompleted + TaskStatusChanged.
+//
+// Channel + retry catalogue lives in
+// `proto/domains/app/w17.proto`. The retry override on
+// TaskCompleted reflects the real-world stance that the
+// downstream side-effects of "task done" must not silently
+// fail (counter increment + cache invalidation in the
+// subscribers).
+
+package e2e.app.tasks;
+
+
+import "w17/event.proto";
+import "google/protobuf/timestamp.proto";
+import "domains/app/workspace/tasks/types/models.proto";
+
+// TaskCreated — emitted on CreateTask. Carries enough
+// context for downstream handlers to fetch the row without
+// a round-trip if they need richer details.
+message TaskCreated {
+  option (w17.event) = {
+    channel: "tasks"
+    topic:   "task.created"
+    public:  true
+  };
+
+  int64                     task_id     = 1;
+  int64                     user_id     = 2;
+  int64                     category_id = 3;
+  string                    title       = 4;
+  google.protobuf.Timestamp created_at  = 5;
+}
+
+// TaskAssigned — emitted when AssignTask sets a new
+// assignee (initial assignment or reassignment).
+message TaskAssigned {
+  option (w17.event) = {
+    channel: "tasks"
+    topic:   "task.assigned"
+  };
+
+  int64 task_id     = 1;
+  int64 assignee_id = 2;
+  int64 assigned_by = 3;
+
+  // The proto3-`optional` POSITION, and the reason it is written here.
+  //
+  // `optional` gives a scalar explicit presence: 0 is then a value on the
+  // wire rather than an omitted default, which is the only way an e2e case
+  // can assert "the count was zero" instead of "I know nothing about the
+  // count". Our own diagnostic tells authors to reach for it.
+  //
+  // No event message in this example had one, so nobody had ever emitted
+  // into a pointer field. The emit codegen renders a payload source as a
+  // getter — which returns T — and assigned it straight into *T, so the
+  // advice produced a bundle that did not compile:
+  //
+  //   cannot use req.GetPriority() (value of type int32)
+  //       as *int32 value in struct literal
+  //
+  // A consumer hit exactly that. codegen exited 0; the break landed in a
+  // generated directory they do not own. This field keeps the
+  // position occupied so the wrap is exercised on every regen.
+  optional int32 priority = 4;
+}
+
+// TaskStatusChanged — emitted on UpdateTaskStatus. Both
+// transitions IN both directions cross the wire (re-opening
+// a completed task fires the same event with swapped
+// from/to). Consumers can filter on the to_status.
+message TaskStatusChanged {
+  option (w17.event) = {
+    channel: "tasks"
+    topic:   "task.status_changed"
+  };
+
+  int64                     task_id     = 1;
+  e2e.app.tasks.Task.Status from_status = 2;
+  e2e.app.tasks.Task.Status to_status   = 3;
+  google.protobuf.Timestamp changed_at  = 4;
+}
+
+// TaskCompleted — emitted on CompleteTask. Retry override
+// is aggressive (10 deliveries / 60s ack / exponential
+// backoff) because the subscribers update business
+// state (completed_count counter + cache invalidation) —
+// silent drop would leave the system inconsistent.
+message TaskCompleted {
+  option (w17.event) = {
+    channel: "tasks"
+    topic:   "task.completed"
+    // Browser-facing: the live task board reacts to it, and the
+    // delivery fallback below exists precisely to survive an SSE
+    // OUTAGE — which presupposes an SSE push to lose. Without
+    // `public: true` there is no push at all, and the fallback
+    // poller (the only remaining path) stops for good after
+    // give_up seconds of quiet.
+    public:  true
+    retry:   {
+      max_deliver: 10
+      ack_wait_seconds: 60
+      backoff: BACKOFF_EXPONENTIAL
+    }
+
+    // FE delivery fallback. task.completed is frontend-
+    // facing (a live task board reacts to it), so it gets a
+    // query-diff fallback: the generated client polls the REST-
+    // exposed TaskQuery.ListTasksLive (GET /live) — UNPAGED on
+    // purpose, since the poller follows no cursor — diffs each
+    // task's status, and synthesizes TaskCompleted when one
+    // transitions to DONE — surviving an SSE outage (within
+    // expected=5s) or a dropped BE emit (caught by max=30s).
+    delivery: {
+      expected_seconds: 1
+      max_seconds:      3
+      give_up_seconds:  30
+      fallback: {
+        query:  "TaskQuery.ListTasksLive"
+        entity: "$response.items"
+        diff:   DIFF_TRANSITION
+        watch_field: "status"
+        to:     "DONE"
+        payload: {
+          fields: [
+            { key: "task_id",      value: "$entity.id" },
+            { key: "completed_by", value: "$entity.user_id" },
+            { key: "category_id",  value: "$entity.category_id" },
+            { key: "completed_at", value: "$entity.created_at" }
+          ]
+        }
+      }
+    }
+  };
+
+  int64                     task_id      = 1;
+  int64                     completed_by = 2;
+  int64                     category_id  = 3;
+  google.protobuf.Timestamp completed_at = 4;
+}
+
+// TaskCommentAdded — emitted on AddTaskComment. Downstream
+// uses: notification fan-out, mentioning detection,
+// activity-feed projection.
+message TaskCommentAdded {
+  option (w17.event) = {
+    channel: "tasks"
+    topic:   "task.comment_added"
+  };
+
+  int64                     task_id    = 1;
+  int64                     comment_id = 2;
+  int64                     author_id  = 3;
+  google.protobuf.Timestamp added_at   = 4;
+}
+
+// TaskViewed — telemetry-shaped fire-and-forget. Best-
+// effort delivery via the in-process MEMORY channel; drops
+// on buffer-full are expected and intentional (analytics
+// data, not business state). One delivery attempt; no
+// retry.
+message TaskViewed {
+  option (w17.event) = {
+    channel: "telemetry"
+    topic:   "telemetry.task_viewed"
+  };
+
+  int64                     task_id   = 1;
+  int64                     viewer_id = 2;
+  google.protobuf.Timestamp viewed_at = 3;
+}

@@ -1,0 +1,9 @@
+method: users.UserQuery.GetUser
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+expect:
+    id: {matcher: not_empty}
+    email: {matcher: not_empty}
+    display_name: {matcher: not_empty}

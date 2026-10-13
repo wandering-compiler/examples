@@ -1,0 +1,36 @@
+# `(w17.rest_api).metadata_propagation.headers[]` + `.extend_defaults`.
+#
+# ONE call, TWO assertions, and that is the whole design. `headers[]`
+# REPLACES the W3C default set unless `extend_defaults` is true, so a
+# fixture that only read the declared header would pass identically
+# under both settings: the declared header arrives either way. The
+# default-set header is the only thing that tells them apart, which is
+# why X-Request-Id is asserted here rather than in a case of its own —
+# split across two files, an ordering change could leave one green while
+# the other never ran.
+#
+# Both values are literal and both are asserted by EQUALITY. `not_empty`
+# would be satisfied by the gateway's own request-id generator, which
+# stamps a fresh uuid on every request that arrives without one — so a
+# propagation middleware that dropped the header entirely would still
+# answer with a plausible-looking id. The exact value is the only
+# evidence the CALLER's header is what reached the backend.
+#
+# On the metadata key: propagation lowercases the header name verbatim
+# (`X-Client-Version` → `x-client-version`) and strips no prefix. The
+# vocabulary's doc claimed an `X-` strip until 2026-07-30 while the
+# middleware never did one; nothing noticed, because no example declared
+# the annotation. The handler reads the key the runtime actually writes.
+method: users.UsersService.EchoRequestContext
+pre:
+    - auth/auth.yaml
+headers:
+    X-Request-Id: e2e-correlation-7f31
+    X-Client-Version: e2e-suite/2.0
+input: {}
+expect:
+    # The W3C default set. Present only because `extend_defaults: true`
+    # kept it alive alongside the declared list.
+    request_id: {matcher: eq, value: e2e-correlation-7f31}
+    # The declared list.
+    client_version: {matcher: eq, value: e2e-suite/2.0}

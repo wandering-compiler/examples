@@ -1,0 +1,19 @@
+# PERSIST — the literal-zero sentinel. `SET ttl_seconds = 0` is written
+# as a literal and not as a bind on purpose: the emitter branches on the
+# literal, so a zero arriving through a parameter would still emit
+# EXPIRE, with a zero lifetime, which Redis reads as "expire now" — the
+# exact opposite of what the caller asked for.
+#
+# ⚠️ What this case can and cannot see. Whether the key's TTL was
+# actually cleared is not observable through any generated endpoint —
+# nothing projects a Redis TTL. What is observable is that the command
+# ran against a real Redis and left the value intact, which rules out the
+# mis-emission the sentinel invites (`Expire(ctx, key, 0)`, which would
+# delete it — see 0567). That the emitted command is `Persist` and not
+# `Expire` is a property of the generated code, not asserted here.
+method: cache.SessionCacheMutation.PersistApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e-ttl-token-keep
+expect: {}

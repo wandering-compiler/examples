@@ -1,0 +1,10 @@
+method: admin.Organizations.Update
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b4
+    slug: e2e-org-${seq}
+    name: E2E Throwaway Org (edited)
+    kind: private
+expect:
+    org_id: {matcher: not_empty}

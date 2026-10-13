@@ -1,0 +1,24 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# The reference catalogue behind `(w17.acl_service) = false`. Three
+# categories are seeded (fixtures/app/test.json), so `>= 3` is the
+# assertion; the generated skeleton's `>= 0` passed on an empty response
+# and would have survived the endpoint returning nothing at all.
+#
+# What this case does NOT prove is the ACL opt-out itself, and that is a
+# property of the fixture rather than of the annotation: this example's
+# seed grants every signup a WILDCARD role (all_permissions), so no
+# caller here lacks a permission and the gate has nothing to refuse.
+# Proving the opt-out behaviourally needs a permission-less user, which
+# in turn needs the suite to be able to assert a REFUSAL — it cannot
+# (`expect:` only describes a successful response). The ACL half is
+# therefore not asserted here.
+method: tasks.TaskLookupQuery.ListTaskCategories
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    categories: {matcher: count, op: '>=', value: 3}

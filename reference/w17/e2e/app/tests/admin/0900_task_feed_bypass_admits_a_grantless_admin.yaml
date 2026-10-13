@@ -1,0 +1,34 @@
+# THE behavioural proof of `(w17.admin_bypass_acl) = true` — an admin
+# holding NO permissions still gets the feed.
+#
+# tasks.TaskQuery.ListTasksAdminFeed is the one method in this project
+# that declares the opt-out. Every other admin step in this scenario runs
+# as the wildcard `admin-all` identity, which passes every check ever
+# emitted — so a 200 there says nothing about whether a gate exists. This
+# step runs as the seeded grant-less admin instead, for whom a gated
+# endpoint MUST 403. Getting rows back is therefore only explicable by
+# the bypass.
+#
+# The refusal half is 0910, one step over: it takes the SAME caller to
+# TaskAdmin — the sibling page over the same `tasks.Task` model whose
+# method carries no opt-out — and requires a 403. Without it this step
+# would also pass if the seed had accidentally granted this admin
+# everything, which is exactly how a "proof" quietly becomes a tautology.
+#
+# The pair also settles what THIS step would do without the bypass,
+# without anyone having to break the compiler to find out: both pages
+# declare `model: "tasks.Task"`, so an un-bypassed TaskFeed would check
+# the very `tasks.Task#view` that 0910 observes this caller failing on.
+# A compiler that stopped reading the annotation therefore turns this
+# 200 into a 403.
+#
+# Same five seeded tasks and the same id-DESC order as 0045; nothing in
+# the admin scenario writes tasks, so the feed reads identically here.
+method: admin.TaskFeed.List
+pre:
+    - auth/admin_nogrant.yaml
+input:
+    limit: 2
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    items.0.id: {matcher: eq, value: "700005"}

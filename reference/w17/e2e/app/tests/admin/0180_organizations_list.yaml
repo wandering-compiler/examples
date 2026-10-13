@@ -1,0 +1,12 @@
+# The Organizations page (auth plugin, org_membership) — admin-only
+# cursor-paged. Unpaged read of the whole (small) seeded set; the cursor
+# walk itself is 0185 / 0186.
+method: admin.Organizations.List
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    organizations: {matcher: count, op: '>=', value: 1}
+    # Prove the list projects a human org name, not just ids.
+    organizations.0.name: {matcher: not_empty}
+    paging.total: {matcher: not_empty}

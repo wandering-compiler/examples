@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package e2e.app.cache;
+
+import "w17/db.proto";
+import "domains/app/cache/types/models.proto";
+import "domains/app/workspace/users/types/models.proto";
+
+// UserPresenceQuery — consolidation home for the
+// forward-direction cross-capability fixture. Originally
+// landed in `users/queries/user_query.proto`, but
+// once the reverse-direction
+// `SessionCacheQuery.GetSessionWithUser` (which needs to
+// reference `User` as a response field), cachepb began
+// importing userspb. Keeping the forward-direction RPC in
+// userspb meanwhile kept userspb importing cachepb — a Go-
+// level import cycle the build refuses.
+//
+// The fix: move the forward direction here. Now cachepb
+// one-way-imports userspb for the `User` response field on
+// both cross-cap responses; userspb has no dependency on
+// cachepb. Both cross-cap RPCs live alongside the KV tables
+// they pair with (CachedSession + UserPresenceCache), which
+// also reads naturally — "cross-capability queries that
+// pair User with a Redis-side entity".
+//
+// Connection cascade: the cache module's w17.proto sets the
+// module-level connection to `app-redis` (KV). The forward-
+// direction method's primary "data dialect" is actually PG
+// (parent on User); the cross-cap dispatch detects this and
+// routes correctly regardless of the file's primary dialect
+// (the dispatch runs above the KV-primary short-circuit
+// specifically so cross-cap can live in either module).
+
+// GetUserWithPresenceReq — input for the forward-direction
+// cross-cap lookup: hand it a user id, get back the User row
+// + their presence cache (if any).
+message GetUserWithPresenceReq {
+  int64 id = 1;
+}
+
+// GetUserWithPresenceResp — `{User; UserPresenceCache}` shape.
+// The dispatch detects parent on `app-postgres`
+// (RELATIONAL) + child on `app-redis` (KV) and routes
+// through `EmitSqlKvSingleRowBody`:
+//   1. QueryRowContext on s.dbPostgres — parent User by id.
+//   2. HGetAll on s.dbRedis keyed by `user_presence:<id>`
+//      derived from the fetched parent's PK → kvhash.
+//      UnmarshalEntity into resp.Presence.
+//
+// Missing-key semantics: an absent presence record leaves
+// resp.Presence nil (the primitive's "KV child is best-
+// effort cache" contract; differs from the reverse
+// direction which treats KV-parent miss as NotFound).
+message GetUserWithPresenceResp {
+  e2e.app.users.User              user     = 1;
+  e2e.app.cache.UserPresenceCache presence = 2;
+}
+
+// GetUserPresenceReq — the KV-only read, added alongside the
+// cross-op chains. `GetUserWithPresence` above cannot serve their
+// assertion: it treats a missing presence record as best-effort
+// and returns the User anyway, so "the chain deleted it" and "the
+// chain deleted the wrong one" both come back as a 200 with a nil
+// child. A read whose whole subject is the presence record turns
+// that into NotFound, which is a distinguishable answer.
+message GetUserPresenceReq {
+  int64 user_id = 1;
+}
+
+service UserPresenceQuery {
+  rpc GetUserPresence(GetUserPresenceReq) returns (e2e.app.cache.UserPresenceCache) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:  "SELECT p FROM cache.UserPresenceCache p WHERE p.user_id = :user_id"
+      }
+    };
+  }
+
+  rpc GetUserWithPresence(GetUserWithPresenceReq) returns (GetUserWithPresenceResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT u.id AS u_id, u.email AS u_email, u.display_name AS u_display_name, "
+          "       u.status AS u_status, u.created_at AS u_created_at, "
+          "       p.user_id AS p_user_id, p.last_seen_at AS p_last_seen_at, "
+          "       p.online AS p_online, p.current_route AS p_current_route "
+          "FROM users.User u "
+          "JOIN cache.UserPresenceCache p ON p.user_id = u.id "
+          "WHERE u.id = :id"
+      }
+    };
+  }
+}

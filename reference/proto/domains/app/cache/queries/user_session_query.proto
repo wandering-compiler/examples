@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package e2e.app.cache;
+
+import "w17/db.proto";
+import "domains/app/cache/types/models.proto";
+import "domains/app/workspace/users/types/models.proto";
+
+// UserSessionQuery — fan-out forward cross-capability
+// fixture. The bucketed-KV-children pattern paired with a SQL
+// parent: hand it a user id, get back the User row + every
+// active UserSession for that user (multi-device session
+// list).
+//
+// DQL `FROM User u JOIN UserSession s ON s.user_id = u.id
+// WHERE u.id = :id` with response `{User; repeated
+// UserSession}` triggers the fan-out dispatch:
+//   1. Parent SELECT against PG, JOIN stripped (bucketed
+//      Redis child can't appear in SQL FROM).
+//   2. HGETALL on `s.dbRedis` keyed by
+//      `user_sessions:<resp.User.Id>` — native fan-out, one
+//      round trip returns every session for the parent user.
+//   3. Sort HASH field names (session_id strings) for stable
+//      response order across calls.
+//   4. Per-field loop: `protojson.Unmarshal` each HASH value
+//      into a `UserSession` entity, append to
+//      `resp.Sessions`.
+//
+// Empty-bucket semantics: `resp.Sessions` is an allocated
+// empty slice when the user has no active sessions; proto3
+// treats nil and `[]` identically over the wire but the
+// allocated-empty convention avoids nil-deref hazards in any
+// facade-side post-processing.
+//
+// Connection cascade: the cache module's w17.proto sets the
+// module-level connection to `app-redis` (KV). The fan-out
+// method's primary "data dialect" is PG (parent on User);
+// the cross-cap dispatch handles this regardless of the
+// file's primary dialect (the dispatch runs above the
+// KV-primary short-circuit specifically so cross-cap can
+// live in either module).
+//
+// Mutation authoring: supported, and spelled the ordinary
+// way — both key columns are SET pairs, which is what gives
+// HSET its key and its field
+// (mutations/user_session_mutation.proto). This note used to
+// say the grammar could not express a composite write, which
+// was wrong about the grammar and, as long as it stood, a
+// reason for nobody to try.
+
+message ListUserSessionsReq {
+  int64 id = 1;
+}
+
+// GetUserSessionReq — the COMPOSITE key of a bucketed entity.
+//
+// Both halves are required and they do different jobs: `user_id` is the
+// bucket discriminator and picks the Redis HASH (`user_sessions:<id>`),
+// `session_id` is the entity PK and picks the field inside it. That is
+// the whole reason a bucketed read cannot take the single-key WHERE
+// every other KV read takes.
+message GetUserSessionReq {
+  int64  user_id    = 1;
+  string session_id = 2;
+}
+
+message ListUserSessionsResp {
+  e2e.app.users.User             user     = 1;
+  repeated e2e.app.cache.UserSession sessions = 2;
+}
+
+service UserSessionQuery {
+  // GetUserSession — a SINGLE bucketed entity, addressed by both key
+  // halves. This is the KV-only read; `ListUserSessions` below is the
+  // cross-capability fan-out, and the two share nothing but the table.
+  //
+  // The fan-out never addresses a bucket at all — it HGETALLs the whole
+  // hash for a parent row and sorts the field names — so it left the
+  // composite-key path completely unexercised. This read is the one that
+  // has to resolve `user_sessions:<user_id>` and then HGET one field out
+  // of it, and it is checked twice on the way: once at typecheck, which
+  // recognises the `bucket = :b AND pk = :p` WHERE shape, and once in
+  // the emitter, whose runtime parser is the mirror of that rule. Both
+  // functions sat at zero.
+  rpc GetUserSession(GetUserSessionReq) returns (e2e.app.cache.UserSession) {
+    option (w17.db.method) = {
+      ops: {
+        name: "cache",
+        dql:
+          "SELECT s FROM cache.UserSession s "
+          "WHERE s.user_id = :user_id AND s.session_id = :session_id"
+      }
+    };
+  }
+
+  rpc ListUserSessions(ListUserSessionsReq) returns (ListUserSessionsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT u.id AS u_id, u.email AS u_email, u.display_name AS u_display_name, "
+          "       u.status AS u_status, u.created_at AS u_created_at, "
+          "       s.user_id AS s_user_id, s.session_id AS s_session_id, "
+          "       s.device AS s_device, s.last_seen_at AS s_last_seen_at "
+          "FROM users.User u "
+          "LEFT JOIN cache.UserSession s ON s.user_id = u.id "
+          "WHERE u.id = :id"
+      }
+    };
+  }
+}

@@ -1,0 +1,16 @@
+# An enum-name literal compared against a SCALAR SUBQUERY over an enum column
+# ListCommentsWhileTaskOpen reads the task's status
+# through `(SELECT t.status FROM tasks.Task t WHERE …) NOT IN ('DONE',
+# 'ARCHIVED')`. Before the fix the names stayed strings against an INTEGER
+# column, and this call failed at the database with codegen clean.
+#
+# The task is open, so its comment lists. rest/0218 closes it and asserts the
+# comment is gone — the predicate has to EVALUATE, not just be accepted.
+method: tasks.TaskQuery.ListCommentsWhileTaskOpen
+pre:
+    - fixtures/a_commented_task.yaml
+input:
+    task_id: ${task.id}
+expect:
+    rows: {matcher: count, op: '==', value: 1}
+    rows.0.id: {matcher: eq, value: "${comment.id}"}

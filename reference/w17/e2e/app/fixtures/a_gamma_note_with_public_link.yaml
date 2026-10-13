@@ -1,0 +1,24 @@
+# A tenant-GAMMA note carrying a share-link capability.
+#
+# Gamma, not beta: 0225 reads beta's EMPTY note list as the baseline of
+# the scope-bypass proof, so giving beta a note would break it. Gamma
+# exists precisely so a chain that needs a tenant of its own can have one.
+#
+# The token is `${seq}`-suffixed because `public_token` is globally
+# unique — it has to be, since the auth backend is handed a token and
+# must answer which tenant owns it. A fixed value would collide the
+# second time any scenario ran this fixture.
+#
+# Which is also why the mutation RETURNs the token: `${seq}` resolves
+# once, at send time, so a later step cannot reconstruct the value it
+# produced. The capture is the only handle on the minted link.
+method: tasks.TaskMutation.CreateTenantNoteWithPublicLink
+pre:
+    - auth/auth_gamma.yaml
+input:
+    title: e2e gamma shared note
+    body: e2e gamma shared note body
+    public_token: e2e-cap-${seq}
+expect:
+    id: {capture: publiclink.note_id}
+    public_token: {capture: publiclink.token}

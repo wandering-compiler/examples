@@ -1,0 +1,14 @@
+# The refusal half, and the reason it needs its own credential rather
+# than a missing one: a caller with NO Authorization header is refused by
+# authentication (401) and the gate never runs, so that case would prove
+# nothing about the gate. `directory-nobody` AUTHENTICATES and returns an
+# empty `permission_ids`, which is the only caller shape that makes a 403
+# mean "the gate read the ids and said no".
+#
+# Same discipline as auth/admin_nogrant.yaml, which exists for exactly
+# this reason one realm over: proving a gate refuses needs a caller the
+# gate would otherwise admit.
+method: users.DirectoryCardQuery.ListDirectoryCards
+credential: Basic ZGlyZWN0b3J5LW5vYm9keTp4
+expect_error:
+    code: PERMISSION_DENIED

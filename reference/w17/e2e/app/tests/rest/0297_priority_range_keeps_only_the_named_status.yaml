@@ -1,0 +1,25 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The `?` enum filter in its PERMIT direction: seeded task 700003
+# carries status IN_PROGRESS, so naming that status must still return
+# it. Same request as 0290 with one field added, which is what makes
+# the pair legible — 0290 leaves `only_status` unset and gets the row,
+# this one names its status and gets the same row.
+#
+# 0290 is the regression pin for the defect itself: an unset optional
+# enum used to bind 0 instead of NULL, `t.status = 0` matched nothing,
+# and its exact `count == 1` went to 0. This case is the other half —
+# without it, "unset works" would also be satisfied by dropping the
+# conjunct altogether.
+method: tasks.TaskQuery.ListTasksInPriorityRange
+pre:
+    - auth/auth.yaml
+input:
+    min_priority: 0
+    max_priority: 9
+    title_is: admin paged task 3
+    only_status: IN_PROGRESS
+expect:
+    items: {matcher: count, op: '==', value: 1}
+    items.0.id: {matcher: eq, value: "700003"}

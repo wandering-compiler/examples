@@ -1,0 +1,17 @@
+# The read-back for 0390, and the whole point of it.
+#
+# 0390 only proves the call returned without an error. That is
+# compatible with a transaction that quietly committed nothing — a KV
+# write acks either way. This read is what distinguishes "the SET
+# survived a no-op DEL" from "the empty DEL took the SET down with it",
+# and the second is the outcome that would lock out anyone rotating a
+# token that had already expired out of the cache.
+method: cache.SessionCacheQuery.GetApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e000000000000000000000000000000000000000000000000000000rotated
+expect:
+    token_hash: {matcher: eq, value: e2e000000000000000000000000000000000000000000000000000000rotated}
+    user_id: {matcher: eq, value: "1"}
+    label: {matcher: eq, value: ci-deploy}

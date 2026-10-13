@@ -1,0 +1,34 @@
+# The composite unique index refusing, and `(w17.db.table)
+# .validation_messages` turning that refusal into something a user can
+# act on.
+#
+# The message is the point. A composite constraint maps to no single
+# request field, so `(w17.field).validation_messages` cannot reach it
+# and the runtime has nothing to fall back on but a generic default.
+# Every part of the pipeline has to line up for the author's sentence to
+# arrive: the emitted index name, the table-level entry keyed on that
+# name, the generated registry, and PG reporting the constraint by name.
+#
+# The code is asserted alongside, because the message alone would also
+# be satisfied by a hand-written 400 somewhere in the gateway;
+# UNIQUE_VIOLATION says the DATABASE refused it.
+#
+# This request violates EXACTLY ONE constraint, on purpose: the handle
+# is new, the window is ordered, the headline is clean. A request that
+# trips two constraints proves only that PG reported one of them.
+method: users.DirectoryCardMutation.CreateDirectoryCard
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    handle: Alpha-CS-Again
+    headline: Backend engineer, Prague
+    locale: cs
+    is_public: true
+    visible_from: "2026-01-01T00:00:00Z"
+    visible_until: "2026-12-31T00:00:00Z"
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - code: UNIQUE_VIOLATION
+          message: {matcher: eq, value: you already have a published card in this language}

@@ -1,0 +1,19 @@
+# The read-back for 0528, and the closing state of the whole
+# 0520-0529 block.
+#
+# `UPDATE … RETURNING id` answers with the row it touched and says
+# nothing about what it wrote, so the write's effect is only visible
+# from a subsequent read. BASIC is the value the retire sets; SPOTLIGHT
+# is what 0525 left, so the two are distinguishable and an update that
+# matched no row would leave SPOTLIGHT here.
+#
+# The count is asserted again on purpose: an UPDATE with a lost WHERE
+# clause writes every row, and over a single-row table that is invisible
+# from the row alone.
+method: users.DirectoryPlanQuery.ListDirectoryPlans
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    plans: {matcher: count, op: '==', value: 1}
+    plans.0.tier: {matcher: eq, value: BASIC}

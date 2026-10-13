@@ -1,0 +1,16 @@
+# TaskAdmin detail read — hand-authored (pre-empts the generate-if-missing
+# scaffold, which would fill a non-numeric placeholder id and 400). The
+# TaskAdmin page's detail binds tasks.TaskQuery.GetTaskWithCategory (a
+# storage-tier read app-storage serves); the {id} URL segment stamps the
+# request's `id` field. Reads the first seeded task (700001, category 1 —
+# fixtures/app/test.json), so both the task and its joined
+# category come back non-empty. Present here mainly so the required detail
+# route is exercised; the cursor-paging proof itself is 0040/0041.
+method: admin.TaskAdmin.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: "700001"
+expect:
+    task: {matcher: not_empty}
+    category: {matcher: not_empty}

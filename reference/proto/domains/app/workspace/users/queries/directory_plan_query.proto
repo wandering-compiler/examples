@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package e2e.app.users;
+
+import "w17/client.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/app/workspace/users/types/models.proto";
+
+message GetDirectoryPlanReq {
+  int64 id = 1;
+}
+
+// GetDirectoryPlanResp is flat scalars, the single-fetch convention in
+// this project.
+//
+// `placement_region` is the JSON read: the column holds a document and
+// this field is one key out of it, which is the only way to see that
+// `(w17.field).json` did anything. A projection of the whole column
+// would come back identical whether or not the annotation exists.
+message GetDirectoryPlanResp {
+  int64  id               = 1;
+  string tier             = 2;
+  string monthly_fee      = 3;
+  string placement_region = 4;
+}
+
+message ListDirectoryPlansReq {}
+
+// ListDirectoryPlansInRegionReq is the FALLBACK POLL's request.
+//
+// The delivery fallbacks in ../events/events.proto name this query and
+// fill this field from a literal, which is what `EventFallback.request`
+// is for: a poller has no triggering RPC to read arguments off, so
+// without fixed arguments every fallback query would have to be an
+// unfiltered list — the whole table, on a timer, from every connected
+// browser.
+message ListDirectoryPlansInRegionReq {
+  string region = 1;
+}
+
+// DirectoryPlanSummary is the per-row shape AND the cache entity.
+//
+// `(w17.entity_id)` marks which field carries the row's identity for
+// the generated FE client: cache entries are stamped
+// `(group, message, id)` and dropped by that tuple when a mutation
+// declares it touches this type. Exactly one per message — zero leaves
+// nothing to stamp, two make identity ambiguous, and the client
+// generator refuses both.
+message DirectoryPlanSummary {
+  int64  id           = 1 [(w17.entity_id) = true];
+  string tier         = 2;
+  string monthly_fee  = 3;
+}
+message ListDirectoryPlansResp {
+  repeated DirectoryPlanSummary plans = 1;
+}
+
+// DirectoryPlanQuery — the read side.
+service DirectoryPlanQuery {
+  // One placement by id, including one key lifted out of its JSON
+  // placement document.
+  rpc GetDirectoryPlan(GetDirectoryPlanReq) returns (GetDirectoryPlanResp) {
+    // `(w17.returns_entities)` — what this response is keyed by for the
+    // FE cache.
+    //
+    // The response is FLAT (the project's single-fetch convention), so
+    // there is no nested entity message for the client generator to
+    // infer from: without this line the read produces no cache tag at
+    // all, and a later mutation declaring it touches this type has
+    // nothing to drop. That is the failure the annotation exists to
+    // prevent, and it is silent — the cache simply keeps serving a
+    // stale plan.
+    option (w17.returns_entities) = "DirectoryPlanSummary";
+
+    // The DQL names `placement.region` — a dotted path INTO the JSON
+    // column, which is what `(w17.field).json` licenses. Without the
+    // annotation the same text is read as an FK hop to a table called
+    // `placement` and the build fails; with it, codegen emits the
+    // dialect's own extraction primitive.
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT p.id, p.tier, p.monthly_fee, p.placement.region AS placement_region "
+          "FROM users.UserDirectoryPlan p WHERE p.id = :id"
+      }
+    };
+  }
+
+  // Every placement rendering in one region, oldest first.
+  //
+  // The region lives inside the JSON placement document, so the
+  // predicate is a second use of the chain navigation — this time in
+  // the WHERE rather than in the projection, which is the half that
+  // decides WHICH ROWS come back rather than what each one carries.
+  rpc ListDirectoryPlansInRegion(ListDirectoryPlansInRegionReq) returns (ListDirectoryPlansResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT p.id, p.tier, p.monthly_fee "
+          "FROM users.UserDirectoryPlan p "
+          "WHERE p.placement.region = :region "
+          "ORDER BY p.id ASC"
+      }
+    };
+  }
+
+  // Every placement, oldest first.
+  rpc ListDirectoryPlans(ListDirectoryPlansReq) returns (ListDirectoryPlansResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT p.id, p.tier, p.monthly_fee "
+          "FROM users.UserDirectoryPlan p ORDER BY p.id ASC"
+      }
+    };
+  }
+}

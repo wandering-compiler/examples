@@ -1,0 +1,7 @@
+method: users.UsersService.GetUsersByIds
+pre:
+    - auth/auth.yaml
+input:
+    ids: [1]
+expect:
+    users: {matcher: count, op: '>=', value: 1}

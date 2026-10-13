@@ -1,0 +1,18 @@
+# Read-back for 1030, and the fixture's closing statement: 720001 must
+# read exactly as fixtures/app/test.json wrote it.
+#
+# Both halves matter. As a read-back it says the flat-`fields` page's
+# update wrote the row rather than merely answering with its id — the same
+# gap 1021 closes for the fieldsets page. As a restore check it says the
+# pair 1020/1030 left nothing behind: 0980 asserts the exact three-row
+# shape of this table and 1010 asserts this row's text, so a case appended
+# after this one inherits the seeded fixture and not an edited one.
+method: admin.CommentAdmin.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 720001
+expect:
+    id: {matcher: eq, value: "720001"}
+    task_id: {matcher: eq, value: "700001"}
+    body_text: {matcher: eq, value: first comment on the paged task}

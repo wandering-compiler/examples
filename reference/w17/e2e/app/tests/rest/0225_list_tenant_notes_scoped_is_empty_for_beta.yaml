@@ -1,0 +1,24 @@
+# The BASELINE half of the scope-bypass proof. Read with 0230 / 0240 —
+# neither is decisive alone.
+#
+# tenant-alpha creates a note (the first `pre` entry), then auth_beta
+# re-authenticates the step as tenant-beta. Beta asks for ITS OWN notes
+# and must get none: tenant-beta writes link rows in this suite
+# (fixtures/a_cross_tenant_note_tag.yaml) but never a TenantNote of its
+# own, so its scoped list is empty by construction.
+#
+# ⚠️ Order-dependent, and deliberately so: 0230's `pre` chain writes a
+# note AS tenant-beta (the cross-scope read needs two tenants to find),
+# so this case is only true while it runs BEFORE that. It is numbered
+# 0225 for exactly that reason.
+#
+# 0240 still leans on this zero — a non-zero cross-scope COUNT means
+# something only if the caller owns none of the rows. 0230 no longer
+# does: `distinct tenant_id >= 2` is true or false on its own.
+method: tasks.TaskQuery.ListTenantNotes
+pre:
+    - fixtures/a_tenant_note.yaml
+    - auth/auth_beta.yaml
+input: {}
+expect:
+    notes: {matcher: count, op: '==', value: 0}

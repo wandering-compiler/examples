@@ -1,0 +1,13 @@
+# The HASH-layout write. `CachedDeviceProfile` declares
+# `redis_layout: REDIS_LAYOUT_HASH`, so this is an HSET of one field per
+# column rather than a single protojson blob — and the whole point of
+# having this table is that the SAME DQL emits a different body here
+# than it does against the JSON-layout token cache.
+method: cache.DeviceProfileMutation.SetDeviceProfile
+pre:
+    - auth/auth.yaml
+input:
+    device_id: e2e-device-alpha
+    user_id: 1
+    platform: web/firefox
+expect: {}

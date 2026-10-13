@@ -1,0 +1,23 @@
+# An admin_auth realm login with NO permissions at all.
+#
+# Seeded by fixtures/app/test.json with no role row, so its
+# AuthResp carries an empty permission_ids — unlike auth/admin.yaml's
+# identity, which holds the wildcard `admin-all` role and passes every
+# check ever emitted. Proving a gate is BYPASSED needs a caller the gate
+# would otherwise refuse; the wildcard admin cannot be that caller.
+#
+# The app realm's counterpart is auth/auth_nogrant.yaml, and it is now the
+# same shape: a seeded identity that signs in. It used to rely on a trigger
+# exception keyed on the email prefix `nogrant-`, because app users sign up at
+# runtime and the grant was a trigger on the insert. Both realms now seed the
+# grant-less caller outright.
+#
+# Captures the same reserved auth.token slot as auth/admin.yaml, so
+# listing it in a step's `pre` chain re-authenticates that step as the
+# grant-less admin.
+method: admin.Authenticate
+input:
+    email: e2e-admin-nogrant@example.com
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}

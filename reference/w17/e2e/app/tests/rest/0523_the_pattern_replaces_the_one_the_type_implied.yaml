@@ -1,0 +1,28 @@
+# `(w17.field).pattern` — the regex OVERRIDE, proved from the side that
+# only an override can explain.
+#
+# `inv-000124` is a perfectly good SLUG: lowercase, digits, a hyphen. It
+# is exactly what `type: SLUG`'s own implied `^[a-z0-9-]+$` accepts. It
+# is refused here, and the only thing that can refuse it is the
+# declared pattern having REPLACED that default rather than narrowing
+# it or being added alongside it.
+#
+# The mirror is 0520, which sends `INV-000123` — uppercase, which SLUG's
+# default would refuse — and is accepted. Neither case alone settles it:
+# an emitter that dropped the override entirely would pass this one's
+# opposite, and one that ANDed the two regexes together would refuse
+# both.
+method: users.DirectoryPlanMutation.CreateDirectoryPlan
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    tier: BASIC
+    invoice_reference: inv-000124
+    monthly_fee: "9.00"
+    placement: '{"region":"eu-central"}'
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - code: INVALID_VALUE
+          message: {matcher: eq, value: an invoice reference looks like INV-000123}

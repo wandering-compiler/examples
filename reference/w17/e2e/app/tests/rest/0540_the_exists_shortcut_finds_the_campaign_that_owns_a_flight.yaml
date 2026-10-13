@@ -1,0 +1,27 @@
+# `EXISTS c.flights(channel = :channel)` — the chain SHORTCUT, single
+# hop.
+#
+# This example already had a hand-written correlated EXISTS
+# (`UserQuery.ListUsersWithTasks`). That is the OUTPUT of this
+# expansion, which is why its existence proved nothing about the
+# expander: all seven of the functions that perform the expansion sat at
+# zero coverage. What runs here is the desugar step that mints
+# `__exsh_c_flights`, derives the FK predicate from the reverse accessor,
+# and auto-qualifies the author's bare `channel` to an alias that appears
+# nowhere in the source text.
+#
+# One of three seeded campaigns is on the social channel. That number is
+# what makes the two ways this can break distinguishable: a lost author
+# predicate answers two campaigns, and a lost FK predicate answers all
+# three — because SOME flight somewhere is on the social channel, so the
+# subquery is true for every outer row. Neither is an error and neither
+# is empty, so the id is pinned and not only the count.
+method: users.CampaignQuery.ListCampaignsOnChannel
+pre:
+    - auth/auth.yaml
+input:
+    channel: social
+expect:
+    campaigns: {matcher: count, op: '==', value: 1}
+    campaigns.0.id: {matcher: eq, value: "720001"}
+    campaigns.0.name: {matcher: eq, value: spring-launch}

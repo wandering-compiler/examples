@@ -1,0 +1,23 @@
+# The SAME session id, in a different bucket.
+#
+# This is the discriminating write. The Redis key is
+# `user_sessions:<user_id>` and the HASH field is the session id, so
+# these two rows differ only in the half of the key that comes from the
+# bucket column. An emitter that dropped the bucket binding, or a
+# typecheck rule that accepted a single-key WHERE, would collapse them
+# into one entry — and nothing about this request would say so, because
+# an HSET acks either way.
+#
+# `user_id: 2` deliberately names an id that has no `users` row. There is
+# no FK here and there cannot be one: the session store is a different
+# connection, so cross-connection foreign keys are refused by
+# construction. Which is exactly why the two buckets have to be kept
+# apart by the KEY — nothing else is holding them apart.
+method: cache.UserSessionMutation.UpsertUserSession
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 2
+    session_id: e2e-shared-device-token
+    device: ios/safari
+expect: {}

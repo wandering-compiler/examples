@@ -1,0 +1,38 @@
+# Admin auto-sort × cursor paging (item 2, INC-2) — LIVE reordering proof
+# on a PAGED list, page 1.
+#
+# TaskAdmin is bound to tasks.TaskQuery.ListTasksPaged, whose DQL declares
+# `ORDER BY t.id ASC` — the keyset. INC-1 could not sort a paged list at
+# all (its CASE-rewritten ORDER BY would have desynced the keyset seek from
+# the row order); INC-2 emits ONE statically-typed keyset query per
+# (column, direction) variant and dispatches on the sort selector, so the
+# boundary comparison follows the active column.
+#
+# `priority` is a declared TaskAdmin column projected as a plain NOT NULL
+# column, so it is auto-sortable under the D5 paged rule. The five seeded
+# tasks (fixtures/app/test.json, ids 700001..700005,
+# COUNT(*) = 5 at admin-scenario time) carry priorities 1..5 in id order —
+# so `priority desc` is the exact REVERSE of the list's declared order.
+# Asserting 700005 then 700004 therefore proves the sort took effect: under
+# the default variant this page would be 700001, 700002.
+#
+# The storage side runs the variant `ORDER BY t.priority DESC, t.id ASC`
+# (the sorted column, then the method's declared ORDER BY as the unique
+# NOT NULL tiebreak the keyset contract already requires), and the handler
+# stamps the active selector into next_cursor so 0044 can resume under it.
+method: admin.TaskAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    limit: 2
+    sort_by: priority
+    sort_dir: desc
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    # total is a uint64 but travels as a JSON NUMBER — the dialect's one
+    # 64-bit carve-out, json-dialect.md §2b.
+    paging.total: {matcher: eq, value: "5"}
+    # Task.id is an int64 → also a JSON string under protojson.
+    items.0.id: {matcher: eq, value: "700005"}
+    items.1.id: {matcher: eq, value: "700004"}
+    paging.next_cursor: {capture: task_admin_sorted.next_cursor, match: {matcher: not_empty}}

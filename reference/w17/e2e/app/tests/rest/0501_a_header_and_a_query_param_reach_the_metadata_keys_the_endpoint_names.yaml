@@ -1,0 +1,29 @@
+# `RestEndpoint.metadata_bindings[]` — the PER-ENDPOINT route into gRPC
+# metadata, and the sibling of the surface-wide propagation 0500 reads.
+#
+# Two entries, deliberately from two different HTTP slots:
+#
+#   HEADER      X-Trace-Origin → w17-trace-origin. Surface-wide
+#     propagation could forward this header too — but only under
+#     `x-trace-origin`, its own lowercased name. The RENAMED key is what
+#     says the per-endpoint binding fired rather than the surface list.
+#   QUERY_PARAM channel        → w17-echo-channel. Reachable through no
+#     other mechanism at all: `metadata_propagation` reads headers and
+#     nothing else, so a query parameter has no surface-wide route into
+#     metadata. If this binding does nothing, nothing else can fill the
+#     key.
+#
+# `channel` is not a field on EchoRequestContextReq, and that is the
+# point of the annotation: `fields[]` routes an HTTP slot into a request
+# FIELD, `metadata_bindings[]` routes one into a metadata KEY. A message
+# field would prove the other feature.
+method: users.UsersService.EchoRequestContext
+pre:
+    - auth/auth.yaml
+headers:
+    X-Trace-Origin: mobile-ios
+input:
+    channel: beta
+expect:
+    trace_origin: {matcher: eq, value: mobile-ios}
+    echo_channel: {matcher: eq, value: beta}

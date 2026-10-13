@@ -1,0 +1,29 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# The FIELDSETS page's update. Written over the generated skeleton, which
+# addressed `id: e2e-value` — not an id — and asserted `id: not_empty`
+# against the response. That skeleton passes whatever the endpoint does
+# to the row, including nothing: an UPDATE matching no rows still answers
+# with the id it was handed.
+#
+# 720001 is the first seeded comment (fixtures/app/test.json). It is edited here and RESTORED by 1030, so the fixture ends as it
+# was found — 0980 asserts the exact three-row shape and 1010 asserts this
+# row's seeded text, both of which would be the next things to break.
+#
+# What this page adds over the inline's update (0960) is the DECLARED
+# EDITABLE SET: `detail.fieldsets` names `body_text` as the one editable
+# field, and the admin guard refuses the page outright if the mutation
+# persists a request field the fieldsets omit. The set is a UI hint the
+# server does not enforce, so that guard is the enforcement — and this
+# case is what says the endpoint it cleared actually writes.
+method: admin.CommentTaskList.Update
+pre:
+    - auth/admin.yaml
+input:
+    id: 720001
+    body_text: edited through the fieldsets page
+expect:
+    id: {matcher: eq, value: "720001"}

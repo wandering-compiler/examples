@@ -1,0 +1,6 @@
+method: tasks.TasksService.DeleteTask
+pre:
+    - fixtures/a_task.yaml
+input:
+    id: ${task.id}
+expect: {}

@@ -1,0 +1,278 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: w17\n"
+"POT-Creation-Date: 2026-10-05 14:28+0000\n"
+"Language: cs\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "#{id} {title}"
+msgstr "#{id} {title}"
+
+msgid "Access"
+msgstr "Access"
+
+msgid "Active"
+msgstr "Active"
+
+msgid "Add {name}"
+msgstr "Add {name}"
+
+msgid "Apply"
+msgstr "Apply"
+
+msgid "Archived"
+msgstr "Archived"
+
+msgid "Audit log"
+msgstr "Audit log"
+
+msgid "Back"
+msgstr "Back"
+
+msgid "Cancel"
+msgstr "Zrušit"
+
+msgid "Clear"
+msgstr "Clear"
+
+msgid "Close"
+msgstr "Close"
+
+msgid "Comment"
+msgstr "Comment"
+
+msgid "Comments on this task"
+msgstr "Comments on this task"
+
+msgid "Continue"
+msgstr "Continue"
+
+msgid "Continue with your organization account."
+msgstr "Continue with your organization account."
+
+msgid "Copied"
+msgstr ""
+
+msgid "Copy"
+msgstr ""
+
+msgid "Copy {field}"
+msgstr ""
+
+msgid "Create"
+msgstr "Create"
+
+msgid "Dark theme"
+msgstr "Dark theme"
+
+msgid "Delete"
+msgstr "Smazat"
+
+msgid "Delete this row?"
+msgstr "Delete this row?"
+
+msgid "Deleted"
+msgstr "Deleted"
+
+msgid "Detail"
+msgstr "Detail"
+
+msgid "Directory"
+msgstr "Directory"
+
+msgid "Disable"
+msgstr "Disable"
+
+msgid "Disable the selected accounts? They won't be able to sign in until re-enabled."
+msgstr "Disable the selected accounts? They won't be able to sign in until re-enabled."
+
+msgid "Disabled"
+msgstr "Disabled"
+
+msgid "Done"
+msgstr "Done"
+
+msgid "Edit"
+msgstr "Edit"
+
+msgid "Edit {name}"
+msgstr ""
+
+msgid "Enable"
+msgstr "Enable"
+
+msgid "Enter your credentials to continue."
+msgstr "Enter your credentials to continue."
+
+msgid "Flag as reviewed"
+msgstr "Flag as reviewed"
+
+msgid "In Progress"
+msgstr "In Progress"
+
+msgid "Inline target page {page} is missing from the spec."
+msgstr ""
+
+msgid "Kept for rows that already carry it; new tasks should be closed as Done instead."
+msgstr "Kept for rows that already carry it; new tasks should be closed as Done instead."
+
+msgid "Leave empty to keep current"
+msgstr "Leave empty to keep current"
+
+msgid "Light theme"
+msgstr "Light theme"
+
+msgid "Loading…"
+msgstr "Načítání…"
+
+msgid "Next"
+msgstr "Next"
+
+msgid "No data"
+msgstr "No data"
+
+msgid "No list view"
+msgstr "No list view"
+
+msgid "No pages declared in spec."
+msgstr "No pages declared in spec."
+
+msgid "No records found"
+msgstr "Nic nenalezeno"
+
+msgid "No related {name} rows."
+msgstr ""
+
+msgid "Nothing here yet"
+msgstr "Nothing here yet"
+
+msgid "Open"
+msgstr "Open"
+
+msgid "Other"
+msgstr "Other"
+
+msgid "Overview"
+msgstr "Přehled"
+
+msgid "Overwrite the status note on every selected milestone?"
+msgstr "Overwrite the status note on every selected milestone?"
+
+msgid "Password"
+msgstr "Password"
+
+msgid "Previous"
+msgstr "Previous"
+
+msgid "Provenance"
+msgstr "Provenance"
+
+msgid "Re-enable the selected accounts?"
+msgstr "Re-enable the selected accounts?"
+
+msgid "Rows per page"
+msgstr "Řádků na stránku"
+
+msgid "Save"
+msgstr "Uložit"
+
+msgid "Search"
+msgstr "Hledat"
+
+msgid "Search across {fields}"
+msgstr ""
+
+msgid "Section"
+msgstr "Section"
+
+msgid "Select at least one row"
+msgstr "Select at least one row"
+
+msgid "Select at least one row to run this action."
+msgstr "Select at least one row to run this action."
+
+msgid "Shown only once. Copy it now: nothing keeps it, and closing this dialog discards it."
+msgstr ""
+
+msgid "Sign in"
+msgstr "Přihlásit se"
+
+msgid "Sign out"
+msgstr "Odhlásit se"
+
+msgid "Sign-in failed"
+msgstr "Sign-in failed"
+
+msgid "Something went wrong"
+msgstr "Something went wrong"
+
+msgid "System theme"
+msgstr "System theme"
+
+msgid "Tasks"
+msgstr "Tasks"
+
+msgid "Tasks by status"
+msgstr "Tasks by status"
+
+msgid "Tasks over time"
+msgstr "Tasks over time"
+
+msgid "Tasks per category"
+msgstr "Tasks per category"
+
+msgid "This page has no detail view."
+msgstr "This page has no detail view."
+
+msgid "This page has no list configured."
+msgstr "This page has no list configured."
+
+msgid "Total users"
+msgstr "Total users"
+
+msgid "Unavailable"
+msgstr "Unavailable"
+
+msgid "Urgency"
+msgstr "Urgency"
+
+msgid "Username"
+msgstr "Username"
+
+msgid "Users"
+msgstr "Users"
+
+msgid "Will apply to {target}."
+msgstr ""
+
+msgid "Work"
+msgstr "Work"
+
+msgid "You cannot create records on this page."
+msgstr "You cannot create records on this page."
+
+msgid "no rows"
+msgstr ""
+
+msgid "or"
+msgstr "or"
+
+msgid "this page"
+msgstr ""
+
+msgid "{count} selected row"
+msgstr ""
+
+msgid "{count} selected rows"
+msgstr ""
+
+msgid "{mode} — click to switch"
+msgstr ""
+
+msgid "{mode}. Click to switch color theme."
+msgstr ""
+
+msgid "{title} ({status})"
+msgstr "{title} ({status})"

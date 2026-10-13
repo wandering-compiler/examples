@@ -1,0 +1,9 @@
+# Last: DeleteUser purges the account's tokens in the same transaction,
+# so it must follow every step that uses the throwaway admin's session.
+method: admin.Users.Delete
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b2
+expect:
+    user_id: {matcher: not_empty}

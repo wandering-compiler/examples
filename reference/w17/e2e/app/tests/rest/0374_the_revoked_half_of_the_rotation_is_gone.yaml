@@ -1,0 +1,19 @@
+# The DEL half of the same MULTI/EXEC.
+#
+# `an_api_token.yaml` wrote this hash before the rotation ran, which is
+# what makes the absence meaningful: Redis DEL on a key that was never
+# there succeeds silently, so a case that only checked "the old hash
+# does not resolve" would pass against a revoke that never executed.
+#
+# The pair 0373/0374 is what the annotation actually claims. Sequential
+# ops leave the store in the state of the last op that succeeded — two
+# live tokens for one user if the DEL was lost, none if the SET was —
+# and the caller cannot tell from the ack which it got.
+method: cache.SessionCacheQuery.GetApiToken
+pre:
+    - auth/auth.yaml
+    - fixtures/a_rotated_token.yaml
+input:
+    token_hash: e2e0000000000000000000000000000000000000000000000000000000000old
+expect_error:
+    code: NOT_FOUND

@@ -1,0 +1,24 @@
+# `MetadataPropagation.header_renames[]` + `HeaderRename.http` /
+# `HeaderRename.metadata` — the AUTHORED entry, as opposed to the
+# auto-installed one 0503 reads.
+#
+# `X-User-Locale` is not a standard header and nothing installs it: the
+# registry names it, and that declaration is the whole reason the value
+# lands anywhere. The request sends no Accept-Language, so the rename is
+# the only route to `w17-language` open on this call — and it names a
+# language that is not the surface default, so the default stamp cannot
+# be the source either.
+#
+# The two halves of the entry fail differently and both fail quietly.
+# A wrong `http` reads a header nobody sends and the key falls back to
+# the default; a wrong `metadata` writes a key nobody reads and the same
+# thing happens. This case sees both, because it asserts the value under
+# the key the entry NAMES.
+method: users.UsersService.EchoRequestContext
+pre:
+    - auth/auth.yaml
+headers:
+    X-User-Locale: en
+input: {}
+expect:
+    language: {matcher: eq, value: en}

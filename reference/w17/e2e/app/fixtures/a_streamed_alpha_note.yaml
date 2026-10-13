@@ -1,0 +1,18 @@
+# Tenant-alpha's note for the scoped-stream case (rest/0695).
+#
+# A FIXED title, not ${seq}: ${seq} climbs on every resolution, so the same
+# token in this fixture and in the case reading it are two different strings
+# (the case's second run streamed 0 frames for exactly that reason). The suite
+# runs on a fresh stack and nothing else uses this title, so the frame count
+# stays exact. Tenant-beta writes a note with the SAME title
+# (a_streamed_beta_note.yaml), which is what makes the stream's tenant
+# predicate observable at all — without a same-titled foreign row, a stream
+# that dropped the scope would return the same single frame.
+method: tasks.TaskMutation.CreateTenantNote
+pre:
+    - auth/auth_alpha_streamer.yaml
+input:
+    title: e2e streamed scoped note
+    body: tenant-alpha's row in the scoped stream
+expect:
+    id: {capture: streamed.alpha_id}

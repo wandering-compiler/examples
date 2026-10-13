@@ -1,0 +1,32 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# The delivery-fallback poll source for TaskCompleted. A poller diffs whole
+# snapshots and follows no cursor, so a paged source would silently mean
+# "page one" and the diff would stop seeing anything past it — codegen
+# refuses that shape.
+#
+# ⚠️ This file used to claim it was "the live half of that refusal", with
+# `paging: {matcher: empty}` and a paragraph explaining that a paging
+# envelope "would carry a cursor and fail it". It would not. `paging` is not
+# a field of this response AT ALL — the refusal is what keeps it out — so the
+# assertion could not fail for any behaviour of any server. It was removed
+# when the generator started refusing an `expect` key the response message
+# does not have — a consumer reported it: `empty` passes for an absent field,
+# so a name that is not there reads as a green assertion.
+#
+# The refusal is enforced where it can be: at codegen. There is no runtime
+# half, and writing one that cannot fail was worse than writing none.
+#
+# A floor rather than a count, for the same reason 0120 uses one: every
+# fixture run adds tasks.
+method: tasks.TaskQuery.ListTasksLive
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    items: {matcher: count, op: '>=', value: 1}
+    items.0.id: {matcher: not_empty}
+    items.0.status: {matcher: not_empty}

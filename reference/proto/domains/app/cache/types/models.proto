@@ -1,0 +1,238 @@
+syntax = "proto3";
+
+package e2e.app.cache;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+
+// CachedSession — Redis-backed authenticated session. Sessions
+// live here rather than in Postgres: they ARE
+// authentication-state, fast TTL-bounded ephemeral data, a
+// natural KV fit. Keying on the bearer-token's SHA256 lets
+// every authenticated request resolve the session in a single
+// Redis GET keyed by a hash of the token the client sent.
+//
+// Cross-DB integrity: there is intentionally NO FK to
+// `app.users.User` here — `main` PG and `cache` Redis are
+// different connections (D41 rejects cross-connection FKs).
+// The user_id on the session is application-layer truth; if
+// the user is hard-deleted in PG, lingering Redis sessions
+// expire on their own TTL or get DEL'd by an audit job.
+message CachedSession {
+  // HASH layout (was JSON default). Pair with the
+  // PG-side `app.users.User` table via the reverse-
+  // direction cross-capability dispatch: a single
+  // `GetSessionWithUser(token_hash)` call hits Redis for the
+  // session (HGETALL → kvhash.UnmarshalEntity) then PG for
+  // the source-of-truth User row (QueryRowContext keyed by
+  // `resp.Session.UserId`). The HASH layout is what the
+  // KV→SQL single-row primitive expects on the KV side (JSON-layout
+  // cross-cap is a future graduation).
+  option (w17.db.table) = {
+    name: "sessions",
+    connection: "app-redis",
+    redis_layout: REDIS_LAYOUT_HASH
+  };
+
+  // PK: hex-encoded SHA256 of the bearer token. The string
+  // form keeps the Redis key human-readable in `redis-cli`
+  // sessions; collision risk is cryptographically negligible.
+  string                      token_hash = 1 [(w17.field) = { pk: true, type: CHAR, max_len: 64 }];
+  // user_id — opaque pointer to `app.users.User.id`. NOT a
+  // FK (cross-connection); enforced at the application
+  // layer.
+  int64                       user_id    = 2;
+  google.protobuf.Timestamp   expires_at = 3;
+  // created_at — set by the application at session creation.
+  // Redis (KV) renders no column defaults and the storage
+  // write path auto-fills only CRYPTO_RANDOM, so `default_auto:
+  // NOW` (a relational-only SQL DEFAULT) is refused here; the
+  // handler stamps the timestamp explicitly.
+  google.protobuf.Timestamp   created_at = 4 [(w17.field) = { immutable: true }];
+}
+
+// CachedApiToken — Redis-backed API token cache, and the
+// `(w17.db.method).kv_atomic` fixture.
+//
+// It exists as its own table rather than reusing CachedSession
+// because CachedSession is deliberately REDIS_LAYOUT_HASH
+// (the cross-capability dispatch fixture) and the
+// atomic emit covers JSON layout only — codegen refuses
+// `kv_atomic` on a HASH table with a steering hint. Converting
+// CachedSession would trade one fixture for another; a second
+// table costs one Redis keyspace and keeps both claims.
+//
+// This one therefore takes the JSON default explicitly-by-
+// omission, the same way UserPresenceCache does.
+//
+// Cross-DB integrity: as with every table on `app-redis`, no FK
+// to the PG-side user (D41 rejects cross-connection FKs).
+message CachedApiToken {
+  option (w17.db.table) = { name: "api_tokens", connection: "app-redis" };
+
+  // PK: hex-encoded SHA256 of the API token, same shape and
+  // reasoning as CachedSession.token_hash.
+  string                    token_hash = 1 [(w17.field) = { pk: true, type: CHAR, max_len: 64 }];
+  // Opaque pointer to `app.users.User.id` — application-layer
+  // truth, not a FK.
+  int64                     user_id    = 2;
+  // label — what the operator named this token in the UI
+  // ("ci-deploy", "laptop"). Carried so a rotation is visibly
+  // the SAME token conceptually, under a new hash.
+  string                    label      = 3 [(w17.field) = { type: CHAR, max_len: 128 }];
+  google.protobuf.Timestamp expires_at = 4;
+
+  // ttl_seconds — the key's Redis-level expiry, and the only
+  // column name the compiler treats specially on a KV table: a
+  // `SET ttl_seconds = <expr>` is not a write to the stored value
+  // at all, it is an EXPIRE (or, for the literal-zero sentinel, a
+  // PERSIST). Both arms are unreachable without a column of this
+  // name, which is why no example had ever emitted one — the
+  // example wrote KV values and never touched their lifetime.
+  //
+  // `expires_at` above is a different thing and both are wanted:
+  // that one is an application-visible timestamp the caller reads
+  // back, this one is state held by Redis that no read returns.
+  int64                     ttl_seconds = 5;
+}
+
+// CachedDeviceProfile — Redis-backed per-device profile, and the
+// externally reachable half of the KV verb set.
+//
+// It duplicates `CachedSession`'s HASH layout on purpose. The verbs
+// this table exists for — the multi-key read and the cross-op
+// handover — can only be shown from the outside, and `CachedSession`
+// is authentication state: a public endpoint that writes one would
+// let any caller mint a session for any user id. Rather than open
+// that hole for a fixture, the fixture gets a table whose contents
+// grant nothing.
+//
+// HASH rather than the JSON default because the two layouts emit
+// genuinely different bodies for the same DQL — the multi-key read
+// is one `MGET` on JSON and a pipeline of `HGETALL`s here — and the
+// JSON side is already covered by `CachedApiToken`. One table per
+// layout is what makes a divergence between them visible.
+//
+// Cross-DB integrity: as with every table on `app-redis`, no FK to
+// the PG-side user (D41 rejects cross-connection FKs).
+message CachedDeviceProfile {
+  option (w17.db.table) = {
+    name: "device_profiles",
+    connection: "app-redis",
+    redis_layout: REDIS_LAYOUT_HASH
+  };
+
+  // PK: the device's opaque client-generated id.
+  string                    device_id    = 1 [(w17.field) = { pk: true, type: CHAR, max_len: 64 }];
+  // Opaque pointer to `app.users.User.id` — application-layer
+  // truth, not a FK. The cross-op chain reads it back OUT of the
+  // decoded entity, which is the whole point: the caller holds a
+  // device id and has no way to know the user behind it.
+  int64                     user_id      = 2;
+  string                    platform     = 3 [(w17.field) = { type: CHAR, max_len: 32 }];
+  google.protobuf.Timestamp last_seen_at = 4;
+}
+
+// UserPresenceCache — Redis-backed per-user ephemeral state
+// keyed by the user's PG id. Pair with `app.users.User` as
+// the canonical e2e demonstration of the cross-
+// capability single-row JOIN (SQL parent + KV child): the
+// optimizer detects parent on `app-postgres` + child on
+// `app-redis` for a `{User; UserPresenceCache}` response,
+// drops the JOIN from the parent SELECT, and emits a Redis
+// HGETALL keyed by the fetched parent's PK. PK == user_id is
+// the contract that lets the generator derive the KV key as
+// `user_presence:<user.id>` without operator hints.
+//
+// Cross-DB integrity: no FK to `app.users.User` (different
+// connection — D41 rejects cross-connection FKs); the
+// presence record's existence is best-effort cache state and
+// callers must tolerate a nil `presence` field in the cross-
+// cap response when the user has no live presence (HGETALL
+// against an absent key returns the empty hash → child stays
+// nil per the primitive's missing-key semantics).
+message UserPresenceCache {
+  option (w17.db.table) = { name: "user_presence", connection: "app-redis" };
+
+  // PK: opaque pointer to `app.users.User.id`. Single-column
+  // PK so the cross-cap dispatch can derive the Redis key
+  // `user_presence:<id>` directly from the parent row.
+  int64                     user_id        = 1 [(w17.field) = { pk: true }];
+  google.protobuf.Timestamp last_seen_at   = 2;
+  bool                      online         = 3;
+  // current_route — last route the gateway saw the user on.
+  // Free-text; CHAR(256) gives gateway room without bloating
+  // the hash payload.
+  string                    current_route  = 4 [(w17.field) = { type: CHAR, max_len: 256 }];
+}
+
+// UserSession — e2e fixture for the SQL-parent +
+// bucketed-KV-children fan-out cross-capability dispatch.
+// Multi-device sessions per user: one
+// User can have N concurrent UserSession records (web tab +
+// mobile app + tablet), each with its own session_id token.
+// All sessions for a given user live under one Redis HASH at
+// key `user_sessions:<user.id>`; HASH fields are keyed by
+// `session_id`, values are protojson-encoded UserSession
+// entities. `HGETALL user_sessions:42` returns every active
+// session for user 42 in one round trip — native KV fan-out,
+// no secondary indexes.
+//
+// Two read surfaces, and they touch the layout differently.
+// `UserSessionQuery.ListUserSessions` is the cross-cap
+// fan-out: it HGETALLs the whole hash for a parent row and
+// never addresses a bucket key at all.
+// `UserSessionQuery.GetUserSession` is the KV-only read and
+// does — `bucket = :b AND pk = :p`, resolved to
+// `HGET user_sessions:<user_id> <session_id>`. Only the
+// second exercises the composite-key path, on either side of
+// the compiler.
+//
+// Bucketed WRITES are spelled the ordinary way, with both key
+// columns as SET pairs (see
+// mutations/user_session_mutation.proto). This comment used
+// to say they did not exist and named a grammar
+// (`INSERT … WHERE … VALUES (…)`) that was never the shape —
+// a note that made the supported construct look unavailable,
+// which is a plausible reason nothing in this example had
+// written one.
+//
+// Cross-DB integrity: no FK to `app.users.User` (cross-
+// connection — D41 rejects). The user_id field is
+// application-layer truth.
+message UserSession {
+  option (w17.db.table) = {
+    name: "user_sessions",
+    connection: "app-redis",
+    redis_layout: REDIS_LAYOUT_HASH_BUCKETED,
+    // Explicit bucket discriminator column. Redis
+    // key is `user_sessions:<user_id>`; one HASH per user
+    // holding every active session, HASH fields keyed by
+    // session_id. Without it the column would be inferred from the
+    // cross-cap dispatch's JOIN ON child column; the
+    // annotation makes it explicit so KV-only ops on this
+    // table can also resolve the bucket column without a
+    // JOIN context (single-child GET / HSET / HDEL slices).
+    redis_bucket_by: "user_id"
+  };
+
+  // Bucket discriminator — every UserSession for the same
+  // user lands in one Redis HASH at key
+  // `user_sessions:<user_id>`. NOT the entity PK; the JOIN
+  // ON `s.user_id = u.id` is what the cross-cap dispatch
+  // reads to derive the bucket key.
+  int64                     user_id    = 1 [(w17.field) = { type: ID }];
+  // PK / HASH field — the session token's content-hash.
+  // Within one user's bucket, each session_id is unique;
+  // across users, the same session_id is meaningless (the
+  // bucket-key scope makes it user-local).
+  string                    session_id = 2 [(w17.field) = { pk: true, type: CHAR, max_len: 64 }];
+  // device — free-text identifier the gateway records on
+  // session open ("web/firefox", "ios/safari", ...). Bounded
+  // to keep the JSON payload small.
+  string                    device     = 3 [(w17.field) = { type: CHAR, max_len: 128 }];
+  // last_seen_at — gateway refresh point; pure metadata, not
+  // used by the cross-cap path itself.
+  google.protobuf.Timestamp last_seen_at = 4;
+}

@@ -1,0 +1,24 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The decoy. Task 700003 is IN_PROGRESS, so asking for DONE must return
+# NOTHING — and this is the only case in the trio that can fail if the
+# `?` conjunct stops filtering at all.
+#
+# It is here because the fix's failure mode is symmetrical: binding the
+# unset filter as NULL is what 0290 checks, and an implementation that
+# achieved the same result by never applying the predicate would pass
+# both 0290 and 0297. An empty result is a weak assertion everywhere
+# else in this suite; here it is the point, so the count is exact and
+# the row that must NOT appear is one the two neighbouring cases prove
+# is otherwise returned.
+method: tasks.TaskQuery.ListTasksInPriorityRange
+pre:
+    - auth/auth.yaml
+input:
+    min_priority: 0
+    max_priority: 9
+    title_is: admin paged task 3
+    only_status: DONE
+expect:
+    items: {matcher: count, op: '==', value: 0}

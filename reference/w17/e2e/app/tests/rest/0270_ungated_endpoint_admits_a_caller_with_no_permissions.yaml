@@ -1,0 +1,19 @@
+# THE behavioural proof of `(w17.acl_service) = false`.
+#
+# The caller holds no permissions at all (auth/auth_nogrant.yaml), and
+# the domain has `(w17.acl_endpoints) = true`, so under the inherited
+# cascade this call would be refused. It is not, because TaskLookupQuery
+# declares the explicit `false` — which is the whole feature: reference
+# data a caller needs before it can render anything must not be gated.
+#
+# Read with 0280, which points the SAME caller at the gated twin and
+# requires a refusal. Alone this case is not decisive: if the seed's
+# grant exception silently stopped working, this user would hold the
+# wildcard role and sail through for the wrong reason. 0280 is what
+# proves the caller really is permission-less.
+method: tasks.TaskLookupQuery.ListTaskCategories
+pre:
+    - auth/auth_nogrant.yaml
+input: {}
+expect:
+    categories: {matcher: count, op: '>=', value: 3}

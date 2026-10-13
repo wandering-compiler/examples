@@ -1,0 +1,11 @@
+# tenant-beta, as its own fixture path — for fixtures/a_streamed_beta_note.yaml.
+# Not auth/auth_beta_writer.yaml: that path may already have run earlier in the
+# suite, and a path that already ran does not re-authenticate (see
+# auth/auth_alpha_streamer.yaml).
+method: auth.AuthService.SignUp
+input:
+    tenant_slug: tenant-beta
+    email: beta-streamer${seq}@example.com
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}

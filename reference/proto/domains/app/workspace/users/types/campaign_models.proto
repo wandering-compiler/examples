@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package e2e.app.users;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+
+// Directory advertising — three tables whose only job is to give DQL
+// constructs a place to be WRITTEN.
+//
+// They are a new, self-contained island rather than columns on
+// `user_directory_plans` for a reason that is about the SUITE, not about
+// the schema: every existing table in this project already has steps
+// asserting its exact contents (`0369` counts the cards, `0524` counts
+// the plans, the admin overview counts the users at a point where the
+// REST suite has not run yet). A row added anywhere in that set is not a
+// local change. These three FK only to each other, are seeded from a
+// high id block, and nothing else counts them.
+//
+// What they host, and why each construct needed a shape of its own:
+//
+//   EXISTS <alias>.<relation>   the chain SHORTCUT. It needs a reverse
+//                               accessor to expand through, and a
+//                               THREE-level chain so the multi-hop arm
+//                               (which mints JOINs) runs at all.
+//   GROUP BY <pk> only          the FD-on-PK relaxation. Every grouped
+//                               query in this example lists every
+//                               projected column in its GROUP BY, so
+//                               the relaxation never had to hold.
+//   an outer-level aggregate    aggregate attribution ACROSS query
+//                               levels — an aggregate written inside a
+//                               subquery whose variables all belong to
+//                               the enclosing grouped query.
+//   `%` over the numeric kinds  the modulo guard, which decides whether
+//                               a query is emitted at all: PostgreSQL
+//                               has no `%` for float8.
+//   a quoted JSON key           a document key that is not a bare
+//                               identifier, so it cannot be spelled as
+//                               a chain segment.
+//   a derived table, and a      two JOIN shapes, each of which puts a
+//   subquery in a JOIN ON       whole SELECT somewhere a walk has to
+//                               descend into and never had.
+//   two GROUPING SETS           which columns stay determined depends on
+//                               the INTERSECTION of the sets, and one
+//                               set makes that no computation at all.
+
+// DirectoryCampaign — a run of paid promotion across the directory.
+message DirectoryCampaign {
+  option (w17.db.table) = {
+    name:    "directory_campaigns"
+    comment: "A run of paid promotion across the directory. Owns its flights; deleting one takes them with it."
+  };
+
+  int64  id   = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string name = 2 [(w17.field) = { type: CHAR, max_len: 120 }];
+
+  // audience — the targeting document.
+  //
+  // `json: true` is the same annotation `UserDirectoryPlan.placement`
+  // carries, but the KEY here is deliberately not a bare identifier:
+  // `utm.source` contains a dot, which is the character DQL's chain
+  // syntax already spends on "navigate one level down". Written
+  // unquoted it would parse as two hops (`audience` → `utm` → `source`)
+  // and resolve to nothing; the double-quoted form is the only spelling
+  // that can reach it, and until this column existed no example had
+  // written one.
+  string audience = 3 [(w17.field) = { type: TEXT, json: true }];
+
+  google.protobuf.Timestamp created_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// CampaignFlight — one channel's slice of a campaign.
+//
+// Carries the three numeric KINDS that `%` (modulo) has to tell apart,
+// and they are three rather than one because the guard's whole job is
+// to distinguish them and it fails silently in both directions:
+//
+//   impressions  int64  → an integer. `%` is valid everywhere.
+//   spend        MONEY on the DOUBLE carrier → NUMERIC(19,4) on
+//                PostgreSQL, where `%` IS valid. Refusing it (which the
+//                compiler did before the preset carve-out) is a loud
+//                false refusal of a correct query.
+//   click_rate   plain double → DOUBLE PRECISION, and PostgreSQL has no
+//                modulo operator for float8 at all. `click_rate % 7` is
+//                a server-side "operator does not exist" error, so the
+//                only way to bucket it is through a CAST.
+message CampaignFlight {
+  option (w17.db.table) = {
+    name:    "campaign_flights"
+    comment: "One channel's slice of a campaign. Impressions are exact, spend is fixed-point, click-through is a binary float."
+  };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  // campaign_id — `related_name: "flights"` is what makes
+  // `EXISTS c.flights(...)` and `LEFT JOIN c.flights f` spellable. The
+  // shortcut resolves the segment name against exactly this accessor.
+  int64 campaign_id = 2 [
+    (w17.field)     = { related_name: "flights" },
+    (w17.db.column) = { fk: "users.DirectoryCampaign", deletion_rule: CASCADE, index: true }
+  ];
+
+  string channel     = 3 [(w17.field) = { type: CHAR, max_len: 32 }];
+  int64  impressions = 4;
+  double spend       = 5 [(w17.field) = { type: MONEY }];
+  double click_rate  = 6;
+
+  google.protobuf.Timestamp started_at = 7 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// FlightEvent — one recorded interaction with a flight.
+//
+// The third level exists so the EXISTS shortcut has a MULTI-hop chain to
+// expand (`c.flights.events`). The single-hop and multi-hop arms of that
+// expansion are different code: one hop synthesises a bare
+// `SELECT 1 ... WHERE <fk>`, two hops mint an explicit JOIN per extra
+// segment and AND the FK predicates together. A two-table schema proves
+// only the first.
+message FlightEvent {
+  option (w17.db.table) = {
+    name:    "flight_events"
+    comment: "One recorded interaction with a flight. Weight is the interaction's value to the advertiser."
+  };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  int64 flight_id = 2 [
+    (w17.field)     = { related_name: "events" },
+    (w17.db.column) = { fk: "users.CampaignFlight", deletion_rule: CASCADE, index: true }
+  ];
+
+  string kind   = 3 [(w17.field) = { type: CHAR, max_len: 24 }];
+  int64  weight = 4;
+
+  google.protobuf.Timestamp recorded_at = 5 [(w17.field) = { default_auto: NOW, immutable: true }];
+}

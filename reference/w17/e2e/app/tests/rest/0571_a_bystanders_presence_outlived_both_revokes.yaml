@@ -1,0 +1,12 @@
+# Stated once, at the end, for both chains. Two revokes ran, each naming
+# a user it had to read out of a stored value, and user 2 was named by
+# neither. A chain that resolved its binding to a zero, or that deleted
+# by prefix, takes this record with it.
+method: cache.UserPresenceQuery.GetUserPresence
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 2
+expect:
+    user_id: {matcher: eq, value: "2"}
+    current_route: {matcher: eq, value: /e2e/bystander}

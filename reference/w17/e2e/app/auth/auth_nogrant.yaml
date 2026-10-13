@@ -1,0 +1,30 @@
+# A caller with NO permissions at all.
+#
+# Every other identity in this suite carries the wildcard `e2e-all` role and
+# therefore passes every ACL check ever emitted, which makes them useless for
+# proving that a gate REFUSES. This one exists to be refused.
+#
+# It signs IN as a seeded, role-less account rather than signing up. Signing up
+# would grant it the role: `e2e-all` is declared `default`, so the auth
+# plugin's turnkey SignUp links it inside the signup's own transaction. A
+# seeded identity never takes that path and therefore never gets a role — the
+# same shape auth/admin_nogrant.yaml has always used for the admin realm, which
+# has no signup at all.
+#
+# What it replaces is a hole in the grant itself: the old seed granted the role
+# by TRIGGER on auth_user and skipped accounts whose email began with
+# `nogrant-`. That put an exception to authorization in an email prefix, and it
+# only worked because the grant was a database trigger nobody else could see.
+#
+# The account is fixtures/app/test.json's `e2e-nogrant@example.com`, with the
+# shared e2e password hash and no auth.UserRole row.
+#
+# Captures the same reserved `auth.token` slot as the other auth fixtures, so
+# listing it LAST in a step's `pre` chain re-authenticates that step as the
+# permission-less user.
+method: auth.AuthService.SignIn
+input:
+    email: e2e-nogrant@example.com
+    password: e2eSecret!23
+expect:
+    token: {capture: auth.token}

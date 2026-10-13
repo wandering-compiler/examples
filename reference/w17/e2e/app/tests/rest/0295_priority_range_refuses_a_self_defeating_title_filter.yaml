@@ -1,0 +1,19 @@
+# NOT_CONTAINS — `against_fields`.
+#
+# Filtering for a title that CONTAINS the title being excluded can only
+# ever return nothing. Without the rule the caller gets an empty report
+# and goes looking for the missing rows in the data.
+method: tasks.TaskQuery.ListTasksInPriorityRange
+pre:
+    - auth/auth.yaml
+input:
+    min_priority: 0
+    max_priority: 9
+    title_is: admin paged task 3
+    title_is_not: paged task
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: title_is
+          code: NOT_CONTAINS_VIOLATION
+          message: {matcher: regex, pattern: "would always come back empty"}

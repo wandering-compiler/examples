@@ -1,0 +1,15 @@
+# The rotation itself: one MULTI/EXEC that issues the new hash and
+# revokes the one `an_api_token.yaml` wrote. The response is empty (a KV
+# write acks, it has no row to hand back), so this fixture asserts
+# nothing on its own — the cases that depend on it read both keys.
+method: cache.SessionCacheMutation.RotateToken
+pre:
+    - auth/auth.yaml
+    - fixtures/an_api_token.yaml
+input:
+    old_token_hash: e2e0000000000000000000000000000000000000000000000000000000000old
+    new_token_hash: e2e0000000000000000000000000000000000000000000000000000000000new
+    user_id: 1
+    label: ci-deploy
+    expires_at: '2030-01-01T00:00:00Z'
+expect: {}

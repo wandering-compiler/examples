@@ -1,0 +1,27 @@
+# Two renames, one metadata key — which one wins.
+#
+# `Accept-Language` (auto-installed) and `X-User-Locale` (authored) both
+# target `w17-language`, so a request carrying both is the only place
+# their precedence is observable. It has to be decided rather than
+# incidental: a deployment puts `X-User-Locale` in the registry PRECISELY
+# because something upstream — a CDN, a proxy, the browser's own
+# language list — is writing an Accept-Language it does not want to obey.
+# If the auto-installed entry won, the authored one would be unreachable
+# in exactly the situation it exists for.
+#
+# The authored entry wins. Every writer of the key APPENDS and every
+# consumer reads the LAST value (`i18n.LocaleFromContext`,
+# `i18n.FormatLocaleFromContext`, the comment the gateway emits into its
+# own handlers), so precedence is emit ORDER: the parser puts the
+# auto-installed entry FIRST and the authored ones after it, and the
+# per-endpoint `metadata_bindings[]` overlay — emitted inside the
+# handler — lands last of all.
+method: users.UsersService.EchoRequestContext
+pre:
+    - auth/auth.yaml
+headers:
+    Accept-Language: cs
+    X-User-Locale: en
+input: {}
+expect:
+    language: {matcher: eq, value: en}

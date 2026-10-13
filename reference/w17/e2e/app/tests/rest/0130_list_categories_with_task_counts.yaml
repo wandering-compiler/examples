@@ -1,0 +1,6 @@
+method: tasks.TaskQuery.ListCategoriesWithTaskCounts
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    rows: {matcher: count, op: '>=', value: 1}

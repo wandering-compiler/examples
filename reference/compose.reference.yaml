@@ -1,0 +1,50 @@
+# What this example adds to the generated stack (compose.w17.yaml), merged
+# over it by the include in compose.yaml: the seed rows the suite starts
+# from, the hand-written business server of the app domain, and the
+# gateway's route to it.
+services:
+  # One-shot: applies the rendered seed of fixtures/app/test.json (rendered
+  # into w17/fixtures by `w17ctl fixtures render`) with the storage binary
+  # itself; the binary refuses a seed older than its fixture. The schema is
+  # in place by then: `w17ctl test` builds it, and seeds the generated
+  # roles, before the services start.
+  app-seed:
+    build:
+      context: .
+      dockerfile: w17/services/app-storage/Dockerfile
+    environment:
+      # The database a `fixtures apply` seeds is the connection's target.
+      W17_TARGET_APP_POSTGRES: postgres://app:${W17_APP_POSTGRES_DB_PASSWORD:-app}@app-postgres:5432/app?sslmode=disable
+    command: ["fixtures", "apply", "--connection", "app-postgres", "--fixtures", "/w17/fixtures"]
+    restart: "no"
+    volumes:
+      - ./w17/fixtures:/w17/fixtures:ro
+      - ./fixtures/app/test.json:/fixtures/app/test.json:ro
+    depends_on:
+      app-postgres: { condition: service_healthy }
+
+  app-storage:
+    depends_on:
+      app-seed: { condition: service_completed_successfully }
+
+  app-business:
+    build: { context: ., dockerfile: business/Dockerfile }
+    restart: unless-stopped
+    environment:
+      APP_LISTEN_ADDR: ":50051"
+      APP_STORAGE_BACKEND_ADDR: app-storage:50051
+      # The cross-domain usage calls are best-effort; this example runs
+      # without them.
+      APP_BILLING_BACKEND_ADDR: disabled
+    depends_on:
+      app-storage: { condition: service_started }
+
+  # The gateway sends storage methods to app-storage and the facade
+  # methods to the business server. (The admin's defaults already name
+  # app-business:50051.)
+  app-gateway:
+    environment:
+      APP_GATEWAY_STORAGE_BACKEND_ADDR: app-storage:50051
+      APP_GATEWAY_BUSINESS_BACKEND_ADDR: app-business:50051
+    depends_on:
+      app-business: { condition: service_started }

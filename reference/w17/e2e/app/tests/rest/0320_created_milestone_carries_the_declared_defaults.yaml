@@ -1,0 +1,34 @@
+# `(w17.field).default_string` + `default_double` — read back off the
+# row 0313 created.
+#
+# This is the assertion the DDL cannot make on its own. A gate over
+# `db/init/app/01_schema.sql` can say the column declares
+# `DEFAULT 'not started'`; it cannot say a row created without the
+# column ends up carrying it. The two come apart whenever the write
+# path names the column and supplies the carrier's zero — which is
+# exactly what an INSERT built from "every column of the model" would
+# do, and what the emitted one must not.
+#
+# The values are chosen so neither can be produced by accident:
+#
+#   status_note   "not started"  — not the empty string, so a column
+#                                  silently written as "" fails here
+#                                  rather than looking defaulted.
+#   weight_factor 1              — not 0, so a default that never
+#                                  reached the DDL is a visible 0
+#                                  rather than an indistinguishable
+#                                  zero value.
+#
+# `weight` is asserted too, as the control: it IS in the request, so
+# if it came back wrong the failure is about the write path in general
+# rather than about the defaults.
+method: tasks.TaskQuery.GetMilestone
+pre:
+    - auth/auth.yaml
+input:
+    id: ${created_milestone.id}
+expect:
+    name: {matcher: eq, value: delta release}
+    weight: {matcher: num, op: '==', value: 4}
+    status_note: {matcher: eq, value: not started}
+    weight_factor: {matcher: num, op: '==', value: 1}

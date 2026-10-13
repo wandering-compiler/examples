@@ -1,0 +1,35 @@
+# THE behavioural proof of `(w17.acl_endpoint) = true` — the method-level
+# override that wins over its service's opt-out.
+#
+# Same permission-less caller as 0270, one endpoint over. 0270 showed the
+# ungated twin admits them; this one must REFUSE them, and refuse with
+# the canonical code rather than merely fail.
+#
+# ⚠️ The message used to name the permission the gate was looking for, and
+# that assertion was the reason a consumer read
+# `forbidden: missing permission tasks.TaskLookupQuery.CountTasksPerCategory`
+# in a browser: this file pinned the leak as the contract. The permission
+# now goes to the operator (observx.ReportRefusal) and the caller gets the
+# code plus the catalog sentence, asserted verbatim below — an exact match,
+# so a body that went back to naming the permission fails here again.
+#
+# What the message can no longer distinguish is WHICH check refused. The
+# code still separates this from an auth failure (UNAUTHENTICATED), 0270
+# proves the same caller is admitted one endpoint over, and the two halves
+# of the split — nothing technical in the body, the permission in the
+# operator's log — are pinned as unit assertions in
+# sdk/go/lib/restgw/auth_test.go. The admin surface keeps the permission in
+# the body on purpose (its reader IS the operator), so 0910 still asserts
+# the permission string directly.
+#
+# Together the pair pins both directions of the cascade override AND
+# proves the caller is genuinely permission-less: a wildcard-role user
+# would pass here, so this case failing to be refused is exactly how a
+# broken seed exception would surface.
+method: tasks.TaskLookupQuery.CountTasksPerCategory
+pre:
+    - auth/auth_nogrant.yaml
+input: {}
+expect_error:
+    code: PERMISSION_DENIED
+    message: {matcher: eq, value: You do not have access to this.}

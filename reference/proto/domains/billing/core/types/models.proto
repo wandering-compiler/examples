@@ -1,0 +1,340 @@
+syntax = "proto3";
+
+package e2e.billing.core;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+
+// Account — the billing-side mirror of an app User. NOT FK-
+// constrained to `app.users.User` because they live in
+// different PG instances (app's `main` connection vs billing's
+// `billing` connection); the wandering-compiler explicitly
+// rejects FKs spanning connections (D41). The `user_id` here
+// is just an int64 the app populates when it provisions a
+// new billing account at signup time. Cross-DB integrity is
+// the operator's responsibility — typically via the same
+// non-atomic mutation pattern as the session writes.
+message Account {
+  option (w17.db.table) = { name: "billing_accounts" };
+
+  int64                       id          = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  // user_id — opaque pointer to `app.users.User.id`. NOT a FK
+  // (cross-DB); enforced at the application layer.
+  int64                       user_id     = 2 [(w17.field) = { unique: true }];
+  string                      email       = 3 [(w17.field) = { type: EMAIL }];
+  google.protobuf.Timestamp   created_at  = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// Plan — catalog row for a subscription tier. Slugs are stable
+// identifiers ("free" / "pro" / "enterprise") that survive
+// price / quota tweaks without breaking external integrations.
+// monthly_task_quota is the soft limit the app's quota-check
+// gate consults — exceeded creates surface a warning header
+// rather than blocking, since billing is non-critical to the
+// app's core function.
+message Plan {
+  option (w17.db.table) = { name: "billing_plans" };
+
+  int64                       id                  = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  string                      slug                = 2 [(w17.field) = { type: CHAR, max_len: 64, unique: true }];
+  string                      display_name        = 3 [(w17.field) = { type: CHAR, max_len: 120 }];
+  // 0 = unlimited (the default for enterprise / unmetered tiers).
+  int32                       monthly_task_quota  = 4 [(w17.field) = {}];
+  // price_cents is the monthly price denominated in the smallest
+  // currency unit (USD cents in the seed fixture). Currency
+  // selection is parked — single-currency e2e fixture keeps the
+  // demo simple.
+  int32                       price_cents         = 5 [(w17.field) = {}];
+  google.protobuf.Timestamp   created_at          = 6 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// Subscription — links an Account to a Plan with a lifecycle.
+// Status drives the app's quota-gate decision: only ACTIVE
+// subscriptions consult their plan's quota; CANCELLED /
+// EXPIRED accounts fall back to the free plan's quota at the
+// app layer.
+message Subscription {
+  option (w17.db.table) = { name: "billing_subscriptions" };
+
+  int64                       id                    = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64                       account_id            = 2 [
+    (w17.field)     = { related_name: "subscriptions" },
+    (w17.db.column) = { fk: "core.Account", deletion_rule: CASCADE, index: true }
+  ];
+  int64                       plan_id               = 3 [(w17.db.column) = { fk: "core.Plan", deletion_rule: CASCADE }];
+  Status                      status                = 4;
+  google.protobuf.Timestamp   current_period_start  = 5;
+  google.protobuf.Timestamp   current_period_end    = 6;
+  google.protobuf.Timestamp   created_at            = 7 [(w17.field) = { default_auto: NOW, immutable: true }];
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    ACTIVE             = 1;
+    CANCELLED          = 2;
+    EXPIRED            = 3;
+  }
+}
+
+// UsageRecord — append-only ledger of metered actions per
+// account. The app records one row per relevant business
+// event (task created, file uploaded, etc.); billing reads
+// the ledger to decide whether the account is over-quota for
+// the current billing period.
+//
+// `count` lets the app batch a single ledger row instead of
+// one row per event when bursts dominate (e.g. bulk task
+// imports).
+message UsageRecord {
+  option (w17.db.table) = { name: "billing_usage_records" };
+
+  int64                       id          = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64                       account_id  = 2 [
+    (w17.field)     = { related_name: "usage_records" },
+    (w17.db.column) = { fk: "core.Account", deletion_rule: CASCADE, index: true }
+  ];
+  Kind                        kind        = 3;
+  int32                       count       = 4 [(w17.field) = {}];
+  google.protobuf.Timestamp   recorded_at = 5 [
+    (w17.field)     = { default_auto: NOW, immutable: true },
+    (w17.db.column) = { index: true }
+  ];
+
+  // `(w17.field).zero_is_value` — the enum's ZERO is an answer here, not the
+  // proto3 sentinel.
+  //
+  // A metering row always has an attribution, and "we could not attribute it"
+  // is one of the outcomes worth counting rather than a gap to skip. Without
+  // the option the generated `CHECK IN (…)` would exclude 0 and
+  // `default_int: 0` would be refused, so the honest classification would have
+  // to be stored as NULL and read back as the proto zero — which round-trips
+  // but needs a comment defending it forever.
+  Attribution                 attribution = 6 [
+    (w17.field) = { zero_is_value: true, default_int: 0 }
+  ];
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    TASK_CREATED     = 1;
+    TASK_UPDATED     = 2;
+  }
+
+  // Zero is UNATTRIBUTED on purpose: the row was metered and nobody could be
+  // billed for it. Renaming it to *_UNSPECIFIED would say the opposite.
+  enum Attribution {
+    UNATTRIBUTED = 0;
+    DIRECT       = 1;
+    RESELLER     = 2;
+  }
+}
+
+// Invoice — billing-document header. One per Account per
+// billing period. Multi-table
+// JOIN hub: every other ledger row reaches its Account / Plan
+// surface through this. Status drives the read-side filter
+// (DRAFT during composition, OPEN once issued, PAID after
+// settlement, VOID when reversed by `VoidInvoice`).
+//
+// `total_cents` is denormalized — kept in sync by the
+// `CreateInvoice` mutation summing line items inside the
+// same write transaction. The denorm is deliberate for the
+// reference fixture: it demonstrates multi-row atomic writes
+// against a single connection (D41 same-conn DT) and removes
+// the per-read aggregate from `GetInvoiceWithAccountAndPlan`.
+message Invoice {
+  option (w17.db.table) = { name: "billing_invoices" };
+
+  int64                       id              = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64                       account_id      = 2 [
+    (w17.field)     = { related_name: "invoices" },
+    (w17.db.column) = { fk: "core.Account", deletion_rule: CASCADE, index: true }
+  ];
+  // subscription_id — nullable: manually-issued credit /
+  // adjustment invoices may not be tied to a subscription
+  // period.
+  int64                       subscription_id = 3 [
+    (w17.field)     = { null: true, related_name: "invoices" },
+    (w17.db.column) = { fk: "core.Subscription", deletion_rule: CASCADE, index: true }
+  ];
+  // number — operator-facing identifier ("INV-2026-0042").
+  // Unique across the billing instance; not a PK so it can
+  // be human-readable + reassignable on void / reissue.
+  string                      number          = 4 [(w17.field) = { type: CHAR, max_len: 32, unique: true }];
+  Status                      status          = 5;
+  google.protobuf.Timestamp   period_start    = 6;
+  google.protobuf.Timestamp   period_end      = 7;
+  // total_cents — sum of line_items.cents, maintained by
+  // CreateInvoice inside the header-+-items write tx.
+  int32                       total_cents     = 8 [(w17.field) = {}];
+  google.protobuf.Timestamp   issued_at       = 9 [(w17.field) = { default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp   due_at          = 10;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    DRAFT              = 1;
+    OPEN               = 2;
+    PAID               = 3;
+    VOID               = 4;
+  }
+}
+
+// InvoiceLineItem — invoice rows (1:N from Invoice). The
+// unannotated `description` is the deliberate PREFETCH
+// trigger: storage emit's optimizer treats unhinted TEXT as
+// 4 KiB carrier, above the 1 KiB join-vs-prefetch threshold,
+// so `GetInvoiceWithLineItems` splits into parent
+// + children queries instead of a single JOIN.
+//
+// `cents` is denormalized (quantity × unit_cents). Same
+// rationale as Invoice.total_cents — same-tx write keeps the
+// readside path aggregate-free.
+message InvoiceLineItem {
+  option (w17.db.table) = { name: "billing_invoice_line_items" };
+
+  int64  id          = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64  invoice_id  = 2 [
+    (w17.field)     = { related_name: "line_items" },
+    (w17.db.column) = { fk: "core.Invoice", deletion_rule: CASCADE, index: true }
+  ];
+  int32  quantity    = 3 [(w17.field) = {}];
+  int32  unit_cents  = 4 [(w17.field) = {}];
+  // cents — denormalized (quantity * unit_cents) computed at
+  // write time by CreateInvoice mutation. Reads short-circuit
+  // the multiplication.
+  int32  cents       = 5 [(w17.field) = {}];
+  Kind   kind        = 6;
+  // description — intentionally UNANNOTATED. Defaults to TEXT
+  // with the optimizer's 4 KiB carrier estimate; mirrors the
+  // `Comment.body_text` pattern in app/tasks so PREFETCH
+  // demonstrations stay parallel across domains.
+  string description = 7;
+
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    SUBSCRIPTION_FEE = 1;
+    USAGE_OVERAGE    = 2;
+    DISCOUNT         = 3;
+    TAX              = 4;
+    ADJUSTMENT       = 5;
+  }
+}
+
+// Payment — money in. Indexed by (account_id, invoice_id,
+// received_at) for the dashboard's "recent payments" panel.
+// invoice_id is nullable: account-credit topups (`method =
+// CREDIT`) may have no target invoice and apply against
+// the account balance directly.
+message Payment {
+  option (w17.db.table) = { name: "billing_payments" };
+
+  int64                       id           = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64                       account_id   = 2 [
+    (w17.field)     = { related_name: "payments" },
+    (w17.db.column) = { fk: "core.Account", deletion_rule: CASCADE, index: true }
+  ];
+  int64                       invoice_id   = 3 [
+    (w17.field)     = { null: true, related_name: "payments" },
+    (w17.db.column) = { fk: "core.Invoice", deletion_rule: CASCADE, index: true }
+  ];
+  int32                       amount_cents = 4 [(w17.field) = {}];
+  Method                      method       = 5;
+  // external_ref — gateway-side transaction id (Stripe pi_…
+  // / Adyen psp_… / SEPA reference). Unbounded form: not
+  // unique (one operator-supplied ref may map to multiple
+  // partial captures), but indexed for support lookups.
+  string                      external_ref = 6 [(w17.field) = { type: CHAR, max_len: 120 }];
+  google.protobuf.Timestamp   received_at  = 7 [
+    (w17.field)     = { default_auto: NOW, immutable: true },
+    (w17.db.column) = { index: true }
+  ];
+
+  enum Method {
+    METHOD_UNSPECIFIED = 0;
+    CARD               = 1;
+    BANK_TRANSFER      = 2;
+    CREDIT             = 3;
+  }
+}
+
+// LedgerEntry — append-only journal. Every money-flow event
+// (invoice issued, payment received, manual adjustment)
+// posts one row. Source of truth for `Account` balance —
+// consumed by `ListAccountStatements` (GROUP BY filtered
+// aggregate) and `LedgerBalanceTrail` (running
+// balance via window function).
+//
+// `(ref_kind, ref_id)` is a polymorphic pointer to the
+// originating surface row (Invoice / Payment). Not a real
+// FK because it spans multiple parent tables; the
+// application layer enforces referential integrity. The
+// REF_KIND_* enum encodes which table `ref_id` lives in.
+message LedgerEntry {
+  option (w17.db.table) = { name: "billing_ledger_entries" };
+
+  int64                       id           = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64                       account_id   = 2 [
+    (w17.field)     = { related_name: "ledger_entries" },
+    (w17.db.column) = { fk: "core.Account", deletion_rule: CASCADE, index: true }
+  ];
+  Direction                   direction    = 3;
+  int32                       amount_cents = 4 [(w17.field) = {}];
+  RefKind                     ref_kind     = 5;
+  // ref_id — polymorphic pointer. Per ref_kind:
+  //   INVOICE_ISSUED   → billing_invoices.id
+  //   PAYMENT_RECEIVED → billing_payments.id
+  //   ADJUSTMENT       → 0 (no parent surface row)
+  int64                       ref_id       = 6 [(w17.field) = {}];
+  google.protobuf.Timestamp   posted_at    = 7 [
+    (w17.field)     = { default_auto: NOW, immutable: true },
+    (w17.db.column) = { index: true }
+  ];
+
+  enum Direction {
+    DIRECTION_UNSPECIFIED = 0;
+    // DEBIT — money owed by the account (invoice issued).
+    DEBIT                 = 1;
+    // CREDIT — money received from the account (payment in).
+    CREDIT                = 2;
+  }
+
+  enum RefKind {
+    REF_KIND_UNSPECIFIED = 0;
+    INVOICE_ISSUED       = 1;
+    PAYMENT_RECEIVED     = 2;
+    ADJUSTMENT           = 3;
+  }
+}
+
+// InvoiceNotice — the record that a customer was told about an invoice.
+//
+// It is the SUBSCRIBER's table: nothing on the write path touches it,
+// and the only thing that inserts into it is the handler the co-located
+// subscriber surface dispatches to (see proto/domains/billing/
+// subscribers.proto). That separation is the point of a subscriber at
+// all — issuing an invoice is a financial write that must not fail
+// because a notification queue is down, so the notice is produced by
+// reacting to the fact rather than inside the transaction that made it.
+//
+// Its own table rather than a column on Invoice for the same reason: a
+// notice is one row per attempt per channel, and an invoice can be
+// re-noticed (a resend, a second channel) without the invoice row
+// changing at all.
+message InvoiceNotice {
+  option (w17.db.table) = {
+    name:    "billing_invoice_notices"
+    comment: "One record per customer notification queued for an invoice. Written only by the invoice-issued subscriber."
+  };
+
+  int64 id         = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64 invoice_id = 2 [
+    (w17.field)     = { related_name: "notices" },
+    (w17.db.column) = { fk: "core.Invoice", deletion_rule: CASCADE, index: true }
+  ];
+  // Which carrier the notice went out on. One value today; the column
+  // exists because "we notified them" is not a fact until it says how.
+  string                    channel   = 3 [(w17.field) = { type: CHAR, max_len: 16 }];
+  google.protobuf.Timestamp queued_at = 4 [
+    (w17.field)     = { default_auto: NOW, immutable: true },
+    (w17.db.column) = { index: true }
+  ];
+}

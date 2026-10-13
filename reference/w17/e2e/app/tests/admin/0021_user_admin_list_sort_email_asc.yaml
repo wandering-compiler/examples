@@ -1,0 +1,36 @@
+# Admin auto-sort (item 2, INC-1) — LIVE reordering proof, ascending.
+#
+# UserAdmin is a hand-declared page over the project's own `users` table,
+# backed by the UNPAGED read users.UserQuery.ListUsers (so the storage
+# runtime-sort ORDER BY applies — this is not a keyset method).
+# INC-1 shipped the DQL-derived sort end-to-end; this step is the missing
+# LIVE assertion that a `?sort_by=&sort_dir=` request actually reorders the
+# rows on Postgres (previously proven only by unit tests + generated-code
+# inspection).
+#
+# At admin-scenario time the `users` table holds exactly the two seeded
+# rows (fixtures/app/test.json id=1 e2e-owner@example.com +
+# 06_admin_e2e_seed.sql id=900001 e2e-admin-page@example.com) — the admin
+# suite runs before any REST row is created, the same determinism the
+# TaskAdmin paging steps (0040/0041) rely on. The generated handler pins
+# req.Limit = 100, so both rows come back.
+#
+# GET /admin/api/list/UserAdmin?sort_by=email&sort_dir=asc — the runner
+# turns the non-path scalar input of a GET into query params. `email` is
+# sortable column i=1, so the handler threads x-w17-sort-by=3 (2*1+1, asc)
+# and storage runs `... CASE WHEN :__sort_by=3 THEN u.email END ASC, u.id`.
+#
+# Ascending email order is 'e2e-admin-page@…' < 'e2e-owner@…' (a < o),
+# which is the REVERSE of the default `ORDER BY u.id ASC` (id 1 =
+# e2e-owner first). So asserting e2e-admin-page first PROVES the sort_by
+# param took effect (the list is no longer in id order).
+method: admin.UserAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    sort_by: email
+    sort_dir: asc
+expect:
+    users: {matcher: count, op: '==', value: 2}
+    users.0.email: {matcher: eq, value: e2e-admin-page@example.com}
+    users.1.email: {matcher: eq, value: e2e-owner@example.com}

@@ -1,0 +1,44 @@
+# The happy path for `users.UserDirectoryPlan`, and the setup for
+# everything 0521-0524 reads.
+#
+# Every value here sits INSIDE a rule that the next four cases step
+# outside of, one at a time: the tier is one of the declared choices,
+# the invoice reference matches the declared pattern (and not the one
+# SLUG would have implied), the fee fits the declared digit budget, and
+# the placement is a JSON document rather than a scalar.
+#
+# `user_id: 1` is the app `users` row from fixtures/app/test.json,
+# the same anchor the directory-card block uses; this table FKs to it.
+#
+# The fee is 19.90 — exactly the digit budget `precision: 10, scale: 2`
+# declares. 0519 is the same request one decimal over that budget, and it
+# is refused; this one sits inside every rule, so the pair together says
+# what the declaration buys. (A case that sent 19.905 and asserted 19.91 came back would pin silent
+# rounding as the contract and hide missing enforcement.)
+method: users.DirectoryPlanMutation.CreateDirectoryPlan
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    tier: FEATURED
+    invoice_reference: INV-000123
+    monthly_fee: "19.90"
+    placement: '{"region":"eu-central","slots":["sidebar","search"]}'
+expect:
+    id: {capture: plan.id, match: {matcher: not_empty}}
+# The server-tier emit at ONE hop, and 0060's sibling: this endpoint is a
+# storage mutation the REST surface exposes directly, so the event fires
+# one hop from the gateway while 0060's fires two (through a facade).
+#
+# The pair is what localises a failure. Both need the hub to be on the
+# project's broker — the emit happens in the storage process, so a hub on
+# an in-process MemoryBus hears nothing either way. Only 0060 needs the
+# request's `w17-label-*` audience key to survive a SECOND relay hop. So:
+# both silent = the hub lost its bus; 0060 alone silent = the label
+# stopped being relayed past the first tier. Neither is visible in a
+# response body — the row is written in every one of those worlds.
+await_events:
+    - topic: directory.plan.published
+      match:
+        plan_id: {matcher: eq, value: "${plan.id}"}
+        tier: {matcher: eq, value: FEATURED}

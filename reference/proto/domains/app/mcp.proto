@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package e2e.app;
+
+import "w17/mcp.proto";
+
+// MCP surface for the app domain.
+//
+// Two ways in, and they are here together because they are DIFFERENT
+// mechanisms that produce the same-looking result:
+//
+//   include: [ "auth" ]  publishes the auth plugin's turnkey session
+//     tools (WhoAmI). Plugin MCP tools are OPT-IN — without this line,
+//     activating the plugin contributes no tools and drags in no mcp
+//     runtime. Only the "auth" realm is included; the tenant-less
+//     "admin_auth" realm is not, so its WhoAmI never collides here.
+//
+//   tools: [ … ]         publishes the project's OWN RPCs, one entry per
+//     tool, addressed by the same `<module>.<Service>.<Method>` ref shape
+//     the REST registry uses.
+//
+// The two tools below differ in WHERE their description comes from, and
+// that is deliberate. An LLM client sees one string per tool; the
+// vocabulary can fill it from three places, and a fixture whose three
+// sources carried the same text would prove only that some string
+// arrived:
+//
+//   who_am_i                — the RPC's leading proto comment (default).
+//   browse_public_directory — `McpTool.description_override`, i.e. the
+//                             REGISTRY overriding the source.
+//   get_user                — `(w17.mcp_description)`, i.e. the SOURCE
+//                             overriding its own comment, with no
+//                             registry entry involved.
+//
+// The middle one also carries `name_override` and `scope`, so its
+// registered name and its "Available in:" line are attributable to the
+// registry entry rather than to the method.
+option (w17.mcp_api) = {
+  name:        "default",
+  version:     "v1",
+  description: "App MCP surface — the auth plugin's session tools plus the public directory reads.",
+  include: [ "auth" ],
+
+  tools: [
+    {
+      ref: "users.DirectoryCardQuery.ListDirectoryCards",
+
+      // Derived would be `list_directory_cards` (snake_case of the
+      // method). The override is not cosmetic here: an LLM picks a tool
+      // by its name before it reads a word of the description, and
+      // "list directory cards" reads like an internal CRUD listing
+      // rather than the public-profile search it is.
+      name_override: "browse_public_directory",
+
+      // The method's own leading comment explains WHY the listing
+      // exists — that it backs the write cases, which is prose for
+      // whoever maintains the proto and useless to a caller deciding
+      // whether to invoke it. This is the same tool described for the
+      // other audience.
+      description_override: "Browse the published public directory: every opt-in profile card, oldest first, with its handle, language and publication state.",
+
+      // Appended to the description as "Available in: <scope>". A
+      // background worker has no user to browse a directory on behalf
+      // of, so the tool says which session types may reach for it.
+      scope: "chat sessions only"
+    },
+    {
+      // The MCP-ONLY position, and the reason it is here at all.
+      //
+      // Every other tool in this example references a method published
+      // somewhere else too — over REST, or as an admin widget source — so
+      // its permission already existed in the ACL lock and nothing about
+      // MCP had to contribute one. That left half the pipeline
+      // unobservable: a method reachable ONLY through `tools[]` never
+      // entered the permission catalogue, so the bundle had nothing to
+      // gate on. A consumer measured the symptom from outside — an
+      // endpoint count of 90 with no MCP registry, 90 with a valid tool,
+      // and 90 with a nonsensical one.
+      //
+      // `cache.SessionCacheQuery.GetSessionWithUser` appears in no other
+      // surface file, so its permission exists ONLY because this entry
+      // names it. If sentinel tools ever stop reaching ACL collection,
+      // CACHE_SESSION_CACHE_QUERY_GET_SESSION_WITH_USER leaves the lock
+      // and this example says so.
+      //
+      // Two other things ride along, both deliberate: the ref crosses
+      // MODULES (a `cache`-module method named from the domain-root
+      // sentinel), exercising the domain-scoped resolution rule; and a
+      // session lookup is exactly the reach that must not be callable by
+      // whoever opens an MCP session, which is what makes the gate on it
+      // worth asserting rather than assuming.
+      ref: "cache.SessionCacheQuery.GetSessionWithUser",
+      description_override: "Look up one session by id together with the user it belongs to."
+    },
+    {
+      // No overrides at all — this entry is the CONTROL. Its name is
+      // derived (`get_user`) and its description comes from the source,
+      // where `(w17.mcp_description)` replaces the leading comment. So
+      // the registry is not involved in either value, which is what
+      // makes the other entry's overrides attributable to the registry.
+      ref: "users.UserQuery.GetUser"
+    }
+  ]
+};

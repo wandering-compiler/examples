@@ -1,0 +1,10 @@
+# Closes the task a_commented_task.yaml created, so a case can ask a question
+# that depends on the task's STATUS being DONE.
+method: tasks.TaskMutation.UpdateTaskStatus
+pre:
+    - fixtures/a_commented_task.yaml
+input:
+    task_id: ${task.id}
+    status: DONE
+expect:
+    id: {matcher: not_empty}

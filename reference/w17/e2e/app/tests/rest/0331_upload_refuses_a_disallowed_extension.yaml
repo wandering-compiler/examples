@@ -1,0 +1,17 @@
+# The `extensions` allow-list is the one rule that refuses a file for
+# what it IS rather than for how big it is, and it runs on the uploaded
+# filename before a byte reaches storage.
+#
+# `.exe` is not on the list (`["txt", "md"]`). The body is identical to
+# the accepted case, so nothing but the name can be the reason.
+method: tasks.TaskMutation.UploadAttachment
+pre:
+    - auth/auth.yaml
+input:
+    task_id: 700001
+files:
+    - part: file
+      filename: probe.exe
+      content: "hello from the e2e upload"
+expect_error:
+    code: INVALID_ARGUMENT

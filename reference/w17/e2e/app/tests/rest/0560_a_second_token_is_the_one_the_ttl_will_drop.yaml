@@ -1,0 +1,12 @@
+# Two tokens, because the TTL surface needs both arms: one refreshed with
+# a lifetime that keeps it, one with a lifetime that ends it. A single
+# token could show the call succeeds and never that the bound value
+# reached Redis.
+method: cache.SessionCacheMutation.IssueApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e-ttl-token-drop
+    user_id: 3
+    label: laptop
+expect: {}

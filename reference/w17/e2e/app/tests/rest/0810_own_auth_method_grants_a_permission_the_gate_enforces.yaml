@@ -1,0 +1,33 @@
+# A project's OWN auth method deciding `permission_ids`, and the
+# GENERATED gate enforcing them. No hand-written permission check on the
+# path: `tasks.OpsAuthService.AuthenticateOps` returns the ids and the
+# emitted handler runs
+# `acllock.HasPermission(ids, 149 /* users.DirectoryCardQuery.ListDirectoryCards */)`.
+#
+# This is the half this example was missing. The other hand-written method
+# here (PublicLinkAuthService) proves a project can author an auth METHOD,
+# and returns NO permissions by design — so nothing exercised a project's
+# own code driving an authorization decision until this case.
+#
+# The consumer shape behind it: one domain holding the auth plugin and
+# publishing no surface, one domain publishing the only surface and
+# holding no plugin, and a person who must hold authority over the
+# second's endpoints. The four obvious routes are all closed; this is the
+# open one.
+#
+# BASIC and not BEARER: the router fans out by Authorization scheme, so
+# this credential cannot be answered by the plugin's turnkey and the
+# plugin's bearer cannot be answered by this method. No `pre` chain — the
+# credential IS the authority, so there is nothing to sign in first, and
+# that is the point of the case.
+method: users.DirectoryCardQuery.ListDirectoryCards
+credential: Basic ZGlyZWN0b3J5LXJlYWRlcjp4
+expect:
+    # `>= 1` and not the exact count: earlier cases populate this table
+    # (0369 pins it at 4) and what this case proves is ADMISSION, so
+    # coupling to a number would make it fail for reasons that have
+    # nothing to do with the gate. `>= 0` was the first attempt and the
+    # runner refused it — an assertion that holds for every possible
+    # count cannot fail, and it would also have passed against a field
+    # the response does not contain.
+    cards: {matcher: count, op: '>=', value: 1}

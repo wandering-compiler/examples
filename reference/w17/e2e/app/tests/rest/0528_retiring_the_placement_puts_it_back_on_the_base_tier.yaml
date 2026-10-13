@@ -1,0 +1,15 @@
+# The server-tier sibling of 0525, and the last write this block makes.
+#
+# What it settles is the READ-BACK of a DQL `UPDATE … RETURNING`: the
+# response's id is the row the update touched, and 0529 shows the tier
+# it left behind. The event it emits is not `public`, so nothing
+# browser-facing observes it and there is no `await_events` here — the
+# co-located consumer's story is the subscriber surface's, not this
+# endpoint's.
+method: users.DirectoryPlanMutation.RetireDirectoryPlan
+pre:
+    - auth/auth.yaml
+input:
+    id: ${plan.id}
+expect:
+    id: {matcher: eq, value: "${plan.id}"}

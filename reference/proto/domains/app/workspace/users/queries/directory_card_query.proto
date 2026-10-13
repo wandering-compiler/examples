@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package e2e.app.users;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/app/workspace/users/types/models.proto";
+
+message GetDirectoryCardReq {
+  int64 id = 1;
+}
+// GetDirectoryCardResp is flat scalars, the single-fetch convention in
+// this project (mirror of GetTenantNoteResp).
+//
+// `search_key` is here because it is the only way to see a generated
+// column at all: the write path cannot set it, so its value is either
+// what the database computed or nothing.
+message GetDirectoryCardResp {
+  int64  id         = 1;
+  string handle     = 2;
+  string headline   = 3;
+  string search_key = 4;
+  string locale     = 5;
+  bool   is_public  = 6;
+}
+
+message ListDirectoryCardsReq {}
+message DirectoryCardSummary {
+  int64  id        = 1;
+  string handle    = 2;
+  string locale    = 3;
+  bool   is_public = 4;
+}
+message ListDirectoryCardsResp {
+  repeated DirectoryCardSummary cards = 1;
+}
+
+// GetDirectoryOptInReq / Resp read the ONE column this project added to
+// a table the auth plugin owns (see types/auth_ext.proto).
+//
+// Why the read exists at all: `(w17.contrib.extends)` is a schema merge,
+// so its whole visible effect is a column in someone else's CREATE
+// TABLE. An emitted column nobody can read is the same shape of promise
+// as an escape hatch nobody ran — and there is a second claim only a
+// read settles, namely that the plugin's own sign-up INSERT (which
+// knows nothing about this column) left the DECLARED DEFAULT behind
+// rather than a NULL or an empty string.
+//
+// This is a cross-plugin read: the query names `auth.User`, the staged
+// module, from a module of this project. It reads and never writes, so
+// the plugin stays the sole author of its own rows.
+message GetDirectoryOptInReq {
+  string user_id = 1 [(w17.field) = { type: UUID }];
+}
+message GetDirectoryOptInResp {
+  string directory_opt_in = 1;
+}
+
+// DirectoryCardQuery — the read side.
+//
+// The list method exists for the write cases rather than for its own
+// sake: a refused INSERT and a refused INSERT that also rolled back a
+// sibling row look identical from the error, so every rejection case
+// reads the whole table back afterwards.
+service DirectoryCardQuery {
+  // One directory card by id, including the server-computed
+  // `search_key` a caller cannot set.
+  rpc GetDirectoryCard(GetDirectoryCardReq) returns (GetDirectoryCardResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.handle, c.headline, c.search_key, c.locale, c.is_public "
+          "FROM users.UserDirectoryCard c WHERE c.id = :id"
+      }
+    };
+  }
+
+  // Every directory card, oldest first.
+  rpc ListDirectoryCards(ListDirectoryCardsReq) returns (ListDirectoryCardsResp) {
+    // ORDER BY id ASC, so an assertion can name positions. The IDENTITY
+    // sequence starts at 1 and this table is never seeded, so the first
+    // card the suite creates is also the first row here.
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id, c.handle, c.locale, c.is_public "
+          "FROM users.UserDirectoryCard c ORDER BY c.id ASC"
+      }
+    };
+  }
+
+  // Whether an account consented to being listed in the public
+  // directory: "unset" until asked, then "yes" or "no".
+  rpc GetDirectoryOptIn(GetDirectoryOptInReq) returns (GetDirectoryOptInResp) {
+    // Cross-plugin READ. The query names `auth.User` — the staged
+    // module — from a module of this project, and never writes, so the
+    // plugin stays the sole author of its own rows.
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql: "SELECT u.directory_opt_in FROM auth.User u WHERE u.id = :user_id"
+      }
+    };
+  }
+}

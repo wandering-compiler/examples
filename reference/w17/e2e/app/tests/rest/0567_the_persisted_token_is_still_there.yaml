@@ -1,0 +1,11 @@
+# The half of PERSIST a live suite can reach. If the zero sentinel had
+# been emitted as an EXPIRE, this token would have gone the way of
+# 0564's.
+method: cache.SessionCacheQuery.GetApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e-ttl-token-keep
+expect:
+    token_hash: {matcher: eq, value: e2e-ttl-token-keep}
+    label: {matcher: eq, value: ci-deploy}

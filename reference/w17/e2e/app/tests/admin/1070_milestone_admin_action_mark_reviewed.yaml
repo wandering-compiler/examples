@@ -1,0 +1,24 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `make regenerate-e2e` && `make test-e2e` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# The bulk action. The skeleton sent `ids: []` and asserted `expect: {}`
+# — an action over an empty selection, checked for nothing, which passes
+# whatever the endpoint does.
+#
+# TWO of the three milestones, never all three. A bulk write that
+# ignored its `ids` and updated every row would satisfy any assertion
+# made only about the rows it was given; the row left OUT is the one
+# that can refuse it, and 1075 reads it back.
+#
+# `note` is the bulk extra — the field `AdminAction.fields` enumerates.
+# Its value is what 1075 filters on, so it also proves the extra reached
+# the mutation rather than being dropped on the way.
+method: admin.MilestoneAdmin.Action.mark_reviewed
+pre:
+    - auth/admin.yaml
+input:
+    ids: ["710002", "710003"]
+    note: reviewed in the bulk modal
+expect: {}

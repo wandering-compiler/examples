@@ -1,0 +1,9 @@
+# And the key is gone. 0561 read it back a moment earlier, so this is an
+# absence the suite watched appear.
+method: cache.SessionCacheQuery.GetApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e-ttl-token-drop
+expect_error:
+    code: NOT_FOUND

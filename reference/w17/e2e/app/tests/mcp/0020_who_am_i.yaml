@@ -1,0 +1,20 @@
+# A permissioned caller reaching a GATED tool over MCP.
+#
+# Every tool on this surface is gated, so this passing means the caller's
+# wildcard role covered the permission and the tool was visible to them.
+#
+# 0060 is the other half — the same tool, a caller with no permissions,
+# and the tool is not merely refused but INVISIBLE (filtered out of
+# tools/list). That half was unassertable until `expect_transport_error`
+# landed: the refusal answers at the JSON-RPC layer with no code, and
+# `expect_error` requires one.
+#
+# Neither case proves anything alone. `tool not found` is also what a
+# tool that was never registered answers, so only the pair separates "the
+# ACL filter hid it" from "the gateway never got it".
+method: auth.AuthService.WhoAmI
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    user_id: {matcher: not_empty}

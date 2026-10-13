@@ -1,0 +1,45 @@
+# The read-back for every write in this block.
+#
+# A create response is an id and nothing else, and a refusal is an error
+# and nothing else. Neither can distinguish "this row was not added" from
+# "this row was not added and a sibling was lost with it" — a constraint
+# that fires mid-statement, or a handler that retried the wrong way,
+# would look identical from 0363 / 0365 / 0366 / 0367.
+#
+# Four writes succeeded and four were refused, so this table holds
+# exactly four rows. Asserting the COUNT is what makes the four refusals
+# mean something: a fifth row would say one of them landed anyway.
+#
+# The order is creation order — `ORDER BY c.id ASC` over an IDENTITY key.
+# Note that ids are NOT contiguous: a refused INSERT still consumes a
+# sequence value, because PG sequences are not transactional. That is
+# why this asserts handles rather than id arithmetic, and why the one id
+# it does assert comes from 0360's capture rather than from a literal.
+#
+# `is_public` is asserted per row because it is the column the partial
+# index and the raw CHECK both read: the two published rows and the two
+# drafts landing the other way round would satisfy every count here and
+# invert both features.
+method: users.DirectoryCardQuery.ListDirectoryCards
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    cards: {matcher: count, op: '==', value: 4}
+
+    cards.0.id: {matcher: eq, value: "${card_cs.id}"}
+    cards.0.handle: {matcher: eq, value: Alpha-CS}
+    cards.0.locale: {matcher: eq, value: cs}
+    cards.0.is_public: {matcher: eq, value: true}
+
+    cards.1.handle: {matcher: eq, value: Alpha-EN}
+    cards.1.locale: {matcher: eq, value: en}
+    cards.1.is_public: {matcher: eq, value: true}
+
+    cards.2.handle: {matcher: eq, value: Alpha-CS-Draft}
+    cards.2.locale: {matcher: eq, value: cs}
+    cards.2.is_public: {matcher: empty}
+
+    cards.3.handle: {matcher: eq, value: Alpha-Discreet}
+    cards.3.locale: {matcher: eq, value: de}
+    cards.3.is_public: {matcher: empty}

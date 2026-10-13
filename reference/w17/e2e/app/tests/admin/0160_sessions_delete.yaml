@@ -1,0 +1,13 @@
+# The route that shipped ungated: RevokeUserToken misses the `Delete*`
+# prefix the ACL cascade keys the model axis off, so no UserToken#delete
+# permission was ever allocated and the force-logout endpoint carried no
+# model-axis gate. This step is its regression guard — it runs as an
+# admin whose role holds the permission, against the generated handler
+# that now enforces both axes.
+method: admin.Sessions.Delete
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b8
+expect:
+    token_id: {matcher: not_empty}

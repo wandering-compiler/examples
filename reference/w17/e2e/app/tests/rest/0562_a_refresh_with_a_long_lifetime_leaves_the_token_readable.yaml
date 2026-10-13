@@ -1,0 +1,13 @@
+# `UPDATE … SET ttl_seconds = :ttl` is not a write to the stored value —
+# it is a Redis EXPIRE on the key. This arm says the command ran without
+# disturbing what the key holds, which is the failure a wrong emitter
+# would produce most quietly: EXPIRE and SET are one letter apart in the
+# generated body and a SET here would overwrite the entity with a
+# half-populated one.
+method: cache.SessionCacheMutation.RefreshApiToken
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e-ttl-token-keep
+    ttl_seconds: 3600
+expect: {}

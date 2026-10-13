@@ -1,0 +1,21 @@
+# The inline's `create`. Routes at the PARENT path
+# (/api/inline/TaskAdmin/{id}/CommentAdmin), so the parent id comes from
+# the URL and the operator supplies only the child's own fields.
+#
+# `create` reuses tasks.TaskMutation.AddTaskComment rather than declaring
+# a private insert, and that is deliberate: AddTaskComment emits
+# TaskCommentAdded, and an admin adding a comment is the same event as
+# anyone else adding one. A silent admin-only insert would leave the
+# counter subscriber wrong for exactly the rows an operator created.
+#
+# The id is captured so 0960 can update THIS row and 0970 can delete it —
+# the three write cases are one lifecycle, not three independent pokes.
+method: admin.TaskAdmin.Inline.CommentAdmin.Create
+pre:
+    - auth/admin.yaml
+input:
+    id: 700001
+    author_id: 1
+    body_text: added through the inline
+expect:
+    id: {capture: inline_comment.id, match: {matcher: not_empty}}

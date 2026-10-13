@@ -1,0 +1,11 @@
+# The guard reads the WRITTEN row's category (`t.category_id`) — a value the
+# request does not carry — through the alias on the UPDATE target. An urgent
+# task matches no row, so RETURNING finds nothing: NOT_FOUND.
+method: tasks.TaskMutation.RetitleTask
+pre:
+    - fixtures/an_urgent_task.yaml
+input:
+    task_id: ${urgent.id}
+    title: e2e urgent task retitled
+expect_error:
+    code: NOT_FOUND

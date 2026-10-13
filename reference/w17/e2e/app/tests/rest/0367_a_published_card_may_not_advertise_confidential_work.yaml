@@ -1,0 +1,33 @@
+# `(w17.db.table).raw_checks[]` — the OPAQUE-SQL CHECK, enforcing a rule
+# the curated vocabulary cannot spell.
+#
+# The predicate is `is_public = FALSE OR headline !~* 'confidential'`.
+# Nothing else in the vocabulary reaches it: `(w17.field).pattern` is a
+# positive match, per column, and would see neither the negation nor
+# `is_public`. `choices` is a closed list of permitted values, not a
+# forbidden substring.
+#
+# The headline says "Confidential" and the pattern says 'confidential',
+# which is the case-insensitivity of `!~*` doing work — the same body
+# with `!~` would let this through.
+#
+# `locale: de` because 0365's insert was refused and left no row, so
+# this account has no published German card and the composite unique
+# index has nothing to say. That leaves the raw CHECK as the only
+# constraint this request can trip.
+method: users.DirectoryCardMutation.CreateDirectoryCard
+pre:
+    - auth/auth.yaml
+input:
+    user_id: 1
+    handle: Alpha-Discreet
+    headline: Confidential systems work for undisclosed clients
+    locale: de
+    is_public: true
+    visible_from: "2026-01-01T00:00:00Z"
+    visible_until: "2026-12-31T00:00:00Z"
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - code: INVALID_VALUE
+          message: {matcher: eq, value: a published card cannot advertise confidential work}

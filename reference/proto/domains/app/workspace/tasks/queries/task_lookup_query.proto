@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package e2e.app.tasks;
+
+import "w17/acl.proto";
+import "w17/db.proto";
+
+// TaskLookupQuery — the ACL cascade's OVERRIDE surface, and the
+// realistic shape the singular `(w17.acl_*)` options exist for.
+//
+// The domain sentinel switches `(w17.acl_endpoints) = true` on for
+// everything, which is the right default. But reference data is the
+// standing exception: a caller who holds no task permissions at all
+// still has to be able to draw the filter controls, so gating the
+// category catalogue makes the app undiscoverable rather than secure.
+// `(w17.acl_service) = false` opts this whole service out of the
+// inherited cascade — the presence-aware "explicit false", not merely
+// "unset".
+//
+// The second method is why the METHOD slot exists on top of that. The
+// same catalogue WITH row counts stops being reference data: the counts
+// disclose how much work exists and for whom. `(w17.acl_endpoint) =
+// true` puts it back under the gate, and method-level wins over
+// service-level — which is the whole precedence chain
+// (method > service > file) exercised in one place.
+//
+// Both directions are load-bearing and they fail differently: a broken
+// service-level opt-out gates reference data (loud, annoying), while a
+// broken method-level override silently un-gates an aggregate. Only the
+// second is a leak, which is why both the permission catalogue AND the
+// emitted handler need checking rather than one of them.
+service TaskLookupQuery {
+  option (w17.acl_service) = false;
+
+  // ListTaskCategories — the bare catalogue. No user data, no counts:
+  // an id, a display name and a colour. Ungated by the service-level
+  // opt-out above, so NO permission is allocated for it and the
+  // generated REST handler emits no `HasPermission` check.
+  rpc ListTaskCategories(ListTaskCategoriesReq) returns (ListTaskCategoriesResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id AS id, c.name AS name, c.color AS color "
+          "FROM tasks.TaskCategory c "
+          "ORDER BY c.name ASC"
+      }
+    };
+  }
+
+  // CountTasksPerCategory — the same catalogue plus volume. Re-gated at
+  // the method level, so a permission IS allocated and the handler DOES
+  // check it, even though the enclosing service opted out.
+  rpc CountTasksPerCategory(CountTasksPerCategoryReq) returns (CountTasksPerCategoryResp) {
+    option (w17.acl_endpoint) = true;
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT c.id AS category_id, c.name AS name, COUNT(c.task_set.id) AS task_count "
+          "FROM tasks.TaskCategory c "
+          "GROUP BY c.id, c.name "
+          "ORDER BY c.id ASC"
+      }
+    };
+  }
+}
+
+message ListTaskCategoriesReq {}
+message ListTaskCategoriesResp {
+  repeated TaskCategoryRef categories = 1;
+}
+message TaskCategoryRef {
+  int64  id    = 1;
+  string name  = 2;
+  string color = 3;
+}
+
+message CountTasksPerCategoryReq {}
+message CountTasksPerCategoryResp {
+  repeated CategoryTaskCount rows = 1;
+}
+message CategoryTaskCount {
+  int64  category_id = 1;
+  string name        = 2;
+  int64  task_count  = 3;
+}

@@ -1,0 +1,31 @@
+# Overview CHART widget (item 5, INC-C) — LIVE proof.
+#
+# The admin overview declares a declarative CHART widget bound to the
+# GROUP BY aggregation tasks.TaskQuery.CountTasksByCategory. The
+# generated admin bundle mounts GET /admin/api/widget/task_categories,
+# which calls that query and returns { rows: [{category_id, task_count}] }
+# as JSON — the runtime reads `rows` off it (the spec's `rows_field`) and
+# plots `task_count` (series) against `category_id` (x_field). This step
+# drives that data route directly; the plotting itself is covered by the
+# runtime's unit tests (the admin SPA runs in no live e2e stack).
+#
+# At admin-scenario time the `tasks` table holds exactly the five rows
+# seeded in fixtures/app/test.json — the admin suite runs
+# before any REST task is created, the same determinism the TaskAdmin
+# paging (0040/0041) and UserAdmin sort (0021/0022) steps rely on. Those
+# five split across categories 1/2/3 as 2/2/1, and the DQL's
+# `ORDER BY t.category_id ASC` pins the row order. `category_id` and
+# `task_count` are int64 → protojson renders them as JSON strings, so the
+# expected values are quoted.
+method: admin.Widget.task_categories
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 3}
+    rows.0.category_id: {matcher: eq, value: "1"}
+    rows.0.task_count: {matcher: eq, value: "2"}
+    rows.1.category_id: {matcher: eq, value: "2"}
+    rows.1.task_count: {matcher: eq, value: "2"}
+    rows.2.category_id: {matcher: eq, value: "3"}
+    rows.2.task_count: {matcher: eq, value: "1"}

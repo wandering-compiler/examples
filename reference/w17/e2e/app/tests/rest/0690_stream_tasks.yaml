@@ -1,0 +1,43 @@
+# The first case in this example to DRIVE a streaming endpoint.
+#
+# Until now a declared `RestStream` had no caller here at all: it was
+# generated, it compiled, and nothing had ever opened one. `await_events`
+# looks like the neighbouring tool and is a different one — it subscribes
+# to the project's public event bus around a call. This opens the ENDPOINT
+# and reads what the endpoint itself sends.
+#
+# `frames` is ORDERED and EXHAUSTIVE, and both halves are load-bearing:
+#
+#   - the ORDER is only assertable because the storage query gained an
+#     `ORDER BY t.id`. A stream without one has no statable contract —
+#     nobody, test or client, can say what frame 2 will be.
+#   - the COUNT, and the close after it, are what stop this passing for a
+#     server that sends one frame and then hangs. That is the likeliest
+#     way a streaming endpoint actually breaks, and a "at least one frame
+#     arrived" assertion would sail straight past it.
+#
+# `user_id: 900001` is the seeded admin-page account, and the two rows are
+# created by this case's own fixtures rather than seeded. Both halves are
+# needed: every other case writes tasks for user 1, so a stream of user 1
+# has no statable frame count; and seeding into fixtures/app/test.json
+# would have broken 0025 and admin/0036, which assert exact counts over
+# the seeded set and say so in their own comments.
+method: tasks.TasksService.StreamTasks
+pre:
+    - auth/auth.yaml
+    - fixtures/two_tasks_for_the_stream_user.yaml
+    - fixtures/second_task_for_the_stream_user.yaml
+input:
+    user_id: 900001
+expect_stream:
+    frames:
+        - id: {matcher: eq, value: "${stream.first_id}"}
+          user_id: {matcher: eq, value: "900001"}
+          category_id: {matcher: eq, value: "1"}
+          title: {matcher: eq, value: stream frame one}
+          body_text: {matcher: eq, value: the first frame of the streamed sequence}
+        - id: {matcher: eq, value: "${stream.second_id}"}
+          user_id: {matcher: eq, value: "900001"}
+          category_id: {matcher: eq, value: "2"}
+          title: {matcher: eq, value: stream frame two}
+          body_text: {matcher: eq, value: the second frame of the streamed sequence}

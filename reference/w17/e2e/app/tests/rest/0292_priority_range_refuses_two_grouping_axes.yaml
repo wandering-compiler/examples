@@ -1,0 +1,22 @@
+# AT_MOST_ONE — `fields`.
+#
+# A category AND a project is an intersection nobody asks for on
+# purpose; the report has one grouping axis. The detail's field is `*`
+# because the rule spans a set rather than naming one field — which is
+# also why `fields` is the only rule slot that cannot be checked by
+# looking at a single value.
+method: tasks.TaskQuery.ListTasksInPriorityRange
+pre:
+    - auth/auth.yaml
+input:
+    min_priority: 0
+    max_priority: 9
+    title_is: admin paged task 3
+    category_id: 1
+    project_id: 1
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: "*"
+          code: AT_MOST_ONE_VIOLATION
+          message: {matcher: regex, pattern: "not by both at once"}

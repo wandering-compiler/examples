@@ -1,0 +1,8 @@
+method: tasks.TaskMutation.CreateTenantNote
+pre:
+    - auth/auth.yaml
+input:
+    title: e2e-value
+    body: e2e-value
+expect:
+    id: {matcher: not_empty}

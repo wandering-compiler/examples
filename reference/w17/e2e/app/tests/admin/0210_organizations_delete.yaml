@@ -1,0 +1,7 @@
+method: admin.Organizations.Delete
+pre:
+    - auth/admin.yaml
+input:
+    id: 00000000-0000-0000-0000-0000000000b4
+expect:
+    org_id: {matcher: not_empty}

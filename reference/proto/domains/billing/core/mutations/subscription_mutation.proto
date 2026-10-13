@@ -1,0 +1,171 @@
+syntax = "proto3";
+
+package e2e.billing.core;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/billing/core/types/models.proto";
+
+// SubscriptionMutation — write side of the billing tier.
+// CreateAccount runs at signup time (cross-domain non-atomic
+// pair with `app.users.UserMutation.CreateUser`); Subscribe /
+// CancelSubscription run from billing-admin REST endpoints;
+// RecordUsage runs from the app's task-mutation paths
+// (non-atomic with the relational task write — D41).
+
+message CreateAccountReq {
+  int64  user_id = 1;
+  string email   = 2;
+}
+message CreateAccountResp {
+  int64 id = 1;
+}
+
+message SubscribeReq {
+  int64                       account_id            = 1;
+  int64                       plan_id               = 2;
+  google.protobuf.Timestamp   current_period_start  = 3;
+  google.protobuf.Timestamp   current_period_end    = 4;
+}
+message SubscribeResp {
+  int64 id = 1;
+}
+
+message CancelSubscriptionReq {
+  int64 subscription_id = 1;
+}
+message CancelSubscriptionResp {}
+
+message RecordUsageReq {
+  int64                            account_id = 1;
+  e2e.billing.core.UsageRecord.Kind kind      = 2;
+  int32                            count      = 3;
+  // attribution — this example's ONLY enum field that reaches a validated
+  // request carrying `(w17.field).zero_is_value`, and it is here on purpose.
+  //
+  // `UsageRecord.attribution` declares its 0 (UNATTRIBUTED) a real answer, so
+  // the migrator keeps 0 in the generated CHECK IN. Three layers have to agree
+  // about that and only one used to: the request validator dropped 0 from the
+  // allowed set unconditionally, and the client's pre-flight dropped it from
+  // the choice set — a column that accepts the value and two gates that
+  // answer 400 for it.
+  //
+  // Nothing in this example exercised that combination, so the fix could only
+  // be proven by unit tests. Writing an unattributed usage row is a real
+  // thing to want (we metered it and nobody could be billed), which makes
+  // this the honest place to put it rather than a fixture invented for the
+  // gate. `type: ENUM` opts the field into enum-domain validation so the
+  // CLIENT half is covered too — the server half needs no annotation.
+  e2e.billing.core.UsageRecord.Attribution attribution = 4 [
+    (w17.field) = { type: ENUM, zero_is_value: true }
+  ];
+}
+message RecordUsageResp {
+  int64 id = 1;
+}
+
+// RegisterAccount — PROOF fixture. The atomic
+// counterpart to the cross-domain non-atomic CreateAccount +
+// Subscribe pair above: create the Account and its first
+// Subscription in ONE multi-op mutation (single billing-postgres
+// tx → no orphan-account window) AND return BOTH rows as a
+// composite nested response.
+//
+// The shape that stumped a consumer: a composite response
+// {account, subscription} spanning TWO written entities, where
+// the child op cross-op-references the parent's freshly minted id.
+// The key is the decomposition — the two INSERTs are INTERMEDIATE
+// ops (the parent exposes a BARE `RETURNING id` for the cross-op
+// ref `:acct.id`), and the composite response is built by the
+// FINAL read-back SELECT projecting dotted aliases into the two
+// nested message fields. Same tx, so the SELECT sees the just-
+// inserted rows.
+message RegisterAccountReq {
+  int64                       user_id              = 1;
+  string                      email                = 2;
+  int64                       plan_id              = 3;
+  google.protobuf.Timestamp   current_period_start = 4;
+  google.protobuf.Timestamp   current_period_end   = 5;
+}
+message RegisterAccountResp {
+  e2e.billing.core.Account      account      = 1;
+  e2e.billing.core.Subscription subscription = 2;
+}
+
+service SubscriptionMutation {
+  rpc CreateAccount(CreateAccountReq) returns (CreateAccountResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:  "INSERT INTO core.Account SET user_id = :user_id, email = :email RETURNING id"
+      }
+    };
+  }
+
+  rpc Subscribe(SubscribeReq) returns (SubscribeResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:  "INSERT INTO core.Subscription SET account_id = :account_id, plan_id = :plan_id, status = 'ACTIVE', current_period_start = :current_period_start, current_period_end = :current_period_end RETURNING id"
+      }
+    };
+  }
+
+  rpc CancelSubscription(CancelSubscriptionReq) returns (CancelSubscriptionResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:  "UPDATE core.Subscription SET status = 'CANCELLED' WHERE id = :subscription_id"
+      }
+    };
+  }
+
+  rpc RecordUsage(RecordUsageReq) returns (RecordUsageResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "billing",
+        dql:  "INSERT INTO core.UsageRecord SET account_id = :account_id, kind = :kind, count = :count, attribution = :attribution RETURNING id"
+      }
+    };
+  }
+
+  // RegisterAccount — 3-op atomic mutation with a composite
+  // nested response. See RegisterAccountReq/Resp docs above.
+  //
+  //   acct (INSERT, intermediate): bare `RETURNING id` → exposes
+  //        the cross-op var `:acct.id`.
+  //   sub  (INSERT, intermediate): SET account_id = :acct.id,
+  //        bare `RETURNING id` → exposes `:sub.id`.
+  //   out  (SELECT, FINAL = response producer): JOINs the two
+  //        just-inserted rows and projects dotted aliases into
+  //        the {account, subscription} composite response. Runs
+  //        in the SAME tx, so it sees the uncommitted inserts.
+  rpc RegisterAccount(RegisterAccountReq) returns (RegisterAccountResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "acct",
+        dql:  "INSERT INTO core.Account SET user_id = :user_id, email = :email RETURNING id"
+      },
+      ops: {
+        name: "sub",
+        dql:
+          "INSERT INTO core.Subscription SET "
+          "  account_id           = :acct.id, "
+          "  plan_id              = :plan_id, "
+          "  status               = 'ACTIVE', "
+          "  current_period_start = :current_period_start, "
+          "  current_period_end   = :current_period_end "
+          "RETURNING "
+          "  id                   AS subscription.id, "
+          "  account_id           AS subscription.account_id, "
+          "  plan_id              AS subscription.plan_id, "
+          "  status               AS subscription.status, "
+          "  current_period_start AS subscription.current_period_start, "
+          "  current_period_end   AS subscription.current_period_end, "
+          "  created_at           AS subscription.created_at, "
+          "  account_id           AS account.id"
+      }
+    };
+  }
+}

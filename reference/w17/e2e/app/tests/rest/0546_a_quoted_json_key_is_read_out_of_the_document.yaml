@@ -1,0 +1,21 @@
+# `c.audience."utm.source"` — a JSON key that is not a bare identifier.
+#
+# The dot inside the key is the character DQL's chain syntax already
+# spends on "descend one level". Written unquoted, `c.audience.utm.source`
+# is two hops into a document with no `utm` object and the build fails;
+# the double-quoted form is the only spelling that can reach it. Every
+# JSON key any other example reads is a bare identifier, so the unquoting
+# step had never run.
+#
+# 0526 is the same claim about a key that needed no escape. That one
+# passing is what makes this one worth having: it says the JSON path
+# works, and says nothing about whether a key that needs quoting survives
+# to the emitted `->>`.
+method: users.CampaignQuery.GetCampaignAudienceSource
+pre:
+    - auth/auth.yaml
+input:
+    id: 720001
+expect:
+    name: {matcher: eq, value: spring-launch}
+    utm_source: {matcher: eq, value: newsletter}

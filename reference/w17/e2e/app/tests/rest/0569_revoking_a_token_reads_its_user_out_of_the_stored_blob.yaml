@@ -1,0 +1,10 @@
+# The cross-op handover, JSON layout — the sibling of 0556. The author
+# writes the same two ops; the emitted first op is a GET + protojson
+# decode here and an HGETALL + field decode there, and both have to hand
+# the decoded entity to the second op the same way.
+method: cache.SessionCacheMutation.RevokeTokenPresence
+pre:
+    - auth/auth.yaml
+input:
+    token_hash: e2e-ttl-token-keep
+expect: {}
