@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/wandering-compiler/examples/jobs/w17/stubs v0.0.0
-	github.com/wandering-compiler/sdk/go v0.1.0-rc.17
+	github.com/wandering-compiler/sdk/go v0.1.0-rc.17.0.20261013055440-1f854286d8e7
 	google.golang.org/grpc v1.83.2
 )
 
