@@ -22,14 +22,15 @@
 # sorts ahead of them". The seed now advances the sequence, so created tasks sort AFTER the seeds instead of before —
 # the conclusion this case rests on is unchanged, its reason is not.
 #
-# No `pre` pointing at 0400: captures flow between steps of the same run
-# by step ORDER, not by declared dependency — the 0026/0027 pair resumes
-# a cursor the same way. Which is also why this file sorts after it.
+# The cursor is minted in this test's own pre chain, after its own sign-in:
+# a cursor is bound to the user who minted it, so resuming 0400's (minted
+# for an account an earlier test signed up) is refused — 0028 asserts that.
 method: tasks.TaskQuery.ListTasksPagedTuned
 pre:
     - auth/auth.yaml
+    - fixtures/a_tuned_page_one.yaml
 input:
-    after: ${tuned.cursor}
+    after: ${tuned_own.cursor}
 expect:
     items: {matcher: count, op: '==', value: 2}
     paging.previous_cursor: {matcher: not_empty}

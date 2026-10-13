@@ -1,0 +1,17 @@
+# A cursor is bound to the caller who minted it. The gateway signs it with a
+# key derived from the user and the scopes and labels the request runs under,
+# so a cursor that leaks (a log, a referrer, a shared link) does not resume
+# the minting request for anybody else. Here a freshly signed-up account
+# presents 0026's cursor and is refused as for a malformed cursor, the answer
+# a forged one gets; it refetches page one.
+#
+# Without the binding this exact request returned 0027's page: it is what
+# 0027 did, with a new account, until the binding made that a refusal.
+method: tasks.TaskQuery.ListTasksPagedWithCategory
+pre:
+    - auth/auth.yaml
+input:
+    limit: 2
+    cursor: ${tasks_joined.next_cursor}
+expect_error:
+    code: INVALID_ARGUMENT

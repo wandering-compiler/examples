@@ -135,8 +135,8 @@ func (s *TasksServer) GetTaskWithComments(ctx context.Context, req *taskspb.GetT
 // shape rest/0691 pins: a refusal decided after the gateway has already
 // sent `200 text/event-stream`, so it can only reach the caller as an
 // `event: error` frame. Every refusal on a stream that the gateway did not
-// make itself arrives that way, and it is the half a consumer could not
-// assert (2026-10-06) — the runner read the 200 as "the stream opened".
+// make itself arrives that way, and a runner that reads the 200 as "the
+// stream opened" cannot assert it.
 func (s *TasksServer) StreamTasks(req *taskspb.StreamTasksReq, stream taskspb.TasksService_StreamTasksServer) error {
 	if req.GetUserId() <= 0 {
 		return grpcerr.ForUser(stream.Context(), codes.InvalidArgument,

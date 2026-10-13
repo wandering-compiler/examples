@@ -9,9 +9,10 @@
 # limit) → the next two seeded rows in `ORDER BY t.id DESC` order.
 #
 # Moved with its partner, and for its reason: see 0026.
+#
+# The SAME caller as 0026, so no sign-in of its own: a cursor is bound to
+# the user who minted it, and 0028 shows another user's is refused.
 method: tasks.TaskQuery.ListTasksPagedWithCategory
-pre:
-    - auth/auth.yaml
 input:
     limit: 2
     cursor: ${tasks_joined.next_cursor}

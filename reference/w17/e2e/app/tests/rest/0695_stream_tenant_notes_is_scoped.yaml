@@ -1,7 +1,7 @@
 # A SERVER STREAM over a SCOPED model whose request carries a VALIDATED field.
 #
-# That shape generated a storage handler which did not compile (a consumer,
-# 2026-10-01): the validation block reads `ctx` for its translated messages,
+# That shape once generated a storage handler which did not compile: the
+# validation block reads `ctx` for its translated messages,
 # and a streaming handler has no `ctx` parameter. `codegen` exited 0 and
 # `go build` failed two steps later. This case is where the fixed shape is
 # BUILT and RUN, not just generated.

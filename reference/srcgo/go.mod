@@ -3,7 +3,7 @@ module github.com/wandering-compiler/examples/reference
 go 1.26.1
 
 require (
-	github.com/wandering-compiler/sdk/go v0.1.0-rc.17.0.20261013055440-1f854286d8e7
+	github.com/wandering-compiler/sdk/go v0.1.0-rc.18
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
 )
