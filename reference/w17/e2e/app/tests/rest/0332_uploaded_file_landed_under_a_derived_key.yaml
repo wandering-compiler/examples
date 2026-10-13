@@ -19,10 +19,11 @@
 # comment stays as the reason the assertion is spelled out rather than
 # copied.
 #
-# The object key is the sha256 of the uploaded body, so the shape below
-# also proves the gateway stored a FILE rather than nothing — a dropped
-# file part still yields a handle, and every status code on the way
-# stays the one you expect.
+# The object key is the sha256 of the uploaded body followed by a random
+# 128-bit suffix (every upload is its own object, even of identical
+# bodies), so the shape below also proves the gateway stored a FILE rather
+# than nothing — a dropped file part still yields a handle, and every
+# status code on the way stays the one you expect.
 method: tasks.TaskQuery.GetTaskUpload
 pre:
     - auth/auth.yaml
@@ -36,4 +37,4 @@ input:
 # than on the key alone. 0350 is what asserts the rewriting itself.
 expect:
     task_id: {matcher: eq, value: "700001"}
-    stored_path: {matcher: regex, pattern: "^/api/v1/tasks/files/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}$"}
+    stored_path: {matcher: regex, pattern: "^/api/v1/tasks/files/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}
