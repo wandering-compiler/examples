@@ -1,7 +1,29 @@
 # What this example adds to the generated stack (compose.w17.yaml), merged
-# over it by the include in compose.yaml: the hand-written business server
-# of the app domain, and the gateway's route to it.
+# over it by the include in compose.yaml: the seed rows the suite starts
+# from, the hand-written business server of the app domain, and the
+# gateway's route to it.
 services:
+  # One-shot: applies the rendered seeds (w17/fixtures, from fixtures/ by
+  # `w17ctl fixtures render`) with the storage binary itself. The schema is
+  # in place by then: `w17ctl test` builds it before the services start.
+  app-seed:
+    build:
+      context: .
+      dockerfile: w17/services/app-storage/Dockerfile
+    env_file:
+      - w17/services/app-storage/.env
+    command: ["fixtures", "apply", "--connection", "app-postgres", "--fixtures", "/w17/fixtures"]
+    restart: "no"
+    volumes:
+      - ./w17/fixtures:/w17/fixtures:ro
+      - ./fixtures:/fixtures:ro
+    depends_on:
+      app-postgres: { condition: service_healthy }
+
+  app-storage:
+    depends_on:
+      app-seed: { condition: service_completed_successfully }
+
   app-business:
     build: { context: ., dockerfile: business/Dockerfile }
     restart: unless-stopped

@@ -1,0 +1,637 @@
+{
+  "statements": [
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000b5",
+        "00000000-0000-0000-0000-0000000000b6",
+        "member",
+        "00000000-0000-0000-0000-0000000000a2"
+      ],
+      "sql": "INSERT INTO \"admin_auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000c4",
+        "00000000-0000-0000-0000-0000000000b6",
+        "member",
+        "00000000-0000-0000-0000-0000000000c3"
+      ],
+      "sql": "INSERT INTO \"admin_auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000b4",
+        "company",
+        "E2E Throwaway Org",
+        "e2e-throwaway-org"
+      ],
+      "sql": "INSERT INTO \"admin_auth_organization\" (\"id\", \"kind\", \"name\", \"slug\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"kind\" = EXCLUDED.\"kind\", \"name\" = EXCLUDED.\"name\", \"slug\" = EXCLUDED.\"slug\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000b6",
+        "company",
+        "E2E Membership Org",
+        "e2e-membership-org"
+      ],
+      "sql": "INSERT INTO \"admin_auth_organization\" (\"id\", \"kind\", \"name\", \"slug\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"kind\" = EXCLUDED.\"kind\", \"name\" = EXCLUDED.\"name\", \"slug\" = EXCLUDED.\"slug\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000a1",
+        true,
+        "e2e all-permissions admin role",
+        "admin-all"
+      ],
+      "sql": "INSERT INTO \"admin_auth_role\" (\"id\", \"all_permissions\", \"description\", \"name\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"all_permissions\" = EXCLUDED.\"all_permissions\", \"description\" = EXCLUDED.\"description\", \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000a2",
+        "e2e-admin@example.com",
+        "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      ],
+      "sql": "INSERT INTO \"admin_auth_user\" (\"id\", \"email\", \"password_hash\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000a3",
+        "e2e-admin-nogrant@example.com",
+        "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      ],
+      "sql": "INSERT INTO \"admin_auth_user\" (\"id\", \"email\", \"password_hash\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000b2",
+        "e2e-throwaway-admin@example.com",
+        "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      ],
+      "sql": "INSERT INTO \"admin_auth_user\" (\"id\", \"email\", \"password_hash\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000b7",
+        "e2e-sessions-admin@example.com",
+        "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      ],
+      "sql": "INSERT INTO \"admin_auth_user\" (\"id\", \"email\", \"password_hash\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000c1",
+        "e2e-admin-members@example.com",
+        "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      ],
+      "sql": "INSERT INTO \"admin_auth_user\" (\"id\", \"email\", \"password_hash\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000c3",
+        "e2e-plain-member@example.com",
+        "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      ],
+      "sql": "INSERT INTO \"admin_auth_user\" (\"id\", \"email\", \"password_hash\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000a4",
+        "00000000-0000-0000-0000-0000000000a1",
+        "00000000-0000-0000-0000-0000000000a2"
+      ],
+      "sql": "INSERT INTO \"admin_auth_userrole\" (\"id\", \"role_id\", \"user_id\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"role_id\" = EXCLUDED.\"role_id\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000c2",
+        "membership-editor",
+        "00000000-0000-0000-0000-0000000000c1"
+      ],
+      "sql": "INSERT INTO \"admin_auth_userrole\" (\"id\", \"role_id\", \"user_id\") VALUES ($1, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $2), $3) ON CONFLICT (\"id\") DO UPDATE SET \"role_id\" = EXCLUDED.\"role_id\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000b3",
+        "2099-01-01T00:00:00Z",
+        "e2e-throwaway-session-token-b3",
+        "00000000-0000-0000-0000-0000000000b2"
+      ],
+      "sql": "INSERT INTO \"admin_auth_usertoken\" (\"id\", \"expires_at\", \"token\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"expires_at\" = EXCLUDED.\"expires_at\", \"token\" = EXCLUDED.\"token\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000b8",
+        "2099-01-01T00:00:00Z",
+        "e2e-throwaway-session-token-b8",
+        "00000000-0000-0000-0000-0000000000b7"
+      ],
+      "sql": "INSERT INTO \"admin_auth_usertoken\" (\"id\", \"expires_at\", \"token\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"expires_at\" = EXCLUDED.\"expires_at\", \"token\" = EXCLUDED.\"token\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000b1",
+        "admin e2e: safe to edit and delete",
+        "e2e-throwaway-role"
+      ],
+      "sql": "INSERT INTO \"auth_role\" (\"id\", \"description\", \"name\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"description\" = EXCLUDED.\"description\", \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        "11111111-1111-1111-1111-111111111111",
+        "tenant-alpha"
+      ],
+      "sql": "INSERT INTO \"auth_tenant\" (\"id\", \"name\") VALUES ($1, $2) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        "22222222-2222-2222-2222-222222222222",
+        "tenant-beta"
+      ],
+      "sql": "INSERT INTO \"auth_tenant\" (\"id\", \"name\") VALUES ($1, $2) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        "33333333-3333-3333-3333-333333333333",
+        "tenant-gamma"
+      ],
+      "sql": "INSERT INTO \"auth_tenant\" (\"id\", \"name\") VALUES ($1, $2) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "alice@example.com",
+        "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk",
+        "11111111-1111-1111-1111-111111111111"
+      ],
+      "sql": "INSERT INTO \"auth_user\" (\"id\", \"email\", \"password_hash\", \"tenant_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\", \"tenant_id\" = EXCLUDED.\"tenant_id\""
+    },
+    {
+      "args": [
+        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "bob@example.com",
+        "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk",
+        "22222222-2222-2222-2222-222222222222"
+      ],
+      "sql": "INSERT INTO \"auth_user\" (\"id\", \"email\", \"password_hash\", \"tenant_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\", \"tenant_id\" = EXCLUDED.\"tenant_id\""
+    },
+    {
+      "args": [
+        "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+        "e2e-nogrant@example.com",
+        "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk",
+        "11111111-1111-1111-1111-111111111111"
+      ],
+      "sql": "INSERT INTO \"auth_user\" (\"id\", \"email\", \"password_hash\", \"tenant_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\", \"tenant_id\" = EXCLUDED.\"tenant_id\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000f1",
+        "e6289651-217c-852c-a54d-8d35f3aae2dc",
+        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+      ],
+      "sql": "INSERT INTO \"auth_userrole\" (\"id\", \"role_id\", \"user_id\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"role_id\" = EXCLUDED.\"role_id\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000f2",
+        "e6289651-217c-852c-a54d-8d35f3aae2dc",
+        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      ],
+      "sql": "INSERT INTO \"auth_userrole\" (\"id\", \"role_id\", \"user_id\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"role_id\" = EXCLUDED.\"role_id\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        "tok-alice",
+        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+      ],
+      "sql": "INSERT INTO \"auth_usertoken\" (\"id\", \"token\", \"user_id\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"token\" = EXCLUDED.\"token\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "tok-bob",
+        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      ],
+      "sql": "INSERT INTO \"auth_usertoken\" (\"id\", \"token\", \"user_id\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"token\" = EXCLUDED.\"token\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        710001,
+        "",
+        "2026-02-01T00:00:00Z",
+        "charlie release",
+        "{}",
+        5
+      ],
+      "sql": "INSERT INTO \"milestones\" (\"id\", \"attachment\", \"created_at\", \"name\", \"tags\", \"weight\") VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (\"id\") DO UPDATE SET \"attachment\" = EXCLUDED.\"attachment\", \"created_at\" = EXCLUDED.\"created_at\", \"name\" = EXCLUDED.\"name\", \"tags\" = EXCLUDED.\"tags\", \"weight\" = EXCLUDED.\"weight\""
+    },
+    {
+      "args": [
+        710002,
+        "",
+        "2026-02-01T00:00:00Z",
+        "alpha release",
+        "{}",
+        12,
+        5
+      ],
+      "sql": "INSERT INTO \"milestones\" (\"id\", \"attachment\", \"created_at\", \"name\", \"tags\", \"target_count\", \"weight\") VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (\"id\") DO UPDATE SET \"attachment\" = EXCLUDED.\"attachment\", \"created_at\" = EXCLUDED.\"created_at\", \"name\" = EXCLUDED.\"name\", \"tags\" = EXCLUDED.\"tags\", \"target_count\" = EXCLUDED.\"target_count\", \"weight\" = EXCLUDED.\"weight\""
+    },
+    {
+      "args": [
+        710003,
+        "",
+        "2026-02-01T00:00:00Z",
+        "bravo release",
+        "{}",
+        4,
+        9
+      ],
+      "sql": "INSERT INTO \"milestones\" (\"id\", \"attachment\", \"created_at\", \"name\", \"tags\", \"target_count\", \"weight\") VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (\"id\") DO UPDATE SET \"attachment\" = EXCLUDED.\"attachment\", \"created_at\" = EXCLUDED.\"created_at\", \"name\" = EXCLUDED.\"name\", \"tags\" = EXCLUDED.\"tags\", \"target_count\" = EXCLUDED.\"target_count\", \"weight\" = EXCLUDED.\"weight\""
+    },
+    {
+      "args": [
+        730001,
+        "#101010",
+        "Admin Pivot Alpha",
+        "admin-pivot-alpha"
+      ],
+      "sql": "INSERT INTO \"tags\" (\"id\", \"color\", \"display_name\", \"slug\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"color\" = EXCLUDED.\"color\", \"display_name\" = EXCLUDED.\"display_name\", \"slug\" = EXCLUDED.\"slug\""
+    },
+    {
+      "args": [
+        730002,
+        "#202020",
+        "Admin Pivot Beta",
+        "admin-pivot-beta"
+      ],
+      "sql": "INSERT INTO \"tags\" (\"id\", \"color\", \"display_name\", \"slug\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"color\" = EXCLUDED.\"color\", \"display_name\" = EXCLUDED.\"display_name\", \"slug\" = EXCLUDED.\"slug\""
+    },
+    {
+      "args": [
+        1,
+        "#FF5733",
+        "work"
+      ],
+      "sql": "INSERT INTO \"task_categories\" (\"id\", \"color\", \"name\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"color\" = EXCLUDED.\"color\", \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        2,
+        "#33C3FF",
+        "personal"
+      ],
+      "sql": "INSERT INTO \"task_categories\" (\"id\", \"color\", \"name\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"color\" = EXCLUDED.\"color\", \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        3,
+        "#C70039",
+        "urgent"
+      ],
+      "sql": "INSERT INTO \"task_categories\" (\"id\", \"color\", \"name\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"color\" = EXCLUDED.\"color\", \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        720001,
+        "{\"tier\":\"paid\",\"utm.source\":\"newsletter\"}",
+        "spring-launch"
+      ],
+      "sql": "INSERT INTO \"directory_campaigns\" (\"id\", \"audience\", \"name\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"audience\" = EXCLUDED.\"audience\", \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        720002,
+        "{\"tier\":\"paid\",\"utm.source\":\"partner\"}",
+        "winter-hold"
+      ],
+      "sql": "INSERT INTO \"directory_campaigns\" (\"id\", \"audience\", \"name\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"audience\" = EXCLUDED.\"audience\", \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        720003,
+        "{\"tier\":\"house\",\"utm.source\":\"partner\"}",
+        "idle-brief"
+      ],
+      "sql": "INSERT INTO \"directory_campaigns\" (\"id\", \"audience\", \"name\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"audience\" = EXCLUDED.\"audience\", \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        720101,
+        720001,
+        "search",
+        0.25,
+        100,
+        "10.5000"
+      ],
+      "sql": "INSERT INTO \"campaign_flights\" (\"id\", \"campaign_id\", \"channel\", \"click_rate\", \"impressions\", \"spend\") VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (\"id\") DO UPDATE SET \"campaign_id\" = EXCLUDED.\"campaign_id\", \"channel\" = EXCLUDED.\"channel\", \"click_rate\" = EXCLUDED.\"click_rate\", \"impressions\" = EXCLUDED.\"impressions\", \"spend\" = EXCLUDED.\"spend\""
+    },
+    {
+      "args": [
+        720102,
+        720001,
+        "social",
+        0.75,
+        300,
+        "20.2500"
+      ],
+      "sql": "INSERT INTO \"campaign_flights\" (\"id\", \"campaign_id\", \"channel\", \"click_rate\", \"impressions\", \"spend\") VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (\"id\") DO UPDATE SET \"campaign_id\" = EXCLUDED.\"campaign_id\", \"channel\" = EXCLUDED.\"channel\", \"click_rate\" = EXCLUDED.\"click_rate\", \"impressions\" = EXCLUDED.\"impressions\", \"spend\" = EXCLUDED.\"spend\""
+    },
+    {
+      "args": [
+        720201,
+        720002,
+        "search",
+        0.5,
+        50,
+        "5.0000"
+      ],
+      "sql": "INSERT INTO \"campaign_flights\" (\"id\", \"campaign_id\", \"channel\", \"click_rate\", \"impressions\", \"spend\") VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (\"id\") DO UPDATE SET \"campaign_id\" = EXCLUDED.\"campaign_id\", \"channel\" = EXCLUDED.\"channel\", \"click_rate\" = EXCLUDED.\"click_rate\", \"impressions\" = EXCLUDED.\"impressions\", \"spend\" = EXCLUDED.\"spend\""
+    },
+    {
+      "args": [
+        720301,
+        720102,
+        "click",
+        3
+      ],
+      "sql": "INSERT INTO \"flight_events\" (\"id\", \"flight_id\", \"kind\", \"weight\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"flight_id\" = EXCLUDED.\"flight_id\", \"kind\" = EXCLUDED.\"kind\", \"weight\" = EXCLUDED.\"weight\""
+    },
+    {
+      "args": [
+        720302,
+        720102,
+        "conversion",
+        4
+      ],
+      "sql": "INSERT INTO \"flight_events\" (\"id\", \"flight_id\", \"kind\", \"weight\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"flight_id\" = EXCLUDED.\"flight_id\", \"kind\" = EXCLUDED.\"kind\", \"weight\" = EXCLUDED.\"weight\""
+    },
+    {
+      "args": [
+        720303,
+        720101,
+        "conversion",
+        9
+      ],
+      "sql": "INSERT INTO \"flight_events\" (\"id\", \"flight_id\", \"kind\", \"weight\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"flight_id\" = EXCLUDED.\"flight_id\", \"kind\" = EXCLUDED.\"kind\", \"weight\" = EXCLUDED.\"weight\""
+    },
+    {
+      "args": [
+        720304,
+        720201,
+        "click",
+        1
+      ],
+      "sql": "INSERT INTO \"flight_events\" (\"id\", \"flight_id\", \"kind\", \"weight\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"flight_id\" = EXCLUDED.\"flight_id\", \"kind\" = EXCLUDED.\"kind\", \"weight\" = EXCLUDED.\"weight\""
+    },
+    {
+      "args": [
+        1,
+        "E2E Owner",
+        "e2e-owner@example.com",
+        "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk",
+        1
+      ],
+      "sql": "INSERT INTO \"users\" (\"id\", \"display_name\", \"email\", \"password_hash\", \"status\") VALUES ($1, $2, $3, $4, $5) ON CONFLICT (\"id\") DO UPDATE SET \"display_name\" = EXCLUDED.\"display_name\", \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\", \"status\" = EXCLUDED.\"status\""
+    },
+    {
+      "args": [
+        900001,
+        "E2E Admin Page User",
+        "e2e-admin-page@example.com",
+        "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk",
+        1
+      ],
+      "sql": "INSERT INTO \"users\" (\"id\", \"display_name\", \"email\", \"password_hash\", \"status\") VALUES ($1, $2, $3, $4, $5) ON CONFLICT (\"id\") DO UPDATE SET \"display_name\" = EXCLUDED.\"display_name\", \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\", \"status\" = EXCLUDED.\"status\""
+    },
+    {
+      "args": [
+        700001,
+        "admin paged seed body 1",
+        1,
+        "2026-01-01T00:00:00Z",
+        1,
+        1,
+        "admin paged task 1",
+        1
+      ],
+      "sql": "INSERT INTO \"tasks\" (\"id\", \"body_text\", \"category_id\", \"created_at\", \"priority\", \"status\", \"title\", \"user_id\") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"category_id\" = EXCLUDED.\"category_id\", \"created_at\" = EXCLUDED.\"created_at\", \"priority\" = EXCLUDED.\"priority\", \"status\" = EXCLUDED.\"status\", \"title\" = EXCLUDED.\"title\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        700002,
+        "admin paged seed body 2",
+        1,
+        "2026-01-01T00:00:00Z",
+        2,
+        1,
+        "admin paged task 2",
+        1
+      ],
+      "sql": "INSERT INTO \"tasks\" (\"id\", \"body_text\", \"category_id\", \"created_at\", \"priority\", \"status\", \"title\", \"user_id\") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"category_id\" = EXCLUDED.\"category_id\", \"created_at\" = EXCLUDED.\"created_at\", \"priority\" = EXCLUDED.\"priority\", \"status\" = EXCLUDED.\"status\", \"title\" = EXCLUDED.\"title\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        700003,
+        "admin paged seed body 3",
+        2,
+        "2026-01-02T00:00:00Z",
+        3,
+        2,
+        "admin paged task 3",
+        1
+      ],
+      "sql": "INSERT INTO \"tasks\" (\"id\", \"body_text\", \"category_id\", \"created_at\", \"priority\", \"status\", \"title\", \"user_id\") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"category_id\" = EXCLUDED.\"category_id\", \"created_at\" = EXCLUDED.\"created_at\", \"priority\" = EXCLUDED.\"priority\", \"status\" = EXCLUDED.\"status\", \"title\" = EXCLUDED.\"title\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        700004,
+        "admin paged seed body 4",
+        2,
+        "2026-01-02T00:00:00Z",
+        4,
+        2,
+        "admin paged task 4",
+        1
+      ],
+      "sql": "INSERT INTO \"tasks\" (\"id\", \"body_text\", \"category_id\", \"created_at\", \"priority\", \"status\", \"title\", \"user_id\") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"category_id\" = EXCLUDED.\"category_id\", \"created_at\" = EXCLUDED.\"created_at\", \"priority\" = EXCLUDED.\"priority\", \"status\" = EXCLUDED.\"status\", \"title\" = EXCLUDED.\"title\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        700005,
+        "admin paged seed body 5",
+        3,
+        "2026-01-03T00:00:00Z",
+        5,
+        3,
+        "admin paged task 5",
+        1
+      ],
+      "sql": "INSERT INTO \"tasks\" (\"id\", \"body_text\", \"category_id\", \"created_at\", \"priority\", \"status\", \"title\", \"user_id\") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"category_id\" = EXCLUDED.\"category_id\", \"created_at\" = EXCLUDED.\"created_at\", \"priority\" = EXCLUDED.\"priority\", \"status\" = EXCLUDED.\"status\", \"title\" = EXCLUDED.\"title\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        720001,
+        "first comment on the paged task",
+        "2026-03-01T00:00:00Z",
+        700001
+      ],
+      "sql": "INSERT INTO \"comments\" (\"id\", \"body_text\", \"created_at\", \"task_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"created_at\" = EXCLUDED.\"created_at\", \"task_id\" = EXCLUDED.\"task_id\""
+    },
+    {
+      "args": [
+        720002,
+        "second comment on the paged task",
+        "2026-03-01T01:00:00Z",
+        700001
+      ],
+      "sql": "INSERT INTO \"comments\" (\"id\", \"body_text\", \"created_at\", \"task_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"created_at\" = EXCLUDED.\"created_at\", \"task_id\" = EXCLUDED.\"task_id\""
+    },
+    {
+      "args": [
+        720003,
+        "the only comment on task two",
+        "2026-03-01T02:00:00Z",
+        700002
+      ],
+      "sql": "INSERT INTO \"comments\" (\"id\", \"body_text\", \"created_at\", \"task_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"created_at\" = EXCLUDED.\"created_at\", \"task_id\" = EXCLUDED.\"task_id\""
+    },
+    {
+      "args": [
+        730101,
+        "audit one",
+        "2020-01-01T00:00:01Z",
+        700005
+      ],
+      "sql": "INSERT INTO \"task_audit_log\" (\"id\", \"body_text\", \"created_at\", \"task_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"created_at\" = EXCLUDED.\"created_at\", \"task_id\" = EXCLUDED.\"task_id\""
+    },
+    {
+      "args": [
+        730102,
+        "audit two",
+        "2020-01-01T00:00:02Z",
+        700005
+      ],
+      "sql": "INSERT INTO \"task_audit_log\" (\"id\", \"body_text\", \"created_at\", \"task_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"created_at\" = EXCLUDED.\"created_at\", \"task_id\" = EXCLUDED.\"task_id\""
+    },
+    {
+      "args": [
+        730103,
+        "audit three",
+        "2020-01-01T00:00:03Z",
+        700005
+      ],
+      "sql": "INSERT INTO \"task_audit_log\" (\"id\", \"body_text\", \"created_at\", \"task_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"created_at\" = EXCLUDED.\"created_at\", \"task_id\" = EXCLUDED.\"task_id\""
+    },
+    {
+      "args": [
+        730104,
+        "audit four",
+        "2020-01-01T00:00:04Z",
+        700005
+      ],
+      "sql": "INSERT INTO \"task_audit_log\" (\"id\", \"body_text\", \"created_at\", \"task_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"created_at\" = EXCLUDED.\"created_at\", \"task_id\" = EXCLUDED.\"task_id\""
+    },
+    {
+      "args": [
+        730105,
+        "audit five",
+        "2020-01-01T00:00:05Z",
+        700005
+      ],
+      "sql": "INSERT INTO \"task_audit_log\" (\"id\", \"body_text\", \"created_at\", \"task_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body_text\" = EXCLUDED.\"body_text\", \"created_at\" = EXCLUDED.\"created_at\", \"task_id\" = EXCLUDED.\"task_id\""
+    },
+    {
+      "args": [
+        700001,
+        730001
+      ],
+      "sql": "INSERT INTO \"task_tags\" (\"task_id\", \"tag_id\") VALUES ($1, $2) ON CONFLICT (\"task_id\", \"tag_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        700001,
+        730002
+      ],
+      "sql": "INSERT INTO \"task_tags\" (\"task_id\", \"tag_id\") VALUES ($1, $2) ON CONFLICT (\"task_id\", \"tag_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        700002,
+        730001
+      ],
+      "sql": "INSERT INTO \"task_tags\" (\"task_id\", \"tag_id\") VALUES ($1, $2) ON CONFLICT (\"task_id\", \"tag_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "milestones",
+        "id"
+      ],
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"milestones\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"milestones\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+    },
+    {
+      "args": [
+        "tags",
+        "id"
+      ],
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"tags\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"tags\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+    },
+    {
+      "args": [
+        "task_categories",
+        "id"
+      ],
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"task_categories\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"task_categories\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+    },
+    {
+      "args": [
+        "directory_campaigns",
+        "id"
+      ],
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"directory_campaigns\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"directory_campaigns\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+    },
+    {
+      "args": [
+        "campaign_flights",
+        "id"
+      ],
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"campaign_flights\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"campaign_flights\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+    },
+    {
+      "args": [
+        "flight_events",
+        "id"
+      ],
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"flight_events\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"flight_events\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+    },
+    {
+      "args": [
+        "users",
+        "id"
+      ],
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"users\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"users\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+    },
+    {
+      "args": [
+        "tasks",
+        "id"
+      ],
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"tasks\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"tasks\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+    },
+    {
+      "args": [
+        "comments",
+        "id"
+      ],
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"comments\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"comments\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+    },
+    {
+      "args": [
+        "task_audit_log",
+        "id"
+      ],
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"task_audit_log\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"task_audit_log\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+    }
+  ]
+}

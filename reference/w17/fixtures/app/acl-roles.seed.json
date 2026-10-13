@@ -1,0 +1,174 @@
+{
+  "statements": [
+    {
+      "args": [
+        "17f000cb-ebac-8a81-8e94-78254f279427",
+        true,
+        true,
+        "platform-staff",
+        "platform-staff"
+      ],
+      "sql": "INSERT INTO \"admin_auth_role\" (\"id\", \"all_permissions\", \"assign_first_user\", \"name\", \"preset_key\") VALUES ($1, $2, $3, $4, $5) ON CONFLICT (\"preset_key\") DO UPDATE SET \"all_permissions\" = EXCLUDED.\"all_permissions\", \"assign_first_user\" = EXCLUDED.\"assign_first_user\", \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        "449bf084-f115-8743-a7b6-1c269b78e9fd",
+        "org-auditor",
+        true,
+        "org-auditor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_role\" (\"id\", \"name\", \"org_scoped\", \"preset_key\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"preset_key\") DO UPDATE SET \"name\" = EXCLUDED.\"name\", \"org_scoped\" = EXCLUDED.\"org_scoped\""
+    },
+    {
+      "args": [
+        "7a79c830-0e47-893d-8d32-42716ac3162a",
+        "membership-editor",
+        "membership-editor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_role\" (\"id\", \"name\", \"preset_key\") VALUES ($1, $2, $3) ON CONFLICT (\"preset_key\") DO UPDATE SET \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        "c923ccfe-8171-8ed3-b0d7-f138204d5a1b",
+        9,
+        "org-auditor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_rolepermission\" (\"id\", \"permission_id\", \"role_id\") VALUES ($1, $2, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $3)) ON CONFLICT (\"role_id\", \"permission_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "3a9f8a74-46ed-8dae-86cb-0a1ae008a700",
+        8,
+        "org-auditor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_rolepermission\" (\"id\", \"permission_id\", \"role_id\") VALUES ($1, $2, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $3)) ON CONFLICT (\"role_id\", \"permission_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "81c0c4b9-d484-8915-9b40-00695bfd8c1d",
+        10,
+        "org-auditor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_rolepermission\" (\"id\", \"permission_id\", \"role_id\") VALUES ($1, $2, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $3)) ON CONFLICT (\"role_id\", \"permission_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "06851a7c-eca3-82ab-903c-24b17d2fed2d",
+        11,
+        "org-auditor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_rolepermission\" (\"id\", \"permission_id\", \"role_id\") VALUES ($1, $2, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $3)) ON CONFLICT (\"role_id\", \"permission_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "05156b13-d727-88dc-bbc8-67456f49b6ed",
+        13,
+        "org-auditor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_rolepermission\" (\"id\", \"permission_id\", \"role_id\") VALUES ($1, $2, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $3)) ON CONFLICT (\"role_id\", \"permission_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "f5f2ed1b-cdf6-81ca-962b-63452ad76ced",
+        12,
+        "org-auditor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_rolepermission\" (\"id\", \"permission_id\", \"role_id\") VALUES ($1, $2, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $3)) ON CONFLICT (\"role_id\", \"permission_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "3651438f-1337-8807-96ef-6dabebb5b5fc",
+        15,
+        "org-auditor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_rolepermission\" (\"id\", \"permission_id\", \"role_id\") VALUES ($1, $2, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $3)) ON CONFLICT (\"role_id\", \"permission_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "7a62fc8e-ac6b-8fc0-b5cf-ee6df86b5d82",
+        14,
+        "org-auditor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_rolepermission\" (\"id\", \"permission_id\", \"role_id\") VALUES ($1, $2, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $3)) ON CONFLICT (\"role_id\", \"permission_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "9450bbd4-4a0b-82d7-8a7b-a938be7d36d4",
+        16,
+        "membership-editor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_rolepermission\" (\"id\", \"permission_id\", \"role_id\") VALUES ($1, $2, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $3)) ON CONFLICT (\"role_id\", \"permission_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "b79460df-8173-8dcb-a115-9bc51d7df3a2",
+        17,
+        "membership-editor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_rolepermission\" (\"id\", \"permission_id\", \"role_id\") VALUES ($1, $2, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $3)) ON CONFLICT (\"role_id\", \"permission_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "ffc459f8-cddf-8fad-bc97-1ce1218b4f54",
+        21,
+        "membership-editor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_rolepermission\" (\"id\", \"permission_id\", \"role_id\") VALUES ($1, $2, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $3)) ON CONFLICT (\"role_id\", \"permission_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "3ded8ff9-2e94-8ec1-a814-469580064344",
+        22,
+        "membership-editor"
+      ],
+      "sql": "INSERT INTO \"admin_auth_rolepermission\" (\"id\", \"permission_id\", \"role_id\") VALUES ($1, $2, (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" = $3)) ON CONFLICT (\"role_id\", \"permission_id\") DO NOTHING"
+    },
+    {
+      "args": [
+        "e6289651-217c-852c-a54d-8d35f3aae2dc",
+        true,
+        true,
+        true,
+        "e2e-all",
+        "e2e-all"
+      ],
+      "sql": "INSERT INTO \"auth_role\" (\"id\", \"all_permissions\", \"assign_default\", \"assign_first_user\", \"name\", \"preset_key\") VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (\"preset_key\") DO UPDATE SET \"all_permissions\" = EXCLUDED.\"all_permissions\", \"assign_default\" = EXCLUDED.\"assign_default\", \"assign_first_user\" = EXCLUDED.\"assign_first_user\", \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        "membership-editor",
+        16,
+        17,
+        21,
+        22
+      ],
+      "sql": "DELETE FROM \"admin_auth_rolepermission\" WHERE \"role_id\" IN (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" IN ($1)) AND \"permission_id\" NOT IN ($2, $3, $4, $5)"
+    },
+    {
+      "args": [
+        "org-auditor",
+        9,
+        8,
+        10,
+        11,
+        13,
+        12,
+        15,
+        14
+      ],
+      "sql": "DELETE FROM \"admin_auth_rolepermission\" WHERE \"role_id\" IN (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" IN ($1)) AND \"permission_id\" NOT IN ($2, $3, $4, $5, $6, $7, $8, $9)"
+    },
+    {
+      "args": [
+        "platform-staff"
+      ],
+      "sql": "DELETE FROM \"admin_auth_rolepermission\" WHERE \"role_id\" IN (SELECT \"id\" FROM \"admin_auth_role\" WHERE \"preset_key\" IN ($1))"
+    },
+    {
+      "args": [
+        "e2e-all"
+      ],
+      "sql": "DELETE FROM \"auth_rolepermission\" WHERE \"role_id\" IN (SELECT \"id\" FROM \"auth_role\" WHERE \"preset_key\" IN ($1))"
+    }
+  ]
+}

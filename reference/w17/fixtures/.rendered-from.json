@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "source_root": "../../fixtures",
+  "seeds": {
+    "app/acl-roles": {
+      "source": "app/acl-roles.json",
+      "sha256": "ded06db489868658512b6df0ffe73d93fe299dd0c39a2ab82f31482f3b4df0a4"
+    },
+    "app/test": {
+      "source": "app/test.json",
+      "sha256": "b1edf71f9438a34862c1444314bab1d256764c0c0eab47843a31404df883c1bf"
+    }
+  }
+}
