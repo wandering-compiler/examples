@@ -32,5 +32,5 @@ pre:
 input:
     id: ${task_upload.id}
 expect:
-    stored_path: {matcher: regex, pattern: "^/api/v1/tasks/files/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}$"}
-    storage_key: {matcher: regex, pattern: "^http://[^/]+/api/v1/tasks/blobs/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}$"}
+    stored_path: {matcher: regex, pattern: "^/api/v1/tasks/files/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}
+    storage_key: {matcher: regex, pattern: "^http://[^/]+/api/v1/tasks/blobs/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}
