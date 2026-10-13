@@ -1,0 +1,23 @@
+# w17/infra.yaml — where and how this project is deployed. YOURS: commit it.
+# `w17ctl infra …` edits it in place and keeps your comments; codegen never writes it.
+# It holds only what differs from the defaults — `w17ctl infra show --effective` prints all of it.
+# Schema (editor completion): w17/specs/infra.schema.json.
+# yaml-language-server: $schema=specs/infra.schema.json
+
+targets:
+  prod: {kind: swarm, ssh: root@203.0.113.10}
+  staging: {kind: swarm}
+environments:
+  prod:
+    target: prod
+    domain: example.test
+    tls: custom
+    database:
+      backup: {alert: none}
+  staging:
+    target: staging
+    domain: staging.example.test
+    tls: custom
+    database:
+      backup: {alert: none}
+ci: {provider: github, registry: ghcr}

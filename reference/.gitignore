@@ -8,3 +8,9 @@ bin/
 
 # Generated CI configurations; this repository runs the examples itself.
 /w17/ci/
+
+# Generated from w17/infra.yaml: the deploy bundles per environment and the
+# CI workflow that ships them. The infra targets are declared so the compiler
+# generates them; nothing here deploys them.
+/deploy/
+/.github/
