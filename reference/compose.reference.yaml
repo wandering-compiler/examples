@@ -3,9 +3,11 @@
 # from, the hand-written business server of the app domain, and the
 # gateway's route to it.
 services:
-  # One-shot: applies the rendered seeds (w17/fixtures, from fixtures/ by
-  # `w17ctl fixtures render`) with the storage binary itself. The schema is
-  # in place by then: `w17ctl test` builds it before the services start.
+  # One-shot: applies the rendered seed of fixtures/app/test.json (rendered
+  # into w17/fixtures by `w17ctl fixtures render`) with the storage binary
+  # itself; the binary refuses a seed older than its fixture. The schema is
+  # in place by then: `w17ctl test` builds it, and seeds the generated
+  # roles, before the services start.
   app-seed:
     build:
       context: .
@@ -16,7 +18,7 @@ services:
     restart: "no"
     volumes:
       - ./w17/fixtures:/w17/fixtures:ro
-      - ./fixtures:/fixtures:ro
+      - ./fixtures/app/test.json:/fixtures/app/test.json:ro
     depends_on:
       app-postgres: { condition: service_healthy }
 

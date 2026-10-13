@@ -1,8 +1,10 @@
 srcgo/gen/
 bin/
 
-# Written by codegen from the ACL lock (permission ids are allocated there).
+# Written by codegen from the ACL lock (permission ids are allocated there),
+# and seeded by `w17ctl test` itself; its rendered seed is not needed.
 /fixtures/app/acl-roles.json
+/w17/fixtures/app/acl-roles.seed.json
 
 # Generated CI configurations; this repository runs the examples itself.
 /w17/ci/
