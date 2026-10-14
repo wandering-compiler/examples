@@ -7,11 +7,11 @@
 # the caller as an `event: error` frame, and every refusal a backend makes
 # on a stream — scope, ACL, overload — arrives the same way.
 #
-# A consumer found this half unassertable on 2026-10-06: the runner read
-# the 200 as "the stream opened" and reported SUCCEEDED against a server
-# that had refused correctly. The `details` entry is load-bearing too —
-# the gateway's SSE error frame used to drop `details[]`, so the handler's
-# STREAM_USER_REQUIRED never left the gateway on a stream.
+# A runner that reads the 200 as "the stream opened" reports SUCCEEDED
+# against a server that refused correctly, so this case asserts the error
+# frame. The `details` entry is load-bearing too: the gateway's SSE error
+# frame carries `details[]`, so the handler's STREAM_USER_REQUIRED reaches
+# the caller on a stream.
 #
 # English on purpose (`Accept-Language: en`): the project's default locale
 # is Czech, and rest/0692 is the same refusal read in it.
