@@ -1,0 +1,29 @@
+# The server stream, driven.
+#
+# `WatchDocuments` is server-streaming, so it routes to SSE and the
+# assertion is the sequence of frames it sends (`expect_stream:`).
+#
+# The query is `SELECT d.id, d.title FROM docs.Document d ORDER BY d.id
+# ASC` with no filter, so it streams EVERY document, and the frame list
+# holds only while the table holds what the fixtures seeded. Every case
+# numbered below this one is a read; 0040 creates a document and 0080
+# inserts another. A case matches its method by the `method:` ref, not
+# by its number, so `w17ctl codegen` leaves a renumbered case alone.
+#
+# The `ORDER BY d.id ASC` in the query is what makes the order
+# assertable: frames arrive in the order the server sends them.
+method: docs.DocumentQuery.WatchDocuments
+# client_id is bound from the X-Client-Id header (rest.proto), so it is
+# sent as a header, not under input:.
+headers:
+    X-Client-Id: e2e-value
+expect_stream:
+    frames:
+        - id: {matcher: eq, value: "700001"}
+          title: {matcher: eq, value: seed alpha}
+        - id: {matcher: eq, value: "700002"}
+          title: {matcher: eq, value: seed bravo}
+        - id: {matcher: eq, value: "700003"}
+          title: {matcher: eq, value: seed charlie}
+        - id: {matcher: eq, value: "700004"}
+          title: {matcher: eq, value: seed delta}

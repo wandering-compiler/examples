@@ -1,0 +1,30 @@
+# LATERAL, Postgres only here: the compiler refuses it on the dialects
+# without one.
+#
+# THE SUBQUERY CORRELATES ON THE OUTER ROW (`x.id > d.id`), which is what
+# makes it lateral rather than an ordinary derived table.
+#
+# Each document is paired with the next one by id; the last has no
+# successor, so the INNER LATERAL join drops it.
+method: docs.DocumentQuery.DocumentPeers
+input: {}
+expect:
+    # Bounded to the seeded block (`d.id > 700000`): the four seeds
+    # (700001-700004), the row 0040 created (700005) and the row 0080
+    # upserted (700900): six documents, so five peer pairs.
+    rows: {matcher: count, op: '==', value: 5}
+
+    # Every document except the highest gets exactly one peer; 700900 is
+    # the max, so the INNER lateral join drops it. That dropped row is
+    # what proves the LIMIT 1 subquery ran per OUTER row — a cross join
+    # would have paired everything with everything.
+    rows.0.id: {matcher: eq, value: "700001"}
+    rows.0.peer_id: {matcher: eq, value: "700002"}
+    rows.1.id: {matcher: eq, value: "700002"}
+    rows.1.peer_id: {matcher: eq, value: "700003"}
+    rows.2.id: {matcher: eq, value: "700003"}
+    rows.2.peer_id: {matcher: eq, value: "700004"}
+    rows.3.id: {matcher: eq, value: "700004"}
+    rows.3.peer_id: {matcher: eq, value: "700005"}
+    rows.4.id: {matcher: eq, value: "700005"}
+    rows.4.peer_id: {matcher: eq, value: "700900"}

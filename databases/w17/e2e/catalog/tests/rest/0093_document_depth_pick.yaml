@@ -1,0 +1,31 @@
+# DISTINCT ON + INTERVAL: two Postgres-only constructs. The compiler
+# refuses both on MySQL and SQLite.
+#
+# DISTINCT ON PICKS ONE ROW PER KEY, and the seed makes that visible:
+# depth 3 has TWO documents (700001 root.docs.alpha, 700002
+# root.docs.bravo). The ORDER BY inside decides WHICH one survives:
+# `nlevel ASC, id ASC` keeps the lower id.
+#
+# INTERVAL rides in the WHERE with a horizon far enough out that it
+# excludes nothing — it is here for the SPELLING (`INTERVAL '3650 days'`,
+# the SQL-standard string form MySQL and SQLite cannot parse), not to
+# filter.
+method: docs.DocumentQuery.DocumentDepthPick
+input: {}
+expect:
+    # 6 documents, depths 1/2/3/3/4(created by 0040)/4(700900 from 0080's
+    # root.upsert.one → depth 3). One row per DISTINCT depth.
+    rows: {matcher: count, op: '>=', value: 3}
+
+    # depth 1 — only 700003 has it.
+    rows.0.id: {matcher: eq, value: "700003"}
+    rows.0.depth: {matcher: num, op: '==', value: 1}
+
+    # depth 2 — only 700004.
+    rows.1.id: {matcher: eq, value: "700004"}
+    rows.1.depth: {matcher: num, op: '==', value: 2}
+
+    # depth 3: two documents share it and exactly one survives; `id ASC`
+    # inside the DISTINCT ON picks 700001.
+    rows.2.depth: {matcher: num, op: '==', value: 3}
+    rows.2.id: {matcher: eq, value: "700001"}

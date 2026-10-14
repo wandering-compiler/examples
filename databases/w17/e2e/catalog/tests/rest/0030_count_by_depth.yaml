@@ -1,0 +1,57 @@
+# A registered custom AGGREGATE beside a builtin one, grouped by a
+# registered custom SCALAR.
+#
+#   SELECT nlevel(d.path)          AS depth,           -- ltree scalar
+#          COUNT(*)                AS document_count,  -- builtin
+#          string_agg(d.title,' | ') AS titles         -- registered, is_aggregate
+#   GROUP BY nlevel(d.path)
+#
+# `is_aggregate: true` on the `string_agg` registration
+# (proto/project.proto) is what this step exists for. The flag is a
+# POSITIVE signal — unset means UNKNOWN, not "scalar" — and it decides
+# whether the typechecker applies the structural aggregate rules to the
+# call. Its absence does not fail codegen (unflagged custom functions
+# stay permissive on purpose), so a lost flag reaches the database, and
+# the only place the difference shows is here.
+#
+# `nlevel(d.path)` appears in both the projection and the GROUP BY. A
+# registered scalar is opaque to the grouping rules, so the typechecker
+# accepts it and PostgreSQL is what has to agree — which it only does if
+# the two expressions are identical, i.e. if the emitter carried the
+# call through unchanged into both clauses.
+#
+# The four seeded rows (fixtures/catalog/test.json) fall into three
+# depth groups, so the row count and each group's size are exact:
+#
+#   depth 1  root              → charlie
+#   depth 2  root.ops          → delta
+#   depth 3  root.docs.alpha   → alpha
+#            root.docs.bravo   → bravo
+#
+# The depth-3 group is the load-bearing one: it is the only group where
+# string_agg has more than one value to join, so it is the only place a
+# separator or a dropped member shows up. Its `titles` is asserted as an
+# alternation of the two complete orderings rather than with `eq`,
+# because string_agg without an ORDER BY inside it has no defined member
+# order — pinning one would be asserting the scan order. Both branches
+# are FULL anchored values, so the claim stays exact: two members, both
+# names, that separator, nothing else.
+#
+# POSITION IS LOAD-BEARING — see 0010. 0040 adds a fifth row at depth 4,
+# which would add a fourth group here.
+method: docs.DocumentQuery.CountByDepth
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 3}
+
+    rows.0.depth: {matcher: num, op: '==', value: 1}
+    rows.0.document_count: {matcher: eq, value: "1"}
+    rows.0.titles: {matcher: eq, value: seed charlie}
+
+    rows.1.depth: {matcher: num, op: '==', value: 2}
+    rows.1.document_count: {matcher: eq, value: "1"}
+    rows.1.titles: {matcher: eq, value: seed delta}
+
+    rows.2.depth: {matcher: num, op: '==', value: 3}
+    rows.2.document_count: {matcher: eq, value: "2"}
+    rows.2.titles: {matcher: regex, pattern: '^seed alpha \| seed bravo$|^seed bravo \| seed alpha$'}

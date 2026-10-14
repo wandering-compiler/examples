@@ -1,0 +1,28 @@
+# NULLS placement on Postgres, where all three dialects differ:
+#
+#   PG      NULLS LAST is native; nothing is synthesised
+#   SQLite  native keyword since 3.30 — stays ONE sort key
+#   MySQL   no NULLS syntax at all, so the placement is forced with an
+#           `IS NULL` prefix key: one sort key becomes TWO
+#
+# THE ASSERTION IS THE POSITION OF THE NULL ROWS.
+#
+# `attrs` is the only nullable column in the model, so there are NULLs to
+# place: 700004 was seeded with attrs NULL, and 0040/0080 add rows whose
+# attrs is unset, so the NULL group sits at the END. (PG's default for
+# ASC puts NULLs last too; the clause matters on MySQL.)
+method: docs.DocumentQuery.DocumentNulls
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 6}
+
+    # The three rows WITH attrs occupy the first three positions — which
+    # is the claim: the NULL group is not among them. Their order comes
+    # from comparing the raw JSON text, where 700001 and 700003 agree
+    # until `"release.channel":"` and then split on `l`ts vs `s`table.
+    #
+    # The NULL group's own order is not asserted: two of its three rows
+    # are created by earlier steps (0040, 0080).
+    rows.0.id: {matcher: eq, value: "700003"}
+    rows.1.id: {matcher: eq, value: "700001"}
+    rows.2.id: {matcher: eq, value: "700002"}

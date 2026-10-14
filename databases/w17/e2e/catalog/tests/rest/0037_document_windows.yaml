@@ -1,0 +1,67 @@
+# Window FRAME clauses on Postgres.
+#
+# Three windows over the same four rows, differing ONLY in their frame:
+#
+#   rows_count       ROWS  BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+#   range_count      RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+#   neighbour_count  ROWS  BETWEEN 1 PRECEDING AND 1 FOLLOWING
+#
+# Seeded depths (nlevel of the ltree path, fixtures/catalog/test.json):
+#
+#   700001  root.docs.alpha  depth 3
+#   700002  root.docs.bravo  depth 3   ← the tie
+#   700003  root             depth 1
+#   700004  root.ops         depth 2
+#
+# ROWS AND RANGE DIFFER ON EXACTLY ONE CELL. The two modes agree until
+# the window's ORDER BY has ties; then ROWS counts up to the current row
+# and RANGE counts the whole peer group. 700001 and 700002 share depth 3,
+# so 700001 reads 3 under ROWS and 4 under RANGE. Every other cell of
+# those two columns agrees.
+#
+# The ROWS window sorts by (depth, id) rather than depth alone because
+# ROWS numbering INSIDE a peer group is arbitrary; ordering by depth
+# alone would hand 700001 and 700002 the values 3 and 4 in an undefined
+# order. The RANGE window keeps the bare key, because the tie is what it
+# shows.
+#
+# neighbour_count is the offset-bound shape (1 PRECEDING AND 1
+# FOLLOWING) over the id order: the first and last rows see two rows,
+# the middle two see three. Without the frame it would be the default
+# running count 1,2,3,4.
+#
+# Runs before 0040, which inserts a fifth document at depth 4 and would
+# shift every count here.
+method: docs.DocumentQuery.DocumentWindows
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 4}
+
+    # depth 3, second in the (depth, id) order among its peers' start.
+    # ROWS 3 vs RANGE 4 — the one cell where the modes disagree.
+    rows.0.id: {matcher: eq, value: "700001"}
+    rows.0.depth: {matcher: num, op: '==', value: 3}
+    rows.0.rows_count: {matcher: eq, value: "3"}
+    rows.0.range_count: {matcher: eq, value: "4"}
+    rows.0.neighbour_count: {matcher: eq, value: "2"}
+
+    # The other half of the tie. Last in both orders, so both modes read 4.
+    rows.1.id: {matcher: eq, value: "700002"}
+    rows.1.depth: {matcher: num, op: '==', value: 3}
+    rows.1.rows_count: {matcher: eq, value: "4"}
+    rows.1.range_count: {matcher: eq, value: "4"}
+    rows.1.neighbour_count: {matcher: eq, value: "3"}
+
+    # depth 1 — first in the window order, no peers, both modes read 1.
+    rows.2.id: {matcher: eq, value: "700003"}
+    rows.2.depth: {matcher: num, op: '==', value: 1}
+    rows.2.rows_count: {matcher: eq, value: "1"}
+    rows.2.range_count: {matcher: eq, value: "1"}
+    rows.2.neighbour_count: {matcher: eq, value: "3"}
+
+    # depth 2 — no peers either.
+    rows.3.id: {matcher: eq, value: "700004"}
+    rows.3.depth: {matcher: num, op: '==', value: 2}
+    rows.3.rows_count: {matcher: eq, value: "2"}
+    rows.3.range_count: {matcher: eq, value: "2"}
+    rows.3.neighbour_count: {matcher: eq, value: "2"}

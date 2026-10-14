@@ -1,0 +1,63 @@
+# EXTRACT + UNION ALL + CTE on Postgres. The MySQL and SQLite modules
+# declare the same DQL (SiteQuery.SitePeriods, ReadingQuery.ReadingPeriods).
+#
+#   WITH periods AS (
+#     SELECT d.id, EXTRACT(QUARTER FROM d.created_at) AS bucket ...
+#     UNION ALL
+#     SELECT d.id, EXTRACT(DOW     FROM d.created_at) AS bucket ...
+#   )
+#   SELECT p.document_id, p.bucket FROM periods p ORDER BY ...
+#
+# PG's EXTRACT returns NUMERIC, not an integer; the response field is an
+# `int32`, and the generated scan carries the one into the other.
+#
+# The three constructs come together because DQL requires it: a set
+# operation may not carry its own ORDER BY (the combined result has no
+# alias to qualify one with), and the compiler's advice for that is "wrap
+# it in a CTE and order the outer SELECT".
+#
+# Every value below is exact because fixtures/catalog/test.json pins
+# created_at. With the column left on its NOW() default these would be a
+# function of when the suite ran:
+#
+#   700001  Tue 2026-02-17  Q1  DOW 2
+#   700002  Wed 2026-05-06  Q2  DOW 3
+#   700003  Sun 2026-08-09  Q3  DOW 0   ← weekday 0
+#   700004  Fri 2026-10-16  Q4  DOW 5
+#
+# Two rows per document (one per set-op arm), ordered by document_id then
+# bucket: 8 rows. The count is asserted first: without the UNION ALL
+# tail the query would return 4 ordered rows.
+#
+# Runs before 0040, which inserts a fifth document and would add two
+# rows here.
+method: docs.DocumentQuery.DocumentPeriods
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 8}
+
+    # Q1 / Tue. Ordered by bucket, so the quarter lands first.
+    rows.0.document_id: {matcher: eq, value: "700001"}
+    rows.0.bucket: {matcher: num, op: '==', value: 1}
+    rows.1.document_id: {matcher: eq, value: "700001"}
+    rows.1.bucket: {matcher: num, op: '==', value: 2}
+
+    # Q2 / Wed.
+    rows.2.document_id: {matcher: eq, value: "700002"}
+    rows.2.bucket: {matcher: num, op: '==', value: 2}
+    rows.3.document_id: {matcher: eq, value: "700002"}
+    rows.3.bucket: {matcher: num, op: '==', value: 3}
+
+    # Q3 / Sun. The weekday sorts BEFORE the quarter here, which is the
+    # only row where the two arms come back in the other order — and the
+    # only one carrying weekday 0.
+    rows.4.document_id: {matcher: eq, value: "700003"}
+    rows.4.bucket: {matcher: num, op: '==', value: 0}
+    rows.5.document_id: {matcher: eq, value: "700003"}
+    rows.5.bucket: {matcher: num, op: '==', value: 3}
+
+    # Q4 / Fri.
+    rows.6.document_id: {matcher: eq, value: "700004"}
+    rows.6.bucket: {matcher: num, op: '==', value: 4}
+    rows.7.document_id: {matcher: eq, value: "700004"}
+    rows.7.bucket: {matcher: num, op: '==', value: 5}

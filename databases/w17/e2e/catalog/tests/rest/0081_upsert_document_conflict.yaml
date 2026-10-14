@@ -1,0 +1,30 @@
+# UPSERT, second call on the SAME id — the CONFLICT arm.
+#
+# THE LABELS AND PATH ARE THE LOAD-BEARING ASSERTIONS, not the title.
+#
+# The DQL's conflict arm is `DO UPDATE SET title = :title` — title and
+# nothing else. This call sends DIFFERENT labels and path, and the
+# response must still carry the values 0080 inserted. That is what
+# separates "the conflict arm ran with the declared SET list" from "the
+# conflict arm overwrote the row wholesale": both answer 200, both show
+# the new title, and only these two fields tell them apart.
+#
+# The title assertion alone would also pass against an emitter that
+# replaced every column — and against one that deleted and re-inserted.
+#
+# That this step returns 200 at all is the other half: a plain INSERT
+# would fail here with a unique violation on the primary key.
+method: docs.DocumentMutation.UpsertDocument
+input:
+    id: "700900"
+    title: upsert bravo
+    labels: k=>2
+    path: root.upsert.two
+expect:
+    id: {matcher: eq, value: "700900"}
+    # Updated — it is the only column the conflict arm names.
+    title: {matcher: eq, value: upsert bravo}
+    # NOT updated: sent as k=>2 and root.upsert.two, must read back as
+    # what 0080 inserted.
+    labels: {matcher: eq, value: '"k"=>"1"'}
+    path: {matcher: eq, value: root.upsert.one}

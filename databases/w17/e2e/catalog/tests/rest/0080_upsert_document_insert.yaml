@@ -1,0 +1,21 @@
+# UPSERT, first call — the INSERT arm. Pairs with 0081, which calls the
+# same endpoint with the same id and must take the CONFLICT arm.
+#
+# Both steps together are the assertion: a plain INSERT would raise a
+# unique violation on the second call, so 0081 passing at all is what
+# proves the conflict clause was emitted and fired.
+#
+# id comes from a high block (700900) that no other case touches, and
+# both steps run after every counting case (0035-0039 assert exact row
+# counts, 0040 adds the fifth document) so the new row disturbs nothing.
+method: docs.DocumentMutation.UpsertDocument
+input:
+    id: "700900"
+    title: upsert alpha
+    labels: k=>1
+    path: root.upsert.one
+expect:
+    id: {matcher: eq, value: "700900"}
+    title: {matcher: eq, value: upsert alpha}
+    labels: {matcher: eq, value: '"k"=>"1"'}
+    path: {matcher: eq, value: root.upsert.one}

@@ -1,0 +1,37 @@
+# Reading keys out of a JSON column on Postgres.
+#
+# THE SEED CARRIES A DECOY:
+#
+#   "release.channel": "stable"          the key this DQL asks for
+#   "release": { "channel": "WRONG" }    what two hops would find
+#
+# `d.attrs."release.channel"` must read the first. Emit it without the
+# quoting and the path becomes `$.release.channel` — valid JSONPath,
+# no error, and it lands on the nested object instead. Asserting "channel
+# is not null" would pass against BOTH; asserting `stable` is what
+# separates them, and a wrong navigation answers `WRONG` out loud.
+#
+# `"owner's team"`: the quoted key is concatenated inside a SQL string
+# literal, so the apostrophe must be doubled or it closes that literal
+# early. Here it simply has to come
+# back as the value that was stored.
+#
+# env='prod' selects 700001 and 700003; 700002 is stage and 700004 has
+# attrs NULL, so both are excluded — the NULL row also proving the
+# column is genuinely nullable rather than defaulted.
+method: docs.DocumentQuery.DocumentJson
+input:
+    env: prod
+expect:
+    rows: {matcher: count, op: '==', value: 2}
+
+    rows.0.id: {matcher: eq, value: "700001"}
+    rows.0.env: {matcher: eq, value: prod}
+    # `WRONG` here would mean the key was read as two hops.
+    rows.0.channel: {matcher: eq, value: stable}
+    rows.0.owner_team: {matcher: eq, value: platform}
+
+    rows.1.id: {matcher: eq, value: "700003"}
+    rows.1.env: {matcher: eq, value: prod}
+    rows.1.channel: {matcher: eq, value: lts}
+    rows.1.owner_team: {matcher: eq, value: ops}

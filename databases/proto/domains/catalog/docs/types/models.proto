@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package databases.catalog.docs;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+import "w17/pg/field.proto";
+
+// Document: the model with two custom Postgres column types.
+//
+// Both `labels` and `path` are ordinary `string` fields in the proto
+// (the wire never learns about hstore or ltree) and ordinary
+// `type: TEXT` columns in the vocabulary. What
+// `(w17.pg.field).custom_type` changes is the SQL COLUMN TYPE, and
+// only that: null/unique/defaults and every other `(w17.field)`
+// semantic still apply, and the Go carrier is still `string`.
+//
+// The value is an ALIAS from a registry, not raw SQL: the registry
+// entry carries the extension the type needs and the conversion a later
+// type change renders its USING clause from. An unregistered alias is a
+// compile error naming the registry to add it to.
+message Document {
+  option (w17.db.table) = {
+    name: "documents"
+    indexes: [
+      // GIST over the geometry, which is what makes a geometric column
+      // worth having: `ST_Contains` / `ST_DWithin` over millions of
+      // footprints is a sequential scan without it. (So is GeoJSON in a
+      // JSONB column, because a conversion function on the column cannot
+      // use an index.)
+      {
+        name:   "documents_footprint_gist"
+        method: GIST
+        fields: [{ name: "footprint" }]
+      }
+    ]
+  };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  string title = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+
+  // hstore, via the PROJECT-level registry (`proto/project.proto`).
+  //
+  // No min_len / max_len / pattern / choices / blank here: those
+  // synthesise string-only CHECKs (char_length, `<> ''`, regex) that
+  // do not type-check against an hstore column, and the compiler
+  // refuses the combination rather than emitting DDL Postgres will
+  // reject.
+  string labels = 3 [
+    (w17.field)    = { type: TEXT },
+    (w17.pg.field) = { custom_type: "tag_map" }
+  ];
+
+  // ltree, via the DOMAIN-level registry
+  // (`proto/domains/catalog/w17.proto`).
+  //
+  // `required_extensions` here is the FIELD-level list; it is merged
+  // (deduped, sorted) with the registry entry's own list rather than
+  // replacing it. "btree_gist" is the index-side prerequisite this
+  // one column adds on top of the type's own "ltree" — a per-column
+  // fact that does not belong in the shared registry entry.
+  string path = 4 [
+    (w17.field)    = { type: TEXT },
+    (w17.pg.field) = { custom_type: "taxonomy_path", required_extensions: [ "btree_gist" ] }
+  ];
+
+  google.protobuf.Timestamp created_at = 5 [(w17.field) = { default_auto: NOW, immutable: true }];
+
+  // PG casts a bool to 'true'/'false' natively; on MySQL and SQLite the
+  // compiler substitutes a CASE to answer the same.
+  // `default_auto: FALSE` because the column is NOT NULL: without a
+  // default, every INSERT that does not name it fails. The vocabulary has
+  // no `default_bool`; bool defaults go through `default_auto`.
+  bool active = 6 [(w17.field) = { default_auto: FALSE }];
+
+  // A JSON column, read key by key in DocumentQuery.DocumentJson.
+  //
+  // `optional` rather than a default: MySQL refuses a literal DEFAULT on
+  // TEXT/BLOB/JSON (ER_BLOB_CANT_HAVE_DEFAULT 1101), so
+  // `default_string: "{}"` cannot exist on this column in a model shared
+  // with MySQL. Nullable works everywhere, and "this row has no
+  // attributes" is a real state.
+  optional string attrs = 7 [(w17.field) = { type: TEXT, json: true }];
+
+  // An int32 beside the int64 `id`, because PG's SUM() returns a
+  // DIFFERENT TYPE depending on the operand's width: SUM(int4) is
+  // bigint (integer), SUM(int8) is numeric (decimal). See
+  // DocumentQuery.DocumentSumDiv.
+  int32 weight = 8 [(w17.field) = { default_int: 1 }];
+
+  // A binary-float column, for the float→integer CAST in
+  // DocumentQuery.DocumentTypeGuard.
+  double score = 9 [(w17.field) = { default_double: 1.5 }];
+
+  // GEOMETRY. A POLYGON stored as GeoJSON in JSONB or as WKT in TEXT
+  // means every query calls a conversion function ON the column, so no
+  // index is used; a geometry column takes the GIST index above.
+  //
+  // Carried as `string`: EWKT on the way in (`SRID=4326;POINT(14.4 50.1)`),
+  // PostGIS's own representation on the way out. Read it back as text with
+  // the ST_AsText registered in the module's custom_functions.
+  //
+  // `geometry_type` is REQUIRED: an unconstrained geometry column accepts
+  // any shape, so a table meant for footprints would take a point, and
+  // the query that assumed otherwise would return a wrong answer rather
+  // than an error.
+  optional string footprint = 10 [(w17.field) = {
+    geometry_type: "MultiPolygon"
+    srid: 4326
+  }, (w17.db.column) = { db_type: GEOMETRY }];
+
+  // The same type with the SRID left out, which defaults to 4326; the
+  // column is `geometry(Point,4326)`.
+  optional string location = 11 [(w17.field) = {
+    geometry_type: "Point"
+  }, (w17.db.column) = { db_type: GEOMETRY }];
+
+  // GEOGRAPHY — the other half of the vocabulary, and NOT a spelling of
+  // the same thing. A geography computes on the spheroid, so ST_Area over
+  // it answers in square METRES where the identical geometry answers in
+  // square degrees: a 1°×1° box at the equator is 1.0 as geometry and
+  // ~1.2e10 as geography. The suite asserts that number.
+  optional string coverage = 12 [(w17.field) = {
+    geometry_type: "Polygon"
+    srid: 4326
+  }, (w17.db.column) = { db_type: GEOGRAPHY }];
+}

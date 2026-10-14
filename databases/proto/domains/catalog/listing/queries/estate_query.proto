@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+// Reads the registered shared model. `realty.Estate` is the name the
+// registration gave it in this domain; the responses carry the shared
+// type itself.
+
+package databases.catalog.listing;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "shared/estate/types/models.proto";
+
+message GetEstateReq { int64 estate_id = 1; }
+
+message ListEstatesReq {
+  string city = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 80 }];
+}
+
+message ListEstatesResp { repeated databases.shared.estate.Estate items = 1; }
+
+service EstateQuery {
+  rpc GetEstate(GetEstateReq) returns (databases.shared.estate.Estate) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "SELECT e.id, e.name, e.city FROM realty.Estate e WHERE e.id = :estate_id" }
+    };
+  }
+
+  rpc ListEstates(ListEstatesReq) returns (ListEstatesResp) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "SELECT e.id, e.name, e.city FROM realty.Estate e WHERE e.city = :city ORDER BY e.id ASC" }
+    };
+  }
+}

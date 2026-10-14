@@ -1,0 +1,28 @@
+# ROWS_TO_ARRAY + FILTER on Postgres.
+#
+# active_count IS ASSERTED AGAINST total_count, not on its own.
+#
+# MySQL has no FILTER syntax; the compiler rewrites the aggregate into
+# `COUNT(CASE WHEN … THEN 1 END)`. A rewrite that dropped the predicate
+# still returns a count — of every row — so `active_count > 0` would pass
+# against it. The seed has 2 active documents of 5 (four seeded, 700900
+# added by 0080 with active defaulting false), so the two numbers must
+# DIFFER, and by how much.
+#
+# ROWS_TO_ARRAY has three spellings and three empty-guards:
+#   PG      COALESCE(array_agg(…), '{}')
+#   MySQL   IFNULL(JSON_ARRAYAGG(…), JSON_ARRAY())
+#   SQLite  COALESCE(json_group_array(…), '[]')
+# This suite runs PG's.
+#
+# Runs after every counting case, so the row it adds nowhere disturbs.
+method: docs.DocumentQuery.DocumentAgg
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 1}
+    # 4 seeded + 700900 from 0080, and 0040 adds one more.
+    rows.0.total_count: {matcher: eq, value: "6"}
+    # Seeded active: 700001 and 700003. Nothing else sets it true.
+    rows.0.active_count: {matcher: eq, value: "2"}
+    # The aggregate collected every title, so a seeded one must be in it.
+    rows.0.values: {matcher: regex, pattern: 'seed alpha'}

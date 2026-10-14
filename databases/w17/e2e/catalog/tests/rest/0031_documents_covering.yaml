@@ -1,0 +1,49 @@
+# The geometric column, answering the question it exists for.
+#
+# 0010 and 0020 prove a column round-trips and that a registered
+# function is live. Neither can prove a SHAPE: a TEXT column holding the
+# same WKT characters would answer both the same way. This step asks
+# PostGIS a question only a geometry can answer — does this polygon
+# CONTAIN this point — and reads the column back through ST_AsText.
+#
+# Four registry entries are load-bearing at once, and they fail at
+# different stages:
+#
+#   * Drop any of ST_Contains / ST_AsText / ST_SetSRID / ST_MakePoint
+#     from `(w17.pg.module).custom_functions` and CODEGEN fails with an
+#     unknown function — the same stage as akeys/nlevel in 0020.
+#   * Keep them registered but emit `footprint` as TEXT (drop the
+#     `db_type: GEOMETRY`) and codegen still succeeds; the suite reaches
+#     Postgres and dies HERE, because ST_Contains has no meaning over
+#     text.
+#
+# THE DECOY IS THE POINT. 700002 also has a footprint — a square at
+# (10..11, 10..11), far from the probe at (0.5, 0.5). Without it, a
+# predicate that matched every non-null footprint would return exactly
+# one row and pass; with it, that bug returns two and fails. The count
+# is therefore the assertion, not decoration.
+#
+# The SRID on both sides is 4326. A constructed point with SRID 0
+# compared against a 4326 column ERRORS rather than answering wrongly,
+# which is why ST_SetSRID is in the query at all.
+#
+# POSITION: before 0040, which inserts a fifth document with no
+# footprint — running after it would leave this answer unchanged, so
+# nothing is gained, but the count above would stop describing the whole
+# fixture.
+method: docs.DocumentQuery.DocumentsCovering
+input:
+    lon: 0.5
+    lat: 0.5
+expect:
+    rows: {matcher: count, op: '==', value: 1}
+    rows.0.id: {matcher: eq, value: "700001"}
+    rows.0.title: {matcher: eq, value: seed alpha}
+    # ST_AsText, not the raw column: the carrier is a string either way,
+    # and the raw read would return PostGIS's hex EWKB.
+    rows.0.footprint_wkt: {matcher: eq, value: "MULTIPOLYGON(((0 0,0 1,1 1,1 0,0 0)))"}
+    # ST_Area over the GEOGRAPHY column — square METRES. The same ring
+    # stored as a geometry answers 1.0 (square degrees), so this bound is
+    # ten orders of magnitude away from the wrong type's answer rather
+    # than being a value that merely looks plausible.
+    rows.0.coverage_m2: {matcher: num, op: '>', value: 10000000000}

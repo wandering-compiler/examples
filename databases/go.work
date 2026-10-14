@@ -1,0 +1,10 @@
+go 1.26.1
+
+use (
+	./srcgo
+	./w17/services/catalog-gateway
+	./w17/services/catalog-storage
+	./w17/services/dialects-storage
+	./w17/services/e2erunner
+	./w17/stubs
+)

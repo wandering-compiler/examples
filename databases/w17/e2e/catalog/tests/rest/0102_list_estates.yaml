@@ -1,0 +1,7 @@
+# A list of the shared type. Only 0100's row is in Brno.
+method: listing.EstateQuery.ListEstates
+input:
+    city: Brno
+expect:
+    items: {matcher: count, op: '==', value: 1}
+    items.0.name: {matcher: eq, value: Vila Tugendhat}

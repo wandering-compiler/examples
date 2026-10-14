@@ -1,0 +1,9 @@
+# Reads back the row 0100 wrote, through `realty.Estate` — the name the
+# registration gives the shared model in this domain's DQL.
+method: listing.EstateQuery.GetEstate
+input:
+    estate_id: ${created_estate.id}
+expect:
+    id: {matcher: not_empty}
+    name: {matcher: eq, value: Vila Tugendhat}
+    city: {matcher: eq, value: Brno}

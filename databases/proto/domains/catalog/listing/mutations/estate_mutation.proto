@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package databases.catalog.listing;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "shared/estate/types/models.proto";
+
+message CreateEstateReq {
+  string name = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 120 }];
+  string city = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 80 }];
+}
+
+service EstateMutation {
+  rpc CreateEstate(CreateEstateReq) returns (databases.shared.estate.Estate) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "INSERT INTO realty.Estate SET name = :name, city = :city RETURNING id, name, city" }
+    };
+  }
+}

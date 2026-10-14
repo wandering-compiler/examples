@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+// Module anchor for dialects.local: OVERRIDES the domain's MySQL
+// connection with a SQLite one (a module has one connection, a domain
+// may have several). The override is what puts this module's tables on
+// SQLite, the only dialect that reads (w17.sqlite.field).
+//
+// File is a SENTINEL — options only, no messages.
+
+package databases.dialects.local;
+
+import "w17/module.proto";
+
+option (w17.module) = {
+  connection: {
+    name: "dialects-sqlite",
+    dialect: SQLITE,
+    version: "3"
+  }
+};

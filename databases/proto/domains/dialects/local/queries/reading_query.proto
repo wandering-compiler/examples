@@ -1,0 +1,335 @@
+syntax = "proto3";
+
+// The queries of the SQLite module: the same DQL as the MySQL module's
+// (spatial/queries/site_query.proto), compiled for SQLite. The comments
+// there say what differs between the dialects; the ones here say what
+// SQLite does.
+//
+//   `||`      SQLite keeps it; MySQL emits CONCAT() instead.
+//   `:sensor` bound TWICE: SQLite's `?` is positional by occurrence, as
+//             MySQL's is, so the handler binds the value once per `?`.
+package databases.dialects.local;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/dialects/local/types/models.proto";
+import "shared/estate/types/models.proto";
+
+message ListReadingsBySensorReq {
+  string sensor = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 64 }];
+}
+
+message ReadingRow {
+  int64  id     = 1;
+  string sensor = 2;
+}
+
+message ListReadingsBySensorResp {
+  repeated ReadingRow items = 1;
+}
+
+message ReadingJsonReq {
+  string env = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 40 }];
+}
+
+message ReadingJsonRow {
+  int64  id          = 1;
+  string env         = 2;
+  string channel     = 3;
+  string owner_team  = 4;
+}
+
+message ReadingJsonResp { repeated ReadingJsonRow items = 1; }
+
+message ReadingMatrixReq {
+  string sensor = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 64 }];
+}
+
+message ReadingMatrixRow {
+  int64  id          = 1;
+  int64  int_div     = 2;
+  double dec_div     = 3;
+  int32  rounded     = 4;
+  string active_text = 5;
+  string id_text     = 6;
+}
+
+message ReadingMatrixResp { repeated ReadingMatrixRow items = 1; }
+
+message ReadingPeriodsReq {
+  string sensor = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 64 }];
+}
+
+message ReadingPeriodRow {
+  int64 reading_id = 1;
+
+  // `optional` for the same reason as its PG and MySQL siblings —
+  // weekday 0 is a value, not an absence. See DocumentPeriodRow.
+  optional int32 bucket = 2;
+}
+
+message ReadingPeriodsResp {
+  repeated ReadingPeriodRow items = 1;
+}
+
+message ReadingAggReq {}
+
+message ReadingAggRow {
+  string values       = 1;
+  int64  active_count = 2;
+  int64  total_count  = 3;
+}
+
+message ReadingAggResp { repeated ReadingAggRow items = 1; }
+
+message ReadingNullsReq {}
+
+message ReadingNullsRow {
+  int64 id = 1;
+
+  // `optional` because the source column is nullable and this is its
+  // projection. A plain string here compiles too, and fails at run time
+  // on the first NULL row: the scan has nowhere to put a NULL. The seed
+  // carries a NULL so the suite reads one.
+  optional string attrs = 2;
+}
+
+message ReadingNullsResp { repeated ReadingNullsRow items = 1; }
+
+message ReadingRangeReq {}
+
+message ReadingRangeRow {
+  int64 id         = 1;
+  int64 near_count = 2;
+}
+
+message ReadingRangeResp { repeated ReadingRangeRow items = 1; }
+
+message ReadingSumDivReq {}
+
+message ReadingSumDivRow {
+  double by_int32 = 1;
+  double by_int64 = 2;
+}
+
+message ReadingSumDivResp { repeated ReadingSumDivRow items = 1; }
+
+message ReadingTypeGuardReq {}
+
+message ReadingTypeGuardRow {
+  int64  id           = 1;
+  int32  from_float   = 2;
+  int32  from_integer = 3;
+
+  // A bool cast to a string, through COALESCE: the compiler still knows
+  // the operand is a bool, so SQLite renders 'true'/'false' as Postgres
+  // does rather than '1'/'0'.
+  string bool_via_coalesce = 4;
+}
+
+message ReadingTypeGuardResp { repeated ReadingTypeGuardRow items = 1; }
+
+// The shared Estate as a CONTRACT: this domain does not register
+// shared/estate, so no table exists for it here — the type is only the
+// shape of a nested message, filled from this domain's own table. It is
+// the same Go type catalog stores (databases.shared.estate.Estate).
+message ReadingSiteReq { int64 reading_id = 1; }
+message ReadingSiteResp { databases.shared.estate.Estate site = 1; }
+
+service ReadingQuery {
+  // The connection comes from the module: local/w17.proto overrides the
+  // domain's MySQL connection with a SQLite one.
+  rpc ReadingSite(ReadingSiteReq) returns (ReadingSiteResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql: "SELECT r.id AS site.id, r.sensor AS site.name, r.sensor AS site.city FROM local.Reading r WHERE r.id = :reading_id"
+      }
+    };
+  }
+
+  rpc ListReadingsBySensor(ListReadingsBySensorReq) returns (ListReadingsBySensorResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT r.id, r.sensor "
+          "FROM local.Reading r "
+          "WHERE r.sensor = :sensor OR r.sensor LIKE :sensor || '%' "
+          "ORDER BY r.id ASC"
+      }
+    };
+  }
+
+  // The same DQL as spatial.SiteQuery.SitePeriods.
+  //
+  // The dialects differ most here: SQLite has no EXTRACT keyword and no
+  // QUARTER, so the compiler emits a CAST around strftime, and the
+  // quarter as arithmetic on the month. `WITH` and `UNION ALL` are
+  // native on both and come out unchanged.
+  rpc ReadingPeriods(ReadingPeriodsReq) returns (ReadingPeriodsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "WITH periods AS ("
+          "SELECT r.id AS reading_id, EXTRACT(QUARTER FROM r.recorded_at) AS bucket "
+          "FROM local.Reading r WHERE r.sensor = :sensor "
+          "UNION ALL "
+          "SELECT r.id AS reading_id, EXTRACT(DOW FROM r.recorded_at) AS bucket "
+          "FROM local.Reading r WHERE r.sensor = :sensor"
+          ") "
+          "SELECT p.reading_id AS reading_id, p.bucket AS bucket "
+          "FROM periods p "
+          "ORDER BY p.reading_id ASC"
+      }
+    };
+  }
+
+  // The same DQL as spatial.SiteQuery.SiteMatrix; see that method for
+  // what each column shows.
+  //
+  // SQLite needs two of the five rewrites, and they pull opposite ways:
+  // `CAST(… AS REAL)` on a division PG computes as NUMERIC (its EXTRACT
+  // lowers to an INTEGER, so integer/integer would truncate), and
+  // `ROUND(…)` around a float→integer CAST operand (its CAST truncates
+  // toward zero where PG and MySQL round).
+  //
+  // It needs neither of MySQL's: `/` truncates natively here, and
+  // `IS DISTINCT FROM` is native since 3.39.
+  rpc ReadingMatrix(ReadingMatrixReq) returns (ReadingMatrixResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT r.id AS id, "
+          "r.id / 7 AS int_div, "
+          "100 / EXTRACT(MONTH FROM r.recorded_at) AS dec_div, "
+          "CAST(100 / EXTRACT(MONTH FROM r.recorded_at) AS INT32) AS rounded, "
+          "CAST(r.active AS STRING) AS active_text, "
+          "CAST(r.id AS STRING) AS id_text "
+          "FROM local.Reading r "
+          "WHERE r.sensor IS DISTINCT FROM :sensor "
+          "ORDER BY r.id ASC"
+      }
+    };
+  }
+
+  // Reading keys out of a JSON column with `json_extract(col, '$.a.b')`.
+  // The keys are the ones spatial.SiteQuery.SiteJson reads, and that
+  // method says how each one is quoted in the path.
+  rpc ReadingJson(ReadingJsonReq) returns (ReadingJsonResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT r.id AS id, "
+          "r.attrs.env AS env, "
+          "r.attrs.\"release.channel\" AS channel, "
+          "r.attrs.\"owner's team\" AS owner_team "
+          "FROM local.Reading r "
+          "WHERE r.attrs.env = :env "
+          "ORDER BY r.id ASC"
+      }
+    };
+  }
+
+
+  // Two aggregates that each dialect spells differently:
+  //
+  //   ROWS_TO_ARRAY   array_agg · JSON_ARRAYAGG · json_group_array,
+  //                   and COALESCE vs IFNULL around them.
+  //   FILTER          native on PG and SQLite; MySQL has no FILTER
+  //                   syntax, so the compiler rewrites the aggregate
+  //                   into a CASE there.
+  rpc ReadingAgg(ReadingAggReq) returns (ReadingAggResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT ROWS_TO_ARRAY(r.sensor) AS values, "
+          "COUNT(*) FILTER (WHERE r.active) AS active_count, "
+          "COUNT(*) AS total_count "
+          "FROM local.Reading r"
+      }
+    };
+  }
+
+
+  // NULLS placement. SQLite has the NULLS keyword since 3.30, so it
+  // stays one sort key, as on Postgres; MySQL needs a synthesised
+  // `IS NULL` key (see spatial.SiteQuery.SiteNulls).
+  rpc ReadingNulls(ReadingNullsReq) returns (ReadingNullsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT r.id AS id, r.attrs AS attrs "
+          "FROM local.Reading r "
+          "ORDER BY r.attrs ASC NULLS LAST, r.id ASC"
+      }
+    };
+  }
+
+
+  // A RANGE window frame with an offset bound, which allows exactly one
+  // sort key. See spatial.SiteQuery.SiteRange for why it has no NULLS
+  // clause.
+  rpc ReadingRange(ReadingRangeReq) returns (ReadingRangeResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT r.id AS id, "
+          "COUNT(*) OVER (ORDER BY r.id ASC "
+          "RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS near_count "
+          "FROM local.Reading r "
+          "ORDER BY r.id ASC"
+      }
+    };
+  }
+
+
+  // The same division twice, differing only in the width of the summed
+  // column, which decides the TYPE PG's SUM() returns:
+  //
+  //   SUM(int4) → bigint   integer  → `/` truncates on PG and SQLite;
+  //                                   MySQL needs DIV (its `/` is decimal)
+  //   SUM(int8) → numeric  decimal  → `/` is decimal on PG and MySQL;
+  //                                   SQLite needs a REAL cast (its SUM
+  //                                   over integers stays an integer)
+  rpc ReadingSumDiv(ReadingSumDivReq) returns (ReadingSumDivResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT 100 / SUM(r.weight) AS by_int32, "
+          "100 / SUM(r.id) AS by_int64 "
+          "FROM local.Reading r"
+      }
+    };
+  }
+
+
+  // A float→integer CAST over COALESCE. SQLite truncates such a CAST
+  // where PG and MySQL round, so the compiler wraps a float operand in
+  // ROUND() here; COALESCE carries its arguments' type, so it can tell:
+  //
+  //   COALESCE(<double>, …)  float     → wrapped in ROUND
+  //   COALESCE(<int32>, …)   not float → no wrap
+  rpc ReadingTypeGuard(ReadingTypeGuardReq) returns (ReadingTypeGuardResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT r.id AS id, "
+          "CAST(COALESCE(r.score, 0) AS INT32) AS from_float, "
+          "CAST(COALESCE(r.weight, 0) AS INT32) AS from_integer, "
+          "CAST(COALESCE(r.active, FALSE) AS STRING) AS bool_via_coalesce "
+          "FROM local.Reading r "
+          "ORDER BY r.id ASC"
+      }
+    };
+  }
+
+}

@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+// UPSERT on SQLite: the same DQL as spatial.SiteMutation.UpsertSite
+// (MySQL) and docs.DocumentMutation.UpsertDocument (Postgres).
+//
+// SQLite spells the conflict clause the same way PG does
+// (`ON CONFLICT (cols) DO UPDATE SET …`) and, from 3.35, returns the row
+// with RETURNING; MySQL does neither.
+package databases.dialects.local;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/dialects/local/types/models.proto";
+
+message UpsertReadingReq {
+  int64  id     = 1;
+  string sensor = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 64 }];
+  // `magnitude` and `payload` are NOT NULL on Reading with no default,
+  // so the INSERT arm of the upsert has to name them; the compiler
+  // refuses an INSERT that leaves out such a column.
+  string magnitude = 3 [(w17.field) = { type: TEXT }];
+  string payload   = 4 [(w17.field) = { type: TEXT }];
+}
+
+message UpsertReadingResp {
+  int64  id     = 1;
+  string sensor = 2;
+}
+
+service ReadingMutation {
+  rpc UpsertReading(UpsertReadingReq) returns (UpsertReadingResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "UPSERT INTO local.Reading SET "
+          "id = :id, sensor = :sensor, magnitude = :magnitude, payload = :payload "
+          "ON CONFLICT (id) DO UPDATE SET sensor = :sensor "
+          "RETURNING id, sensor"
+      }
+    };
+  }
+}

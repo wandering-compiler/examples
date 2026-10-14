@@ -1,0 +1,34 @@
+# A float→integer CAST over COALESCE. PG and MySQL round such a CAST;
+# SQLite truncates, so the compiler wraps a float operand in ROUND()
+# there. COALESCE resolves to the COMMON type of its arguments
+# (`pg_typeof(COALESCE(1.5::float8, 0))` is `double precision`), so
+# `COALESCE(<float>, 0)` is a float operand even with an integer fallback:
+#
+#   PG      CAST(COALESCE(1.5::float8, 0) AS int)  = 2   rounds
+#   SQLite  CAST(COALESCE(1.5, 0) AS INTEGER)      = 1   truncates, unless
+#                                                        wrapped in ROUND
+#
+# Both columns are asserted:
+#
+#   from_float    COALESCE(<double>, 0)  float     → SQLite wraps
+#   from_integer  COALESCE(<int32>, 0)   not float → nobody wraps
+#
+# This suite runs against Postgres, which rounds natively; the SQLite
+# module's ReadingQuery.ReadingTypeGuard is the same DQL with the wrap.
+#
+# `score` defaults to 1.5 and nothing sets it, so every row rounds to 2 —
+# truncation would answer 1. `weight` defaults to 1 and is already an
+# integer, so it reads 1 either way and is the control.
+method: docs.DocumentQuery.DocumentTypeGuard
+input: {}
+expect:
+    # Bounded to the seeded block (`d.id > 700000`), ordered by id, so
+    # row 0 is the seeded 700001.
+    rows: {matcher: count, op: '>=', value: 4}
+    # 1.5 rounded, not truncated.
+    rows.0.from_float: {matcher: num, op: '==', value: 2}
+    # An integer operand reads the same under either behaviour.
+    rows.0.from_integer: {matcher: num, op: '==', value: 1}
+    # `active` is true on 700001, and PG renders a boolean cast as 'true'
+    # natively; on MySQL and SQLite the compiler emits a CASE for it.
+    rows.0.bool_via_coalesce: {matcher: eq, value: "true"}
