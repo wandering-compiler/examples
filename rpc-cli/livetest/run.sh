@@ -54,8 +54,12 @@ mkdir -p w17/certs/dev.local
 
 # The database first, and its schema from the console: the seed step writes
 # rows, so the tables have to exist before the rest of the stack starts.
+# `stack up` syncs through the console the lock names; W17_CONSOLE_ADDR,
+# which `w17ctl codegen` and `w17ctl test` read, names another one.
+console=()
+if [ -n "${W17_CONSOLE_ADDR:-}" ]; then console=(--console "$W17_CONSOLE_ADDR"); fi
 echo "==> the database and its schema"
-w17ctl stack up --build ops-postgres
+w17ctl stack up --build "${console[@]}" ops-postgres
 echo "==> the stack"
 w17ctl stack up --build --no-sync
 
@@ -66,7 +70,9 @@ grpcurl() { docker run --rm --network "$network" "$grpcurl_image" -plaintext "$@
 surface="ops-gateway:8082"
 
 echo "==> waiting for the public surface on $surface"
-deadline=$((SECONDS + 180))
+# Long enough for services that compile at start-up (`go run`) as well as
+# for built images, which answer within seconds.
+deadline=$((SECONDS + 600))
 until services="$(grpcurl "$surface" list 2>&1)"; do
   [ "$SECONDS" -lt "$deadline" ] || { docker compose logs --tail=40 ops-gateway ops-storage; fail "the public surface did not answer: $services"; }
   sleep 2
