@@ -1,0 +1,27 @@
+# What this example adds to the generated stack (compose.w17.yaml), merged
+# over it by the include in compose.yaml: the seed rows the suite starts
+# from.
+services:
+  # One-shot: applies the rendered seed of fixtures/app/test.json (rendered
+  # into w17/fixtures by `w17ctl fixtures render`) with the app-server
+  # binary itself; the binary refuses a seed older than its fixture. The
+  # schema is in place by then: `w17ctl test` builds it before the services
+  # start.
+  app-seed:
+    build:
+      context: .
+      dockerfile: w17/services/app-server/Dockerfile
+    environment:
+      # The database a `fixtures apply` seeds is the connection's target.
+      W17_TARGET_APP_POSTGRES: postgres://app:${W17_APP_POSTGRES_DB_PASSWORD:-app}@app-postgres:5432/app?sslmode=disable
+    command: ["fixtures", "apply", "--connection", "app-postgres", "--fixtures", "/w17/fixtures"]
+    restart: "no"
+    volumes:
+      - ./w17/fixtures:/w17/fixtures:ro
+      - ./fixtures/app/test.json:/fixtures/app/test.json:ro
+    depends_on:
+      app-postgres: { condition: service_healthy }
+
+  app-server:
+    depends_on:
+      app-seed: { condition: service_completed_successfully }

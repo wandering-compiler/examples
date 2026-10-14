@@ -7,4 +7,4 @@ pre:
     - auth/admin.yaml
 input: {}
 expect:
-    notes: {matcher: unwritten}
+    notes: {matcher: count, op: '>=', value: 1}

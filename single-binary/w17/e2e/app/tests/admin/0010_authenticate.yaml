@@ -3,12 +3,8 @@
 # `w17ctl codegen` && `w17ctl test` — skip the regen and the run
 # silently asserts the previous expectations and passes.
 
-# Sign-in against a SEEDED account — the admin realm has no self-signup,
-# so the suite cannot register a fresh user. The account below must
-# ALREADY exist when the suite runs: seed it with a fixture (fixtures/,
-# applied by the storage binary's `fixtures apply`) with a password hash
-# for the literal below. Until it is seeded, Authenticate returns 401 and
-# every step that depends on this login is skipped.
+# Sign-in against the account seeded in fixtures/app/test.json (the
+# admin realm has no self-signup), with the admin-all role.
 method: admin.Authenticate
 input:
     email: e2e-admin@example.com

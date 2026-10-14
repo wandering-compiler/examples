@@ -10,11 +10,11 @@
 method: example.NotesFacade.CreateNoteCheckedComposed
 input:
     owner_id: ${random:uuid}
-    title: e2e-value
-    body: e2e-value
+    title: composed
+    body: b
 expect:
     id: {matcher: not_empty}
     owner_id: {matcher: not_empty}
-    title: {matcher: eq, value: "[checked] e2e-value"}
+    title: {matcher: eq, value: "[checked] composed"}
     body: {matcher: not_empty}
     created_at: {matcher: not_empty}

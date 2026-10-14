@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "source_root": "../../fixtures",
+  "seeds": {
+    "app/test": {
+      "source": "app/test.json",
+      "sha256": "5c1b74f32803f649d712a8fd18feb175d7ff2879e7bfb087f8b63f3dbd335bd0"
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "rows": [
+    {
+      "model": "example.Note",
+      "pk": [
+        700001
+      ],
+      "fields": {
+        "owner_id": "0ad10000-0000-7000-8000-0000000000e2",
+        "title": "seeded note",
+        "body": "read by the REST and admin cases"
+      }
+    },
+    {
+      "model": "example.Note",
+      "pk": [
+        700002
+      ],
+      "fields": {
+        "owner_id": "0ad10000-0000-7000-8000-0000000000e2",
+        "title": "note to edit",
+        "body": "updated by 0020 and by the admin's update case"
+      }
+    },
+    {
+      "model": "example.Note",
+      "pk": [
+        700003
+      ],
+      "fields": {
+        "owner_id": "0ad10000-0000-7000-8000-0000000000e2",
+        "title": "note to delete over REST",
+        "body": "deleted by 0030"
+      }
+    },
+    {
+      "model": "example.Note",
+      "pk": [
+        700004
+      ],
+      "fields": {
+        "owner_id": "0ad10000-0000-7000-8000-0000000000e2",
+        "title": "note to delete in the admin",
+        "body": "deleted by the admin's delete case"
+      }
+    },
+    {
+      "model": "example.Note",
+      "pk": [
+        700005
+      ],
+      "fields": {
+        "owner_id": "0ad10000-0000-7000-8000-0000000000e3",
+        "title": "the one note of its owner",
+        "body": "listed by 0050"
+      }
+    },
+    {
+      "model": "admin_auth.Role",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000a1"
+      ],
+      "fields": {
+        "name": "admin-all",
+        "description": "e2e all-permissions admin role",
+        "all_permissions": true
+      }
+    },
+    {
+      "model": "admin_auth.User",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000a2"
+      ],
+      "fields": {
+        "email": "e2e-admin@example.com",
+        "password_hash": "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      }
+    },
+    {
+      "model": "admin_auth.UserRole",
+      "pk": [
+        "00000000-0000-0000-0000-0000000000a4"
+      ],
+      "fields": {
+        "user_id": "00000000-0000-0000-0000-0000000000a2",
+        "role_id": "00000000-0000-0000-0000-0000000000a1"
+      }
+    }
+  ]
+}

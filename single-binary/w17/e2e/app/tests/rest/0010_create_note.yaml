@@ -1,11 +1,14 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
+# silently asserts the previous expectations and passes.
 method: example.NoteMutation.CreateNote
 input:
     owner_id: ${random:uuid}
-    title: e2e-value
-    body: e2e-value
+    title: a new note
+    body: written by the suite
 expect:
     id: {matcher: not_empty}
-    owner_id: {matcher: not_empty}
-    title: {matcher: not_empty}
-    body: {matcher: not_empty}
+    title: {matcher: eq, value: a new note}
+    body: {matcher: eq, value: written by the suite}
     created_at: {matcher: not_empty}

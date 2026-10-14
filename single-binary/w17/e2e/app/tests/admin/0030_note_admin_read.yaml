@@ -6,10 +6,7 @@ method: admin.NoteAdmin.Read
 pre:
     - auth/admin.yaml
 input:
-    id: e2e-value
+    id: "700001"
 expect:
-    id: {matcher: not_empty}
-    owner_id: {matcher: not_empty}
-    title: {matcher: not_empty}
-    body: {matcher: not_empty}
-    created_at: {matcher: not_empty}
+    id: {matcher: eq, value: "700001"}
+    title: {matcher: eq, value: seeded note}

@@ -34,7 +34,10 @@ infrastructure, and no service for any component folded into it.
 
 ## Tests
 
-- `w17/e2e/app/` is the generated end-to-end suite.
+- `w17/e2e/app/` is the end-to-end suite, over REST and the admin, from the
+  rows in `fixtures/app/test.json` (notes, and the admin account it signs in
+  with). `compose.single-binary.yaml` adds the step that seeds them, with
+  `app-server fixtures apply`, before the binary starts.
 - `livetest/` checks what the generated suite cannot: that the stack has no
   standalone service for a folded component, that `app-server`'s
   Dockerfile builds the admin's console (`vite build`), that each event is

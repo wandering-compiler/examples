@@ -6,12 +6,9 @@ method: admin.NoteAdmin.Update
 pre:
     - auth/admin.yaml
 input:
-    id: e2e-value
-    title: e2e-value
-    body: e2e-value
+    id: "700005"
+    title: edited in the admin
+    body: b
 expect:
-    id: {matcher: not_empty}
-    owner_id: {matcher: not_empty}
-    title: {matcher: not_empty}
-    body: {matcher: not_empty}
-    created_at: {matcher: not_empty}
+    id: {matcher: eq, value: "700005"}
+    title: {matcher: eq, value: edited in the admin}

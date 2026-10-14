@@ -1,0 +1,81 @@
+{
+  "statements": [
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000a1",
+        true,
+        "e2e all-permissions admin role",
+        "admin-all"
+      ],
+      "sql": "INSERT INTO \"admin_auth_role\" (\"id\", \"all_permissions\", \"description\", \"name\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"all_permissions\" = EXCLUDED.\"all_permissions\", \"description\" = EXCLUDED.\"description\", \"name\" = EXCLUDED.\"name\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000a2",
+        "e2e-admin@example.com",
+        "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
+      ],
+      "sql": "INSERT INTO \"admin_auth_user\" (\"id\", \"email\", \"password_hash\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000a4",
+        "00000000-0000-0000-0000-0000000000a1",
+        "00000000-0000-0000-0000-0000000000a2"
+      ],
+      "sql": "INSERT INTO \"admin_auth_userrole\" (\"id\", \"role_id\", \"user_id\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"role_id\" = EXCLUDED.\"role_id\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        700001,
+        "read by the REST and admin cases",
+        "0ad10000-0000-7000-8000-0000000000e2",
+        "seeded note"
+      ],
+      "sql": "INSERT INTO \"notes\" (\"id\", \"body\", \"owner_id\", \"title\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body\" = EXCLUDED.\"body\", \"owner_id\" = EXCLUDED.\"owner_id\", \"title\" = EXCLUDED.\"title\""
+    },
+    {
+      "args": [
+        700002,
+        "updated by 0020 and by the admin's update case",
+        "0ad10000-0000-7000-8000-0000000000e2",
+        "note to edit"
+      ],
+      "sql": "INSERT INTO \"notes\" (\"id\", \"body\", \"owner_id\", \"title\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body\" = EXCLUDED.\"body\", \"owner_id\" = EXCLUDED.\"owner_id\", \"title\" = EXCLUDED.\"title\""
+    },
+    {
+      "args": [
+        700003,
+        "deleted by 0030",
+        "0ad10000-0000-7000-8000-0000000000e2",
+        "note to delete over REST"
+      ],
+      "sql": "INSERT INTO \"notes\" (\"id\", \"body\", \"owner_id\", \"title\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body\" = EXCLUDED.\"body\", \"owner_id\" = EXCLUDED.\"owner_id\", \"title\" = EXCLUDED.\"title\""
+    },
+    {
+      "args": [
+        700004,
+        "deleted by the admin's delete case",
+        "0ad10000-0000-7000-8000-0000000000e2",
+        "note to delete in the admin"
+      ],
+      "sql": "INSERT INTO \"notes\" (\"id\", \"body\", \"owner_id\", \"title\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body\" = EXCLUDED.\"body\", \"owner_id\" = EXCLUDED.\"owner_id\", \"title\" = EXCLUDED.\"title\""
+    },
+    {
+      "args": [
+        700005,
+        "listed by 0050",
+        "0ad10000-0000-7000-8000-0000000000e3",
+        "the one note of its owner"
+      ],
+      "sql": "INSERT INTO \"notes\" (\"id\", \"body\", \"owner_id\", \"title\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"body\" = EXCLUDED.\"body\", \"owner_id\" = EXCLUDED.\"owner_id\", \"title\" = EXCLUDED.\"title\""
+    },
+    {
+      "args": [
+        "notes",
+        "id"
+      ],
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"notes\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"notes\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+    }
+  ]
+}
