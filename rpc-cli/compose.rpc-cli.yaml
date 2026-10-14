@@ -1,0 +1,25 @@
+# What this example adds to the generated stack (compose.w17.yaml), merged
+# over it by the include in compose.yaml: the seed rows livetest/run.sh reads.
+services:
+  # One-shot: applies the rendered seed of fixtures/ops/test.json (rendered
+  # into w17/fixtures by `w17ctl fixtures render`) with the storage binary
+  # itself; the binary refuses a seed older than its fixture. The schema is
+  # in place by then: `w17ctl stack up` syncs it before the services start.
+  ops-seed:
+    build:
+      context: .
+      dockerfile: w17/services/ops-storage/Dockerfile
+    environment:
+      # The database a `fixtures apply` seeds is the connection's target.
+      W17_TARGET_OPS_POSTGRES: postgres://ops:${W17_OPS_POSTGRES_DB_PASSWORD:-ops}@ops-postgres:5432/ops?sslmode=disable
+    command: ["fixtures", "apply", "--connection", "ops-postgres", "--fixtures", "/w17/fixtures"]
+    restart: "no"
+    volumes:
+      - ./w17/fixtures:/w17/fixtures:ro
+      - ./fixtures/ops/test.json:/fixtures/ops/test.json:ro
+    depends_on:
+      ops-postgres: { condition: service_healthy }
+
+  ops-storage:
+    depends_on:
+      ops-seed: { condition: service_completed_successfully }

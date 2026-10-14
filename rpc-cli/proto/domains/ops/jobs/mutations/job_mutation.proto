@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package rpc_cli.ops.jobs;
+
+import "w17/cli.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+import "w17/rpc.proto";
+import "domains/ops/jobs/types/models.proto";
+
+message CreateJobReq {
+  string name     = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 120 }];
+  int32  priority = 2 [(w17.field) = { type: NUMBER, gte: 0, lte: 9 }];
+}
+
+message CancelJobReq { int64 job_id = 1; }
+
+service JobMutation {
+  // Picked on the method, with a public service name: it is served as
+  // `JobAdmin.CreateJob`, not `JobMutation.CreateJob`. `(w17.rpc_service)`
+  // gathers methods of several backend services under one public name, or
+  // gives a backend service a different one.
+  rpc CreateJob(CreateJobReq) returns (Job) {
+    option (w17.rpc)         = true;
+    option (w17.rpc_service) = "JobAdmin";
+    option (w17.cli)         = { command: "job create <name>" };
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO jobs.Job SET name = :name, priority = :priority RETURNING id, name, status, priority, created_at"
+      }
+    };
+  }
+
+  // Picked on the method, with no public name of its own, so it keeps its
+  // backend service's: `JobMutation.CancelJob`. One backend service is
+  // thus split across two public ones.
+  rpc CancelJob(CancelJobReq) returns (Job) {
+    option (w17.rpc) = true;
+    option (w17.cli) = { command: "job cancel <job_id>" };
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "UPDATE jobs.Job SET status = 4 WHERE id = :job_id RETURNING id, name, status, priority, created_at"
+      }
+    };
+  }
+}

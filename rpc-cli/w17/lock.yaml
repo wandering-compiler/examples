@@ -1,0 +1,40 @@
+admin_languages: []
+admin_wire: CLIENT_WIRE_UNSPECIFIED
+connections:
+    - default: true
+      name: ops-postgres
+      target_content_sha256: ""
+      target_migration_id: ""
+formats: {}
+generated_code:
+    binaries: []
+    business_bundles: []
+    ci_configs: []
+    clients: []
+    deploy_targets:
+        - target: kubernetes
+    e2e: false
+    grpc_clients: []
+    pb_stubs:
+        - language: go
+          output_root: ""
+          package: ""
+    proto_dir: proto
+    replicas: []
+    stubs: srcgo/gen
+infra: null
+languages:
+    - en
+languages_dir: w17/languages
+org_id: 01a08faa-bba7-7f3c-bc4b-962c69e23b74
+org_slug: wandering-compiler
+plugins: []
+project: examples-rpc-cli
+project_id: 2634d995-9103-44d3-90e4-d312721f21b0
+sdk_version: v0.1.0-rc.18
+secrets: null
+signature:
+    alg: ed25519/v1
+    body: 24fc928f283dc71c817da49afc8c2da3034c804be8678416a45c61023519873e30e0686f40820cb8d7864184b497892988df9b7bab336aab15d9653ab76e4509
+    key_id: ed25519:d1f1f31adf965af1
+w17_url: grpcs://api.w17.app:50051

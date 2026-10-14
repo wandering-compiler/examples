@@ -1,0 +1,7 @@
+# Local developer compose: the generated stack (compose.w17.yaml) plus what
+# this example adds to it (compose.rpc-cli.yaml). `w17ctl stack up --build`
+# builds the images, brings the database's schema to the protos and starts it.
+include:
+  - path:
+      - compose.w17.yaml
+      - compose.rpc-cli.yaml

@@ -1,0 +1,5 @@
+srcgo/gen/
+bin/
+
+# Generated CI configurations; this repository runs the examples itself.
+/w17/ci/

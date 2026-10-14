@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+// The ops domain: one Postgres connection for every module under it.
+//
+// Options only, no messages.
+
+package rpc_cli.ops;
+
+import "w17/module.proto";
+
+option (w17.module) = {
+  connection: {
+    name: "ops-postgres",
+    dialect: POSTGRES,
+    version: "18"
+  }
+};

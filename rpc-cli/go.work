@@ -1,0 +1,9 @@
+go 1.26.1
+
+use (
+	./srcgo
+	./w17/services/ops-ctl
+	./w17/services/ops-gateway
+	./w17/services/ops-storage
+	./w17/stubs
+)
