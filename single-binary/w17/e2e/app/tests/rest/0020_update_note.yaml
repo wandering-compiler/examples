@@ -1,0 +1,14 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+# The seeded note 700002 (fixtures/app/test.json).
+method: example.NoteMutation.UpdateNote
+input:
+    note_id: 700002
+    title: an edited note
+    body: edited by the suite
+expect:
+    id: {matcher: eq, value: "700002"}
+    title: {matcher: eq, value: an edited note}
+    body: {matcher: eq, value: edited by the suite}

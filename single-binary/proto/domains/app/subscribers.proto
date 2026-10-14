@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+// Subscriber-registry sentinel for the app domain. Drives the eventbus
+// codegen to emit the standalone app-eventbus subscriber runner — which
+// is the fifth component the lock's composed binary absorbs.
+//
+// One subscription, deliberately: a
+// single durable is enough to make double-dispatch observable. The
+// handler writes a NoteDelivery row per delivery; the live suite asserts
+// the count is 1.
+
+package single_binary.app.example;
+
+import "w17/event_subscribers.proto";
+
+option (w17.event_subscribers) = {
+  subscriptions: [
+    {
+      event:   "NoteCreated"
+      channel: "notes"
+      handler: "example.NotesEvents.OnNoteCreatedRecord"
+    },
+    {
+      // The second subscription, and the only one whose publisher is the
+      // BUSINESS tier. Same channel, same runner, different producer: the
+      // point is that a facade's `(w17.event_emit)` reaches the broker at
+      // all, which needs its wrapper installed in the binary that serves
+      // the facade.
+      event:   "NoteChecked"
+      channel: "notes"
+      handler: "example.NotesEvents.OnNoteCheckedStamp"
+    },
+    {
+      // A PLUGIN's event handled by a project facade — the third producer
+      // on this channel and the one whose module differs from its
+      // handler's. The auth activation binds its `events` alias to
+      // `notes`, so it arrives on the same channel as the rest.
+      event:   "UserCreated"
+      channel: "notes"
+      handler: "example.NotesEvents.OnAuthUserCreatedWelcomeNote"
+    }
+  ]
+};

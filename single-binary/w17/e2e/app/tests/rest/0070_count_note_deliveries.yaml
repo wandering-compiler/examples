@@ -1,0 +1,11 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+# The count is filled in asynchronously, by the NoteCreated subscriber;
+# the live suite (livetest/) waits for it and asserts exactly one. Here
+# the call answers: a count of zero is an empty object on the wire.
+method: example.NoteQuery.CountNoteDeliveries
+input:
+    note_id: 700001
+expect: {}

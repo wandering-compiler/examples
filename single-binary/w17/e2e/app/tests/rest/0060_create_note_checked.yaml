@@ -1,0 +1,14 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+# The business facade runs its rule (it tags the title), then calls the
+# storage tier, in the same process.
+method: example.NotesFacade.CreateNoteChecked
+input:
+    owner_id: ${random:uuid}
+    title: through the facade
+    body: b
+expect:
+    id: {matcher: not_empty}
+    title: {matcher: eq, value: "[checked] through the facade"}

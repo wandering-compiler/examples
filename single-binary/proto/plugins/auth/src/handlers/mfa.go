@@ -1,0 +1,672 @@
+package handlers
+
+import (
+	"context"
+	"crypto/rand"
+	"errors"
+	"fmt"
+	distxpb "github.com/wandering-compiler/sdk/go/pb/common/distx"
+	"github.com/wandering-compiler/sdk/go/service/tx/distx"
+	"math/big"
+	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/wandering-compiler/plugins/auth/lib/qrsvg"
+	"github.com/wandering-compiler/plugins/auth/lib/secretbox"
+	"github.com/wandering-compiler/plugins/auth/lib/totp"
+
+	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
+)
+
+// This file implements the `two_factor` feature. It is staged into a
+// bundle ONLY when the activation enables `two_factor` (plugin.yaml maps
+// the feature to this file via go_files). With the feature off it is not
+// staged, so the SignIn 2FA gate keeps its no-op default and the
+// UserTotpSecret / MfaChallenge tables aren't emitted. Standalone (the
+// plugin author's own `go test`) always compiles it.
+
+const (
+	defaultMfaCodeTTLSeconds = 300 // fallback when the env knob is unset/0
+	totpSkewSteps            = 1   // accept ±1 30s window of clock drift
+	mfaCodeDigits            = 6
+	// maxMfaAttempts is the failed-VerifyMfa ceiling per challenge
+	// (Q43-auth-mfa). At this count the challenge is locked — even the
+	// correct code is refused — so a 6-digit factor (10^6 space) can't be
+	// brute-forced within the TTL.
+	//
+	// PER CHALLENGE is the whole of what it claims. Restarting the sign-in
+	// flow yields a fresh challenge with a fresh budget, so this number
+	// alone bounds nothing; the ISSUANCE cap below is the other half, and
+	// neither is sufficient on its own (a consumer).
+	maxMfaAttempts = 5
+
+	// defaultMaxMfaChallengesPerWindow / defaultMfaChallengeWindowSeconds
+	// cap ISSUANCE: at most 10 challenges per 15 minutes per user, so the
+	// guesses an attacker holding the password can buy are bounded at
+	// 10 × maxMfaAttempts per window rather than being unbounded in time.
+	//
+	// Sized for a human, not for the attacker: ten sign-ins in a quarter
+	// hour is already an unusual session, and the two knobs exist for a
+	// deployment that finds otherwise.
+	defaultMaxMfaChallengesPerWindow = 10
+	defaultMfaChallengeWindowSeconds = 900
+)
+
+// scopeNewDevices is the two_factor_scope value that challenges only
+// untrusted devices (requires the `devices` feature — codegen rejects the
+// combo without it, so at runtime an absent devices feature can't reach
+// this branch meaningfully).
+const scopeNewDevices = "new_devices"
+
+var errMfaChallengeInvalid = errors.New("mfa challenge invalid/expired/consumed")
+
+// errMfaChallengeBudget refuses a new challenge once the issuance cap is
+// spent. It is a wireError — a DELIBERATE, non-opaque answer — because it is
+// only reachable AFTER the password verified, so saying what happened tells
+// an attacker nothing the credential did not already buy. The opaque
+// "invalid credentials" here would be a lie of the same shape a consumer
+// objected to: it sends a user whose password is fine to go reset it.
+var errMfaChallengeBudget = &wireError{
+	code: codes.ResourceExhausted,
+	msg:  "too many verification codes requested for this account — wait a few minutes and sign in again",
+}
+
+// init wires the two_factor sign-in gate on package load.
+func init() {
+	signInMfaGate = mfaSignInGate
+}
+
+// enrolmentAllowed refuses an enrolment this deployment does not offer.
+//
+// two_factor_totp=false means the built-in authenticator is OFF: VerifyMfa
+// ignores a stored secret and mails a code instead. Enrolling anyway stored
+// an authenticator nothing would ever ask for, so a person believed it
+// protected them. A configuration the caller can be told about.
+//
+// No key check any more: the seed is a CRYPTED_SECRET column, and a bundle
+// with one refuses to BOOT without its keyring (W17_FIELD_KEYS), so a
+// running handler always has it.
+func (h *AuthServiceHandler) enrolmentAllowed(ctx context.Context) error {
+	if !h.TwoFactorTOTP {
+		return refusal(ctx, codes.FailedPrecondition, "two_factor: the built-in authenticator is off (two_factor_totp=false)",
+			CodeTotpUnavailable, "", MsgTotpUnavailable, nil)
+	}
+	return nil
+}
+
+// seedOf is the plaintext TOTP seed of an enrolment row.
+//
+// `seed` is a CRYPTED_SECRET and arrives decrypted. A row enrolled by rc.19 or
+// earlier has only `secret`, the blob lib/secretbox sealed under
+// two_factor_secret_key: it is opened with that key and MOVED into `seed`, so
+// each such row needs the old key exactly once. A failed move is not a failed
+// verification — the seed is right either way, and the next read moves it.
+func (h *AuthServiceHandler) seedOf(ctx context.Context, row *pb.UserTotpSecret) (string, error) {
+	if row.GetSeed() != "" {
+		return row.GetSeed(), nil
+	}
+	if row.GetSecret() == "" {
+		return "", fmt.Errorf("two_factor: enrolment of user %s holds no seed", row.GetUserId())
+	}
+	cipher, err := secretbox.NewFromBase64(h.TwoFactorSecretKey)
+	if err != nil {
+		// Not a 500: the authenticator predates the field keyring and the key
+		// it was sealed with is gone; the caller can be told it cannot be
+		// checked here.
+		return "", refusal(ctx, codes.FailedPrecondition,
+			"two_factor: this authenticator was enrolled under two_factor_secret_key, which is not usable: "+err.Error(),
+			CodeTotpUnavailable, "", MsgTotpUnavailable, nil)
+	}
+	plain, err := cipher.Open(row.GetSecret())
+	if err != nil {
+		return "", err
+	}
+	_, _ = h.Mutation.MoveTotpSeed(ctx, &pb.MoveTotpSeedReq{Id: row.GetId(), UserId: row.GetUserId(), Seed: plain})
+	return plain, nil
+}
+
+func (h *AuthServiceHandler) mfaTTL() time.Duration {
+	if h.MfaCodeTTLSeconds > 0 {
+		return time.Duration(h.MfaCodeTTLSeconds) * time.Second
+	}
+	return defaultMfaCodeTTLSeconds * time.Second
+}
+
+// totpEnrolled reports whether the user has a CONFIRMED authenticator and
+// returns the enrolment row (seedOf reads its seed). A missing row →
+// (false, nil); an unconfirmed one → (false, row).
+// A query error is RETURNED rather than folded into `false`. "No enrolment row"
+// and "the enrolment store did not answer" are opposite facts about a second
+// factor, and collapsing them let a read failure downgrade every caller: the
+// sign-in gate skipped the challenge, VerifyMfa fell to the weaker code path,
+// and GetMfaStatus told the user they had no authenticator (reported by a consumer). The
+// call sites now refuse instead, which is the direction a factor may fail in.
+//
+// NotFound stays a value, not an error: it is the genuine "not enrolled".
+func (h *AuthServiceHandler) totpEnrolled(ctx context.Context, userID string) (bool, *pb.UserTotpSecret, error) {
+	resp, err := h.Query.GetTotpSecret(ctx, &pb.GetTotpSecretReq{UserId: userID})
+	if err != nil {
+		if notFoundOK(err) == nil {
+			return false, nil, nil
+		}
+		return false, nil, err
+	}
+	if resp.GetSecret() == nil {
+		return false, nil, nil
+	}
+	s := resp.GetSecret()
+	s.Seed = resp.GetSeed() // decrypted beside the row, not inside it
+	return s.GetConfirmedAt() != nil, s, nil
+}
+
+// mfaChallengeWindow / maxMfaChallengesPerWindow read the ISSUANCE cap
+// knobs. <= 0 falls back to the default, matching mfaTTL — a security cap
+// that switches itself off when someone writes 0 is not a knob worth having.
+func (h *AuthServiceHandler) mfaChallengeWindow() time.Duration {
+	if h.MfaChallengeWindowSeconds > 0 {
+		return time.Duration(h.MfaChallengeWindowSeconds) * time.Second
+	}
+	return defaultMfaChallengeWindowSeconds * time.Second
+}
+
+func (h *AuthServiceHandler) maxMfaChallengesPerWindow() int64 {
+	if h.MaxMfaChallengesPerWindow > 0 {
+		return int64(h.MaxMfaChallengesPerWindow)
+	}
+	return defaultMaxMfaChallengesPerWindow
+}
+
+// enforceMfaChallengeBudget caps how many challenges a user can be ISSUED
+// within the window.
+//
+// The attempts counter on MfaChallenge is a per-CHALLENGE budget, and it was
+// read as if it bounded guessing. It does not: a new challenge is a new row
+// with attempts = 0, so an attacker who already holds the password buys five
+// more guesses per sign-in, for as long as they care to sign in. Five of a
+// six-digit space is a real bound; five-times-unbounded is none (a consumer).
+//
+// The threat model this closes is exactly the one the second factor exists
+// for — an attacker WITH the password and without the delivery channel. The
+// practical brake today is that every challenge sends a message, so a run at
+// the space is 200k e-mails; that brake belongs to the mail provider, not to
+// us, and a project delivering codes through its own channel (the shape
+// MfaChallengeRequested deliberately invites) may have no brake at all.
+//
+// A read failure REFUSES. The alternative is to issue on a failed count,
+// which is the same as having no cap during an outage.
+//
+// Called ONLY from issueMfaChallenge, inside the transaction that holds the
+// user row lock. Counting outside that lock reads a number that another
+// request is already making wrong (a consumer) — the count and the insert it
+// gates have to be one serialised section or the cap is decorative.
+func (h *AuthServiceHandler) enforceMfaChallengeBudget(ctx context.Context, userID string) error {
+	since := timestamppb.New(time.Now().Add(-h.mfaChallengeWindow()))
+	resp, err := h.Query.CountRecentMfaChallenges(ctx, &pb.CountRecentMfaChallengesReq{
+		UserId: userID,
+		Since:  since,
+	})
+	if err != nil {
+		return err
+	}
+	if resp.GetCount() >= h.maxMfaChallengesPerWindow() {
+		return errMfaChallengeBudget
+	}
+	return nil
+}
+
+// issueMfaChallenge retires the user's pending challenges and mints the new
+// one IN ONE TRANSACTION, because the two halves are a REPLACEMENT and not
+// two independent writes — the same reasoning as replaceTotpSecret. Split,
+// a failure of the insert leaves a user whose working code was just retired
+// by an operation that was supposed to hand them a new one.
+//
+// Superseding is what makes "one live code per user" true. Without it, N
+// sign-ins leave N codes alive at once, each with its own five guesses, and
+// the user who clicks "sign in" five times holds five valid codes.
+//
+// The transaction has a second effect worth keeping: CreateMfaChallenge
+// carries the MfaChallengeRequested emit, and a generated emitter defers
+// until COMMIT when a transaction is in scope (txregistry.DeferUntilCommit).
+// So the delivery channel is handed a code only once the row it belongs to is
+// durable. Unwrap this and the message goes out on the insert, which is a code
+// a user can be sent for a challenge that was rolled back.
+func (h *AuthServiceHandler) issueMfaChallenge(ctx context.Context, req *pb.CreateMfaChallengeReq) (*pb.CreateMfaChallengeResp, error) {
+	var tx *distx.TxHandle
+	txCtx := ctx
+	var err error
+	if h.DistTx != nil {
+		if tx, txCtx, err = distx.Begin(ctx, h.DistTx, &distxpb.BeginRequest{ConnectionName: h.Connection}); err != nil {
+			return nil, err
+		}
+	}
+	fail := func(err error) (*pb.CreateMfaChallengeResp, error) {
+		if tx != nil {
+			_ = tx.Rollback(ctx)
+		}
+		return nil, err
+	}
+	// Serialise issuance for THIS user, then decide. The cap used to count
+	// outside any transaction and decide on the answer, which bounds nothing
+	// against anything concurrent: a consumer sent twenty sign-ins at once and got
+	// twenty challenges past a limit of ten, because all twenty read zero
+	// before any of them committed (#65).
+	//
+	// The lock is on the USER row, not on the challenges being counted —
+	// there may be none yet, and a row that does not exist cannot be locked,
+	// which is precisely the case that was measured.
+	if _, err := h.Query.LockUserForIssuance(txCtx, &pb.LockUserForIssuanceReq{
+		UserId: req.GetUserId(),
+	}); err != nil {
+		return fail(err)
+	}
+	// INSIDE the lock, and only here: a second copy of this check outside it
+	// would pass on its own and hide that this one is the load-bearing one.
+	if err := h.enforceMfaChallengeBudget(txCtx, req.GetUserId()); err != nil {
+		return fail(err)
+	}
+	if _, err := h.Mutation.SupersedePendingMfaChallenges(txCtx, &pb.SupersedePendingMfaChallengesReq{
+		UserId: req.GetUserId(),
+	}); err != nil {
+		return fail(err)
+	}
+	created, err := h.Mutation.CreateMfaChallenge(txCtx, req)
+	if err != nil {
+		return fail(err)
+	}
+	if tx != nil {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+	}
+	return created, nil
+}
+
+// mfaSignInGate is the two_factor SignIn seam. It decides whether a
+// challenge fires (scope), creates the MfaChallenge (which emits
+// MfaChallengeRequested), and returns the mfa_required response so SignIn
+// stops short of issuing a token.
+func mfaSignInGate(ctx context.Context, h *AuthServiceHandler, user *pb.User, deviceID string, deviceTrusted bool) (*pb.SignInResp, bool, error) {
+	// new_devices: only challenge an untrusted device. all_logins (default):
+	// every sign-in challenges.
+	if h.TwoFactorScope == scopeNewDevices && deviceTrusted {
+		return nil, false, nil
+	}
+
+	enrolled, _, err := h.totpEnrolled(ctx, user.GetId())
+	if err != nil {
+		// Refuse the sign-in rather than issue a token with one factor
+		// because the enrolment store was unreachable.
+		return nil, false, err
+	}
+
+	// Code path: a confirmed authenticator with the built-in verifier on
+	// needs no stored code (verified against the secret). Otherwise the
+	// plugin generates a numeric code, stores its hash, and ships the
+	// plaintext in the event for a hand-written delivery channel.
+	var codeHash, code string
+	if !(enrolled && h.TwoFactorTOTP) {
+		c, err := generateNumericCode(mfaCodeDigits)
+		if err != nil {
+			return nil, false, err
+		}
+		hash, err := h.PasswordHash.Hash(c)
+		if err != nil {
+			return nil, false, err
+		}
+		code, codeHash = c, hash
+	}
+
+	expiresAt := timestamppb.New(time.Now().Add(h.mfaTTL()))
+	created, err := h.issueMfaChallenge(ctx, &pb.CreateMfaChallengeReq{
+		UserId:       user.GetId(),
+		CodeHash:     codeHash,
+		TotpEnrolled: enrolled,
+		Email:        user.GetEmail(),
+		Code:         code,
+		ExpiresAt:    expiresAt,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return &pb.SignInResp{
+		MfaRequired: true,
+		ChallengeId: created.GetChallenge().GetId(),
+	}, true, nil
+}
+
+// EnrollTotp generates a fresh authenticator secret for the caller,
+// stores it (unconfirmed; CRYPTED_SECRET, so encrypted at rest), and returns
+// the secret, the otpauth URI and that URI as a QR code (SVG). Re-enrolling
+// replaces any prior secret (delete-then-create) so a user can move
+// authenticators — and when the prior one is CONFIRMED, only with a current
+// code from it or a recovery code (stepUp), because replacing it is switching
+// the second factor off until the new one is confirmed.
+func (h *AuthServiceHandler) EnrollTotp(ctx context.Context, req *pb.EnrollTotpReq) (*pb.EnrollTotpResp, error) {
+	userID, err := callerUserID(ctx)
+	if err != nil {
+		return nil, Unauthenticated(err)
+	}
+	if err := h.enrolmentAllowed(ctx); err != nil {
+		return nil, err
+	}
+	// Same reasoning as DisableTotp's B1: without this, the code DisableTotp
+	// demands was one EnrollTotp call away from irrelevant.
+	enrolled, row, err := h.totpEnrolled(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enrolled {
+		if err := h.stepUp(ctx, userID, row, req.GetCode()); err != nil {
+			return nil, err
+		}
+	}
+	secret, err := totp.GenerateSecret()
+	if err != nil {
+		return nil, err
+	}
+	// Replace any existing secret so re-enrollment is idempotent (the unique
+	// user_id index would otherwise reject a second CreateTotpSecret). First
+	// enrollment has nothing to delete → tolerate NotFound.
+	//
+	// IN ONE TRANSACTION, because the two halves are a replacement and not
+	// two independent writes. Run apart, a failure of the create leaves the
+	// user with NO second factor: their working authenticator was already
+	// deleted, and they are locked out of the thing that was protecting them
+	// — by an operation whose entire purpose was to move it to a new phone
+	// (a consumer). Same distx shape AcceptOrgInvite uses.
+	if err := h.inMfaTx(ctx, func(txCtx context.Context) error {
+		return h.replaceTotpSecret(txCtx, userID, secret)
+	}); err != nil {
+		return nil, err
+	}
+
+	account := userID
+	if u, err := h.Query.GetUserById(ctx, &pb.GetUserByIdReq{UserId: userID}); err == nil && u.GetUser().GetEmail() != "" {
+		account = u.GetUser().GetEmail()
+	}
+	uri := totp.ProvisioningURI(secret, h.TotpIssuer, account)
+	svg, err := qrsvg.SVG(uri)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.EnrollTotpResp{Secret: secret, OtpauthUri: uri, QrSvg: svg}, nil
+}
+
+// inMfaTx runs fn in one distributed transaction when the bundle has a
+// coordinator (always, in a generated bundle), plainly otherwise.
+func (h *AuthServiceHandler) inMfaTx(ctx context.Context, fn func(txCtx context.Context) error) error {
+	if h.DistTx == nil {
+		return fn(ctx)
+	}
+	tx, txCtx, err := distx.Begin(ctx, h.DistTx, &distxpb.BeginRequest{ConnectionName: h.Connection})
+	if err != nil {
+		return err
+	}
+	if err := fn(txCtx); err != nil {
+		_ = tx.Rollback(ctx)
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// ConfirmTotp verifies the first code against the pending secret and, on
+// success, marks the authenticator confirmed (now it satisfies sign-in
+// challenges).
+func (h *AuthServiceHandler) ConfirmTotp(ctx context.Context, req *pb.ConfirmTotpReq) (*pb.ConfirmTotpResp, error) {
+	userID, err := callerUserID(ctx)
+	if err != nil {
+		return nil, Unauthenticated(err)
+	}
+	if err := h.enrolmentAllowed(ctx); err != nil {
+		return nil, err
+	}
+	resp, err := h.Query.GetTotpSecret(ctx, &pb.GetTotpSecretReq{UserId: userID})
+	if err != nil || resp.GetSecret() == nil {
+		return nil, Unauthenticated(errMfaChallengeInvalid)
+	}
+	// Confirming is for a PENDING authenticator. Re-confirming a confirmed one
+	// used to be a harmless no-op; now it would mint a new set of recovery
+	// codes for whoever holds the session, on any code that verifies, with no
+	// step-up budget — GenerateRecoveryCodes is that operation, behind one.
+	if resp.GetSecret().GetConfirmedAt() != nil {
+		return nil, refusal(ctx, codes.FailedPrecondition, "two_factor: the authenticator is already confirmed",
+			CodeTotpAlreadyConfirmed, "", MsgTotpAlreadyConfirmed, nil)
+	}
+	resp.GetSecret().Seed = resp.GetSeed()
+	plain, err := h.seedOf(ctx, resp.GetSecret())
+	if err != nil {
+		return nil, err
+	}
+	ok, err := h.acceptTotp(ctx, resp.GetSecret(), plain, req.GetCode())
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, Unauthenticated(errMfaChallengeInvalid)
+	}
+	// Confirmed and given its recovery codes together: an authenticator that
+	// protects the account with no way back from a lost phone is one support
+	// ticket away from an account takeover by social engineering.
+	var codes []string
+	if err := h.inMfaTx(ctx, func(txCtx context.Context) error {
+		if _, err := h.Mutation.ConfirmTotpSecret(txCtx, &pb.ConfirmTotpSecretReq{UserId: userID}); err != nil {
+			return err
+		}
+		var err error
+		codes, err = h.replaceRecoveryCodes(txCtx, userID)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return &pb.ConfirmTotpResp{RecoveryCodes: codes}, nil
+}
+
+// DisableTotp removes the caller's authenticator and its recovery codes. B1:
+// a CONFIRMED authenticator is re-verified against a live TOTP code — or a
+// recovery code — first (stepUp) so a hijacked session
+// can't permanently disable the victim's 2FA — a transient compromise
+// then can't weaken the account. A missing or still-pending
+// (unconfirmed) enrollment provides no active protection, so it's
+// cancelled without a code (a user who lost the device mid-setup must
+// still be able to back out).
+func (h *AuthServiceHandler) DisableTotp(ctx context.Context, req *pb.DisableTotpReq) (*pb.DisableTotpResp, error) {
+	userID, err := callerUserID(ctx)
+	if err != nil {
+		return nil, Unauthenticated(err)
+	}
+	// `err == nil && …` made the whole condition false on a read failure, so
+	// the TOTP check was SKIPPED and the delete ran anyway: a signed-in
+	// session could drop a confirmed second factor without presenting a code,
+	// for as long as the read was failing (reported by a consumer). Going through
+	// totpEnrolled keeps that impossible — the error is now a refusal.
+	enrolled, row, err := h.totpEnrolled(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enrolled {
+		if err := h.stepUp(ctx, userID, row, req.GetCode()); err != nil {
+			return nil, err
+		}
+	}
+	// The recovery codes go with the authenticator they stand in for: kept,
+	// they would be a second factor nothing asks for — until the next
+	// enrolment, when they would quietly work again.
+	if err := h.inMfaTx(ctx, func(txCtx context.Context) error {
+		if _, err := h.Mutation.DeleteTotpSecret(txCtx, &pb.DeleteTotpSecretReq{UserId: userID}); notFoundOK(err) != nil {
+			return err
+		}
+		_, err := h.Mutation.DeleteRecoveryCodes(txCtx, &pb.DeleteRecoveryCodesReq{UserId: userID})
+		return notFoundOK(err)
+	}); err != nil {
+		return nil, err
+	}
+	return &pb.DisableTotpResp{}, nil
+}
+
+// replaceTotpSecret is the delete-then-create pair, kept together so a caller
+// can run it inside one transaction. Extracted rather than inlined because the
+// pairing IS the fix: separated again, the rollback has nothing to roll back.
+func (h *AuthServiceHandler) replaceTotpSecret(txCtx context.Context, userID, seed string) error {
+	if _, err := h.Mutation.DeleteTotpSecret(txCtx, &pb.DeleteTotpSecretReq{UserId: userID}); notFoundOK(err) != nil {
+		return err
+	}
+	if _, err := h.Mutation.CreateTotpSecret(txCtx, &pb.CreateTotpSecretReq{UserId: userID, Seed: seed}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetMfaStatus reports whether the caller has a confirmed authenticator.
+func (h *AuthServiceHandler) GetMfaStatus(ctx context.Context, req *pb.GetMfaStatusReq) (*pb.GetMfaStatusResp, error) {
+	userID, err := callerUserID(ctx)
+	if err != nil {
+		return nil, Unauthenticated(err)
+	}
+	enrolled, _, err := h.totpEnrolled(ctx, userID)
+	if err != nil {
+		// "You have no authenticator" is a claim, and a failed read does
+		// not support it — a user who acts on it disables what they have.
+		return nil, err
+	}
+	out := &pb.GetMfaStatusResp{TotpEnrolled: enrolled}
+	if enrolled {
+		n, err := h.Query.CountRecoveryCodes(ctx, &pb.CountRecoveryCodesReq{UserId: userID})
+		if err != nil {
+			return nil, err
+		}
+		out.RecoveryCodesRemaining = n.GetCount()
+	}
+	return out, nil
+}
+
+// VerifyMfa completes a two-step sign-in: load the pending challenge,
+// dual-path verify (confirmed TOTP → check the secret; else → check the
+// event-flow code hash), consume it single-use, then issue the session
+// (re-resolving + trusting the device under `devices`). Every failure is
+// the same opaque Unauthenticated (anti-enumeration).
+func (h *AuthServiceHandler) VerifyMfa(ctx context.Context, req *pb.VerifyMfaReq) (*pb.VerifyMfaResp, error) {
+	resp, err := h.Query.GetMfaChallenge(ctx, &pb.GetMfaChallengeReq{ChallengeId: req.GetChallengeId()})
+	if err != nil || resp.GetChallenge() == nil {
+		return nil, Unauthenticated(errMfaChallengeInvalid)
+	}
+	ch := resp.GetChallenge()
+	if ch.GetConsumedAt() != nil {
+		return nil, Unauthenticated(errMfaChallengeInvalid)
+	}
+	if created := ch.GetCreatedAt(); created != nil && time.Now().After(created.AsTime().Add(h.mfaTTL())) {
+		return nil, Unauthenticated(errMfaChallengeInvalid)
+	}
+	// Brute-force lockout (Q43-auth-mfa). The budget is CLAIMED before the
+	// code is checked, and the claim is the same statement that counts it.
+	//
+	// It used to read `ch.GetAttempts()` — the value loaded at the top of
+	// this function — and increment afterwards, in a separate rpc, only on a
+	// miss. Sequentially that holds. Concurrently it does not: N requests
+	// arriving together all read the same count, all pass the check, and all
+	// get a guess. The cap was five per challenge and a caller who could open
+	// connections in parallel had as many as they liked, which is the one
+	// property a lockout exists to deny. The comment here claimed "the cap
+	// holds across separate VerifyMfa requests within the TTL" — true of
+	// separate requests, and that was the word doing the work.
+	//
+	// `UPDATE … SET attempts = attempts + 1 … RETURNING attempts` serialises
+	// them: concurrent callers get 1, 2, 3 … and each decides on its own
+	// number. Nothing is read and acted on later.
+	att, attErr := h.Mutation.RecordMfaAttempt(ctx, &pb.RecordMfaAttemptReq{ChallengeId: req.GetChallengeId()})
+	if attErr != nil {
+		// Fail CLOSED. An attempt we cannot account for must not be granted —
+		// otherwise the store being unreachable is itself the bypass. This is
+		// a change in direction: the increment used to sit on the failure path
+		// where its error could be discarded harmlessly.
+		return nil, Unauthenticated(errMfaChallengeInvalid)
+	}
+	// Zero is unambiguous HERE, and only here: a matched row always comes
+	// back with attempts+1, which is at least 1. So zero means the UPDATE
+	// matched nothing — the challenge was consumed by a concurrent request,
+	// or is gone. (Everywhere else in this codebase a proto3 zero is the same
+	// answer as an absent field; this statement is what makes it a sentinel.)
+	if att.GetAttempts() == 0 {
+		return nil, Unauthenticated(errMfaChallengeInvalid)
+	}
+	if att.GetAttempts() > maxMfaAttempts {
+		return nil, Unauthenticated(errMfaChallengeInvalid)
+	}
+	userID := ch.GetUserId()
+
+	if !h.verifyMfaCode(ctx, userID, ch.GetCodeHash(), req.GetCode()) {
+		return nil, Unauthenticated(errMfaChallengeInvalid)
+	}
+
+	// Single-use consume — RETURNING user_id empty means another request
+	// already consumed it (race); fail closed.
+	consumed, err := h.Mutation.ConsumeMfaChallenge(ctx, &pb.ConsumeMfaChallengeReq{ChallengeId: req.GetChallengeId()})
+	if err != nil {
+		return nil, Unauthenticated(err)
+	}
+	if consumed.GetUserId() == "" {
+		return nil, Unauthenticated(errMfaChallengeInvalid)
+	}
+
+	// Re-resolve the device from THIS request (same device as the SignIn
+	// that raised the challenge) so issueSession trusts it under `devices`.
+	deviceID, _, err := resolveSignInDevice(ctx, h, userID)
+	if err != nil {
+		return nil, Unauthenticated(err)
+	}
+	if err := refuseUnsignableAccount(ctx, h, userID); err != nil {
+		return nil, err
+	}
+	token, trustToken, err := issueSession(ctx, h, userID, deviceID)
+	if err != nil {
+		return nil, Unauthenticated(err)
+	}
+	out := &pb.VerifyMfaResp{UserId: userID, Token: token}
+	stampDeviceTrust(out, trustToken) // devices-gated field; seam is a no-op without `devices`
+	return out, nil
+}
+
+// verifyMfaCode is the dual-path check: a confirmed TOTP user (with the
+// built-in verifier on) is checked against their secret; everyone else is
+// checked against the challenge's code hash (the event/fallback path).
+func (h *AuthServiceHandler) verifyMfaCode(ctx context.Context, userID, codeHash, code string) bool {
+	enrolled, row, err := h.totpEnrolled(ctx, userID)
+	if err != nil {
+		// Not "fall through to the code hash": an unreadable enrolment
+		// cannot tell us the user is NOT on the TOTP path, and taking the
+		// other branch would verify against a challenge code that a TOTP
+		// user never receives. Fail the verification.
+		return false
+	}
+	if enrolled && h.TwoFactorTOTP {
+		plain, err := h.seedOf(ctx, row)
+		if err != nil {
+			return false
+		}
+		if ok, err := h.acceptTotp(ctx, row, plain, code); err != nil || ok {
+			return ok && err == nil
+		}
+		// Not the authenticator's code: one of its recovery codes, or nothing.
+		return h.acceptRecoveryCode(ctx, userID, code)
+	}
+	if codeHash == "" {
+		return false
+	}
+	ok, _, _ := h.PasswordHash.VerifyAndRotate(codeHash, code, nil)
+	return ok
+}
+
+// generateNumericCode returns a zero-padded random decimal code of n
+// digits, using crypto/rand.
+func generateNumericCode(n int) (string, error) {
+	max := big.NewInt(1)
+	for i := 0; i < n; i++ {
+		max.Mul(max, big.NewInt(10))
+	}
+	v, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return "", fmt.Errorf("two_factor: generate code: %w", err)
+	}
+	return fmt.Sprintf("%0*d", n, v), nil
+}

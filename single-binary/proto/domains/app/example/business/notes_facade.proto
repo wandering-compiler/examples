@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package single_binary.app.example;
+
+import "w17/event.proto";
+import "w17/field.proto";
+import "domains/app/example/events/events.proto";
+import "domains/app/example/types/models.proto";
+
+message CreateNoteCheckedReq {
+  string owner_id = 1 [(w17.field) = { type: UUID }];
+  string title    = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+  string body     = 3 [(w17.field) = { type: TEXT }];
+}
+
+message ReadAttachmentReq { int64 note_id = 1; }
+
+// ReadAttachmentResp — what the facade learned by actually READING the
+// uploaded file: its size in bytes and its first line. Both are
+// properties of the CONTENT, so neither can be produced from the row
+// alone — an assertion on them fails unless the business tier really
+// opened the object.
+message ReadAttachmentResp {
+  int64  byte_count = 1;
+  string first_line = 2;
+}
+
+// NotesFacade — hand-written BUSINESS tier. CreateNoteChecked applies a
+// trivial business rule (tags the title) then delegates to the storage
+// NoteMutation. In the single binary the facade reaches storage by
+// DIRECT in-process call (no network). Lives under business/ so the
+// codegen discovers it as a facade service (no (w17.db.method) — the body
+// is hand-written, registered via the project's RegisterBusiness).
+service NotesFacade {
+  // The emit lives HERE, on the facade, because "a note passed the check"
+  // is a fact this method owns — the storage CreateNote it delegates to
+  // cannot tell a checked write from a direct one. The wrapper that fires
+  // it is installed by this bundle's registry at Register…Server, so the
+  // event goes out for every caller of the facade: the REST gateway, an
+  // in-process call in the composed binary, a bus delivery.
+  rpc CreateNoteChecked(CreateNoteCheckedReq) returns (Note) {
+    option (w17.event_emit) = {
+      event: "NoteChecked"
+      payload: {
+        fields: [
+          { key: "note_id", value: "$response.id" },
+          { key: "title",   value: "$response.title" }
+        ]
+      }
+    };
+  }
+
+  // ReadAttachment — the business tier reading a file the GATEWAY
+  // wrote. It resolves the note's storage handle over the storage
+  // client, then opens the object through the injected read-only store
+  // (`clients.AppUploadsStore()`), which the bundle built from the same
+  // bucket root the gateway writes into.
+  //
+  // This is the shape the UPLOADED_FILE docs promise ("business code
+  // reads files back through the same handle") and the one an import
+  // pipeline needs: the gateway owns the bytes landing safely, the
+  // facade owns what they MEAN.
+  rpc ReadAttachment(ReadAttachmentReq) returns (ReadAttachmentResp);
+
+  // CreateNoteCheckedComposed — COMPOSITION: no annotation of its own; it
+  // reuses CreateNoteChecked through the server the registry returned, so
+  // CreateNoteChecked's declared NoteChecked still fires. A direct Go call on
+  // the implementation would skip the emit wrapper and publish nothing.
+  rpc CreateNoteCheckedComposed(CreateNoteCheckedReq) returns (Note);
+
+  // CreateNoteCheckedInTx — the same composition inside the caller's own
+  // distx transaction. NoteChecked waits for that transaction's COMMIT and is
+  // dropped if it rolls back; a title starting with "rollback:" makes this
+  // method fail after the composed call, so the live suite can see both.
+  rpc CreateNoteCheckedInTx(CreateNoteCheckedReq) returns (Note);
+}

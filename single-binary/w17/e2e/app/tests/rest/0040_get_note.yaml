@@ -1,0 +1,12 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+method: example.NoteQuery.GetNote
+input:
+    note_id: 700001
+expect:
+    id: {matcher: eq, value: "700001"}
+    owner_id: {matcher: eq, value: 0ad10000-0000-7000-8000-0000000000e2}
+    title: {matcher: eq, value: seeded note}
+    created_at: {matcher: not_empty}

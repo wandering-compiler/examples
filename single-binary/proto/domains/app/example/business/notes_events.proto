@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package single_binary.app.example;
+
+import "w17/event.proto";
+import "domains/app/admin_auth/events/auth_events.proto";
+import "domains/app/example/events/events.proto";
+
+// HandlerAck — acknowledgement payload returned by every eventbus
+// handler RPC. Same one-bit convention the other examples use.
+message HandlerAck {
+  bool ok = 1;
+}
+
+// WelcomeNoteAck carries the note the handler wrote, because the event it
+// emits is ABOUT that note: a handler answering only "ok" would leave the
+// payload nothing to bind to.
+message WelcomeNoteAck {
+  int64 note_id = 1;
+}
+
+// NotesEvents — the in-domain eventbus handler service. Kept separate
+// from NotesFacade so the facade stays a pure request/response surface
+// and the subscriber wiring is legible on its own.
+//
+// Its single handler records the delivery (RecordNoteDelivery) rather
+// than doing something idempotent, because the live suite needs
+// duplicate delivery to leave a trace. Hand-written body lives in
+// the business package under srcgo (notes_events.go).
+service NotesEvents {
+  // OnNoteCreatedRecord — writes one NoteDelivery row per delivery of
+  // NoteCreated.
+  rpc OnNoteCreatedRecord(NoteCreated) returns (HandlerAck);
+
+  // OnNoteCheckedStamp — the consumer side of the FACADE's emit. It
+  // stamps the note's title, which is an observable the storage-tier
+  // event cannot produce: NoteCreated's handler writes a NoteDelivery
+  // row, so "a row appeared" and "the title changed" tell the two
+  // publishers apart. A live test can therefore wait for this stamp and
+  // fail on exactly one thing — the facade's event never reaching the
+  // bus (see NoteChecked in events/events.proto).
+  rpc OnNoteCheckedStamp(NoteChecked) returns (HandlerAck);
+
+  // OnAuthUserCreatedWelcomeNote — reacts to an ACCOUNT event with a note,
+  // and emits its own event about the note it wrote.
+  //
+  // Its request comes from the auth plugin's module while the service lives
+  // in `example`: the wrapper installed for this service is named after
+  // `example`, the emit helper after `admin_auth`.
+  rpc OnAuthUserCreatedWelcomeNote(single_binary.app.admin_auth.UserCreated) returns (WelcomeNoteAck) {
+    option (w17.event_emit) = {
+      event: "WelcomeNoteIssued"
+      payload: {
+        fields: [
+          { key: "note_id",  value: "$response.note_id" },
+          { key: "owner_id", value: "$request.user_id" }
+        ]
+      }
+    };
+  }
+}

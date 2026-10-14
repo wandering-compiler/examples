@@ -1,0 +1,14 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+
+# Sign-in against the account seeded in fixtures/app/test.json (the
+# admin realm has no self-signup), with the admin-all role.
+method: admin.Authenticate
+input:
+    email: e2e-admin@example.com
+    password: e2eSecret!23
+expect:
+    user_id: {matcher: not_empty}
+    token: {matcher: not_empty}

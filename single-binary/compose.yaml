@@ -1,0 +1,7 @@
+# Local developer compose: the generated stack (compose.w17.yaml) plus what
+# this example adds to it (compose.single-binary.yaml). `docker compose up -d`
+# brings it up; `w17ctl test` layers compose.test.yaml over it.
+include:
+  - path:
+      - compose.w17.yaml
+      - compose.single-binary.yaml

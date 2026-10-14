@@ -1,0 +1,60 @@
+admin_languages: []
+admin_wire: CLIENT_WIRE_UNSPECIFIED
+connections:
+    - default: true
+      name: app-postgres
+      target_content_sha256: ""
+      target_migration_id: ""
+formats: {}
+generated_code:
+    binaries:
+        - components:
+            - admin
+            - business
+            - eventbus
+            - gateway
+            - storage
+          domain: app
+    business_bundles:
+        - domain: app
+          env: []
+          register: domains/app/modules/example/business
+    ci_configs:
+        - provider: azure
+        - provider: bitbucket
+        - provider: circleci
+        - provider: generic
+        - provider: github
+        - provider: gitlab
+        - provider: jenkins
+    clients: []
+    deploy_targets: []
+    e2e: true
+    grpc_clients: []
+    pb_stubs:
+        - language: go
+          output_root: ""
+          package: ""
+    proto_dir: proto
+    replicas: []
+    stubs: srcgo/gen
+infra: null
+languages:
+    - en
+languages_dir: w17/languages
+org_id: 01a08faa-bba7-7f3c-bc4b-962c69e23b74
+org_slug: wandering-compiler
+plugins:
+    - git: null
+      name: auth
+      source: local
+      version: 0.1.0-rc.23
+project: examples-single-binary
+project_id: d1ef82a1-ffe4-4220-af2e-2bdeb3c99889
+sdk_version: v0.1.0-rc.18
+secrets: null
+signature:
+    alg: ed25519/v1
+    body: 05d3bc55e7eac4956eb125d051e27e46fdbe9d28fe4378f1aa94b1dcb8810ecc2415cb2ed44480e87a663332d56d8d6e28ffc213bdf6859569a9b56704b2e407
+    key_id: ed25519:d1f1f31adf965af1
+w17_url: grpcs://api.w17.app:50051

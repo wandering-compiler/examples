@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package single_binary.app.example;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+
+// Note — one example DB-backed model. owner_id is a plain UUID string
+// with no foreign key: the auth plugin backs only the admin login.
+message Note {
+  option (w17.db.table) = { name: "notes" };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  string owner_id = 2 [(w17.field) = { type: UUID }];
+
+  string title = 3 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+
+  string body = 4 [(w17.field) = { type: TEXT }];
+
+  google.protobuf.Timestamp created_at = 5 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// ApiKey — demonstrates CRYPTO_RANDOM auto-fill in an INTERMEDIATE
+// (non-final) multi-op statement. IssueApiKey (note_mutation.proto)
+// INSERTs an ApiKey in its FIRST op — the `token` column auto-fills
+// app-side via CRYPTO_RANDOM — and then a SECOND, final op writes an
+// audit row referencing the first op's id (`:issue.id`). Because the
+// crypto INSERT is a non-final op, this exercises the intermediate-op
+// crypto preamble codegen path.
+message ApiKey {
+  option (w17.db.table) = { name: "api_keys" };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  string owner_id = 2 [(w17.field) = { type: UUID }];
+
+  string token = 3 [(w17.field) = { type: CHAR, max_len: 64, unique: true, default_auto: CRYPTO_RANDOM }];
+
+  string label = 4 [(w17.field) = { type: CHAR, min_len: 1, max_len: 100 }];
+
+  google.protobuf.Timestamp created_at = 5 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// NoteDelivery — one row per eventbus delivery of NoteCreated,
+// written by the subscriber handler (NotesEvents.OnNoteCreatedRecord).
+//
+// This table makes duplicate delivery COUNTABLE: two subscriber
+// processes on the same durable would each receive the stream, and a
+// single CreateNote would yield two rows here. No unique constraint on
+// note_id on purpose: the table records what actually arrived.
+message NoteDelivery {
+  option (w17.db.table) = { name: "note_deliveries" };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  int64 note_id = 2;
+
+  google.protobuf.Timestamp delivered_at = 3 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// NoteAttachment — a file uploaded against a note.
+//
+// `stored_path` is SERVICE-MANAGED: the gateway receives the multipart
+// part, enforces the size cap while streaming, hashes as it writes, and
+// stores the key it derived. The column holds that storage HANDLE — the
+// full key, bucket path and sub-bucket included — which is what makes it
+// enough on its own for the business tier to read the bytes back
+// (NotesFacade.ReadAttachment) without re-deriving any part of the path.
+message NoteAttachment {
+  option (w17.db.table) = { name: "note_attachments" };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  int64 note_id = 2;
+
+  string stored_path = 3 [(w17.field) = {
+    type: UPLOADED_FILE,
+    extensions: ["txt", "md"],
+    upload: {
+      connection:       "app-uploads",
+      bucket_path:      "/note-attachments",
+      expected_objects: 10000,
+      max_per_bucket:   100,
+      max_size_bytes:   65536
+    }
+  }];
+
+  google.protobuf.Timestamp uploaded_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// ApiKeyAudit — the side-effect row written by IssueApiKey's FINAL
+// op. It records which key was issued (api_key_id ← the intermediate
+// op's :issue.id) without storing the secret token itself.
+message ApiKeyAudit {
+  option (w17.db.table) = { name: "api_key_audits" };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  int64 api_key_id = 2;
+
+  string action = 3 [(w17.field) = { type: CHAR, min_len: 1, max_len: 40 }];
+
+  google.protobuf.Timestamp created_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
+}

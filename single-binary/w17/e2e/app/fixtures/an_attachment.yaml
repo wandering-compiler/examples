@@ -1,0 +1,11 @@
+# A text file attached to the seeded note 700001, through the multipart
+# endpoint: the gateway stores the part and the row keeps its handle.
+method: example.NoteMutation.AttachNote
+input:
+    note_id: 700001
+files:
+    - part: file
+      filename: statement.txt
+      content: "first line of the statement\nsecond line\n"
+expect:
+    id: {capture: attachment.id}

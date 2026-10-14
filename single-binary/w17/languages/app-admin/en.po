@@ -1,0 +1,191 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: w17\n"
+"POT-Creation-Date: 2026-10-05 14:29+0000\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Add {name}"
+msgstr "Add {name}"
+
+msgid "Apply"
+msgstr "Apply"
+
+msgid "Audit log"
+msgstr "Audit log"
+
+msgid "Back"
+msgstr "Back"
+
+msgid "Cancel"
+msgstr "Cancel"
+
+msgid "Clear"
+msgstr "Clear"
+
+msgid "Close"
+msgstr "Close"
+
+msgid "Continue"
+msgstr "Continue"
+
+msgid "Continue with your organization account."
+msgstr "Continue with your organization account."
+
+msgid "Copied"
+msgstr "Copied"
+
+msgid "Copy"
+msgstr "Copy"
+
+msgid "Copy {field}"
+msgstr "Copy {field}"
+
+msgid "Create"
+msgstr "Create"
+
+msgid "Dark theme"
+msgstr "Dark theme"
+
+msgid "Delete"
+msgstr "Delete"
+
+msgid "Delete this row?"
+msgstr "Delete this row?"
+
+msgid "Detail"
+msgstr "Detail"
+
+msgid "Edit"
+msgstr "Edit"
+
+msgid "Edit {name}"
+msgstr "Edit {name}"
+
+msgid "Enter your credentials to continue."
+msgstr "Enter your credentials to continue."
+
+msgid "Inline target page {page} is missing from the spec."
+msgstr "Inline target page {page} is missing from the spec."
+
+msgid "Leave empty to keep current"
+msgstr "Leave empty to keep current"
+
+msgid "Light theme"
+msgstr "Light theme"
+
+msgid "Loading…"
+msgstr "Loading…"
+
+msgid "Next"
+msgstr "Next"
+
+msgid "No data"
+msgstr "No data"
+
+msgid "No list view"
+msgstr "No list view"
+
+msgid "No pages declared in spec."
+msgstr "No pages declared in spec."
+
+msgid "No records found"
+msgstr "No records found"
+
+msgid "No related {name} rows."
+msgstr "No related {name} rows."
+
+msgid "Nothing here yet"
+msgstr "Nothing here yet"
+
+msgid "Other"
+msgstr "Other"
+
+msgid "Overview"
+msgstr "Overview"
+
+msgid "Password"
+msgstr "Password"
+
+msgid "Previous"
+msgstr "Previous"
+
+msgid "Rows per page"
+msgstr "Rows per page"
+
+msgid "Save"
+msgstr "Save"
+
+msgid "Search"
+msgstr "Search"
+
+msgid "Search across {fields}"
+msgstr "Search across {fields}"
+
+msgid "Section"
+msgstr "Section"
+
+msgid "Select at least one row"
+msgstr "Select at least one row"
+
+msgid "Select at least one row to run this action."
+msgstr "Select at least one row to run this action."
+
+msgid "Shown only once. Copy it now: nothing keeps it, and closing this dialog discards it."
+msgstr "Shown only once. Copy it now: nothing keeps it, and closing this dialog discards it."
+
+msgid "Sign in"
+msgstr "Sign in"
+
+msgid "Sign out"
+msgstr "Sign out"
+
+msgid "Sign-in failed"
+msgstr "Sign-in failed"
+
+msgid "Something went wrong"
+msgstr "Something went wrong"
+
+msgid "System theme"
+msgstr "System theme"
+
+msgid "This page has no detail view."
+msgstr "This page has no detail view."
+
+msgid "This page has no list configured."
+msgstr "This page has no list configured."
+
+msgid "Unavailable"
+msgstr "Unavailable"
+
+msgid "Username"
+msgstr "Username"
+
+msgid "Will apply to {target}."
+msgstr "Will apply to {target}."
+
+msgid "You cannot create records on this page."
+msgstr "You cannot create records on this page."
+
+msgid "no rows"
+msgstr "no rows"
+
+msgid "or"
+msgstr "or"
+
+msgid "this page"
+msgstr "this page"
+
+msgid "{count} selected row"
+msgstr "{count} selected row"
+
+msgid "{count} selected rows"
+msgstr "{count} selected rows"
+
+msgid "{mode} — click to switch"
+msgstr "{mode} — click to switch"
+
+msgid "{mode}. Click to switch color theme."
+msgstr "{mode}. Click to switch color theme."

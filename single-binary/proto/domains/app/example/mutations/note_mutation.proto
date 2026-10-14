@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package single_binary.app.example;
+
+import "w17/db.proto";
+import "w17/event.proto";
+import "w17/field.proto";
+import "domains/app/example/events/events.proto";
+import "domains/app/example/types/models.proto";
+
+message CreateNoteReq {
+  string owner_id = 1 [(w17.field) = { type: UUID }];
+  string title    = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+  string body     = 3 [(w17.field) = { type: TEXT }];
+}
+
+message UpdateNoteReq {
+  int64  note_id = 1;
+  string title   = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+  string body    = 3 [(w17.field) = { type: TEXT }];
+}
+
+message DeleteNoteReq  { int64 note_id = 1; }
+message DeleteNoteResp {}
+
+message RecordNoteDeliveryReq { int64 note_id = 1; }
+
+// AttachNoteReq — the multipart write. `stored_path` is filled by the
+// GATEWAY from the `file` form part (rest.proto's FILE_PART binding),
+// never by the caller: the value that lands here is the key the gateway
+// derived after streaming and hashing the body.
+message AttachNoteReq {
+  int64  note_id     = 1;
+  string stored_path = 2 [(w17.field) = {
+    type: UPLOADED_FILE,
+    extensions: ["txt", "md"],
+    upload: {
+      connection:       "app-uploads",
+      bucket_path:      "/note-attachments",
+      expected_objects: 10000,
+      max_per_bucket:   100,
+      max_size_bytes:   65536
+    }
+  }];
+}
+
+message IssueApiKeyReq {
+  string owner_id = 1 [(w17.field) = { type: UUID }];
+  string label    = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 100 }];
+}
+
+// NoteMutation — write side. Storage-tier SQL handlers.
+service NoteMutation {
+  rpc CreateNote(CreateNoteReq) returns (Note) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO example.Note SET owner_id = :owner_id, title = :title, body = :body RETURNING id, owner_id, title, body, created_at"
+      }
+    };
+    // Emit NoteCreated once the INSERT commits. The subscriber writes
+    // one NoteDelivery row per delivery, which is what makes the
+    // live suite able to assert exactly-once.
+    option (w17.event_emit) = {
+      event: "NoteCreated"
+      payload: {
+        fields: [
+          { key: "note_id",    value: "$response.id" },
+          { key: "owner_id",   value: "$request.owner_id" },
+          { key: "title",      value: "$request.title" },
+          { key: "created_at", value: "$response.created_at" }
+        ]
+      }
+    };
+  }
+
+  // RecordNoteDelivery — the subscriber handler's only write. One row
+  // per delivery of NoteCreated; the live suite counts them.
+  rpc RecordNoteDelivery(RecordNoteDeliveryReq) returns (NoteDelivery) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO example.NoteDelivery SET note_id = :note_id RETURNING id, note_id, delivered_at"
+      }
+    };
+  }
+
+  rpc UpdateNote(UpdateNoteReq) returns (Note) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "UPDATE example.Note SET title = :title, body = :body WHERE id = :note_id RETURNING id, owner_id, title, body, created_at"
+      }
+    };
+  }
+
+  rpc DeleteNote(DeleteNoteReq) returns (DeleteNoteResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "DELETE FROM example.Note WHERE id = :note_id"
+      }
+    };
+  }
+
+  // AttachNote — stores the handle the gateway produced for the
+  // uploaded part. The write half of the read-back check: the bytes are
+  // on disk under the gateway's bucket root and this row is the only
+  // pointer to them.
+  rpc AttachNote(AttachNoteReq) returns (NoteAttachment) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO example.NoteAttachment SET note_id = :note_id, stored_path = :stored_path RETURNING id, note_id, stored_path, uploaded_at"
+      }
+    };
+  }
+
+  // IssueApiKey — multi-op. The FIRST op "issue" INSERTs an ApiKey
+  // (its `token` column auto-fills app-side via CRYPTO_RANDOM, so the
+  // request carries no token); the FINAL op "record" writes an audit
+  // row referencing the freshly inserted key's id (`:issue.id`). Since
+  // the crypto INSERT is a non-final op, codegen renders the
+  // CRYPTO_RANDOM randstr.Token preamble in the INTERMEDIATE-op path.
+  rpc IssueApiKey(IssueApiKeyReq) returns (ApiKeyAudit) {
+    option (w17.db.method) = {
+      ops: {
+        name: "issue",
+        dql:  "INSERT INTO example.ApiKey SET owner_id = :owner_id, label = :label RETURNING id"
+      }
+      ops: {
+        name: "record",
+        dql:  "INSERT INTO example.ApiKeyAudit SET api_key_id = :issue.id, action = 'issued' RETURNING id, api_key_id, action, created_at"
+      }
+    };
+  }
+}

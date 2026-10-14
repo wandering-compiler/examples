@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package single_binary.app.example;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/app/example/types/models.proto";
+
+message GetNoteReq { int64 note_id = 1; }
+
+message ListNotesReq {
+  optional string owner_id = 1 [(w17.field) = { type: UUID }];
+  int32 limit = 2 [(w17.field) = { type: NUMBER, gte: 1, lte: 100 }];
+}
+
+message ListNotesResp {
+  repeated Note notes = 1;
+}
+
+message CountNoteDeliveriesReq { int64 note_id = 1; }
+
+message CountNoteDeliveriesResp {
+  int64 deliveries = 1;
+}
+
+message GetNoteAttachmentReq { int64 note_id = 1; }
+
+// NoteQuery — read side. Storage-tier SQL handlers.
+service NoteQuery {
+  rpc GetNote(GetNoteReq) returns (Note) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "SELECT n.id, n.owner_id, n.title, n.body, n.created_at FROM example.Note n WHERE n.id = :note_id" }
+    };
+  }
+
+  rpc ListNotes(ListNotesReq) returns (ListNotesResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.owner_id, n.title, n.body, n.created_at "
+          "FROM example.Note n "
+          "WHERE ?n.owner_id = :owner_id "
+          "ORDER BY n.id DESC "
+          "LIMIT :limit"
+      }
+    };
+  }
+
+  // GetNoteAttachment — resolves a note to the storage handle of its
+  // attachment. The business tier calls this, then opens the object
+  // through that handle; the handle is the whole address, so nothing
+  // downstream needs the bucket_path or the sub-bucket rule.
+  rpc GetNoteAttachment(GetNoteAttachmentReq) returns (NoteAttachment) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "SELECT a.id, a.note_id, a.stored_path, a.uploaded_at FROM example.NoteAttachment a WHERE a.note_id = :note_id ORDER BY a.id DESC LIMIT 1"
+      }
+    };
+  }
+
+  // CountNoteDeliveries — how many times the eventbus delivered
+  // NoteCreated for this note. The live suite reads
+  // this over REST and requires exactly 1: a duplicated eventbus
+  // container would make it 2.
+  rpc CountNoteDeliveries(CountNoteDeliveriesReq) returns (CountNoteDeliveriesResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "SELECT COUNT(d.id) AS deliveries FROM example.NoteDelivery d WHERE d.note_id = :note_id"
+      }
+    };
+  }
+}

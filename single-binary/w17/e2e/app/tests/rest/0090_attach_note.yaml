@@ -1,0 +1,18 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+# The response carries the download URL the gateway rewrote the stored
+# handle into.
+method: example.NoteMutation.AttachNote
+input:
+    note_id: 700002
+files:
+    - part: file
+      filename: notes.md
+      content: "# notes\n"
+expect:
+    id: {matcher: not_empty}
+    note_id: {matcher: eq, value: "700002"}
+    stored_path: {matcher: regex, pattern: '^/api/v1/notes/attachments/'}
+    uploaded_at: {matcher: not_empty}

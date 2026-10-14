@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package single_binary.app.example;
+
+import "google/protobuf/timestamp.proto";
+import "w17/event.proto";
+
+// NoteCreated — emitted by NoteMutation.CreateNote once the INSERT
+// commits. One event, one subscriber, one durable: the smallest shape
+// that still makes duplicate delivery observable.
+//
+// The subscriber records every delivery in a NoteDelivery row
+// (subscribers.proto → NotesEvents.OnNoteCreatedRecord), so "was this
+// event delivered exactly once?" is a COUNT the live suite reads over
+// REST. A standalone eventbus container beside the binary would produce
+// two rows per note.
+message NoteCreated {
+  option (w17.event) = {
+    channel: "notes"
+    topic:   "note.created"
+  };
+
+  int64                     note_id    = 1;
+  string                    owner_id   = 2;
+  string                    title      = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// NoteChecked — emitted by the BUSINESS tier: NotesFacade.CreateNoteChecked
+// publishes it after its rule ran and the storage write it delegates to
+// came back.
+//
+// It is a different statement from NoteCreated, and that difference is the
+// reason a facade emits at all. NoteCreated is a fact about the ROW and
+// fires on every path that writes one — including a direct POST that
+// skipped the facade entirely. This one says a note passed the business
+// CHECK, which is knowledge only the facade has; moving the annotation
+// down to CreateNote would announce it for writes that never went through
+// the rule.
+//
+// A facade is served by the business tier, so its emit wrapper is
+// installed there. The subscription below turns this event into a title
+// stamp the live suite waits for.
+message NoteChecked {
+  option (w17.event) = {
+    channel: "notes"
+    topic:   "note.checked"
+  };
+
+  int64  note_id = 1;
+  string title   = 2;
+}
+
+// WelcomeNoteIssued — emitted by the BUSINESS tier when the notes module
+// reacts to a new account by writing its welcome note.
+//
+// Its handler's request type is the AUTH PLUGIN's UserCreated, so the
+// handler's service module (`example`) and its request module
+// (`admin_auth`) differ: the generated wrapper is named after the
+// SERVICE, the emit helpers beside it after the REQUEST type.
+message WelcomeNoteIssued {
+  option (w17.event) = {
+    channel: "notes"
+    topic:   "note.welcome_issued"
+  };
+
+  int64  note_id  = 1;
+  string owner_id = 2;
+}

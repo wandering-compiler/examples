@@ -1,0 +1,14 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+# The business tier reads back the file the gateway stored: both values
+# come from the file's content, not from the attachment row.
+method: example.NotesFacade.ReadAttachment
+pre:
+    - fixtures/an_attachment.yaml
+input:
+    note_id: 700001
+expect:
+    byte_count: {matcher: eq, value: "40"}
+    first_line: {matcher: eq, value: first line of the statement}
