@@ -187,8 +187,8 @@ service TasksService {
   // gateway → business → storage trust-metadata chain end to end:
   // the gateway threads `x-w17-scope-tenant_id` to the business
   // tier, and the business→storage hop MUST relay it onward or the
-  // storage scope guard fails closed with PermissionDenied. It is a
-  // deliberate regression guard for that relay (the direct
+  // storage scope guard fails closed with PermissionDenied. It is the
+  // check on that relay (the direct
   // `TaskMutation.CreateTenantNote` endpoint only covers the
   // gateway→storage hop and never crosses the business tier). Reuses
   // the storage CreateTenantNote request/response shape by import.

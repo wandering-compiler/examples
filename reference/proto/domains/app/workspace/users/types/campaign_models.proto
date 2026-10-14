@@ -63,8 +63,7 @@ message DirectoryCampaign {
   // syntax already spends on "navigate one level down". Written
   // unquoted it would parse as two hops (`audience` → `utm` → `source`)
   // and resolve to nothing; the double-quoted form is the only spelling
-  // that can reach it, and until this column existed no example had
-  // written one.
+  // that can reach it.
   string audience = 3 [(w17.field) = { type: TEXT, json: true }];
 
   google.protobuf.Timestamp created_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];

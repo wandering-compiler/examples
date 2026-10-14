@@ -10,10 +10,8 @@ import "domains/app/cache/types/models.proto";
 // Redis has no multi-key HGETALL, so the same DQL that becomes a
 // single `MGET` against a JSON table becomes a pipeline of
 // `HGETALL`s here, decoded field-by-field instead of from one
-// protojson blob. Both emitters were dark until this example wrote
-// the `IN` form at all; putting the two layouts behind two
-// otherwise identical endpoints is what lets a live case tell them
-// apart.
+// protojson blob. Putting the two layouts behind two otherwise
+// identical endpoints is what lets a live case tell them apart.
 
 message GetDeviceProfileReq {
   string device_id = 1;

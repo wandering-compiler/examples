@@ -170,10 +170,9 @@ option (w17.rest_api) = {
         { ref: "tasks.TaskQuery.ListTenantNotesForPublicLink", method: GET,
           path: "/notes/{public_token}/related",
           credential: { path_param: "public_token" } },
-        // The QUERY-string form of the same credential. Both slots exist,
-        // so both are exercised: extraction runs through a different
-        // runtime helper per slot, and the vocabulary ratchet flags a
-        // declaration no example writes.
+        // The QUERY-string form of the same credential. Both slots are
+        // exercised: extraction runs through a different runtime helper
+        // per slot.
         { ref: "tasks.TaskQuery.GetTenantNoteSummaryByPublicToken", method: GET,
           path: "/note-summary",
           credential: { query_param: "public_token" } }
@@ -295,7 +294,7 @@ option (w17.rest_api) = {
     },
     {
       // The DQL-language surface. Six reads, each one spelling a
-      // construct this example had never written — the EXISTS chain
+      // construct — the EXISTS chain
       // shortcut in both its arms, a GROUP BY that leans on the primary
       // key, an aggregate attributed to an enclosing query level, `%`
       // over the numeric kinds, and a JSON key that needs quoting.
@@ -308,7 +307,7 @@ option (w17.rest_api) = {
       // around it. Only a seeded database answering the question settles
       // which of those happened.
       prefix:      "/campaigns",
-      description: "Directory campaigns — the DQL constructs no example had written",
+      description: "Directory campaigns — the less common DQL constructs",
       endpoints: [
         { ref: "users.CampaignQuery.ListCampaignsOnChannel",      method: GET, path: "/on-channel" },
         { ref: "users.CampaignQuery.ListCampaignsWithHeavyEvent", method: GET, path: "/with-heavy-event" },
@@ -321,10 +320,9 @@ option (w17.rest_api) = {
       ]
     },
     {
-      // The `kv_atomic` host. Nothing in the cache module reached REST
-      // before this group: its methods are called by the facade, and a
-      // facade-internal write is exactly the kind of surface a live
-      // suite cannot see. The annotation's claim is all-or-nothing
+      // The `kv_atomic` host. The cache module's methods are otherwise
+      // called only by the facade, and a write inside the facade is one a
+      // live suite cannot see. The annotation's claim is all-or-nothing
       // across two Redis commands, and the only way to falsify it is to
       // read BOTH keys afterwards — so the read has to be reachable too.
       //
@@ -337,9 +335,8 @@ option (w17.rest_api) = {
         { ref: "cache.SessionCacheMutation.RotateToken",   method: POST, path: "/rotate" },
         { ref: "cache.SessionCacheQuery.GetApiToken",      method: GET,  path: "/{token_hash}" },
 
-        // The rest of the KV verb set. GET and DEL were the only Redis
-        // commands this example had ever emitted; MGET, EXPIRE, PERSIST
-        // and the cross-op handover are all reachable from here.
+        // The rest of the KV verb set: beside GET and DEL, MGET, EXPIRE,
+        // PERSIST and the cross-op handover are all reachable from here.
         //
         // Multi-key reads are POST rather than GET: the key list is a
         // repeated field and a path segment cannot carry one. The two
@@ -788,9 +785,8 @@ option (w17.rest_api) = {
         { ref: "tasks.TasksService.CreateTenantNoteViaService", method: POST, path: "/via-service" }
       ],
       streams: [
-        // The scoped server stream with a validated request (SSE) — the
-        // shape that generated a handler which did not compile. Exposed
-        // straight from storage, as a consumer would.
+        // The scoped server stream with a validated request (SSE),
+        // exposed straight from storage.
         { ref: "tasks.TaskQuery.StreamTenantNotes", path: "/stream" }
       ]
     },
@@ -866,8 +862,8 @@ option (w17.rest_api) = {
       ],
       streams: [
         // The public directory feed — the one stream on this
-        // surface that is not a task stream, and the host for all
-        // three RestStream knobs that had no example.
+        // surface that is not a task stream, and the host for the
+        // three RestStream knobs.
         //
         //   transport_override — the method is server-streaming, so
         //     the auto-derivation would pick SSE. WS is forced

@@ -85,8 +85,8 @@ message LoginAuditLog {
 // has steps asserting its exact contents, and every claim below is
 // about which VALUES a column will accept.
 //
-// What it carries is the half of `(w17.field)` that has no example —
-// the per-column value RULES, as opposed to the length / nullability /
+// What it carries is the per-column value RULES of `(w17.field)`, as
+// opposed to the length / nullability /
 // default knobs the rest of this file already covers. Each one is
 // enforced in two places at once (a request-side check and a DDL
 // constraint), and they are chosen so a live database can tell them
@@ -238,13 +238,10 @@ message UserDirectoryPlan {
 // the other case: there the module prefix applies to the table and to
 // every name authored on it alike.
 //
-// It used to be asymmetric — the prefix reached the constraint names of
-// a table that had declined it — and getting the two halves out of step
-// was SILENT: a validation_messages entry that matches no constraint
-// simply never fired, leaving the generic default ("already exists" /
-// "value violates constraint") in place of the message written here.
-// That is now a build-time refusal that lists the table's real
-// constraint names, so this block cannot rot unnoticed again.
+// A validation_messages entry that matches no constraint is refused at
+// build time, with the table's real constraint names: one that never
+// fired would leave the generic default ("already exists" / "value
+// violates constraint") in place of the message written here.
 message UserDirectoryCard {
   option (w17.db.table) = {
     name: "user_directory_cards"

@@ -215,10 +215,9 @@ service TaskQuery {
   // `FOR UPDATE` variant, or fall back to the pool and run the unlocked
   // one — and the SQL is emitted TWICE, once per branch.
   //
-  // `UserMutation.UpdateProfile` has carried the annotation for a long
-  // time and never reached this: it is a mutation. Nothing in this example
-  // had ever locked a read, so the branch that decides between the two
-  // variants had never been emitted.
+  // `UserMutation.UpdateProfile` carries the annotation too, but it is a
+  // mutation; this is the example's locked READ, the one with the branch
+  // that decides between the two variants.
   //
   // The failure it guards is the quiet one. Without the adopted-tx arm a
   // locked read runs on a pooled connection, outside the caller's
@@ -593,9 +592,8 @@ service TaskQuery {
   //
   // TaskTag is identified by (task_id, tag_id), so it can declare no admin
   // detail: a detail is keyed by a single-column row id and there is none to
-  // give it. The page is therefore list-only, which the parser used to refuse
-  // outright — taking every join-table-with-payload out of the console rather
-  // than asking for more work. This method is what that page reads.
+  // give it. The page is therefore list-only. This method is what that page
+  // reads.
   rpc ListTaskTags(ListTaskTagsReq) returns (ListTaskTagsResp) {
     option (w17.db.method) = {
       ops: {
@@ -854,18 +852,13 @@ service TaskQuery {
   // instead of the models, and reaching one column further:
   // `c.parent_id`, which the schema declares NULL-able.
   //
-  // Two things had to be true before this could be scanned safely, and
-  // neither was:
-  //
-  //   * the nullability predicate resolved the FROM alias only, so a
-  //     column reached through a JOIN was invisible to it, and
-  //   * the JOIN body emitters never consulted the predicate's answer
-  //     at all — the slice reached the single-row / streaming planner
-  //     and stopped there.
+  // To scan it, the compiler has to know the column is NULL-able though
+  // it is reached through a JOIN rather than the FROM alias, and the JOIN
+  // body has to scan it into a nullable value.
   //
   // Every seeded category is top-level, so this read returns a NULL
-  // `parent_id` on every row it can produce. Before the fix that is a
-  // direct scan into a non-pointer int64 and a 500 on the first call.
+  // `parent_id` on every row it can produce: a scan into a plain int64
+  // would fail on the first call.
   rpc GetTaskCategoryRow(GetTaskCategoryRowReq) returns (GetTaskCategoryRowResp) {
     option (w17.db.method) = {
       ops: {
@@ -1850,7 +1843,7 @@ message ListTasksPagedTunedResp {
 
 // Cursor paging OVER A JOIN — the admin-list shape (a list row
 // that shows a foreign key as a human handle instead of a raw
-// id). Two rules meet here and used to be read as contradictory:
+// id). Two rules meet here:
 //
 //   - the joined display column MUST be COALESCE-wrapped, or a
 //     row whose parent was deleted scans NULL into a string and
@@ -1859,12 +1852,9 @@ message ListTasksPagedTunedResp {
 //     paged LIST, not the fan-out `{Parent; repeated Child}` —
 //     the JOIN is many-to-one, no row multiplies.
 //
-// The envelope used to be counted as a shape field, so this
-// exact combination classified as fan-out and was refused with
-// "no projected column carries a JOIN-alias prefix". Keeping a
-// live fixture on the intersection is what stops that from
-// coming back: keyset WHERE, the per-variant sort queries and
-// the Paging.Total COUNT(*) must all carry the JOIN.
+// The `w17.Paging` envelope is not a shape field, so the
+// combination is a paged list. The keyset WHERE, the per-variant
+// sort queries and the Paging.Total COUNT(*) all carry the JOIN.
 message ListTasksPagedWithCategoryReq {}
 
 // A read projection, not a table message — the row carries one

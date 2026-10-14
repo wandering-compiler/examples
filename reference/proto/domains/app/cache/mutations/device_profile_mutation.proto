@@ -44,9 +44,9 @@ service DeviceProfileMutation {
   // consumes is refused outright — and that handover is its own
   // body shape: the read is rendered as an assignment into an
   // outer-scope var rather than into `resp`, and the later op binds
-  // `:<op>.<column>` against that var. Every KV method in the
-  // example before these two was single-op or SET+DEL, so the
-  // handover had never been emitted for either layout.
+  // `:<op>.<column>` against that var. Every other KV method in the
+  // example is single-op or SET+DEL; these two hand over, one per
+  // layout.
   //
   // The chain is one the caller genuinely cannot run itself: it
   // holds a device id, and the user id it needs to address the

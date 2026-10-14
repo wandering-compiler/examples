@@ -5,7 +5,7 @@ syntax = "proto3";
 //
 // It exists for the halves of the eventbus vocabulary the tasks module
 // does not reach. `app/tasks` already covers the emit side and one
-// delivery fallback; what has no example anywhere is:
+// delivery fallback; this one covers:
 //
 //   - the GATEWAY emit tier (`(w17.event_emit_gateway)`), which fires
 //     only for requests that came in through a gateway,
@@ -83,8 +83,7 @@ message DirectoryPlanUpgraded {
         diff:   DIFF_TRANSITION
         watch_field: "tier"
 
-        // `from` + `to` — the transition GUARD, and `from` is the half
-        // that no example had.
+        // `from` + `to` — the transition GUARD.
         //
         // With `to` alone the poller fires on any row that arrives at
         // SPOTLIGHT, including one that was already SPOTLIGHT before the

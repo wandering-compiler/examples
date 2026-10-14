@@ -62,9 +62,6 @@ message RotateTokenResp {}
 // PERSIST, anything else emits EXPIRE. Two methods differing only
 // in that one token are what make the sentinel visible — a single
 // method could not show that zero is special.
-//
-// Nothing in this example had ever set a TTL after the write, so
-// both arms were dark.
 message RefreshApiTokenReq {
   string token_hash  = 1;
   // The window the sentinel lives in, stated rather than implied.

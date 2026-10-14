@@ -5,16 +5,11 @@ package e2e.app.users;
 import "w17/db.proto";
 import "w17/field.proto";
 
-// Six reads over the directory-campaign island, each written for one DQL
-// construct that the whole example had never spelled.
-//
-// "Never spelled" is a measurement, not a guess: `lib/dql/topb.go`
-// converts an already-parsed AST into proto and has no error paths at
-// all, so a function sitting at zero coverage after a full regen means
-// exactly one thing — no example wrote the construct. The same held one
-// layer up in `desugar` and `typecheck`, where the dark functions were
-// the EXISTS-shortcut expander, the FD-on-PK relaxation, the cross-level
-// aggregate attribution and the `%` guard.
+// Reads over the directory-campaign island, each written for a DQL
+// construct: the EXISTS shortcut over a relation (one hop and two), two
+// grouping rules in one query, the `%` operator, a derived table and a
+// subquery in a JOIN's ON, two grouping sets, and a JSON key in the quoted
+// form.
 //
 // Everything below is a query someone would plausibly want; the point is
 // which SPELLING each one uses.
@@ -81,10 +76,9 @@ message FlightWeightsReq { int64 campaign_id = 1; }
 // The two numbers come from two different join SHAPES, which is the
 // reason this row has both: `total_weight` from a derived table (a
 // grouped subquery in the FROM list) and `peak_weight` from an ordinary
-// join whose ON carries a correlated subquery. Neither shape existed
-// anywhere in this example, and the checks that walk them — "does this
-// derived body aggregate over the OUTER query's columns", "does this ON
-// reference an alias joined later" — had never run.
+// join whose ON carries a correlated subquery. Each has its own check —
+// "does this derived body aggregate over the OUTER query's columns",
+// "does this ON reference an alias joined later".
 message FlightWeightRow {
   int64  id           = 1;
   string channel      = 2;
@@ -185,8 +179,8 @@ service CampaignQuery {
   // FIRST: `GROUP BY c.id` alone, while the projection also carries
   // `c.name`. Every other grouped query in this example lists every
   // projected column in its GROUP BY (`GROUP BY a.id, a.email` in the
-  // ledger rollup), which is why the FD-on-PK relaxation had never once
-  // been asked to hold. It is not decoration: the primary key
+  // ledger rollup); this one leans on the primary key instead. It is not
+  // decoration: the primary key
   // functionally determines the row, so PostgreSQL accepts the
   // shorter GROUP BY, and a compiler that did not model that would
   // refuse a query the database is happy with.
@@ -258,25 +252,21 @@ service CampaignQuery {
     };
   }
 
-  // FlightWeights — two join shapes this example had never written, in the
-  // one query that wants both.
+  // FlightWeights — two join shapes in the one query that wants both.
   //
   // The DERIVED TABLE (`JOIN (SELECT … GROUP BY …) t`) puts a whole
   // grouped SELECT into the FROM list. That body is part of THIS query's
   // FROM clause, which is evaluated before grouping, so an aggregate
   // there that aggregated the OUTER query's columns would be illegal —
-  // and the walk that decides which level a body's aggregates belong to
-  // had never been handed a body to walk. Here `SUM(e2.weight)`
-  // aggregates the body's OWN rows, which is the legal case and the one
-  // worth having: it is what an example containing only the refusal could
-  // not prove.
+  // and the compiler decides which level a body's aggregates belong to.
+  // Here `SUM(e2.weight)` aggregates the body's OWN rows, which is the
+  // legal case: an example containing only the refusal could not show it.
   //
   // The SUBQUERY IN THE ON is the second. A JOIN may reference the FROM
   // alias, an earlier join, or its own — never one joined further down —
   // and that rule has to descend into subqueries written inside the ON,
   // carrying the aliases each nested SELECT declares for itself so a
   // legitimate re-use of a name is not mistaken for a forward reference.
-  // No example had ever nested a SELECT in an ON at all.
   //
   // Read plainly: per flight, how much its events weigh in total and how
   // much its single heaviest one weighs. The two differ on any flight
@@ -306,9 +296,8 @@ service CampaignQuery {
   // and the compiler has to reason about which columns are still
   // functionally determined: only the keys present in EVERY set qualify,
   // which is why the intersection of the sets — and not their union — is
-  // what a functional-dependency exemption may rest on. Computing that
-  // intersection is the step no example had ever triggered, because no
-  // example had ever written more than one grouping set.
+  // what a functional-dependency exemption may rest on, and only a query
+  // with more than one grouping set has an intersection to compute.
   //
   // Deliberately NOT ROLLUP. ROLLUP is native on PostgreSQL and MySQL,
   // spelled differently on MySQL, and refused on SQLite, so it is a
@@ -335,8 +324,8 @@ service CampaignQuery {
   // is the character the chain syntax spends on "go one level down".
   // Written bare, `c.audience.utm.source` is two hops into a document
   // that has no `utm` object, and the build fails. The quoted spelling
-  // is the escape, and nothing in this example had ever used it — every
-  // JSON key any example reads is a bare identifier.
+  // is the escape; every other JSON key this example reads is a bare
+  // identifier.
   rpc GetCampaignAudienceSource(GetCampaignAudienceSourceReq) returns (GetCampaignAudienceSourceResp) {
     option (w17.db.method) = {
       ops: {

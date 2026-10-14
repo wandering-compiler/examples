@@ -69,13 +69,9 @@ option (w17.mcp_api) = {
       //
       // Every other tool in this example references a method published
       // somewhere else too — over REST, or as an admin widget source — so
-      // its permission already existed in the ACL lock and nothing about
-      // MCP had to contribute one. That left half the pipeline
-      // unobservable: a method reachable ONLY through `tools[]` never
-      // entered the permission catalogue, so the bundle had nothing to
-      // gate on. A consumer measured the symptom from outside — an
-      // endpoint count of 90 with no MCP registry, 90 with a valid tool,
-      // and 90 with a nonsensical one.
+      // its permission already exists in the ACL lock whatever MCP
+      // contributes. A method reachable ONLY through `tools[]` has a
+      // permission because the tool names it, and the bundle gates on it.
       //
       // `cache.SessionCacheQuery.GetSessionWithUser` appears in no other
       // surface file, so its permission exists ONLY because this entry
