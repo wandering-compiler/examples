@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package databases.catalog;
+
+import "w17/rest.proto";
+
+// Domain-level REST registry, the surface the e2e suite drives. No auth
+// plugin is activated in this project, so there are no `auth_methods`
+// and no ACL: the example is about what goes into the database.
+option (w17.rest_api) = {
+  name:        "public",
+  version:     "v1",
+  prefix:      "/api/v1",
+  description: "Catalog REST surface — writes and reads documents with Postgres-specific column types.",
+
+  groups: [
+    {
+      prefix:      "/estates",
+      description: "Estates — a SHARED model (proto/shared/estate) this domain registers.",
+      endpoints: [
+        { ref: "listing.EstateQuery.ListEstates",       method: GET,  path: "" },
+        { ref: "listing.EstateQuery.GetEstate",         method: GET,  path: "/{estate_id}" },
+        { ref: "listing.EstateMutation.CreateEstate",   method: POST, path: "", body: "*" }
+      ]
+    },
+    {
+      prefix:      "/documents",
+      description: "Documents carrying an hstore label map and an ltree path.",
+      endpoints: [
+        { ref: "docs.DocumentQuery.ListDocuments",    method: GET,  path: "" },
+        // Static segment declared BEFORE the {document_id} route: the
+        // id is an int64, so "by-depth" reaching the parameterised
+        // handler is a 400, not a fallthrough.
+        { ref: "docs.DocumentQuery.CountByDepth",     method: GET,  path: "/by-depth" },
+        // More static segments, declared before the parameterised route
+        // for the same reason as /by-depth.
+        { ref: "docs.DocumentQuery.DocumentPeriods",  method: GET,  path: "/periods" },
+        { ref: "docs.DocumentQuery.DocumentsInRange",  method: GET,  path: "/in-range" },
+        { ref: "docs.DocumentQuery.DocumentWindows",   method: GET,  path: "/windows" },
+        { ref: "docs.DocumentQuery.DepthRollup",       method: GET,  path: "/depth-rollup" },
+        { ref: "docs.DocumentQuery.DocumentJson",     method: GET,  path: "/json" },
+        { ref: "docs.DocumentQuery.DocumentAgg",      method: GET,  path: "/agg" },
+        { ref: "docs.DocumentQuery.DocumentNulls",    method: GET,  path: "/nulls" },
+        { ref: "docs.DocumentQuery.DocumentDepthPick", method: GET,  path: "/depth-pick" },
+        { ref: "docs.DocumentQuery.DocumentPeers",    method: GET,  path: "/peers" },
+        { ref: "docs.DocumentQuery.DocumentSumDiv",   method: GET,  path: "/sum-div" },
+        { ref: "docs.DocumentQuery.DocumentTypeGuard", method: GET,  path: "/type-guard" },
+        { ref: "docs.DocumentQuery.DocumentMatrix",    method: GET,  path: "/matrix" },
+        // Static segment, declared before "/{document_id}" for the same
+        // reason as the rest of this block. Takes the point as two query
+        // parameters, which is how a caller has one.
+        { ref: "docs.DocumentQuery.DocumentsCovering", method: GET,  path: "/covering" },
+        { ref: "docs.DocumentQuery.GetDocument",      method: GET,  path: "/{document_id}" },
+        { ref: "docs.DocumentQuery.GetDocumentShape", method: GET,  path: "/{document_id}/shape" },
+        { ref: "docs.DocumentMutation.CreateDocument", method: POST, path: "", body: "*" },
+        { ref: "docs.DocumentMutation.UpsertDocument", method: PUT,  path: "", body: "*" }
+      ],
+
+      // A stream binds headers of its own: into gRPC metadata
+      // (`metadata_bindings`) and into its request message (`fields`).
+      streams: [
+        {
+          ref: "docs.DocumentQuery.WatchDocuments", path: "/watch",
+          // header → gRPC metadata key, for THIS stream only.
+          metadata_bindings: [
+            { ref: "X-Trace-Origin", from: HEADER, metadata: "w17-trace-origin" }
+          ],
+          // header → request FIELD. Declared alongside the binding above
+          // so the two are told apart: one lands in metadata the backend
+          // reads off the context, the other in the message it receives.
+          fields: [
+            // `ref` is a path on the REQUEST MESSAGE; `http_name` is the
+            // HTTP-side name. A header name in `ref` is refused.
+            { ref: "client_id", from: HEADER, http_name: "X-Client-Id" }
+          ]
+        }
+      ]
+    }
+  ]
+};

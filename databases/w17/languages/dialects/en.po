@@ -1,0 +1,134 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: w17\n"
+"POT-Creation-Date: 2026-10-13 14:33+0000\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Another change reached this first. Please try again."
+msgstr "Another change reached this first. Please try again."
+
+msgid "No file was attached."
+msgstr "No file was attached."
+
+msgid "No permissions are in effect for you here. If access is scoped by organization, choose one and try again."
+msgstr "No permissions are in effect for you here. If access is scoped by organization, choose one and try again."
+
+msgid "Something went wrong on our side."
+msgstr "Something went wrong on our side."
+
+msgid "The file is too large."
+msgstr "The file is too large."
+
+msgid "The item you asked for does not exist."
+msgstr "The item you asked for does not exist."
+
+msgid "The request could not be accepted as sent."
+msgstr "The request could not be accepted as sent."
+
+msgid "The request took too long and was stopped."
+msgstr "The request took too long and was stopped."
+
+msgid "The request was cancelled before it finished."
+msgstr "The request was cancelled before it finished."
+
+msgid "The service is temporarily unavailable."
+msgstr "The service is temporarily unavailable."
+
+msgid "This cannot be done in the current state."
+msgstr "This cannot be done in the current state."
+
+msgid "This is not available."
+msgstr "This is not available."
+
+msgid "This type of file is not accepted."
+msgstr "This type of file is not accepted."
+
+msgid "This value is not in the expected format."
+msgstr "This value is not in the expected format."
+
+msgid "Too many requests. Please wait and try again."
+msgstr "Too many requests. Please wait and try again."
+
+msgid "You are not signed in."
+msgstr "You are not signed in."
+
+msgid "You do not have access to this."
+msgstr "You do not have access to this."
+
+msgid "already exists"
+msgstr "already exists"
+
+msgid "conflicts with an existing record"
+msgstr "conflicts with an existing record"
+
+msgid "extension must be one of: {extensions}"
+msgstr "extension must be one of: {extensions}"
+
+msgid "format is invalid"
+msgstr "format is invalid"
+
+msgid "is required"
+msgstr "is required"
+
+msgid "may not be blank"
+msgstr "may not be blank"
+
+msgid "must be a valid IP address"
+msgstr "must be a valid IP address"
+
+msgid "must be a valid JSON document"
+msgstr "must be a valid JSON document"
+
+msgid "must be a valid MAC address"
+msgstr "must be a valid MAC address"
+
+msgid "must be a valid URL"
+msgstr "must be a valid URL"
+
+msgid "must be a valid UUID"
+msgstr "must be a valid UUID"
+
+msgid "must be a valid email address"
+msgstr "must be a valid email address"
+
+msgid "must be a valid value"
+msgstr "must be a valid value"
+
+msgid "must be at least {min} (got {got})"
+msgstr "must be at least {min} (got {got})"
+
+msgid "must be at least {min} characters (got {got})"
+msgstr "must be at least {min} characters (got {got})"
+
+msgid "must be at most {max} (got {got})"
+msgstr "must be at most {max} (got {got})"
+
+msgid "must be at most {max} characters (got {got})"
+msgstr "must be at most {max} characters (got {got})"
+
+msgid "must be greater than {min} (got {got})"
+msgstr "must be greater than {min} (got {got})"
+
+msgid "must be in [0, 100] (got {got})"
+msgstr "must be in [0, 100] (got {got})"
+
+msgid "must be in [0, 1] (got {got})"
+msgstr "must be in [0, 1] (got {got})"
+
+msgid "must be less than {max} (got {got})"
+msgstr "must be less than {max} (got {got})"
+
+msgid "must be one of: {choices}"
+msgstr "must be one of: {choices}"
+
+msgid "must fit precision {precision} scale {scale}"
+msgstr "must fit precision {precision} scale {scale}"
+
+msgid "referenced record does not exist"
+msgstr "referenced record does not exist"
+
+msgid "value violates constraint"
+msgstr "value violates constraint"

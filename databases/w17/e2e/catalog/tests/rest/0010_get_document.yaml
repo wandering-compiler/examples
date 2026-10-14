@@ -1,0 +1,34 @@
+# The two custom-typed columns are ordinary strings on the wire.
+#
+# `labels` is an hstore column and `path` an ltree column
+# (from `(w17.pg.field).custom_type`), yet the proto declares both as plain
+# `string` — so what this asserts is that the override changes STORAGE
+# ONLY. Nothing in the request or the response mentions either extension
+# type.
+#
+# `labels` is asserted with a regex rather than `eq` because hstore is a
+# MAP: Postgres stores its pairs unordered and renders them back in its
+# own order, so `eq` on the whole literal would be asserting an
+# implementation detail. What the pattern pins instead is the part that
+# tells an hstore column apart from a TEXT column that merely kept the
+# input string — hstore RE-RENDERS (every key and value quoted, one
+# canonical separator), where TEXT would hand back the seed's
+# `env=>prod, tier=>gold` character for character.
+#
+# `path` IS asserted exactly: ltree preserves the label sequence, so
+# there is nothing implementation-defined about it.
+#
+# Cases run in file-name order. This step and 0020 / 0030 read the
+# seeded table (fixtures/catalog/test.json, four rows); the first step
+# that adds a row is 0040, and the counts in the read cases hold only
+# before it.
+method: docs.DocumentQuery.GetDocument
+input:
+    document_id: 700001
+expect:
+    # int64 → quoted decimal string, as in protobuf's JSON mapping.
+    id: {matcher: eq, value: "700001"}
+    title: {matcher: eq, value: seed alpha}
+    labels: {matcher: regex, pattern: '^"(env"=>"prod|tier"=>"gold)", "(env"=>"prod|tier"=>"gold)"$'}
+    path: {matcher: eq, value: root.docs.alpha}
+    created_at: {matcher: not_empty}

@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package databases.catalog.docs;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/catalog/docs/types/models.proto";
+
+message CreateDocumentReq {
+  string title  = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+  // Request-side carriers for the two custom-typed columns are plain
+  // strings with no string-only rules, for the same reason as the
+  // model's (see types/models.proto): a CHECK that assumes text does not
+  // type-check against hstore / ltree.
+  string labels = 2 [(w17.field) = { type: TEXT }];
+  string path   = 3 [(w17.field) = { type: TEXT }];
+}
+
+message UpsertDocumentReq {
+  int64  id     = 1;
+  string title  = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+  string labels = 3 [(w17.field) = { type: TEXT }];
+  string path   = 4 [(w17.field) = { type: TEXT }];
+}
+
+message RetitleDocumentReq {
+  int64  id    = 1;
+  string title = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+}
+
+message RetitleDocumentRow { int64 id = 1; string title = 2; }
+
+message RetitleDocumentResp { repeated RetitleDocumentRow rows = 1; }
+
+service DocumentMutation {
+  rpc CreateDocument(CreateDocumentReq) returns (Document) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO docs.Document SET title = :title, labels = :labels, path = :path RETURNING id, title, labels, path, created_at"
+      }
+    };
+  }
+
+  // UPSERT on Postgres: `ON CONFLICT (cols) DO UPDATE SET …`, conflict
+  // columns named and honoured. SQLite spells it identically; MySQL drops
+  // the column list because its engine arbitrates on ANY unique key.
+  //
+  // The suite inserts the row (0080) and upserts the same id with a
+  // different title (0081). A plain INSERT would raise a unique violation
+  // on the second call, so the second step passing shows the conflict arm
+  // ran.
+  rpc UpsertDocument(UpsertDocumentReq) returns (Document) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "UPSERT INTO docs.Document SET "
+          "id = :id, title = :title, labels = :labels, path = :path "
+          "ON CONFLICT (id) DO UPDATE SET title = :title "
+          "RETURNING id, title, labels, path, created_at"
+      }
+    };
+  }
+
+  // A DATA-MODIFYING CTE: `WITH x AS (UPDATE … RETURNING …) SELECT …`.
+  //
+  // Postgres only; the compiler refuses a CTE body that is not a SELECT
+  // on MySQL and SQLite. PG also constrains where such a CTE may sit: a
+  // data-modifying WITH must be at the TOP level of the statement.
+  // Nested in a subquery, a derived table, a set-op arm or another CTE's
+  // body, the server rejects it at prepare time, and the compiler refuses
+  // it first.
+  //
+  // The RETURNING inside the CTE is what gives the outer SELECT something
+  // to read; without it the construct is a plain UPDATE.
+  rpc RetitleDocument(RetitleDocumentReq) returns (RetitleDocumentResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "WITH bumped AS ("
+          "UPDATE docs.Document SET title = :title WHERE id = :id "
+          "RETURNING id, title"
+          ") "
+          "SELECT b.id AS id, b.title AS title "
+          "FROM bumped b "
+          "ORDER BY b.id ASC"
+      }
+    };
+  }
+
+}

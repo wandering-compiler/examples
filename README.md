@@ -13,6 +13,7 @@ tests.
 | [`assistant`](assistant) | notes and an assistant that answers questions about them with the `agent` plugin: a hand-written service over it, a tool the model calls, streaming, usage recording and limits, a TLS stand-in for the provider, an end-to-end suite and a live suite |
 | [`billing`](billing) | card payments and a prepaid credit wallet with the `payment` plugin, the provider's signed webhooks, a stand-in for the Stripe API, an end-to-end suite and a live suite against the running stack |
 | [`jobs`](jobs) | jobs on a pool of workers with the `cluster` plugin: a relay built from the plugin, two workers on its worker library, pinned identities set up before start, a hand-written service that places each job and calls the worker with a single-use ticket, an end-to-end suite and a live suite |
+| [`databases`](databases) | one project on Postgres, MySQL and SQLite: hstore, ltree and PostGIS columns, MySQL and SQLite column types, and the same DQL queries compiled for each database; an end-to-end suite against the Postgres domain |
 | [`reference`](reference) | the widest one: two domains on Postgres and Redis, REST with cursor paging, uploads and streams, an MCP server, an admin with an ACL, events on NATS, a hand-written business tier and a capability link; an end-to-end suite of a few hundred cases |
 
 ## Running an example

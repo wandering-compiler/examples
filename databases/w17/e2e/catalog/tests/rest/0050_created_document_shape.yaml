@@ -1,0 +1,29 @@
+# The two registered functions again, this time over a row the SUITE
+# wrote rather than one SQL seeded.
+#
+# 0020 reads a seeded row: `fixtures/catalog/test.json` holds an hstore
+# literal and an ltree literal, so `akeys` /
+# `nlevel` succeeding there says the COLUMNS are the right types. It says
+# nothing about what the generated INSERT stores — a write path that
+# somehow landed text in those columns would still let 0020 pass, because
+# 0020 never looks at the row 0040 created.
+#
+# This step closes that: it reads 0040's row through the same two
+# functions. Passing means the value the gateway bound as a string is a
+# first-class hstore / ltree value in the table, not a lookalike.
+#
+# `depth` is 4 ('root.docs.created.deep'), one deeper than anything
+# seeded — see 0040 on why.
+method: docs.DocumentQuery.GetDocumentShape
+input:
+    document_id: ${created_document.id}
+# `title_folded` is `unaccent(title)`, and the title carries a diacritic
+# on purpose: folding "Rohlík" to "Rohlik" is a value the plain column
+# cannot produce, so this line fails if the extension is missing AND if
+# it is present but the function never ran. A title without diacritics
+# would make the two indistinguishable.
+expect:
+    title: {matcher: eq, value: Rohlík delta}
+    title_folded: {matcher: eq, value: Rohlik delta}
+    label_keys: {matcher: eq, value: "env,run"}
+    depth: {matcher: num, op: '==', value: 4}

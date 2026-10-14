@@ -1,0 +1,62 @@
+# The dialect MATRIX on Postgres.
+#
+# Five constructs whose SQL differs per dialect, one column each. The
+# MySQL and SQLite modules declare the same DQL
+# (spatial.SiteQuery.SiteMatrix, local.ReadingQuery.ReadingMatrix), and
+# the compiler rewrites it there so that it answers the numbers below.
+#
+# `rounded` on August shows why the rewrites have to look at the SQL the
+# compiler emits, not only at the DQL: SQLite needs `100 / month` as a
+# REAL division (PG computes it as NUMERIC), and then a ROUND around the
+# CAST to an integer (SQLite truncates toward zero, PG rounds).
+# CAST(100 / CAST(8 AS REAL) AS INTEGER) is 12 on SQLite;
+# CAST(100 / 8::numeric AS int) is 13 on PG.
+#
+# Seeded months (fixtures/catalog/test.json) drive `dec_div` = 100/month:
+#
+#   700001  Feb (2)   50      active=true
+#   700002  May (5)   20      active=false
+#   700003  Aug (8)   12.5    active=true    ← the only fractional one
+#   700004  Oct (10)  10      active=false
+#
+# August is the row that matters: 12.5 is the only value where rounding
+# and truncation disagree.
+#
+# `title IS DISTINCT FROM 'seed alpha'` drops 700001, leaving three rows.
+#
+# `title` is not nullable, so against a non-null parameter IS DISTINCT
+# FROM behaves like `<>` here; it is in the query for its spelling (MySQL
+# has no such operator, and the compiler emits `NOT (a <=> b)` there).
+#
+# Runs before 0040, which inserts a fifth document and would add a row.
+method: docs.DocumentQuery.DocumentMatrix
+input:
+    title: seed alpha
+expect:
+    rows: {matcher: count, op: '==', value: 3}
+
+    # May. 700002/7 truncates to 100000 — PG and SQLite do that natively,
+    # MySQL needs DIV, and a MySQL emitting `/` would answer 100000.2857.
+    rows.0.id: {matcher: eq, value: "700002"}
+    rows.0.int_div: {matcher: eq, value: "100000"}
+    rows.0.dec_div: {matcher: num, op: '==', value: 20}
+    rows.0.rounded: {matcher: num, op: '==', value: 20}
+    rows.0.active_text: {matcher: eq, value: "false"}
+    rows.0.id_text: {matcher: eq, value: "700002"}
+
+    # August. dec_div is 12.5, so `rounded` is 13 under PG's rounding and
+    # would be 12 under truncation.
+    rows.1.id: {matcher: eq, value: "700003"}
+    rows.1.int_div: {matcher: eq, value: "100000"}
+    rows.1.dec_div: {matcher: num, op: '==', value: 12.5}
+    rows.1.rounded: {matcher: num, op: '==', value: 13}
+    rows.1.active_text: {matcher: eq, value: "true"}
+    rows.1.id_text: {matcher: eq, value: "700003"}
+
+    # October.
+    rows.2.id: {matcher: eq, value: "700004"}
+    rows.2.int_div: {matcher: eq, value: "100000"}
+    rows.2.dec_div: {matcher: num, op: '==', value: 10}
+    rows.2.rounded: {matcher: num, op: '==', value: 10}
+    rows.2.active_text: {matcher: eq, value: "false"}
+    rows.2.id_text: {matcher: eq, value: "700004"}

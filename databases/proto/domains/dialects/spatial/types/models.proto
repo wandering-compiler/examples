@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package databases.dialects.spatial;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+import "w17/mysql/field.proto";
+
+// Site: two MySQL-specific column types the cross-dialect vocabulary
+// cannot name.
+//
+// Unlike the Postgres side there is no registry and no alias: the string
+// IS the SQL type and lands in the CREATE TABLE verbatim. That is the
+// documented shape — MySQL has no extension or DOMAIN concept, so there
+// is nothing for a registry entry to carry beyond the type name itself.
+//
+// Everything else about the column still comes from `(w17.field)`:
+// NOT NULL, uniqueness and defaults are added around the custom type,
+// which replaces the type and nothing else.
+message Site {
+  option (w17.db.table) = { name: "sites" };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  string name = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 120 }];
+
+  // A spatial column with an SRID restriction. `GEOMETRY` alone is
+  // nameable nowhere in the cross-dialect enum, and the `SRID 4326`
+  // qualifier is MySQL syntax with no equivalent anywhere else: the case
+  // a custom type is for, rather than a way around
+  // `(w17.db.column).db_type`.
+  string footprint = 3 [
+    (w17.field)       = { type: TEXT },
+    (w17.mysql.field) = { custom_type: "GEOMETRY SRID 4326" }
+  ];
+
+  // `SET` is MySQL's multi-valued membership type — several values from
+  // a fixed list in ONE column. The vocabulary's `choices` / enum
+  // support is single-valued, so there is no annotation that produces
+  // this, and no other dialect has the type at all.
+  string flags = 4 [
+    (w17.field)       = { type: TEXT },
+    (w17.mysql.field) = { custom_type: "SET('draft','review','published')" }
+  ];
+
+  // The column `EXTRACT(...)` reads. Nothing about it is MySQL-specific:
+  // temporal extraction is one of the places where one DQL expression
+  // has three different SQL spellings.
+  google.protobuf.Timestamp recorded_at = 5 [(w17.field) = { default_auto: NOW }];
+
+  // A boolean: `CAST(<bool> AS STRING)` is native on PG ('true'/'false'),
+  // but MySQL stores a bool as TINYINT and SQLite as INTEGER, so both
+  // would render '1'/'0'. The compiler substitutes a CASE on both.
+  // `default_auto: FALSE` because the column is NOT NULL: without a
+  // default, every INSERT that does not name it fails. The vocabulary has
+  // no `default_bool`; bool defaults go through `default_auto`.
+  bool active = 6 [(w17.field) = { default_auto: FALSE }];
+
+  // A JSON column, read key by key in the module's JSON query.
+  //
+  // `optional` rather than a default: MySQL refuses a literal DEFAULT on
+  // TEXT/BLOB/JSON (ER_BLOB_CANT_HAVE_DEFAULT 1101), so
+  // `default_string: "{}"` cannot exist on this column. Nullable works
+  // everywhere, and "this row has no attributes" is a real state.
+  optional string attrs = 7 [(w17.field) = { type: TEXT, json: true }];
+
+  // An int32 beside the int64 `id`: SUM() over the two answers different
+  // types on PG, and the division after it is rewritten differently on
+  // the other two dialects (see the module's SumDiv query).
+  int32 weight = 8 [(w17.field) = { default_int: 1 }];
+
+  // A binary-float column, for the float→integer CAST in the module's
+  // TypeGuard query.
+  double score = 9 [(w17.field) = { default_double: 1.5 }];
+}

@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+// A SHARED model: it belongs to no domain. Every domain that uses
+// `Estate` uses this one type — one Go struct, one TS type — whether it
+// stores it or only passes it around.
+//
+//   - `catalog` REGISTERS the module as `realty` (domains/catalog/w17.proto):
+//     the model is a table in catalog's database, `realty_estate`, with
+//     catalog's migrations, and catalog's DQL reads it as
+//     `realty.Estate`.
+//   - `dialects` does not register it: it only nests the type in a
+//     response (dialects/local/queries/reading_query.proto). No table
+//     exists for it there.
+//
+// A shared module holds types only: no service, no surface, no
+// w17.proto — those belong to the domain that registers it.
+
+package databases.shared.estate;
+
+import "w17/db.proto";
+import "w17/field.proto";
+
+message Estate {
+  option (w17.db.table) = {};
+  int64  id   = 1 [(w17.field) = { type: ID, pk: true, default_auto: IDENTITY }];
+  string name = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 120 }];
+  string city = 3 [(w17.field) = { type: CHAR, min_len: 1, max_len: 80 }];
+}

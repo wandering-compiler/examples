@@ -1,0 +1,47 @@
+admin_languages: []
+admin_wire: CLIENT_WIRE_UNSPECIFIED
+connections:
+    - default: true
+      name: catalog-postgres
+      target_content_sha256: ""
+      target_migration_id: ""
+    - default: false
+      name: dialects-mysql
+      target_content_sha256: ""
+      target_migration_id: ""
+    - default: false
+      name: dialects-sqlite
+      target_content_sha256: ""
+      target_migration_id: ""
+formats: {}
+generated_code:
+    binaries: []
+    business_bundles: []
+    ci_configs: []
+    clients: []
+    deploy_targets: []
+    e2e: true
+    grpc_clients: []
+    pb_stubs:
+        - language: go
+          output_root: ""
+          package: ""
+    proto_dir: proto
+    replicas: []
+    stubs: srcgo/gen
+infra: null
+languages:
+    - en
+languages_dir: w17/languages
+org_id: 01a08faa-bba7-7f3c-bc4b-962c69e23b74
+org_slug: wandering-compiler
+plugins: []
+project: examples-databases
+project_id: 6660fe96-cf06-4803-96ee-8ddb9997c494
+sdk_version: v0.1.0-rc.18
+secrets: null
+signature:
+    alg: ed25519/v1
+    body: 40a12da057ca959ab25bd83a8dcfd741e2ad442446e5631399a6a523fcf6227132d90981049e778e6ff457ef21b490d6393f3000729468ff8ff495954a901100
+    key_id: ed25519:d1f1f31adf965af1
+w17_url: grpcs://api.w17.app:50051

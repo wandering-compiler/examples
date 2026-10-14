@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package databases.dialects.local;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+import "w17/sqlite/field.proto";
+
+// Reading: two SQLite custom column types. The same plain-string shape
+// as MySQL's (no extensions, no DOMAINs, so no registry).
+//
+// SQLite's type system is deliberately permissive — a declared column
+// type is a storage-class HINT, not a constraint — so the escape hatch
+// here is about pinning an AFFINITY the vocabulary's cross-dialect
+// mapping would otherwise choose for you.
+message Reading {
+  option (w17.db.table) = { name: "readings" };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  string sensor = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 64 }];
+
+  // NUMERIC affinity on a column the proto carries as text. SQLite will
+  // store a value that looks numeric as INTEGER/REAL and anything else
+  // as TEXT — a behaviour with no cross-dialect equivalent, so no
+  // `db_type` names it.
+  string magnitude = 3 [
+    (w17.field)        = { type: TEXT },
+    (w17.sqlite.field) = { custom_type: "NUMERIC" }
+  ];
+
+  // A BLOB storage class on a string carrier. Note what it does NOT get:
+  // the compiler adds its Unicode COLLATE on SQLite only to declared
+  // types containing CHAR / CLOB / TEXT, so a BLOB column is left
+  // uncollated. Changing the type changes the collation too.
+  string payload = 4 [
+    (w17.field)        = { type: TEXT },
+    (w17.sqlite.field) = { custom_type: "BLOB" }
+  ];
+
+  // As Site.recorded_at. SQLite has no EXTRACT keyword at all; the
+  // compiler expands it into strftime() arithmetic.
+  google.protobuf.Timestamp recorded_at = 5 [(w17.field) = { default_auto: NOW }];
+
+  // As Site.active: SQLite stores a bool as INTEGER, and the compiler
+  // renders its CAST to a string as 'true'/'false'.
+  // `default_auto: FALSE` because the column is NOT NULL: without a
+  // default, every INSERT that does not name it fails. The vocabulary has
+  // no `default_bool`; bool defaults go through `default_auto`.
+  bool active = 6 [(w17.field) = { default_auto: FALSE }];
+
+  // A JSON column, read key by key in the module's JSON query.
+  //
+  // `optional` rather than a default: MySQL refuses a literal DEFAULT on
+  // TEXT/BLOB/JSON (ER_BLOB_CANT_HAVE_DEFAULT 1101), so
+  // `default_string: "{}"` cannot exist on this column. Nullable works
+  // everywhere, and "this row has no attributes" is a real state.
+  optional string attrs = 7 [(w17.field) = { type: TEXT, json: true }];
+
+  // An int32 beside the int64 `id`: SUM() over the two answers different
+  // types on PG, and the division after it is rewritten differently on
+  // the other two dialects (see the module's SumDiv query).
+  int32 weight = 8 [(w17.field) = { default_int: 1 }];
+
+  // A binary-float column, for the float→integer CAST in the module's
+  // TypeGuard query.
+  double score = 9 [(w17.field) = { default_double: 1.5 }];
+}

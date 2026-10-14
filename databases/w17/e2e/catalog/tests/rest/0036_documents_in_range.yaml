@@ -1,0 +1,26 @@
+# INTERSECT and EXCEPT, in a three-armed chain.
+#
+#   WITH picked AS (
+#     SELECT d.id WHERE d.id >= :min_id      -- {700002,700003,700004}
+#     INTERSECT
+#     SELECT d.id WHERE d.id <= :max_id      -- {700001,700002,700003}
+#     EXCEPT
+#     SELECT d.id WHERE d.title = :exclude   -- {700002}
+#   )
+#   SELECT k.document_id FROM picked k ORDER BY k.document_id ASC
+#
+# Postgres only: the compiler refuses both operators on MySQL (8.0 LTS
+# has neither) and SQLite (no ALL forms).
+#
+# Without the INTERSECT the answer would be {700003,700004}; without the
+# EXCEPT, {700002,700003}. The assertion is the exact single id.
+#
+# Runs before 0040, which inserts a document above the range's ceiling.
+method: docs.DocumentQuery.DocumentsInRange
+input:
+    min_id: "700002"
+    max_id: "700003"
+    exclude_title: seed bravo
+expect:
+    rows: {matcher: count, op: '==', value: 1}
+    rows.0.document_id: {matcher: eq, value: "700003"}

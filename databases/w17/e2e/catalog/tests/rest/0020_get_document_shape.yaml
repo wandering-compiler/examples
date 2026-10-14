@@ -1,0 +1,41 @@
+# The registered CUSTOM FUNCTIONS, live.
+#
+# 0010 proves the columns round-trip; it cannot prove they are really
+# hstore and ltree, because a TEXT column carrying the same characters
+# would answer the same. This step reads the SAME row through functions
+# that only those two types have:
+#
+#   label_keys = array_to_string(akeys(d.labels), ',')   -- hstore
+#   depth      = nlevel(d.path)                          -- ltree
+#
+# Both halves have to hold for this to pass, and they fail at different
+# stages:
+#
+#   * Drop `akeys` / `nlevel` from `(w17.pg.module).custom_functions` and
+#     CODEGEN fails — DQL resolves function names against the builtin set
+#     first and the registry second, so an unregistered name is an
+#     "unknown function" diagnostic, not a runtime surprise.
+#   * Keep the registrations but drop the column's `custom_type` and the
+#     column emits as TEXT — codegen still succeeds, the suite reaches
+#     Postgres, and THIS step is where it dies (`function akeys(text)
+#     does not exist`).
+#
+# `label_keys` is order-sensitive in principle (akeys returns hstore's
+# own key order) but not in practice for a two-key map — PG renders
+# hstore keys in a stable internal order for a given input, and 0010
+# already pins that order via its own pattern. Asserted with `eq` so a
+# regression in the flattening (a missing separator, one key lost)
+# names itself rather than passing a laxer pattern.
+#
+# `depth` is an int32 → JSON number, so the expected value is unquoted.
+#
+# POSITION IS LOAD-BEARING — see 0010.
+method: docs.DocumentQuery.GetDocumentShape
+input:
+    document_id: 700001
+expect:
+    id: {matcher: eq, value: "700001"}
+    title: {matcher: eq, value: seed alpha}
+    label_keys: {matcher: eq, value: "env,tier"}
+    # 'root.docs.alpha' — three ltree labels.
+    depth: {matcher: num, op: '==', value: 3}

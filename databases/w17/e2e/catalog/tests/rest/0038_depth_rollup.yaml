@@ -1,0 +1,46 @@
+# GROUP BY ROLLUP on Postgres. The dialects disagree about the SHAPE of
+# the clause:
+#
+#   PG      GROUP BY ROLLUP (nlevel(d.path))                  wrapper
+#   MySQL   GROUP BY EXTRACT(QUARTER FROM …) WITH ROLLUP      suffix
+#   SQLite  refused — no grouping-set extensions at all
+#
+# The MySQL twin is spatial.SiteQuery.SitesByQuarterRollup.
+#
+# THE ROW COUNT IS THE FIRST ASSERTION. A rollup differs from a plain
+# GROUP BY by exactly one row: the grand total, carrying NULL in the
+# dimension it aggregates over. Without the ROLLUP the query still
+# groups, orders and returns depth counts, one row fewer.
+#
+# Seeded depths (fixtures/catalog/test.json):
+#
+#   depth 1  root              700003
+#   depth 2  root.ops          700004
+#   depth 3  root.docs.alpha   700001
+#            root.docs.bravo   700002
+#
+# `depth` is `optional int32` because the grand-total row's grouping key
+# is NULL, which a plain int32 has nowhere to put. The total row is
+# identified by its count: the other three rows already account for all
+# four documents.
+#
+# Runs before 0040, which inserts a fifth document at depth 4.
+method: docs.DocumentQuery.DepthRollup
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 4}
+
+    rows.0.depth: {matcher: num, op: '==', value: 1}
+    rows.0.document_count: {matcher: eq, value: "1"}
+
+    rows.1.depth: {matcher: num, op: '==', value: 2}
+    rows.1.document_count: {matcher: eq, value: "1"}
+
+    # The only depth with more than one member — so the only row where a
+    # rollup that lost its grouping would read 1 instead of 2.
+    rows.2.depth: {matcher: num, op: '==', value: 3}
+    rows.2.document_count: {matcher: eq, value: "2"}
+
+    # The grand total. PG sorts the NULL key last on ASC, so it lands
+    # here; its count is every seeded document at once.
+    rows.3.document_count: {matcher: eq, value: "4"}

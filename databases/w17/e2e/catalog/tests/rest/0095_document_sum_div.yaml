@@ -1,0 +1,26 @@
+# Division after SUM(): which dialect needs a rewrite depends on the
+# WIDTH of the summed integer.
+#
+#   SUM(int32) → PG bigint  → integer division → MySQL needs DIV
+#   SUM(int64) → PG numeric → decimal division → SQLite needs CAST AS REAL
+#
+#   PG      100 / SUM(weight)        100 / SUM(id)
+#   MySQL   100 DIV SUM(weight)      100 / SUM(id)
+#   SQLite  100 / SUM(weight)        100 / CAST(SUM(id) AS REAL)
+#
+# VALUES. `weight` defaults to 1 and nothing sets it, so SUM(weight) is
+# the row count. Six documents exist by the time this runs, so
+# 100 / 6 = 16.67 (decimal on PG) and the int64 column divides by a sum
+# of ids far larger than 100, giving a small fraction; an integer
+# division there would answer 0.
+method: docs.DocumentQuery.DocumentSumDiv
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 1}
+    # PG computes SUM(int4) as bigint, so this is integer division:
+    # 100 / 6 truncates to 16.
+    rows.0.by_int32: {matcher: num, op: '==', value: 16}
+    # SUM(int8) is numeric on PG, so this stays DECIMAL. The exact value
+    # depends on how many rows earlier steps created; what is asserted is
+    # that it is not zero, which integer division would answer.
+    rows.0.by_int64: {matcher: num, op: '>', value: 0}

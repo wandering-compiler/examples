@@ -1,0 +1,19 @@
+# The whole table, after 0040 added its row: four seeds + one created.
+#
+# `limit: 10` with an exact count of 5 states the size of the whole set,
+# so a row that failed to insert or a filter that leaked into the query
+# fails here.
+#
+# The order is `d.id ASC`, and the created row sorts LAST: seeding an
+# IDENTITY column advances its sequence past the seeded rows, so the four
+# seeds hold 7000{01..04} and the row 0040 created takes 700005.
+method: docs.DocumentQuery.ListDocuments
+input:
+    limit: 10
+expect:
+    documents: {matcher: count, op: '==', value: 5}
+    documents.0.id: {matcher: eq, value: "700001"}
+    documents.1.id: {matcher: eq, value: "700002"}
+    documents.2.id: {matcher: eq, value: "700003"}
+    documents.3.id: {matcher: eq, value: "700004"}
+    documents.4.title: {matcher: eq, value: Rohlík delta}

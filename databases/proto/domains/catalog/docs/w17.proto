@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+// Module-level cascade anchor for catalog.docs. No override block —
+// the module inherits the connection and the PG registry from
+// proto/domains/catalog/w17.proto.
+//
+// File is a SENTINEL — options only, no messages.
+
+package databases.catalog.docs;

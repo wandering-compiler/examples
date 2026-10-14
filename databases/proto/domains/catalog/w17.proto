@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+// Domain-level cascade config for `catalog`, plus the DOMAIN half of
+// the Postgres registry.
+//
+// `(w17.pg.module)` is the per-domain sibling of `(w17.pg.project)`
+// (proto/project.proto): entries here are visible to this domain
+// only. A type or function that one domain uses belongs here, not in
+// the project file; the compiler refuses an alias declared on both
+// levels rather than letting one shadow the other.
+//
+// File is a SENTINEL — options only, no messages.
+
+package databases.catalog;
+
+import "w17/domain.proto";
+import "w17/module.proto";
+import "w17/pg/module.proto";
+
+// The shared model proto/shared/estate is persisted HERE, under the name
+// `realty`: a table in this domain's database (`realty_estate`), read in DQL
+// as `realty.Estate`. Without `as` the name is the module's own
+// (`estate_estate`, `estate.Estate`).
+option (w17.domain) = { register: [ { module: "shared/estate", as: "realty" } ] };
+
+option (w17.module) = {
+  connection: {
+    name: "catalog-postgres",
+    dialect: POSTGRES,
+    version: "18"
+  }
+};
+
+option (w17.pg.module) = {
+  // Domain-only type: only `catalog` models a hierarchy, so the
+  // ltree alias stays here rather than in project.proto.
+  custom_types: [
+    {
+      alias:       "taxonomy_path"
+      sql_type:    "LTREE"
+      description: "Materialised path of a document's place in the catalog tree (ltree labels, dot-separated)."
+      required_extensions: [ "ltree" ]
+
+      convertible_from: [
+        {
+          type:      "text"
+          cast:      "{{.Col}}::ltree"
+          rationale: "A dotted label string is already a valid ltree literal; an illegal label aborts the migration instead of silently truncating the path."
+        }
+      ]
+    }
+  ]
+
+  custom_functions: [
+    {
+      // Extension-backed scalar. Registering it is what makes a query
+      // calling it type-check: an unregistered name is an "unknown
+      // function" diagnostic at build time.
+      name:                "nlevel"
+      description:         "ltree depth — number of labels in the path."
+      required_extensions: [ "ltree" ]
+    },
+    {
+      name:                "akeys"
+      description:         "hstore key set as a text[] — projects the label keys without shipping the values."
+      required_extensions: [ "hstore" ]
+    },
+    {
+      // The one entry whose extension no column requires: `unaccent`
+      // reaches the generated 00_extensions.sql through this function's
+      // required_extensions alone.
+      name:                "unaccent"
+      description:         "Fold diacritics, so a search for Rohlik matches Rohlík."
+      required_extensions: [ "unaccent" ]
+    },
+    {
+      // The PostGIS entries below are what make the geometric columns
+      // QUERYABLE; the column types alone only store them.
+      name:                "ST_AsText"
+      description:         "Geometry as WKT — the readable form of a column stored as PostGIS's own binary."
+      required_extensions: [ "postgis" ]
+    },
+    {
+      // A predicate, not a projection: the call the GIST index on
+      // Document.footprint answers.
+      name:                "ST_Contains"
+      description:         "True when the first geometry covers the second — the containment test a GIST index can answer."
+      required_extensions: [ "postgis" ]
+    },
+    {
+      name:                "ST_SetSRID"
+      description:         "Stamp a geometry with a spatial reference, so a constructed point compares against a 4326 column."
+      required_extensions: [ "postgis" ]
+    },
+    {
+      name:                "ST_MakePoint"
+      description:         "Build a point from two numbers — the parameter side of a containment query."
+      required_extensions: [ "postgis" ]
+    },
+    {
+      // Registered for the GEOGRAPHY column: its answer is in square
+      // metres, which is what tells a geography apart from a geometry
+      // carrying the identical coordinates.
+      name:                "ST_Area"
+      description:         "Area of a shape — square metres over a geography, square degrees over a geometry."
+      required_extensions: [ "postgis" ]
+    }
+  ]
+};

@@ -1,0 +1,676 @@
+syntax = "proto3";
+
+package databases.catalog.docs;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/catalog/docs/types/models.proto";
+
+message GetDocumentReq { int64 document_id = 1; }
+
+message ListDocumentsReq {
+  int32 limit = 1 [(w17.field) = { type: NUMBER, gte: 1, lte: 100 }];
+}
+
+message ListDocumentsResp { repeated Document documents = 1; }
+
+// GetDocumentShapeReq / DocumentShape read the two custom-typed
+// columns THROUGH registered custom functions rather than selecting
+// them raw. `nlevel` and `akeys` are ltree/hstore functions: the query
+// compiles because `(w17.pg.module).custom_functions` names them, and
+// runs because the columns really are ltree/hstore.
+message GetDocumentShapeReq { int64 document_id = 1; }
+
+message DocumentShape {
+  int64  id         = 1;
+  string title      = 2;
+  // akeys() returns text[]; array_to_string flattens it so the
+  // response shape stays a plain scalar.
+  string label_keys = 3;
+  // nlevel() is the ltree label count — 1 for "root", 3 for
+  // "root.a.b".
+  int32  depth      = 4;
+  // unaccent() comes from an extension no column needs: the function's
+  // own required_extensions is what puts `CREATE EXTENSION unaccent` in
+  // the schema.
+  string title_folded = 5;
+}
+
+// DocumentsCoveringReq asks which footprints cover a point. The
+// parameters are the point's two numbers rather than a geometry,
+// because that is how a caller has one: a click, a GPS fix, a
+// geocoded address.
+message DocumentsCoveringReq {
+  double lon = 1;
+  double lat = 2;
+}
+
+// CoveringDocument reads the geometry back THROUGH ST_AsText. The
+// column's carrier is a string either way, so selecting it raw would
+// compile and return PostGIS's hex EWKB: readable to a library, not to
+// a person.
+message CoveringDocument {
+  int64  id            = 1;
+  string title         = 2;
+  string footprint_wkt = 3;
+
+  // ST_Area over the GEOGRAPHY column, in square metres. The same ring
+  // stored as geometry would answer 1.0 (square degrees).
+  double coverage_m2   = 4;
+}
+
+message DocumentsCoveringResp { repeated CoveringDocument rows = 1; }
+
+message CountByDepthReq {}
+
+// DepthGroup is one GROUP BY row. `titles` is produced by
+// `string_agg`, the registry's is_aggregate entry: the flag is what
+// tells the typechecker this call collapses the group rather than
+// needing to appear in GROUP BY.
+message DepthGroup {
+  int32  depth          = 1;
+  int64  document_count = 2;
+  string titles         = 3;
+}
+
+message CountByDepthResp { repeated DepthGroup rows = 1; }
+
+message DocumentPeriodsReq {}
+
+// One row per (document, temporal bucket). `bucket` carries a quarter in
+// the first set-op arm and a weekday in the second.
+message DocumentPeriodRow {
+  int64 document_id = 1;
+
+  // `optional` because 0 is a real value here: PG and SQLite number
+  // Sunday 0 (MySQL's DAYOFWEEK numbers it 1, and the compiler subtracts
+  // one there). A plain proto3 scalar is omitted from JSON when it equals
+  // its default, so "Sunday" and "no value" would read the same.
+  optional int32 bucket = 2;
+}
+
+message DocumentPeriodsResp { repeated DocumentPeriodRow rows = 1; }
+
+// Three parameters, one per arm of the set-operation chain (see the
+// RPC).
+message DocumentsInRangeReq {
+  int64  min_id  = 1;
+  int64  max_id  = 2;
+  string exclude_title = 3 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+}
+
+message DocumentIdRow { int64 document_id = 1; }
+
+message DocumentsInRangeResp { repeated DocumentIdRow rows = 1; }
+
+message DocumentWindowsReq {}
+
+// Three window functions over the same rows, differing only in their
+// FRAME. None of these counts can be 0 (a frame always contains at least
+// the current row), so a plain int64 carries them; compare
+// DocumentPeriodRow.bucket.
+message DocumentWindowRow {
+  int64 id              = 1;
+  int32 depth           = 2;
+  int64 rows_count      = 3;
+  int64 range_count     = 4;
+  int64 neighbour_count = 5;
+}
+
+message DocumentWindowsResp { repeated DocumentWindowRow rows = 1; }
+
+message DocumentMatrixReq {
+  string title = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+}
+
+message DocumentMatrixRow {
+  int64  id          = 1;
+  int64  int_div     = 2;
+  double dec_div     = 3;
+  int32  rounded     = 4;
+  string active_text = 5;
+  string id_text     = 6;
+}
+
+message DocumentMatrixResp { repeated DocumentMatrixRow rows = 1; }
+
+message DocumentJsonReq {
+  string env = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 40 }];
+}
+
+// Both proto3 readings of an absent value, in one message.
+//
+// A `->>'key'` navigation answers SQL NULL for a document that does not
+// carry the key. That is a legal document, and `attrs` is itself
+// nullable, so a row can have no object at all. Every target here is
+// therefore nullable, whatever the column's NOT NULL flag says.
+//
+// `env` keeps the PLAIN reading. It is the equality key of the WHERE
+// clause, so a row that came back has it, and the generated scan reads
+// a NULL as "".
+//
+// `channel` and `owner_team` keep PRESENCE. "This release declares no
+// channel" and "its channel is the empty string" are different answers
+// about a JSON document, and `optional` is what lets the response say
+// which one it means: the Go field is a *string and stays nil on NULL.
+message DocumentJsonRow {
+  int64           id         = 1;
+  string          env        = 2;
+  optional string channel    = 3;
+  optional string owner_team = 4;
+}
+
+message DocumentJsonResp { repeated DocumentJsonRow rows = 1; }
+
+message DepthRollupReq {}
+
+// One GROUP BY ROLLUP row. `depth` is `optional` because a rollup's
+// subtotal rows carry NULL in every dimension they aggregate over. A
+// plain int32 has nowhere to put that: the scan would fail on the
+// grand-total row, and the response could not tell "depth 0" from
+// "every depth".
+message DepthRollupRow {
+  optional int32 depth          = 1;
+  int64          document_count = 2;
+}
+
+message DepthRollupResp { repeated DepthRollupRow rows = 1; }
+
+message WatchDocumentsReq {
+  // Bound from a HEADER via the stream's own `fields[]` (ref names THIS
+  // field, http_name names the header), not from the query string. A
+  // stream's request message is sent once at connect, so a header binds
+  // into it as it does for a unary call.
+  string client_id = 1;
+}
+
+message DocumentEvent { int64 id = 1; string title = 2; }
+
+message DocumentAggReq {}
+
+message DocumentAggRow {
+  string values       = 1;
+  int64  active_count = 2;
+  int64  total_count  = 3;
+}
+
+message DocumentAggResp { repeated DocumentAggRow rows = 1; }
+
+message DocumentNullsReq {}
+
+message DocumentNullsRow {
+  int64 id = 1;
+
+  // Deliberately NOT `optional`, though the source column is nullable:
+  // proto3 reads a plain `string` as "you always get a value", the empty
+  // one, and the generated scan reads a NULL as "". DocumentJsonRow
+  // shows the other reading, where `optional` keeps "nothing was there"
+  // apart from the empty string.
+  string attrs = 2;
+}
+
+message DocumentNullsResp { repeated DocumentNullsRow rows = 1; }
+
+message DocumentPgOnlyReq {}
+
+message DocumentDepthPickRow {
+  int64 id    = 1;
+  int32 depth = 2;
+}
+
+message DocumentDepthPickResp { repeated DocumentDepthPickRow rows = 1; }
+
+message DocumentPeerRow {
+  int64 id      = 1;
+  int64 peer_id = 2;
+}
+
+message DocumentPeerResp { repeated DocumentPeerRow rows = 1; }
+
+message DocumentRangeReq {}
+
+message DocumentRangeRow {
+  int64 id         = 1;
+  int64 near_count = 2;
+}
+
+message DocumentRangeResp { repeated DocumentRangeRow rows = 1; }
+
+message DocumentSumDivReq {}
+
+message DocumentSumDivRow {
+  double by_int32 = 1;
+  double by_int64 = 2;
+}
+
+message DocumentSumDivResp { repeated DocumentSumDivRow rows = 1; }
+
+message DocumentTypeGuardReq {}
+
+message DocumentTypeGuardRow {
+  int64  id           = 1;
+  int32  from_float   = 2;
+  int32  from_integer = 3;
+
+  // A bool cast to a string, through COALESCE: 'true'/'false' here, and
+  // on MySQL and SQLite too, where the compiler substitutes a CASE.
+  string bool_via_coalesce = 4;
+}
+
+message DocumentTypeGuardResp { repeated DocumentTypeGuardRow rows = 1; }
+
+service DocumentQuery {
+  // A plain round trip: the two custom-typed columns are ordinary
+  // strings on the wire in both directions. The custom type changes the
+  // storage, not the contract.
+  rpc GetDocument(GetDocumentReq) returns (Document) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "SELECT d.id, d.title, d.labels, d.path, d.created_at FROM docs.Document d WHERE d.id = :document_id" }
+    };
+  }
+
+  rpc ListDocuments(ListDocumentsReq) returns (ListDocumentsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id, d.title, d.labels, d.path, d.created_at "
+          "FROM docs.Document d "
+          "ORDER BY d.id ASC "
+          "LIMIT :limit"
+      }
+    };
+  }
+
+  // Two registered scalars, one of them nested inside another.
+  rpc GetDocumentShape(GetDocumentShapeReq) returns (DocumentShape) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id AS id, d.title AS title, "
+          "array_to_string(akeys(d.labels), ',') AS label_keys, "
+          "nlevel(d.path) AS depth, "
+          "unaccent(d.title) AS title_folded "
+          "FROM docs.Document d "
+          "WHERE d.id = :document_id"
+      }
+    };
+  }
+
+  // DocumentsCovering: the query a geometric column exists for.
+  //
+  // ST_Contains as a PREDICATE (the call a GIST index answers),
+  // ST_MakePoint + ST_SetSRID building the other side from two ordinary
+  // parameters, and ST_AsText projecting the column into something a
+  // person can read. Each of the four is declared in `custom_functions`
+  // (catalog/w17.proto); none compiles without its entry.
+  //
+  // The SRID is written out rather than left to a default: a geometry
+  // with SRID 0 compares against a 4326 column by ERRORING, which is
+  // the good case. The bad one is two geometries that share a number
+  // and not a coordinate system.
+  rpc DocumentsCovering(DocumentsCoveringReq) returns (DocumentsCoveringResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id AS id, d.title AS title, "
+          "ST_AsText(d.footprint) AS footprint_wkt, "
+          "ST_Area(d.coverage) AS coverage_m2 "
+          "FROM docs.Document d "
+          "WHERE ST_Contains(d.footprint, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)) "
+          "ORDER BY d.id"
+      }
+    };
+  }
+
+  // A server stream. rest.proto binds a header into its request
+  // (`fields[]`) and another into the backend's metadata
+  // (`metadata_bindings[]`), per stream.
+  rpc WatchDocuments(WatchDocumentsReq) returns (stream DocumentEvent) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "SELECT d.id AS id, d.title AS title FROM docs.Document d ORDER BY d.id ASC" }
+    };
+  }
+
+  // A registered custom AGGREGATE beside a builtin one, grouped by a
+  // registered custom SCALAR.
+  rpc CountByDepth(CountByDepthReq) returns (CountByDepthResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT nlevel(d.path) AS depth, COUNT(*) AS document_count, "
+          "string_agg(d.title, ' | ') AS titles "
+          "FROM docs.Document d "
+          "GROUP BY nlevel(d.path) "
+          "ORDER BY nlevel(d.path) ASC"
+      }
+    };
+  }
+
+  // EXTRACT on Postgres: the same DQL as spatial.SiteQuery.SitePeriods
+  // (MySQL) and local.ReadingQuery.ReadingPeriods (SQLite), so the three
+  // generated handlers can be read side by side.
+  //
+  // PG's `EXTRACT` returns NUMERIC, not an integer; the generated scan
+  // carries it into the `int32` field. The seed pins created_at (all
+  // four quarters, and a Sunday, whose weekday number is 0), so
+  // `w17/e2e/catalog/tests/rest/0035_document_periods.yaml` asserts
+  // exact values.
+  rpc DocumentPeriods(DocumentPeriodsReq) returns (DocumentPeriodsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "WITH periods AS ("
+          "SELECT d.id AS document_id, EXTRACT(QUARTER FROM d.created_at) AS bucket "
+          "FROM docs.Document d "
+          "UNION ALL "
+          "SELECT d.id AS document_id, EXTRACT(DOW FROM d.created_at) AS bucket "
+          "FROM docs.Document d"
+          ") "
+          "SELECT p.document_id AS document_id, p.bucket AS bucket "
+          "FROM periods p "
+          "ORDER BY p.document_id ASC, p.bucket ASC"
+      }
+    };
+  }
+
+  // INTERSECT and EXCEPT, chained.
+  //
+  // Postgres only: MySQL 8.0 LTS has neither, and SQLite has them but
+  // not their `ALL` forms, so the compiler refuses them on the other two
+  // modules. The arms compose left to right:
+  //
+  //   id >= :min_id      {2,3,4}
+  //   INTERSECT
+  //   id <= :max_id      {1,2,3}   → {2,3}
+  //   EXCEPT
+  //   title = :exclude   {2}       → {3}
+  //
+  // Without the INTERSECT the answer would be {3,4}; without the EXCEPT,
+  // {2,3}. The suite asserts the single id.
+  rpc DocumentsInRange(DocumentsInRangeReq) returns (DocumentsInRangeResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "WITH picked AS ("
+          "SELECT d.id AS document_id FROM docs.Document d WHERE d.id >= :min_id "
+          "INTERSECT "
+          "SELECT d.id AS document_id FROM docs.Document d WHERE d.id <= :max_id "
+          "EXCEPT "
+          "SELECT d.id AS document_id FROM docs.Document d WHERE d.title = :exclude_title"
+          ") "
+          "SELECT k.document_id AS document_id "
+          "FROM picked k "
+          "ORDER BY k.document_id ASC"
+      }
+    };
+  }
+
+  // Window FRAME clauses: three windows over the same four rows,
+  // differing only in the frame:
+  //
+  //   rows_count       ROWS  BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+  //   range_count      RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+  //   neighbour_count  ROWS  BETWEEN 1 PRECEDING AND 1 FOLLOWING
+  //
+  // ROWS and RANGE agree until the window's ORDER BY has TIES; then ROWS
+  // counts up to the current row and RANGE counts the whole peer group.
+  // Two seeded documents share depth 3, so `700001` reads 3 under ROWS
+  // and 4 under RANGE.
+  //
+  // The ROWS window carries `d.id` as a second sort key: ROWS numbering
+  // INSIDE a peer group is arbitrary, so ordering by depth alone would
+  // number `700001` and `700002` in an undefined order. The RANGE window
+  // keeps the bare key, because the tie is what it shows.
+  //
+  // The offset frame (`1 PRECEDING AND 1 FOLLOWING`) is checked at build
+  // time: PG rejects a frame whose end comes before its start, and the
+  // compiler refuses one first.
+  rpc DocumentWindows(DocumentWindowsReq) returns (DocumentWindowsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id AS id, nlevel(d.path) AS depth, "
+          "COUNT(*) OVER (ORDER BY nlevel(d.path) ASC, d.id ASC "
+          "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS rows_count, "
+          "COUNT(*) OVER (ORDER BY nlevel(d.path) ASC "
+          "RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS range_count, "
+          "COUNT(*) OVER (ORDER BY d.id ASC "
+          "ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS neighbour_count "
+          "FROM docs.Document d "
+          "ORDER BY d.id ASC"
+      }
+    };
+  }
+
+  // GROUP BY ROLLUP. The dialects disagree about the shape of the
+  // clause, not merely its spelling:
+  //
+  //   PG      GROUP BY ROLLUP (<items>)     wrapper around the list
+  //   MySQL   GROUP BY <items> WITH ROLLUP  suffix after the list
+  //   SQLite  refused: no grouping-set extensions at all
+  //
+  // The MySQL twin is spatial.SiteQuery.SitesByQuarterRollup.
+  //
+  // The rollup adds one row to the plain grouping: the grand total, with
+  // NULL in the dimension it aggregates over. The suite (0038) asserts
+  // the row count first, because without ROLLUP the query still groups
+  // and orders, and returns one row fewer.
+  rpc DepthRollup(DepthRollupReq) returns (DepthRollupResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT nlevel(d.path) AS depth, COUNT(*) AS document_count "
+          "FROM docs.Document d "
+          "GROUP BY ROLLUP (nlevel(d.path)) "
+          "ORDER BY nlevel(d.path) ASC"
+      }
+    };
+  }
+
+  // The dialect matrix on Postgres: the same DQL as
+  // spatial.SiteQuery.SiteMatrix and local.ReadingQuery.ReadingMatrix
+  // (the first says what each column shows).
+  //
+  // Postgres is the reference: the compiler rewrites the expressions on
+  // MySQL and SQLite so that they answer what PG answers, and PG takes
+  // all five as written. The suite (0039) asserts the numbers against
+  // the seeded database.
+  rpc DocumentMatrix(DocumentMatrixReq) returns (DocumentMatrixResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id AS id, "
+          "d.id / 7 AS int_div, "
+          "100 / EXTRACT(MONTH FROM d.created_at) AS dec_div, "
+          "CAST(100 / EXTRACT(MONTH FROM d.created_at) AS INT32) AS rounded, "
+          "CAST(d.active AS STRING) AS active_text, "
+          "CAST(d.id AS STRING) AS id_text "
+          "FROM docs.Document d "
+          "WHERE d.title IS DISTINCT FROM :title "
+          "ORDER BY d.id ASC"
+      }
+    };
+  }
+
+  // Reading keys out of a JSON column on Postgres, `->>` per hop. The
+  // keys are the ones spatial.SiteQuery.SiteJson reads:
+  //
+  //   "release.channel"  one key with a dot in its name; read as two
+  //                      hops, `release` → `channel`, it would find a
+  //                      different value.
+  //   "owner's team"     the apostrophe is doubled so it cannot close
+  //                      the SQL literal the key is embedded in.
+  //
+  // The seed (0090) has a key literally named `release.channel` AND a
+  // nested `release` object, so reading it the wrong way returns the
+  // nested value, which the suite would see.
+  rpc DocumentJson(DocumentJsonReq) returns (DocumentJsonResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id AS id, "
+          "d.attrs.env AS env, "
+          "d.attrs.\"release.channel\" AS channel, "
+          "d.attrs.\"owner's team\" AS owner_team "
+          "FROM docs.Document d "
+          "WHERE d.attrs.env = :env "
+          "ORDER BY d.id ASC"
+      }
+    };
+  }
+
+
+  // Two aggregates that each dialect spells differently:
+  //
+  //   ROWS_TO_ARRAY   array_agg here · JSON_ARRAYAGG on MySQL ·
+  //                   json_group_array on SQLite, and the empty guard
+  //                   differs too (COALESCE '{}' vs IFNULL JSON_ARRAY()
+  //                   vs COALESCE '[]').
+  //   FILTER          native here and on SQLite; MySQL has no FILTER
+  //                   syntax, so the compiler rewrites the aggregate
+  //                   into a CASE there. The suite asserts active_count
+  //                   against total_count.
+  rpc DocumentAgg(DocumentAggReq) returns (DocumentAggResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT ROWS_TO_ARRAY(d.title) AS values, "
+          "COUNT(*) FILTER (WHERE d.active) AS active_count, "
+          "COUNT(*) AS total_count "
+          "FROM docs.Document d"
+      }
+    };
+  }
+
+  // NULLS placement. `NULLS LAST` is native on Postgres and adds no sort
+  // key. MySQL has no such syntax and places NULLs with an `IS NULL`
+  // prefix key, one key becoming two; SQLite has the keyword and stays
+  // at one.
+  rpc DocumentNulls(DocumentNullsReq) returns (DocumentNullsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id AS id, d.attrs AS attrs "
+          "FROM docs.Document d "
+          "ORDER BY d.attrs ASC NULLS LAST, d.id ASC"
+      }
+    };
+  }
+
+
+  // Two Postgres-only constructs in one query; the compiler refuses both
+  // on MySQL and SQLite:
+  //
+  //   DISTINCT ON   PG picks one row per key.
+  //   INTERVAL      PG takes the SQL-standard string form. MySQL wants
+  //                 `INTERVAL <num> <unit>` keywords, and SQLite has no
+  //                 INTERVAL type at all (date math is modifier
+  //                 strings).
+  rpc DocumentDepthPick(DocumentPgOnlyReq) returns (DocumentDepthPickResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT DISTINCT ON (nlevel(d.path)) d.id AS id, nlevel(d.path) AS depth "
+          "FROM docs.Document d "
+          "WHERE d.created_at < NOW() + INTERVAL '3650 days' "
+          "ORDER BY nlevel(d.path) ASC, d.id ASC"
+      }
+    };
+  }
+
+  // A LATERAL join, also Postgres-only here: the compiler refuses it on
+  // the dialects without one, with advice on what to write instead.
+  //
+  // The subquery correlates on the OUTER row (`x.id > d.id`), which is
+  // what makes it lateral rather than an ordinary derived table.
+  rpc DocumentPeers(DocumentPgOnlyReq) returns (DocumentPeerResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id AS id, p.id AS peer_id "
+          "FROM docs.Document d "
+          "JOIN LATERAL (SELECT x.id AS id FROM docs.Document x "
+          "WHERE x.id > d.id ORDER BY x.id ASC LIMIT 1) p ON TRUE "
+          "WHERE d.id > 700000 "
+          "ORDER BY d.id ASC"
+      }
+    };
+  }
+
+
+  // A RANGE window frame with an offset bound, which allows exactly one
+  // sort key. See spatial.SiteQuery.SiteRange for why it has no NULLS
+  // clause.
+  rpc DocumentRange(DocumentRangeReq) returns (DocumentRangeResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id AS id, "
+          "COUNT(*) OVER (ORDER BY d.id ASC "
+          "RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS near_count "
+          "FROM docs.Document d "
+          "ORDER BY d.id ASC"
+      }
+    };
+  }
+
+
+  // The same division twice, differing only in the width of the summed
+  // column, which decides the TYPE PG's SUM() returns:
+  //
+  //   SUM(int4) → bigint   integer  → `/` truncates on PG and SQLite;
+  //                                   MySQL needs DIV (its `/` is decimal)
+  //   SUM(int8) → numeric  decimal  → `/` is decimal on PG and MySQL;
+  //                                   SQLite needs a REAL cast (its SUM
+  //                                   over integers stays an integer)
+  rpc DocumentSumDiv(DocumentSumDivReq) returns (DocumentSumDivResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT 100 / SUM(d.weight) AS by_int32, "
+          "100 / SUM(d.id) AS by_int64 "
+          "FROM docs.Document d"
+      }
+    };
+  }
+
+
+  // A float→integer CAST over COALESCE. PG rounds such a CAST; SQLite
+  // truncates, so the compiler wraps a float operand in ROUND() there
+  // (see spatial.SiteQuery.SiteTypeGuard):
+  //
+  //   COALESCE(<double>, …)  float     → wrapped in ROUND on SQLite
+  //   COALESCE(<int32>, …)   not float → no wrap anywhere
+  rpc DocumentTypeGuard(DocumentTypeGuardReq) returns (DocumentTypeGuardResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id AS id, "
+          "CAST(COALESCE(d.score, 0) AS INT32) AS from_float, "
+          "CAST(COALESCE(d.weight, 0) AS INT32) AS from_integer, "
+          "CAST(COALESCE(d.active, FALSE) AS STRING) AS bool_via_coalesce "
+          "FROM docs.Document d "
+          "WHERE d.id > 700000 "
+          "ORDER BY d.id ASC"
+      }
+    };
+  }
+
+}

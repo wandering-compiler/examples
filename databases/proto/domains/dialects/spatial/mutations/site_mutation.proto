@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+// One method over two databases: `(w17.db.method).execution_plan`.
+//
+// A method's ops may address several relational connections on DISTINCT
+// dialects; here that is MySQL (this module) and SQLite (dialects.local).
+// Two Postgres connections in one method are refused (one *sql.DB per
+// dialect, so both ops would address the same pool), and so is
+// Postgres + Redis.
+//
+// WHY THE PLAN IS `[2, 1, 3]` AND NOT `[1, 2, 3]`
+//
+// The ops run in the order execution_plan gives, not in source order:
+//
+//   2  site    read the site's CURRENT name          (MySQL)
+//   1  rename  give it a new one                     (MySQL)
+//   3  main    look up readings under the OLD name   (SQLite)
+//
+// Run in source order instead, `rename` lands before `site`, `:site.name`
+// resolves to the NEW name, and `main` looks up readings that were never
+// recorded under it: the method runs cleanly and returns an empty list.
+//
+// The cross-op reference is what a multi-connection method is for:
+// `:site.name` is read out of MySQL into a Go variable and bound as a
+// parameter to a SQLite query. No SQL can express that, which is why the
+// ordering is decided above the database.
+package databases.dialects.spatial;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/dialects/spatial/types/models.proto";
+import "domains/dialects/local/types/models.proto";
+
+message RenameSiteReq {
+  int64  site_id  = 1;
+  string new_name = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 120 }];
+}
+
+message SiteReadingRow {
+  int64  id     = 1;
+  string sensor = 2;
+}
+
+// The response comes from the SQLite op — the LAST DECLARED op is the
+// response producer regardless of where it sits in execution_plan order,
+// so `main` produces this even though the plan runs it third.
+message RenameSiteResp {
+  repeated SiteReadingRow items = 1;
+}
+
+message UpsertSiteReq {
+  int64  id   = 1;
+  string name = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 120 }];
+  // The two custom-typed columns are NOT NULL on Site with no default,
+  // so the INSERT arm of the upsert has to name them; the compiler
+  // refuses an INSERT that leaves out such a column.
+  string footprint = 3 [(w17.field) = { type: TEXT }];
+  string flags     = 4 [(w17.field) = { type: TEXT }];
+}
+
+// Deliberately EMPTY: MySQL 8 has no RETURNING in any DML statement, so
+// the write cannot hand the row back inline the way PG and SQLite
+// (3.35+) do. A caller that needs the stored row reads it back in a
+// second op. Fields here would be part of the contract and never filled.
+message UpsertSiteResp {}
+
+service SiteMutation {
+  rpc RenameSite(RenameSiteReq) returns (RenameSiteResp) {
+    option (w17.db.method) = {
+      // Source order is deliberately NOT execution order; see the
+      // file comment. `rename` is written first because it is what the
+      // method is named for; it runs second because the read of the old
+      // name has to happen before it.
+      ops: {
+        name: "rename",
+        dql:  "UPDATE spatial.Site SET name = :new_name WHERE id = :site_id"
+      }
+      ops: {
+        name: "site",
+        dql:  "SELECT s.id AS site_id, s.name AS name FROM spatial.Site s WHERE s.id = :site_id"
+      }
+      ops: {
+        name: "main",
+        dql:
+          "SELECT r.id AS id, r.sensor AS sensor "
+          "FROM local.Reading r "
+          "WHERE r.sensor = :site.name "
+          "ORDER BY r.id ASC"
+      }
+      execution_plan: [2, 1, 3]
+    };
+  }
+
+  // UPSERT on MySQL, the dialect whose translation is least like the
+  // others. PG and SQLite both spell it
+  // `ON CONFLICT (cols) DO UPDATE SET …`; MySQL has
+  // `ON DUPLICATE KEY UPDATE pairs` and **drops the conflict-column
+  // list entirely**, because the engine arbitrates against ANY unique
+  // key rather than the one the author named.
+  //
+  // So with more than one unique constraint on the table, a conflict
+  // could merge into a row matched by a different key than the author
+  // targeted, and the compiler refuses the upsert. `sites` has exactly
+  // one (its PK).
+  // MySQL cannot return the row (see UpsertSiteResp), so unlike its PG
+  // and SQLite twins this method answers with an acknowledgement.
+  rpc UpsertSite(UpsertSiteReq) returns (UpsertSiteResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "UPSERT INTO spatial.Site SET "
+          "id = :id, name = :name, footprint = :footprint, flags = :flags "
+          "ON CONFLICT (id) DO UPDATE SET name = :name"
+      }
+    };
+  }
+
+  // DO NOTHING, whose obvious translation is WRONG.
+  //
+  // MySQL has no DO NOTHING. `INSERT IGNORE` is the usual suggestion, and
+  // the compiler does not use it: IGNORE downgrades EVERY error on the
+  // statement to a warning (FK violations, truncation, bad values), far
+  // more than the duplicate it was reached for. The compiler emits a
+  // no-op self-assignment (`ON DUPLICATE KEY UPDATE <col> = <col>`)
+  // instead, which suppresses the conflict and nothing else.
+  // MySQL cannot return the row (see UpsertSiteResp), so unlike its PG
+  // and SQLite twins this method answers with an acknowledgement.
+  rpc EnsureSite(UpsertSiteReq) returns (UpsertSiteResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "UPSERT INTO spatial.Site SET "
+          "id = :id, name = :name, footprint = :footprint, flags = :flags "
+          "ON CONFLICT (id) DO NOTHING"
+      }
+    };
+  }
+}

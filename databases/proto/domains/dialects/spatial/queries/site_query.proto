@@ -1,0 +1,492 @@
+syntax = "proto3";
+
+// The queries of the MySQL module. Each one is written once in DQL and
+// compiled to MySQL's SQL; most have a twin in the SQLite module
+// (dialects.local) or the Postgres one (catalog.docs) with the same DQL,
+// so the three generated handlers can be read side by side.
+//
+// The differences are where the dialects disagree about the same
+// expression. Most of them are silent: the SQL is valid on every engine
+// and returns a different value, so each comment below says what differs
+// and what the compiler emits for it.
+//
+// The first query shows the two most common ones:
+//
+//   * `:name` is bound TWICE (equality and prefix). Postgres numbers its
+//     parameters (`$1` can appear twice); MySQL's `?` is positional by
+//     occurrence, so the handler binds the value once per `?`.
+//   * the prefix match uses DQL's `||` concatenation. MySQL reads `||` as
+//     logical OR under its default sql_mode, so the compiler emits
+//     CONCAT() there; SQLite keeps `||`.
+package databases.dialects.spatial;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/dialects/spatial/types/models.proto";
+
+message ListSitesByNameReq {
+  string name = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 120 }];
+}
+
+message SiteRow {
+  int64  id   = 1;
+  string name = 2;
+}
+
+message ListSitesByNameResp {
+  repeated SiteRow items = 1;
+}
+
+message SitePeriodsReq {
+  string name = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 120 }];
+}
+
+// One row per (site, temporal bucket). `bucket` carries two different
+// meanings across the two set-op arms — the point is the NUMBER the
+// database computes, not what it names.
+message SitePeriodRow {
+  int64 site_id = 1;
+
+  // `optional` for the same reason as its PG and SQLite siblings —
+  // weekday 0 is a value, not an absence. See DocumentPeriodRow.
+  optional int32 bucket = 2;
+}
+
+message SitePeriodsResp {
+  repeated SitePeriodRow items = 1;
+}
+
+message SiteJsonReq {
+  string env = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 40 }];
+}
+
+message SiteJsonRow {
+  int64  id          = 1;
+  string env         = 2;
+  string channel     = 3;
+  string owner_team  = 4;
+}
+
+message SiteJsonResp { repeated SiteJsonRow items = 1; }
+
+message SiteMatrixReq {
+  string name = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 120 }];
+}
+
+message SiteMatrixRow {
+  int64  id          = 1;
+  int64  int_div     = 2;
+  double dec_div     = 3;
+  int32  rounded     = 4;
+  string active_text = 5;
+  string id_text     = 6;
+}
+
+message SiteMatrixResp { repeated SiteMatrixRow items = 1; }
+
+message SitesByQuarterRollupReq {}
+
+// `quarter` is `optional` for the same structural reason as its PG
+// sibling DepthRollupRow.depth: the rollup's grand-total row carries
+// NULL in the dimension it aggregates over.
+message SiteQuarterRow {
+  optional int32 quarter    = 1;
+  int64          site_count = 2;
+}
+
+message SitesByQuarterRollupResp {
+  repeated SiteQuarterRow items = 1;
+}
+
+message SiteAggReq {}
+
+message SiteAggRow {
+  string values       = 1;
+  int64  active_count = 2;
+  int64  total_count  = 3;
+}
+
+message SiteAggResp { repeated SiteAggRow items = 1; }
+
+message SiteNullsReq {}
+
+message SiteNullsRow {
+  int64 id = 1;
+
+  // `optional` because the source column is nullable and this is its
+  // projection. A plain string here compiles too, and fails at run time
+  // on the first NULL row: the scan has nowhere to put a NULL. The seed
+  // carries a NULL so the suite reads one.
+  optional string attrs = 2;
+}
+
+message SiteNullsResp { repeated SiteNullsRow items = 1; }
+
+// Ordering chosen by the caller: each enum value carries the SQL
+// fragment it sorts by, and codegen renders a static
+// `CASE :sort WHEN <n> THEN <sort_sql> ... END` ordering term, so the
+// caller picks an ordering without sending any SQL.
+//
+// It is on the MySQL module because MySQL has no NULLS syntax: the
+// compiler places NULLs by prepending an `IS NULL` key, here once per
+// enum value.
+enum SiteSortField {
+  SITE_SORT_UNSPECIFIED = 0;
+  SITE_SORT_NAME        = 1 [(w17.db.enum_value) = { sort_sql: "s.name ASC" }];
+  SITE_SORT_RECORDED    = 2 [(w17.db.enum_value) = { sort_sql: "s.recorded_at DESC" }];
+}
+
+message SiteSortedReq {
+  SiteSortField sort = 1;
+}
+
+message SiteSortedRow {
+  int64  id   = 1;
+  string name = 2;
+}
+
+message SiteSortedResp { repeated SiteSortedRow items = 1; }
+
+message SiteRangeReq {}
+
+message SiteRangeRow {
+  int64 id         = 1;
+  int64 near_count = 2;
+}
+
+message SiteRangeResp { repeated SiteRangeRow items = 1; }
+
+message SiteSumDivReq {}
+
+message SiteSumDivRow {
+  double by_int32 = 1;
+  double by_int64 = 2;
+}
+
+message SiteSumDivResp { repeated SiteSumDivRow items = 1; }
+
+message SiteTypeGuardReq {}
+
+message SiteTypeGuardRow {
+  int64  id           = 1;
+  int32  from_float   = 2;
+  int32  from_integer = 3;
+
+  // A bool cast to a string, through COALESCE: the compiler still knows
+  // the operand is a bool, so MySQL renders 'true'/'false' as Postgres
+  // does rather than '1'/'0'.
+  string bool_via_coalesce = 4;
+}
+
+message SiteTypeGuardResp { repeated SiteTypeGuardRow items = 1; }
+
+service SiteQuery {
+  // The connection comes from the module: spatial/w17.proto inherits the
+  // domain's MySQL connection. A module has one connection; a domain may
+  // have several.
+  rpc ListSitesByName(ListSitesByNameReq) returns (ListSitesByNameResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT s.id, s.name "
+          "FROM spatial.Site s "
+          "WHERE s.name = :name OR s.name LIKE :name || '%' "
+          "ORDER BY s.id ASC"
+      }
+    };
+  }
+
+  // A CTE wrapping a UNION ALL of two EXTRACTs. The three come together
+  // because DQL requires it: a set operation may not carry its own
+  // ORDER BY (the combined result has no alias to qualify one with), and
+  // the compiler's advice for that is "wrap it in a CTE and order the
+  // outer SELECT".
+  //
+  // EXTRACT is the interesting half, because one expression has three
+  // spellings and two of the differences return a DIFFERENT NUMBER
+  // rather than an error:
+  //
+  //   QUARTER  PG + MySQL implement it natively. SQLite has no such
+  //            strftime code, so the emitter expands it arithmetically
+  //            from the month: `((CAST(strftime('%m', ts) AS INTEGER)
+  //            + 2) / 3)`. Get the offset wrong and Q1 becomes Q0 —
+  //            valid SQL, wrong bucket, no error.
+  //   DOW      PG and SQLite are 0-indexed (0 = Sunday). MySQL's
+  //            DAYOFWEEK is 1-indexed, so its emitter subtracts one.
+  //            Drop that `- 1` and every weekday shifts by a day, on
+  //            one dialect only.
+  rpc SitePeriods(SitePeriodsReq) returns (SitePeriodsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "WITH periods AS ("
+          "SELECT s.id AS site_id, EXTRACT(QUARTER FROM s.recorded_at) AS bucket "
+          "FROM spatial.Site s WHERE s.name = :name "
+          "UNION ALL "
+          "SELECT s.id AS site_id, EXTRACT(DOW FROM s.recorded_at) AS bucket "
+          "FROM spatial.Site s WHERE s.name = :name"
+          ") "
+          "SELECT p.site_id AS site_id, p.bucket AS bucket "
+          "FROM periods p "
+          "ORDER BY p.site_id ASC"
+      }
+    };
+  }
+
+  // ROLLUP on MySQL: the same DQL clause as
+  // docs.DocumentQuery.DepthRollup on Postgres.
+  //
+  // Unlike EXTRACT above, the dialects disagree here about the shape of
+  // the clause, not the spelling of an expression:
+  //
+  //   PG      GROUP BY ROLLUP (<items>)     wrapper
+  //   MySQL   GROUP BY <items> WITH ROLLUP  suffix
+  //
+  // No ORDER BY: MySQL only accepted one alongside WITH ROLLUP from
+  // 8.0.12, and the ordering is not what this pair is about.
+  rpc SitesByQuarterRollup(SitesByQuarterRollupReq) returns (SitesByQuarterRollupResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT EXTRACT(QUARTER FROM s.recorded_at) AS quarter, "
+          "COUNT(*) AS site_count "
+          "FROM spatial.Site s "
+          "GROUP BY ROLLUP (EXTRACT(QUARTER FROM s.recorded_at))"
+      }
+    };
+  }
+
+// The dialect MATRIX — one DQL expression per column, three SQL
+// spellings, and every divergence below is SILENT: valid SQL on all
+// three engines, different values back.
+//
+//   int_div      `a / b` on integers. PG and SQLite truncate natively;
+//                MySQL's `/` is DECIMAL division whatever the operands,
+//                so its emitter must use `DIV`. Passed through, 22/7
+//                answers 3.1428 instead of 3.
+//   dec_div      a division PG computes as NUMERIC (here the divisor is
+//                EXTRACT, which PG types numeric). SQLite has no
+//                numeric-widening rule — EXTRACT lowers to
+//                CAST(strftime(…) AS INTEGER), so integer/integer
+//                truncates — and its emitter casts an operand to REAL.
+//                The two divergences run in OPPOSITE directions, which
+//                is why one column cannot show both.
+//   rounded      float→integer CAST. PG and MySQL round; SQLite
+//                truncates toward zero, so its emitter wraps the operand
+//                in ROUND(). `CAST(2.7 AS INT)` is 2 there and 3
+//                elsewhere.
+//   active_text  BOOL→STRING CAST. Native on PG ('true'/'false'); MySQL
+//                stores bool as TINYINT and SQLite as INTEGER, so both
+//                would render '1'/'0' and both emitters substitute a
+//                CASE.
+//   id_text      →CHAR CAST. The MySQL-only one, and the nastiest:
+//                `CAST(x AS CHAR)` takes collation_connection, whose
+//                server default (utf8mb4_0900_ai_ci) is case- AND
+//                accent-INSENSITIVE. Without the forced
+//                `COLLATE utf8mb4_0900_as_cs` a comparison on the cast
+//                result matches rows PG would not.
+//
+// The WHERE uses `IS DISTINCT FROM` — native on PG and SQLite 3.39+,
+// absent on MySQL, whose emitter emulates it with `NOT (a <=> b)`.
+  rpc SiteMatrix(SiteMatrixReq) returns (SiteMatrixResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT s.id AS id, "
+          "s.id / 7 AS int_div, "
+          "100 / EXTRACT(MONTH FROM s.recorded_at) AS dec_div, "
+          "CAST(100 / EXTRACT(MONTH FROM s.recorded_at) AS INT32) AS rounded, "
+          "CAST(s.active AS STRING) AS active_text, "
+          "CAST(s.id AS STRING) AS id_text "
+          "FROM spatial.Site s "
+          "WHERE s.name IS DISTINCT FROM :name "
+          "ORDER BY s.id ASC"
+      }
+    };
+  }
+
+  // Reading keys out of a JSON column: one DQL path, three native
+  // extraction primitives.
+  //
+  //   PG      col ->> 'key'                      chained per hop
+  //   MySQL   JSON_UNQUOTE(JSON_EXTRACT(col, '$.a.b'))   one call, path string
+  //   SQLite  json_extract(col, '$.a.b')                 one call, path string
+  //
+  // The three keys show how a key is quoted in the path:
+  //
+  //   env                 a bare identifier, no quoting
+  //   "release.channel"   contains a dot, so the path needs `$."..."`;
+  //                       unquoted it would navigate TWO hops instead of
+  //                       reading one key with a dot in its name. Valid
+  //                       JSONPath either way, different value back.
+  //   "owner's team"      contains an apostrophe. The path is a SQL
+  //                       string literal — `JSON_EXTRACT(col, '$."<key>"')`
+  //                       — so the compiler doubles the `'`; unescaped it
+  //                       would end the literal.
+  rpc SiteJson(SiteJsonReq) returns (SiteJsonResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT s.id AS id, "
+          "s.attrs.env AS env, "
+          "s.attrs.\"release.channel\" AS channel, "
+          "s.attrs.\"owner's team\" AS owner_team "
+          "FROM spatial.Site s "
+          "WHERE s.attrs.env = :env "
+          "ORDER BY s.id ASC"
+      }
+    };
+  }
+
+
+  // Two aggregates that each dialect spells differently:
+  //
+  //   ROWS_TO_ARRAY   array_agg · JSON_ARRAYAGG · json_group_array,
+  //                   and COALESCE vs IFNULL around them. Three
+  //                   aggregate functions and two null-guards for one
+  //                   DQL call.
+  //   FILTER          native on PG and SQLite; MySQL has no FILTER
+  //                   syntax and its emitter rewrites the aggregate
+  //                   into a CASE. A rewrite that loses the predicate
+  //                   still returns a count — just of everything.
+  rpc SiteAgg(SiteAggReq) returns (SiteAggResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT ROWS_TO_ARRAY(s.name) AS values, "
+          "COUNT(*) FILTER (WHERE s.active) AS active_count, "
+          "COUNT(*) AS total_count "
+          "FROM spatial.Site s"
+      }
+    };
+  }
+
+
+  // NULLS placement, where all three dialects differ:
+  //
+  //   PG      native NULLS LAST, nothing synthesised
+  //   SQLite  native NULLS keyword since 3.30 — stays ONE sort key
+  //   MySQL   no NULLS syntax at all; the placement is forced by
+  //           synthesising an `IS NULL` prefix key, so one sort key
+  //           becomes TWO. That is also why a RANGE-offset frame cannot
+  //           carry the forcing there (MySQL wants exactly one key,
+  //           ERROR 3587).
+  //
+  // `attrs` is the ordering key because it is the one nullable column in
+  // the model, so there are NULLs to place.
+  rpc SiteNulls(SiteNullsReq) returns (SiteNullsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT s.id AS id, s.attrs AS attrs "
+          "FROM spatial.Site s "
+          "ORDER BY s.attrs ASC NULLS LAST, s.id ASC"
+      }
+    };
+  }
+
+
+  // `ORDER BY :sort` — the enum-driven ordering. Codegen expands it into
+  // a CASE over the enum's per-value sort_sql, and on MySQL each arm
+  // gets a synthesised `IS NULL` placement key in front of it so the
+  // NULLs land where PostgreSQL puts them.
+  //
+  // `recorded_at` is NOT NULL, but the CASE yields NULL for the
+  // UNSPECIFIED value, and a sort_sql fragment is SQL the compiler does
+  // not analyse, so on MySQL the placement key is always added.
+  rpc SiteSorted(SiteSortedReq) returns (SiteSortedResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT s.id AS id, s.name AS name "
+          "FROM spatial.Site s "
+          "ORDER BY :sort"
+      }
+    };
+  }
+
+
+  // A RANGE window frame with an offset bound.
+  //
+  // Such a frame requires EXACTLY ONE sort key (MySQL ERROR 3587). MySQL
+  // places NULLs by PREPENDING a synthesised key, which would make two,
+  // so in this frame the compiler adds no placement key on MySQL. An
+  // explicit NULLS placement in a RANGE-offset frame cannot be met on
+  // MySQL, so the compiler refuses it at build time rather than ordering
+  // the rows differently; hence no NULLS clause here.
+  rpc SiteRange(SiteRangeReq) returns (SiteRangeResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT s.id AS id, "
+          "COUNT(*) OVER (ORDER BY s.id ASC "
+          "RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS near_count "
+          "FROM spatial.Site s "
+          "ORDER BY s.id ASC"
+      }
+    };
+  }
+
+
+  // The SAME division shape twice, differing only in the WIDTH of the
+  // summed column — and that width is what PG's SUM() returns a
+  // different TYPE for:
+  //
+  //   SUM(int4) → bigint   integer  → `/` truncates on PG and SQLite;
+  //                                   MySQL needs DIV (its `/` is decimal)
+  //   SUM(int8) → numeric  decimal  → `/` is decimal on PG and MySQL;
+  //                                   SQLite needs a REAL cast (its SUM
+  //                                   over integers stays an integer)
+  //
+  // The two normalisations run in OPPOSITE directions, and which one
+  // applies is decided by the summed column's integer width alone. The
+  // matrix above reaches both through EXTRACT; this reaches them through
+  // the type of SUM().
+  rpc SiteSumDiv(SiteSumDivReq) returns (SiteSumDivResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT 100 / SUM(s.weight) AS by_int32, "
+          "100 / SUM(s.id) AS by_int64 "
+          "FROM spatial.Site s"
+      }
+    };
+  }
+
+
+  // The TYPE-PRESERVING builtins, in the position where their type
+  // actually decides something: the operand of a float→integer CAST.
+  //
+  // MIN/MAX/ABS/SUM/AVG carry their argument's type, and COALESCE/IFNULL
+  // the common type of theirs. SQLite truncates a float→integer CAST
+  // where PG and MySQL round, so the compiler wraps a float operand in
+  // ROUND() there, and it can tell through these functions:
+  //
+  //   COALESCE(<double>, …)  float     → SQLite wraps in ROUND
+  //   COALESCE(<int32>, …)   not float → no wrap anywhere
+  rpc SiteTypeGuard(SiteTypeGuardReq) returns (SiteTypeGuardResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT s.id AS id, "
+          "CAST(COALESCE(s.score, 0) AS INT32) AS from_float, "
+          "CAST(COALESCE(s.weight, 0) AS INT32) AS from_integer, "
+          "CAST(COALESCE(s.active, FALSE) AS STRING) AS bool_via_coalesce "
+          "FROM spatial.Site s "
+          "ORDER BY s.id ASC"
+      }
+    };
+  }
+
+}

@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+// Domain-level cascade config for `dialects` — the OTHER two per-dialect
+// escape hatches.
+//
+// `(w17.mysql.field).custom_type` and `(w17.sqlite.field).custom_type`
+// are the MySQL / SQLite siblings of `(w17.pg.field).custom_type`, and
+// they are deliberately a SIMPLER shape: neither dialect has an
+// extension or DOMAIN concept, so there is no registry and no alias —
+// the value is opaque per-column SQL, used verbatim. An author needing
+// the same type on many columns repeats the string.
+//
+// They live in their own domain rather than beside `catalog`'s Postgres
+// columns because at most ONE per-dialect custom_type may be set on a
+// field, and each dialect's emitter refuses a column carrying another
+// dialect's hint. So they need their own connections, not another column
+// on `Document`.
+//
+// The domain's default connection is MySQL; the `local` module overrides
+// to SQLite: a module has one connection, a domain may have several.
+//
+// File is a SENTINEL — options only, no messages.
+
+package databases.dialects;
+
+import "w17/module.proto";
+
+option (w17.module) = {
+  connection: {
+    name: "dialects-mysql",
+    dialect: MYSQL,
+    version: "8.4"
+  }
+};

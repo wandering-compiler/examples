@@ -1,0 +1,13 @@
+# A SHARED model, persisted: `catalog` registers proto/shared/estate as
+# `realty`, so the shared `Estate` is a table in catalog's database
+# (`realty_estate`).
+# The response is the shared type itself — the same one `dialects` only
+# nests (no table there).
+method: listing.EstateMutation.CreateEstate
+input:
+    name: Vila Tugendhat
+    city: Brno
+expect:
+    id: {capture: created_estate.id, match: {matcher: not_empty}}
+    name: {matcher: eq, value: Vila Tugendhat}
+    city: {matcher: eq, value: Brno}

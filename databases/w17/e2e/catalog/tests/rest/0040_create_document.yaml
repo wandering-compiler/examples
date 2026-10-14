@@ -1,0 +1,33 @@
+# Writing the custom-typed columns.
+#
+# Everything above reads seeded rows. This
+# step goes through the generated INSERT: the request carries two plain
+# JSON strings, the gateway validates and forwards them as ordinary
+# string parameters, and Postgres has to accept each one as a value of
+# the custom column type: a parameter bound as text against an hstore
+# column is where a missing cast would surface.
+#
+# `path` is depth 4, one deeper than any seeded row, so this row forms
+# its OWN group in the by-depth query. That keeps 0030's three groups
+# above it intact regardless of where this step is ordered, and gives
+# 0050 an unambiguous row to read back.
+#
+# The response echo is asserted for `path` exactly (ltree preserves label
+# order) and for `labels` as a re-rendered hstore — the same reasoning as
+# 0010, and here it also proves the round trip is a real hstore parse of
+# the request string, not the request string handed back: the input has a
+# space after the comma and no quotes; the response has quotes and
+# hstore's own separator.
+method: docs.DocumentMutation.CreateDocument
+input:
+    title: Rohlík delta
+    labels: env=>ci, run=>e2e
+    path: root.docs.created.deep
+expect:
+    # The generated id comes from the identity sequence, which seeding
+    # advanced past the seeded rows (0060 reads it as 700005).
+    id: {capture: created_document.id, match: {matcher: not_empty}}
+    title: {matcher: eq, value: Rohlík delta}
+    labels: {matcher: regex, pattern: '^"(env"=>"ci|run"=>"e2e)", "(env"=>"ci|run"=>"e2e)"$'}
+    path: {matcher: eq, value: root.docs.created.deep}
+    created_at: {matcher: not_empty}

@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+// PROJECT-WIDE Postgres registry. `(w17.pg.project)` is the
+// project-level half of the custom-type / custom-function escape
+// hatch: what is declared here is visible to EVERY domain in this
+// proto root, while `(w17.pg.module)` (see
+// proto/domains/catalog/w17.proto) is domain-only. Aliases and
+// function names may not collide between the two — the compiler
+// refuses shadowing rather than picking a winner.
+//
+// Convention: one file at the proto root carrying this option. A
+// second file declaring it is a hard error, so the registry has a
+// single source of truth.
+//
+// File is a SENTINEL — options only, no messages.
+
+package databases;
+
+import "w17/pg/project.proto";
+
+option (w17.pg.project) = {
+  // `tag_map` is the project-wide entry: an hstore column shape any
+  // domain may reach for. It is the escape-hatch case by
+  // construction — HSTORE is extension-backed, so the cross-dialect
+  // `(w17.db.column).db_type` enum cannot name it without the
+  // compiler also owning `CREATE EXTENSION`.
+  custom_types: [
+    {
+      alias:       "tag_map"
+      sql_type:    "HSTORE"
+      description: "Key/value labels carried as a single hstore column. Read side uses akeys() to project the key set."
+      required_extensions: [ "hstore" ]
+
+      // Conversions are the migrator's USING-clause source: when a
+      // column's alias CHANGES, the engine renders
+      // `ALTER COLUMN … TYPE … USING <cast>` from whichever side
+      // declares the pair. Both directions are declared so the
+      // engine finds a path regardless of which end moved.
+      convertible_from: [
+        {
+          type:      "text"
+          cast:      "{{.Col}}::hstore"
+          rationale: "Text already in hstore literal form parses without loss; a malformed literal fails the migration loudly rather than dropping labels."
+        }
+      ]
+      convertible_to: [
+        {
+          type:      "text"
+          cast:      "{{.Col}}::text"
+          rationale: "hstore renders back to its canonical literal, so the round trip is lossless."
+        }
+      ]
+    }
+  ]
+
+  // Project-wide function registry. The DQL type checker consults
+  // it AFTER the builtin set, so a name registered here is callable
+  // from any domain's query without the compiler shipping a
+  // signature for it.
+  custom_functions: [
+    {
+      // `string_agg` is Postgres CORE. It is registered not because it
+      // needs an extension but because it is NOT in the compiler's
+      // builtin set (COUNT / SUM / AVG / MIN / MAX / …).
+      name:         "string_agg"
+      description:  "Core PG string aggregate — concatenates a text column across the group with a separator."
+      // is_aggregate is a POSITIVE signal: set means the structural
+      // aggregate rules (nested-aggregate refusal, FOR UPDATE shape
+      // guard) apply to calls of this name. Unset means UNKNOWN, not
+      // "scalar".
+      is_aggregate: true
+    },
+    {
+      // Also core, also absent from the builtin set, and NOT an
+      // aggregate. It lets a query project hstore's key set (a text[]) into a
+      // string field without the compiler learning about arrays.
+      name:        "array_to_string"
+      description: "Core PG array flattener — renders a text[] as one delimited string."
+    }
+  ]
+};
