@@ -568,13 +568,9 @@ message Milestone {
   // is refused by the database unless the generated binding coerces the
   // slice non-nil first.
   //
-  // That coercion shipped twice as a DEFECT before it was a rule
-  // (`dqlbind.Arr` / `dqlbind.Bytes`), and both times this example was
-  // silent: every `pq.Array` in it was a `= ANY($n)` FILTER, where NULL
-  // and `{}` match nothing equally, so no example had ever WRITTEN
-  // either kind of column. The first consumer that did was the
-  // console's own registry, in production code, against a real
-  // database.
+  // Every other `pq.Array` in this example is a `= ANY($n)` FILTER,
+  // where NULL and `{}` match nothing equally, so only a WRITE of either
+  // kind of column shows the coercion.
   //
   // Milestone carries them because it already has the one thing this
   // needs: a create path whose request the e2e suite controls field by

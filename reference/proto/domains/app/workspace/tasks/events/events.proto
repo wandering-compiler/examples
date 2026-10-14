@@ -61,17 +61,9 @@ message TaskAssigned {
   // can assert "the count was zero" instead of "I know nothing about the
   // count". Our own diagnostic tells authors to reach for it.
   //
-  // No event message in this example had one, so nobody had ever emitted
-  // into a pointer field. The emit codegen renders a payload source as a
-  // getter — which returns T — and assigned it straight into *T, so the
-  // advice produced a bundle that did not compile:
-  //
-  //   cannot use req.GetPriority() (value of type int32)
-  //       as *int32 value in struct literal
-  //
-  // A consumer hit exactly that. codegen exited 0; the break landed in a
-  // generated directory they do not own. This field keeps the
-  // position occupied so the wrap is exercised on every regen.
+  // This is the event field with one: the emit reads the source with a
+  // getter, which returns T, and the field is a *T, so the generated
+  // payload takes the value's address.
   optional int32 priority = 4;
 }
 

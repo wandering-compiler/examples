@@ -72,7 +72,7 @@ message RecordUsageResp {
 // tx → no orphan-account window) AND return BOTH rows as a
 // composite nested response.
 //
-// The shape that stumped a consumer: a composite response
+// The shape: a composite response
 // {account, subscription} spanning TWO written entities, where
 // the child op cross-op-references the parent's freshly minted id.
 // The key is the decomposition — the two INSERTs are INTERMEDIATE

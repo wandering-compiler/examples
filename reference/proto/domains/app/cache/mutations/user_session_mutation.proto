@@ -7,22 +7,14 @@ import "domains/app/cache/types/models.proto";
 
 // UserSessionMutation — the write half of the HASH_BUCKETED layout.
 //
-// `UserSession` has carried `redis_layout: REDIS_LAYOUT_HASH_BUCKETED`
-// from the start, and until this file existed nothing had ever ADDRESSED
-// a bucket: the layout was declared, read once through the cross-
-// capability fan-out (which never touches a bucket key, it HGETALLs the
-// whole hash), and otherwise inert. The composite-key path — the
-// typecheck rule that recognises `bucket = :b AND pk = :p`, and the
-// runtime parser in the redis emitter that is its mirror — had run zero
-// times between them, which is what "declared but never queried" looks
-// like from the coverage side.
+// `UserSession` is declared with `redis_layout: REDIS_LAYOUT_HASH_BUCKETED`,
+// and these methods address one bucket: the cross-capability fan-out reads
+// the whole hash (HGETALL) and never names a bucket key. The compiler
+// recognises `bucket = :b AND pk = :p` as the composite key.
 //
-// The model's own comment used to say bucketed mutation authoring did
-// not exist, and named a grammar (`INSERT … WHERE … VALUES (…)`) that
-// was never the shape. It is spelled the ordinary way: both key columns
-// are SET pairs, because a bucketed write needs the bucket value to pick
-// the Redis HASH and the PK value to pick the field inside it. That
-// comment is corrected in types/models.proto.
+// A bucketed write is spelled the ordinary way: both key columns are SET
+// pairs, because it needs the bucket value to pick the Redis HASH and the
+// PK value to pick the field inside it.
 
 message UpsertUserSessionReq {
   int64  user_id    = 1;

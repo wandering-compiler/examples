@@ -220,10 +220,8 @@ message UploadAttachmentReq {
   // field on this request that is NEITHER routed (task_id is the path
   // variable) NOR a file part (stored_path is), and that is precisely
   // what it is here to be: a `multipart: true` endpoint carries its
-  // ordinary scalar fields as string form parts, and until this field
-  // existed no request in this example had one — every multipart request
-  // was routed-plus-file and the "remaining scalars become form parts"
-  // half of the contract was emitted by nothing.
+  // ordinary scalar fields as string form parts, and this is the one
+  // multipart request in the example with such a field.
   //
   // Like `reason` on ListTasksInPriorityRange it reaches no SQL. What it
   // does reach is validation: `max_len` is enforced on the request, so an
@@ -270,12 +268,10 @@ message ArchiveTaskBatchResp {
   int64 id = 1;
 }
 
-// SnapshotCommentReq — the mutation-value SUBQUERY, which no example
-// carried until now.
+// SnapshotCommentReq — a SUBQUERY as the value a mutation writes.
 //
 // `category_id` is OPTIONAL and sits inside a scalar subquery that feeds
-// `body_text`, a NOT NULL column. That combination is the one a consumer
-// reported seven times a run: when the field is omitted the param binds
+// `body_text`, a NOT NULL column. When the field is omitted the param binds
 // NULL, the subquery matches no rows, the scalar is NULL, and the write is
 // REFUSED. The refusal is the point — a comment with no category must not
 // be written — and it is why codegen does not warn here: there is no
@@ -311,8 +307,6 @@ message AppendTaskAuditsReq {
 // `inserted` is the multi-row INSERT's row count. A write without
 // RETURNING is emitted as an Exec, and the count is the one thing an Exec
 // can report — the same summary the client-streaming BulkInsert returns.
-// It used to be reported by that streaming shape ALONE, so this message
-// could not carry the field: declaring it on a unary write was refused.
 message AppendTaskAuditsResp {
   int32 inserted = 1;
 }
@@ -952,9 +946,8 @@ service TaskMutation {
   // `SET :entries[*]` is the splat: one INSERT whose VALUES list
   // is built from a REPEATED request field, one tuple per element,
   // expanded at call time. Every other INSERT in this example binds
-  // a fixed tuple, so the whole multi-row emit path — the splat
-  // resolution, the per-row binding renderer, the placeholder
-  // expansion — had never run.
+  // a fixed tuple; this one runs the multi-row path: the splat
+  // resolution, the per-row binding and the placeholder expansion.
   //
   // The mixed form (`:entries[*], task_id = :task_id`) rather than
   // the bare splat, because the two halves render differently and

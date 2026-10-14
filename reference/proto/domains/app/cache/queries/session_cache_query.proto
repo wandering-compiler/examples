@@ -52,9 +52,7 @@ message GetApiTokenReq {
 //
 // `WHERE <pk> IN (:<repeated bind>)` is the ONLY spelling that
 // reaches Redis MGET; single-key equality (every other KV read in
-// this project) takes the GET path instead. Until this method
-// existed no example had written the IN form, so the multi-key
-// body emitters had never run.
+// this project) takes the GET path instead.
 //
 // This is the JSON half: one `MGET key…` round trip whose values
 // each protojson-decode into the response's repeated field. The

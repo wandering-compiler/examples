@@ -42,12 +42,9 @@ option (w17.event_subscribers) = {
       handler: "core.InvoiceNoticeMutation.OnInvoiceIssued"
     },
     {
-      // The SAME event, a DIFFERENT handler service. A domain used to be
-      // limited to one service across every subscription it declares, so
-      // this entry could not be written at all — the first subscription
-      // fixed the choice for the domain's lifetime. The bundle now builds
-      // one client per service, and this is the case that proves
-      // it: two services, one subscriber process, one domain.
+      // The SAME event, a DIFFERENT handler service. The bundle builds
+      // one client per service: two services, one subscriber process,
+      // one domain.
       event:   "InvoiceIssued"
       channel: "billing"
       topic_filter: "billing.invoice.*"

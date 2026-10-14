@@ -345,10 +345,8 @@ option (w17.admin_api) = {
     {
       // ADMIN-ONLY cursor paging — the page TaskAdmin above is NOT.
       // TaskAdmin's source is also published as a paged REST endpoint
-      // (`/tasks/paged`), which used to be the only way an admin list
-      // could page at all: paging was detected from the REST registry, so
-      // a list with no public endpoint behind it silently returned every
-      // row with a nil `paging` envelope.
+      // (`/tasks/paged`); this page's source has no public endpoint, and
+      // pages all the same.
       //
       // This page binds tasks.TaskQuery.ListTasksAdminFeed, which appears
       // in NO registry but its own admin page. The `w17.Paging` field on
@@ -599,12 +597,10 @@ option (w17.admin_api) = {
       // The composite-key page: list, and NO detail.
       //
       // TaskTag is identified by (task_id, tag_id). A detail is keyed by a
-      // single-column row id, so this model cannot declare one — and the
-      // parser used to refuse the whole page for it, which removed the table
-      // from the console instead of asking for a block the author could not
-      // write. The refusal now applies only to models that HAVE a
-      // single-column identity, and this page is the live proof of the other
-      // branch: the admin e2e opens it and reads its rows.
+      // single-column row id, so this model cannot declare one. A missing
+      // detail is refused only for models that HAVE a single-column
+      // identity; this page is the other branch, and the admin e2e opens it
+      // and reads its rows.
       name: "TaskTagAdmin"
       model: "tasks.TaskTag"
       list: {

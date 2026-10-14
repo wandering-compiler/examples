@@ -180,15 +180,13 @@ service InvoiceQuery {
 
   // SumInvoiceAdjustments — the enum-name literal idiom on a
   // MODULE-QUALIFIED JOIN alias. Every other enum literal in this
-  // example sits on a SET clause or on the FROM entity, so the
-  // joined position had no example at all and the two positions
-  // were free to disagree: `li.kind = 'ADJUSTMENT'` kept its
-  // string while the identical predicate on a FROM entity lowered
-  // to the ordinal, and a string reached an integer column.
+  // example sits on a SET clause or on the FROM entity; here
+  // `li.kind = 'ADJUSTMENT'` sits on a joined one, and lowers to the
+  // ordinal the integer column stores, as it does on a FROM entity.
   //
   // Invoice is deliberately the FROM entity and InvoiceLineItem
-  // the joined one — putting the enum's own model in FROM is what
-  // hides the defect.
+  // the joined one: with the enum's own model in FROM, this would be
+  // the FROM case again.
   rpc SumInvoiceAdjustments(SumInvoiceAdjustmentsReq) returns (SumInvoiceAdjustmentsResp) {
     option (w17.db.method) = {
       ops: {

@@ -246,9 +246,7 @@ option (w17.module) = {
   // What this project's build context does not need, appended to every
   // bundle's generated Dockerfile.dockerignore.
   //
-  // Here because the vocabulary needs a consumer in this example: an annotation
-  // no example declares is one the emitters can stop honouring without a
-  // single test going red. The two patterns are the shapes a real project
+  // The two patterns are the shapes a real project
   // brings — a front-end build output directory and large media — and neither
   // is anything w17 would guess at, which is exactly why the generated half
   // stops where it does and leaves this half to the author.

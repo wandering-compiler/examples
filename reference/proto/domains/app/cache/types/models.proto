@@ -87,9 +87,7 @@ message CachedApiToken {
   // column name the compiler treats specially on a KV table: a
   // `SET ttl_seconds = <expr>` is not a write to the stored value
   // at all, it is an EXPIRE (or, for the literal-zero sentinel, a
-  // PERSIST). Both arms are unreachable without a column of this
-  // name, which is why no example had ever emitted one — the
-  // example wrote KV values and never touched their lifetime.
+  // PERSIST). Both arms need a column of this name.
   //
   // `expires_at` above is a different thing and both are wanted:
   // that one is an application-visible timestamp the caller reads
