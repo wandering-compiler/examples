@@ -51,7 +51,19 @@ docker run --rm "$spa_tag" sh -c '
 
 w17ctl test --keep --project "$project"
 
-docker run --rm --network "${project}_default" \
+# In CI the job serves its Go module cache as a proxy (W17_GOPROXY_CONTAINER,
+# adoption.yml); the suite's container is on the stack's network, so the
+# proxy joins it and is dialled at its address there.
+goproxy=()
+if [ -n "${W17_GOPROXY_CONTAINER:-}" ]; then
+  docker network connect "${project}_default" "$W17_GOPROXY_CONTAINER" >/dev/null 2>&1 || true
+  # Off the stack's network before it is torn down, which a container still
+  # attached would stop.
+  trap 'docker network disconnect -f "${project}_default" "$W17_GOPROXY_CONTAINER" >/dev/null 2>&1 || true; cleanup' EXIT
+  ip="$(docker inspect -f "{{(index .NetworkSettings.Networks \"${project}_default\").IPAddress}}" "$W17_GOPROXY_CONTAINER")"
+  goproxy=(-e "GOPROXY=http://$ip,https://proxy.golang.org,direct" -e GODEBUG=http2client=0)
+fi
+docker run --rm --network "${project}_default" "${goproxy[@]}" \
   -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOFLAGS=-buildvcs=false -e GOWORK=off \
   -v "$PWD:/w" -w /w/livetest golang:1.26 \
   go test -count=1 -race ./...

@@ -65,11 +65,98 @@ jobs:
           echo "examples=$json" >> "$GITHUB_OUTPUT"
           echo "examples: $json"
 
+  # The Go modules every example job needs, downloaded once and shared through
+  # the Actions cache. Without it each of the parallel jobs, and each container
+  # inside one, fetched the same few hundred modules from proxy.golang.org and
+  # sum.golang.org, and one dropped HTTP/2 stream among those thousands of
+  # requests failed a job at random. The example jobs serve this cache to their
+  # containers as a module proxy (see "Serve the module cache").
+  modules:
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      sdk_version: ${{ steps.sdk.outputs.version }}
+      cache_key: ${{ steps.key.outputs.key }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: wandering-compiler/examples
+          ref: ${{ github.repository == 'wandering-compiler/examples' && github.sha || 'main' }}
+          path: examples
+
+      - name: Resolve the SDK version
+        id: sdk
+        if: inputs.sdk_ref != ''
+        run: |
+          # The version Go resolves the ref to (a tag, or a pseudo-version).
+          v="$(docker run --rm -e GOFLAGS=-mod=mod -e GODEBUG=http2client=0 golang:1.26 go list -m -f '{{.Version}}' "github.com/wandering-compiler/sdk/go@${{ inputs.sdk_ref }}")"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "SDK at $v"
+
+      - name: Cache key
+        id: key
+        run: |
+          set -euo pipefail
+          # The SDK the examples build against (the one under review, or the
+          # ones the locks pin) and every committed go.sum.
+          sdk="${{ steps.sdk.outputs.version }}"
+          if [ -z "$sdk" ]; then
+            sdk="$(grep -h '^sdk_version:' examples/*/w17/lock.yaml | awk '{print $2}' | sort -u | tr '\n' ' ')"
+          fi
+          sums="$(find examples -name go.sum -not -path '*/node_modules/*' -print0 | sort -z | xargs -0 cat | sha256sum | cut -c1-16)"
+          echo "key=gomod-v1-$(echo "$sdk" | tr ' ' '_')-$sums" >> "$GITHUB_OUTPUT"
+          echo "sdk=$sdk" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: restore
+        with:
+          path: ~/gomod
+          key: ${{ steps.key.outputs.key }}
+          restore-keys: gomod-v1-
+
+      - name: Download the modules
+        if: steps.restore.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/gomod"
+          # go in a container, as the runner's user so the cache stays
+          # readable to the save step; HTTP/1.1, where a dropped request is a
+          # retryable error rather than a reset HTTP/2 stream.
+          gorun() {
+            docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOMODCACHE=/gomod \
+              -e GODEBUG=http2client=0 -e GOFLAGS=-mod=mod -e GOWORK=off \
+              -v "$HOME/gomod:/gomod" -v "$PWD:/w" -w "/w/$1" golang:1.26 sh -c "$2"
+          }
+          retry() { for i in 1 2 3; do "$@" && return 0; echo "::warning::attempt $i failed: $*"; sleep 10; done; return 1; }
+          # The SDK's whole module graph, through a scratch module.
+          mkdir -p warm
+          for v in ${{ steps.key.outputs.sdk }}; do
+            printf 'module warm\n\ngo 1.26.1\n' > warm/go.mod; rm -f warm/go.sum
+            retry gorun warm "go get github.com/wandering-compiler/sdk/go@$v && go mod download all"
+          done
+          # What each committed module lists (srcgo, livetest/, workers), one
+          # attempt each: a module whose local replace points into the
+          # generated tree (w17/stubs) cannot be resolved before codegen, and
+          # retrying it would only wait. Its modules come from the proxy like
+          # any other miss.
+          find examples -name go.mod -not -path '*/node_modules/*' -not -path '*/w17/services/*' -not -path '*/w17/stubs/*' \
+            | while IFS= read -r mod; do
+                gorun "$(dirname "$mod")" "go mod download" || echo "::notice::skipped $(dirname "$mod")"
+              done
+          du -sh "$HOME/gomod"
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.restore.outputs.cache-hit != 'true'
+        with:
+          path: ~/gomod
+          key: ${{ steps.key.outputs.key }}
+
   # One job per example, in parallel: each example is its own project with its
   # own stack, so nothing is shared between them, and the slowest example sets
   # the run's length rather than the sum of all of them.
   example:
-    needs: list
+    needs: [list, modules]
     name: ${{ matrix.example }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -83,6 +170,10 @@ jobs:
       # under the branch's initiative. One fixed name for every run, so CI does
       # not leave an initiative per branch on the console.
       W17_INITIATIVE: ci
+      # Every go in a container speaks HTTP/1.1 to the module proxies: an
+      # HTTP/2 stream the proxy resets ("stream error … INTERNAL_ERROR") is
+      # not retried, a failed HTTP/1.1 request is.
+      GODEBUG: http2client=0
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -123,14 +214,28 @@ jobs:
           curl -fsSL https://get.w17.dev/install.sh | PATH="$shim:$PATH" sh -s -- "${sel[@]}" --dir "$HOME/bin"
           echo "$HOME/bin" >> "$GITHUB_PATH"
 
-      - name: Resolve the SDK version
-        id: sdk
-        if: inputs.sdk_ref != ''
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/gomod
+          key: ${{ needs.modules.outputs.cache_key }}
+
+      # The restored cache's download tree has the layout of a GOPROXY, so a
+      # static file server is one. Containers reach it at its address on the
+      # default bridge (builds and `docker run` without --network use it; a
+      # container on a stack's network is connected to it as well, see
+      # livetest/run.sh). A module the cache lacks is a 404, and go goes on to
+      # proxy.golang.org. Checksums still come from sum.golang.org: the cached
+      # tiles do not cover a tree that has grown since, so the server does not
+      # claim to serve the checksum database.
+      - name: Serve the module cache
         run: |
-          # The version Go resolves the ref to (a tag, or a pseudo-version).
-          v="$(docker run --rm -e GOFLAGS=-mod=mod golang:1.26 go list -m -f '{{.Version}}' "github.com/wandering-compiler/sdk/go@${{ inputs.sdk_ref }}")"
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "SDK at $v"
+          set -euo pipefail
+          mkdir -p "$HOME/gomod/cache/download"
+          docker run -d --name w17-goproxy -v "$HOME/gomod/cache/download:/www:ro" busybox:1.37 httpd -f -p 80 -h /www
+          ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' w17-goproxy)"
+          echo "GOPROXY=http://$ip,https://proxy.golang.org,direct" >> "$GITHUB_ENV"
+          echo "W17_GOPROXY_CONTAINER=w17-goproxy" >> "$GITHUB_ENV"
+          echo "module cache served at http://$ip ($(du -sh "$HOME/gomod" | cut -f1))"
 
       - name: Generate, build and test
         working-directory: examples/${{ matrix.example }}
@@ -166,13 +271,14 @@ jobs:
           # The SDK under review, after codegen: codegen writes the lock's
           # SDK pin into every module, and `w17ctl sdk pin` is a lock edit
           # too. `go get` moves each module (and its go.sum) to the commit.
-          if [ -n "${{ steps.sdk.outputs.version }}" ]; then
+          retry() { for i in 1 2 3; do "$@" && return 0; echo "::warning::attempt $i failed: $*"; sleep 10; done; return 1; }
+          if [ -n "${{ needs.modules.outputs.sdk_version }}" ]; then
             find . -name go.mod -not -path '*/node_modules/*' -print0 \
               | xargs -0 grep -l 'wandering-compiler/sdk/go ' \
               | while IFS= read -r mod; do
-                  docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off \
+                  retry docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off -e GOPROXY -e GODEBUG \
                     -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
-                    go get "github.com/wandering-compiler/sdk/go@${{ steps.sdk.outputs.version }}"
+                    go get "github.com/wandering-compiler/sdk/go@${{ needs.modules.outputs.sdk_version }}"
                 done
             # A module that reaches the SDK through a local `replace` — a
             # hand-written worker on the vendored plugin tree or on srcgo — is
@@ -185,7 +291,7 @@ jobs:
             find . -name go.mod -not -path '*/node_modules/*' -print0 \
               | { xargs -0 grep -lE '=> \.\.?/' || true; } \
               | while IFS= read -r mod; do
-                  docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off \
+                  retry docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off -e GOPROXY -e GODEBUG \
                     -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
                     go mod tidy
                 done
