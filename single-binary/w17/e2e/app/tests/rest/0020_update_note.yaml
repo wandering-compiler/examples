@@ -1,0 +1,11 @@
+method: example.NoteMutation.UpdateNote
+input:
+    note_id: 0
+    title: e2e-value
+    body: e2e-value
+expect:
+    id: {matcher: not_empty}
+    owner_id: {matcher: not_empty}
+    title: {matcher: not_empty}
+    body: {matcher: not_empty}
+    created_at: {matcher: not_empty}

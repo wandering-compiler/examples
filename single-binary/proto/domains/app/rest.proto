@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package single_binary.app;
+
+import "w17/rest.proto";
+
+// Domain-level REST registry of the app domain. The gateway forwards
+// these to the storage tier; in the one binary it reaches storage by a
+// direct in-process call.
+option (w17.rest_api) = {
+  name:        "public",
+  version:     "v1",
+  prefix:      "/api/v1",
+  description: "REST surface of the single-binary example.",
+
+  // Every endpoint here sets `exclude_auth`. The domain activates the auth
+  // plugin (an admin surface cannot ship unauthenticated), which installs
+  // bearer middleware across this surface — but this example exists to prove
+  // the composed binary's PACKAGING, and the notes CRUD is only the vehicle
+  // the live suite drives to reach the folded tiers. Threading a seeded
+  // sign-in through it would test the auth plugin, not the packaging.
+  //
+  // The ADMIN surface keeps its authentication, and the live suite asserts it:
+  // an unauthenticated admin API call must answer 401.
+  groups: [
+    {
+      prefix:      "/notes",
+      description: "CRUD endpoints for the Note resource.",
+      endpoints: [
+        { ref: "example.NoteQuery.GetNote",   method: GET,  path: "/{note_id}", exclude_auth: true },
+        { ref: "example.NoteQuery.ListNotes", method: GET,  path: "", exclude_auth: true },
+
+        // Delivery count for one note — the live suite
+        // polls this to assert the absorbed eventbus tier delivered
+        // NoteCreated exactly once.
+        { ref: "example.NoteQuery.CountNoteDeliveries", method: GET, path: "/{note_id}/deliveries", exclude_auth: true },
+        { ref: "example.NoteMutation.CreateNote", method: POST,   path: "", exclude_auth: true },
+        { ref: "example.NoteMutation.UpdateNote", method: PATCH,  path: "/{note_id}", exclude_auth: true },
+        { ref: "example.NoteMutation.DeleteNote", method: DELETE, path: "/{note_id}", exclude_auth: true },
+
+        // Business-tier facade — the gateway routes this to the business
+        // conn (in the -server: a direct in-process call into the facade,
+        // which itself calls storage in-process).
+        { ref: "example.NotesFacade.CreateNoteChecked", method: POST, path: "/checked", exclude_auth: true },
+        // Business-to-business composition — see notes_facade.proto.
+        { ref: "example.NotesFacade.CreateNoteCheckedComposed", method: POST, path: "/checked-composed", exclude_auth: true },
+        { ref: "example.NotesFacade.CreateNoteCheckedInTx",     method: POST, path: "/checked-in-tx",    exclude_auth: true },
+
+        // The upload half of the read-back check. `multipart: true`
+        // switches the gateway off JSON-body parsing; the FILE_PART
+        // binding fills `stored_path` with the key the gateway derived
+        // after streaming and hashing the part.
+        { ref: "example.NoteMutation.AttachNote", method: POST, path: "/{note_id}/attachment",
+          exclude_auth: true,
+          multipart: true,
+          fields: [
+            { ref: "stored_path", from: FILE_PART, http_name: "file" }
+          ]
+        },
+
+        // The read-back half, served by the BUSINESS tier: byte count +
+        // first line, both computed from the object's CONTENT. In the
+        // composed binary this call reaches the facade in-process, and
+        // the facade opens the file through the store the bundle built
+        // from the gateway's bucket root.
+        //
+        // Reading it over REST next to the /files download below is what
+        // makes the shared root observable: the download streams through
+        // the GATEWAY's driver, this streams through the BUSINESS tier's
+        // reader, and two different roots would take exactly one of them
+        // to a 404.
+        { ref: "example.NotesFacade.ReadAttachment", method: GET, path: "/{note_id}/attachment/summary", exclude_auth: true }
+      ],
+      // Required, not decorative: AttachNote's response carries an
+      // UPLOADED_* field, and the parser refuses to ship one that no
+      // download endpoint covers — a raw storage handle in a REST
+      // response is a key the caller can do nothing with.
+      downloads: [
+        {
+          path: "/attachments"
+          include: ["example.*"]
+          url_form: URL_FORM_RELATIVE
+          content_disposition: CONTENT_DISPOSITION_ATTACHMENT
+          exclude_auth: true
+        }
+      ]
+    }
+  ]
+};

@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+// Module-level cascade for the app domain's `files` module — the
+// file-storage connection behind NoteAttachment.stored_path.
+//
+// Its own module because `(w17.module).connection` is singular and the
+// table that names it lives in `example` on Postgres; `upload.connection`
+// resolves by name within the DOMAIN, so that is fine.
+//
+// It is in the COMPOSED example on purpose. An upload connection is the
+// one connection two tiers touch: the gateway WRITES the object (it owns
+// the key derivation) and the business tier READS it back through the
+// handle stored in the column. Composed, those two are one process, so
+// this example is what proves they resolve the same bucket root — a
+// second, business-tier root variable would give one process two
+// directories and turn every read into a not-found.
+//
+// File is a SENTINEL — options only, no messages.
+
+package single_binary.app.files;
+
+import "w17/module.proto";
+
+option (w17.module) = {
+  connection: { name: "app-uploads", dialect: LOCAL_FS, version: "1", used_capability: KV }
+};

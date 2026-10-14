@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+// Domain-level cascade for the app domain: one Postgres connection, and
+// all five components (gateway, storage, business, admin, eventbus)
+// folded into one app-server binary, with direct in-process calls
+// between the tiers (`generated_code.binaries` in w17/lock.yaml).
+//
+// The `notes` channel is on NATS rather than in memory, so its durable
+// consumer is a real one: the live suite asserts each event is delivered
+// exactly once.
+//
+// File is a SENTINEL — options only, no messages.
+
+package single_binary.app;
+
+import "w17/domain.proto";
+import "w17/module.proto";
+
+// The auth plugin is activated because an admin surface cannot ship
+// unauthenticated (the gateway parser refuses it: "a network perimeter is
+// not authentication").
+//
+// A single realm, `admin_auth`, backing the admin login only. Its admin
+// preset is OPTED OUT so the plugin contributes no admin pages of its
+// own; the admin is the one hand-declared NoteAdmin page.
+option (w17.domain) = {
+  plugins: [
+    {
+      source_name:   "auth"
+      registered_as: "admin_auth"
+      channels:   [ { key: "events", value: "notes" } ]
+      auth_input: { header_name: "Authorization", scheme: "Bearer" }
+      features:   { names: [ "rbac", "authenticate_turnkey", "sign_in_turnkey" ] }
+      presets: { admin: { enabled: false } }
+    }
+  ]
+};
+
+option (w17.module) = {
+  connection: {
+    name: "app-postgres",
+    dialect: POSTGRES,
+    version: "18"
+  },
+
+  channels: [
+    {
+      name: "notes"
+      transport: TRANSPORT_NATS
+      retry: {
+        max_deliver: 5
+        ack_wait_seconds: 30
+        backoff: BACKOFF_EXPONENTIAL
+      }
+      drain_timeout_seconds: 30
+    }
+  ]
+};

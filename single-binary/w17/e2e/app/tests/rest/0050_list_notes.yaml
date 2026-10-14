@@ -1,0 +1,6 @@
+method: example.NoteQuery.ListNotes
+input:
+    owner_id: ${random:uuid}
+    limit: 1
+expect:
+    notes: {matcher: unwritten}

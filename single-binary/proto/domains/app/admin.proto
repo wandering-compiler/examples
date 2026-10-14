@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package single_binary.app;
+
+import "w17/admin.proto";
+
+// Admin surface for the app domain — the fourth component folded into
+// the single app-server binary.
+//
+// Authenticates against the tenant-less `admin_auth` realm (the single
+// auth activation in w17.proto). An admin surface cannot ship
+// unauthenticated — the gateway parser refuses it outright — so this is
+// the minimum wiring, not a convenience.
+//
+// The admin is the one folded component that keeps its OWN HTTP listener
+// inside the shared process (:9090 beside the gateway's :8080). The live
+// suite checks it without logging in: a 401 from the admin's own error
+// envelope shows the listener is bound and serving the admin.
+option (w17.admin_api) = {
+  name:   "admin",
+  prefix: "/admin",
+
+  auth: {
+    login_method: "admin_auth.AuthService.SignIn"
+    user_lookup:  "admin_auth.AuthService.Authenticate"
+  }
+
+  pages: [
+    {
+      name:  "NoteAdmin"
+      model: "example.Note"
+      list: {
+        source:  "example.NoteQuery.ListNotes"
+        columns: [
+          { name: "id" },
+          { name: "owner_id" },
+          { name: "title" },
+          { name: "created_at" }
+        ]
+        detail_link_column: "title"
+      }
+      detail: {
+        read:            "example.NoteQuery.GetNote"
+        update:          "example.NoteMutation.UpdateNote"
+        delete:          "example.NoteMutation.DeleteNote"
+        create:          "example.NoteMutation.CreateNote"
+        readonly_fields: ["id", "owner_id", "created_at"]
+      }
+    }
+  ]
+};

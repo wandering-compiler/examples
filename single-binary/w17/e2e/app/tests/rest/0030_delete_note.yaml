@@ -1,0 +1,4 @@
+method: example.NoteMutation.DeleteNote
+input:
+    note_id: 0
+expect: {}

@@ -1,0 +1,12 @@
+go 1.26.1
+
+use (
+	./srcgo
+	./w17/services/app-admin
+	./w17/services/app-business
+	./w17/services/app-eventbus
+	./w17/services/app-server
+	./w17/services/app-storage
+	./w17/services/e2erunner
+	./w17/stubs
+)

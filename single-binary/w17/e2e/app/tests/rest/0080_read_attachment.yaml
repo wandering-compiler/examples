@@ -1,0 +1,10 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+method: example.NotesFacade.ReadAttachment
+input:
+    note_id: 0
+expect:
+    byte_count: {matcher: not_empty}
+    first_line: {matcher: not_empty}
