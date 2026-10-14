@@ -12,10 +12,9 @@
 # `paging: {matcher: empty}` and a paragraph explaining that a paging
 # envelope "would carry a cursor and fail it". It would not. `paging` is not
 # a field of this response AT ALL — the refusal is what keeps it out — so the
-# assertion could not fail for any behaviour of any server. It was removed
-# when the generator started refusing an `expect` key the response message
-# does not have — a consumer reported it: `empty` passes for an absent field,
-# so a name that is not there reads as a green assertion.
+# assertion could not fail for any behaviour of any server. The generator
+# refuses an `expect` key the response message does not have: `empty` passes
+# for an absent field, so a name that is not there reads as a green assertion.
 #
 # The refusal is enforced where it can be: at codegen. There is no runtime
 # half, and writing one that cannot fail was worse than writing none.

@@ -48,9 +48,8 @@ services:
     #
     # That failure is silent from the outside: a subscriber reconnects at the
     # TCP level to a server that no longer has its consumer, and stops
-    # delivering without logging anything. A consumer reported half an hour
-    # lost to it — sign-in returned 200, the challenge row appeared, and the
-    # code never arrived.
+    # delivering without logging anything: a sign-in returns 200, its
+    # challenge row appears, and the code it emits never arrives.
     command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
       - "${W17_BIND_HOST:-0.0.0.0}:${W17_NATS_CLIENT_HOST_PORT:-14001}:4222"
