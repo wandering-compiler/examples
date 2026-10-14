@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package rpc_cli.ops;
+
+import "w17/cli.proto";
+
+// The CLI surface. Two binaries come out of the same `(w17.cli)` picks and
+// differ in where they connect:
+//
+//   ops-gateway-cli  In the gateway's bundle. Dials the backend services
+//                    directly, like the gateway's own handlers, so it can
+//                    run any method that has a command.
+//   ops-gateway-ctl  Standalone: its own module (w17/services/ops-ctl),
+//                    which imports nothing of the project's own code. It
+//                    connects only through the public gRPC surface
+//                    (rpc.proto), so a command lands in it only when its
+//                    method is also `(w17.rpc)`-exposed.
+//
+// That is why `jobs.JobQuery.CountJobs` has a command and no rpc pick: it
+// is in ops-gateway-cli and not in ops-gateway-ctl.
+//
+// Options only, no messages.
+option (w17.cli_api) = {
+  name:        "default",
+  version:     "v1",
+  description: "Operator CLI for the ops domain — inspect and drive jobs."
+};

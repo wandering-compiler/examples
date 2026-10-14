@@ -1,0 +1,38 @@
+{
+  "statements": [
+    {
+      "args": [
+        710001,
+        "seed reindex",
+        7,
+        2
+      ],
+      "sql": "INSERT INTO \"jobs\" (\"id\", \"name\", \"priority\", \"status\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\", \"priority\" = EXCLUDED.\"priority\", \"status\" = EXCLUDED.\"status\""
+    },
+    {
+      "args": [
+        710002,
+        "seed vacuum",
+        3,
+        1
+      ],
+      "sql": "INSERT INTO \"jobs\" (\"id\", \"name\", \"priority\", \"status\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\", \"priority\" = EXCLUDED.\"priority\", \"status\" = EXCLUDED.\"status\""
+    },
+    {
+      "args": [
+        710003,
+        "seed snapshot",
+        5,
+        3
+      ],
+      "sql": "INSERT INTO \"jobs\" (\"id\", \"name\", \"priority\", \"status\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\", \"priority\" = EXCLUDED.\"priority\", \"status\" = EXCLUDED.\"status\""
+    },
+    {
+      "args": [
+        "jobs",
+        "id"
+      ],
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"jobs\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"jobs\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+    }
+  ]
+}

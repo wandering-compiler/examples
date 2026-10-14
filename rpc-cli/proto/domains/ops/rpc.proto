@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package rpc_cli.ops;
+
+import "w17/rpc.proto";
+
+// The public gRPC surface: a gateway transport beside REST and MCP, for
+// clients that speak gRPC over HTTP/2.
+//
+// The gateway is not a proxy. It declares the picked methods again, in the
+// generated `w17.lock.rpc.proto`, under public service names of its own and
+// with the backend's message types, and runs the gateway's own steps (auth,
+// intent events) between the public call and the backend.
+//
+// A method is picked in one of two ways, and this example uses both:
+//
+//   * `groups` below, by reference, the way rest.proto files pick;
+//   * `(w17.rpc)` (and `(w17.rpc_service)`) on the method itself, the way
+//     `(w17.mcp)` does; see jobs/mutations/job_mutation.proto.
+//
+// `jobs.JobQuery.CountJobs` is picked by neither, so it is not on the
+// public surface: the surface is the methods picked, not whole services.
+//
+// Options only, no messages.
+option (w17.rpc_api) = {
+  name:        "public",
+  version:     "v1",
+  description: "Public gRPC surface for the ops domain — job reads, plus the two writes an operator drives remotely.",
+
+  // gRPC reflection, so grpcurl and other tools can list and call the
+  // surface without a copy of the contract. It is off unless asked for,
+  // since a surface may not want to advertise its shape. livetest/run.sh
+  // lists the services through it.
+  reflection:  true,
+
+  groups: [
+    {
+      name:        "JobRead",
+      description: "Read-side job access. Both methods come from one backend service; the public name is this group's.",
+
+      // A second name the same service answers to. The generated contract
+      // declares it under the project's package (w17lock.ops.rpc); a
+      // surface that serves a contract published under another package
+      // names that package's service here, and clients generated from the
+      // published proto reach it. One implementation, registered under
+      // both names.
+      public_fqn:  "acme.ops.v1.JobRead",
+
+      refs: [
+        "jobs.JobQuery.GetJob",
+        "jobs.JobQuery.ListJobs"
+      ]
+    }
+  ]
+};

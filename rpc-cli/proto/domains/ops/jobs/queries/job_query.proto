@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package rpc_cli.ops.jobs;
+
+import "w17/cli.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+import "w17/rpc.proto";
+import "domains/ops/jobs/types/models.proto";
+
+message GetJobReq { int64 job_id = 1; }
+
+message ListJobsReq {
+  optional JobStatus status = 1;
+  int32 limit = 2 [(w17.field) = { type: NUMBER, gte: 1, lte: 100 }];
+}
+
+message ListJobsResp { repeated Job jobs = 1; }
+
+message CountJobsReq {}
+message CountJobsResp { int64 total = 1; }
+
+service JobQuery {
+  // On the public surface through the `JobRead` group in rpc.proto.
+  //
+  // The command `job get <job_id>` takes job_id as an argument; any other
+  // request field would be a --flag. The method is on the public surface,
+  // so the command is in both binaries.
+  rpc GetJob(GetJobReq) returns (Job) {
+    option (w17.cli) = { command: "job get <job_id>" };
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "SELECT j.id, j.name, j.status, j.priority, j.created_at FROM jobs.Job j WHERE j.id = :job_id" }
+    };
+  }
+
+  rpc ListJobs(ListJobsReq) returns (ListJobsResp) {
+    // No argument in the command: every request field is a --flag.
+    option (w17.cli) = { command: "job list" };
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT j.id, j.name, j.status, j.priority, j.created_at "
+          "FROM jobs.Job j "
+          "WHERE ?j.status = :status "
+          "ORDER BY j.id ASC "
+          "LIMIT :limit"
+      }
+    };
+  }
+
+  // A command and no rpc pick. It is in ops-gateway-cli, which dials the
+  // backend, and not in ops-gateway-ctl, which has only the public surface
+  // to call through; it is not on the public surface either.
+  rpc CountJobs(CountJobsReq) returns (CountJobsResp) {
+    option (w17.cli) = { command: "job count" };
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "SELECT COUNT(*) AS total FROM jobs.Job j" }
+    };
+  }
+}

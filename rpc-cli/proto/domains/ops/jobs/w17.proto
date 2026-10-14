@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+// The jobs module; it takes the connection from the domain.
+//
+// Options only, no messages.
+
+package rpc_cli.ops.jobs;

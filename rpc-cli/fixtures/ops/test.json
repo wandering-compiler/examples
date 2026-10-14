@@ -1,0 +1,19 @@
+{
+  "rows": [
+    {
+      "model": "jobs.Job",
+      "pk": [710001],
+      "fields": { "name": "seed reindex", "status": 2, "priority": 7 }
+    },
+    {
+      "model": "jobs.Job",
+      "pk": [710002],
+      "fields": { "name": "seed vacuum", "status": 1, "priority": 3 }
+    },
+    {
+      "model": "jobs.Job",
+      "pk": [710003],
+      "fields": { "name": "seed snapshot", "status": 3, "priority": 5 }
+    }
+  ]
+}

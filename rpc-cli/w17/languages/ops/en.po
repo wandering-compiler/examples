@@ -1,0 +1,134 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: w17\n"
+"POT-Creation-Date: 2026-10-14 08:26+0000\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Another change reached this first. Please try again."
+msgstr ""
+
+msgid "No file was attached."
+msgstr ""
+
+msgid "No permissions are in effect for you here. If access is scoped by organization, choose one and try again."
+msgstr ""
+
+msgid "Something went wrong on our side."
+msgstr ""
+
+msgid "The file is too large."
+msgstr ""
+
+msgid "The item you asked for does not exist."
+msgstr ""
+
+msgid "The request could not be accepted as sent."
+msgstr ""
+
+msgid "The request took too long and was stopped."
+msgstr ""
+
+msgid "The request was cancelled before it finished."
+msgstr ""
+
+msgid "The service is temporarily unavailable."
+msgstr ""
+
+msgid "This cannot be done in the current state."
+msgstr ""
+
+msgid "This is not available."
+msgstr ""
+
+msgid "This type of file is not accepted."
+msgstr ""
+
+msgid "This value is not in the expected format."
+msgstr ""
+
+msgid "Too many requests. Please wait and try again."
+msgstr ""
+
+msgid "You are not signed in."
+msgstr ""
+
+msgid "You do not have access to this."
+msgstr ""
+
+msgid "already exists"
+msgstr ""
+
+msgid "conflicts with an existing record"
+msgstr ""
+
+msgid "extension must be one of: {extensions}"
+msgstr ""
+
+msgid "format is invalid"
+msgstr ""
+
+msgid "is required"
+msgstr ""
+
+msgid "may not be blank"
+msgstr ""
+
+msgid "must be a valid IP address"
+msgstr ""
+
+msgid "must be a valid JSON document"
+msgstr ""
+
+msgid "must be a valid MAC address"
+msgstr ""
+
+msgid "must be a valid URL"
+msgstr ""
+
+msgid "must be a valid UUID"
+msgstr ""
+
+msgid "must be a valid email address"
+msgstr ""
+
+msgid "must be a valid value"
+msgstr ""
+
+msgid "must be at least {min} (got {got})"
+msgstr ""
+
+msgid "must be at least {min} characters (got {got})"
+msgstr ""
+
+msgid "must be at most {max} (got {got})"
+msgstr ""
+
+msgid "must be at most {max} characters (got {got})"
+msgstr ""
+
+msgid "must be greater than {min} (got {got})"
+msgstr ""
+
+msgid "must be in [0, 100] (got {got})"
+msgstr ""
+
+msgid "must be in [0, 1] (got {got})"
+msgstr ""
+
+msgid "must be less than {max} (got {got})"
+msgstr ""
+
+msgid "must be one of: {choices}"
+msgstr ""
+
+msgid "must fit precision {precision} scale {scale}"
+msgstr ""
+
+msgid "referenced record does not exist"
+msgstr ""
+
+msgid "value violates constraint"
+msgstr ""
