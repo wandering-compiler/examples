@@ -23,9 +23,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# One name for every run, so the image builder `w17ctl stack up --build`
-# makes for a compose project is made once and reused.
-export COMPOSE_PROJECT_NAME=rpc-cli-live
+# The same name on every run, so the image builder `w17ctl stack up --build`
+# makes per compose project is made once and reused. An ambient
+# COMPOSE_PROJECT_NAME is a namespace (one per checkout on a shared machine)
+# and prefixes it, so two checkouts get two stacks.
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:+${COMPOSE_PROJECT_NAME}-}rpc-cli-live"
 grpcurl_image="fullstorydev/grpcurl:v1.9.3"
 seed_id=710001
 seed_name="seed reindex"
