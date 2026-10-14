@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-10-08 14:31+0000\n"
+"POT-Creation-Date: 2026-10-14 11:58+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -192,6 +192,9 @@ msgstr "Choose whose tasks to stream."
 
 msgid "Confirm your email address before accepting this invitation."
 msgstr "Confirm your email address before accepting this invitation."
+
+msgid "No file was attached."
+msgstr "No file was attached."
 
 msgid "No permissions are in effect for you here. If access is scoped by organization, choose one and try again."
 msgstr "No permissions are in effect for you here. If access is scoped by organization, choose one and try again."
@@ -463,6 +466,9 @@ msgstr "That role cannot be assigned in this organization: it is not an organiza
 msgid "That role carries permissions you do not hold. A role can be granted only by someone who holds everything it grants."
 msgstr "That role carries permissions you do not hold. A role can be granted only by someone who holds everything it grants."
 
+msgid "The file is too large."
+msgstr "The file is too large."
+
 msgid "The item you asked for does not exist."
 msgstr "The item you asked for does not exist."
 
@@ -504,6 +510,9 @@ msgstr "This membership belongs to another organization."
 
 msgid "This request names two different organizations. Name one."
 msgstr "This request names two different organizations. Name one."
+
+msgid "This type of file is not accepted."
+msgstr "This type of file is not accepted."
 
 msgid "This value is not in the expected format."
 msgstr "This value is not in the expected format."
