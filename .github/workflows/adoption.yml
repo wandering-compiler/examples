@@ -253,6 +253,24 @@ jobs:
               fi
             done
           fi
+          # The SDK under review, BEFORE codegen as well: codegen pins every
+          # generated module to the version the project's own modules require,
+          # and refuses one older than the console's SDK floor. Left at the
+          # example's release, an SDK pull request was refused before its SDK
+          # was ever applied whenever the console had moved past that release
+          # (every SDK PR on 2026-10-14). `go mod edit` rewrites the require
+          # line alone — no lock edit (refused to a machine account), and no
+          # resolution, which a module whose replace points into the not yet
+          # generated tree could not do. go.sum follows with `go get` below.
+          if [ -n "${{ needs.modules.outputs.sdk_version }}" ]; then
+            find . -name go.mod -not -path '*/node_modules/*' -not -path '*/w17/services/*' -not -path '*/w17/stubs/*' -print0 \
+              | { xargs -0 grep -l 'wandering-compiler/sdk/go ' || true; } \
+              | while IFS= read -r mod; do
+                  docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off -e GOFLAGS=-mod=mod \
+                    -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
+                    go mod edit -require="github.com/wandering-compiler/sdk/go@${{ needs.modules.outputs.sdk_version }}"
+                done
+          fi
           # The console queues at most a few codegen runs per organization,
           # and the sdk, plugins and examples CI share one, so a busy moment
           # refuses the run with ORG_PLACEMENT_LIMIT. That refusal, and only
@@ -268,9 +286,9 @@ jobs:
             sleep "$wait"
           done
           rm -f codegen.log
-          # The SDK under review, after codegen: codegen writes the lock's
-          # SDK pin into every module, and `w17ctl sdk pin` is a lock edit
-          # too. `go get` moves each module (and its go.sum) to the commit.
+          # The SDK under review, after codegen too: `go get` moves every
+          # module — the generated ones included — and its go.sum to the
+          # commit (`w17ctl sdk pin` would be a lock edit).
           retry() { for i in 1 2 3; do "$@" && return 0; echo "::warning::attempt $i failed: $*"; sleep 10; done; return 1; }
           if [ -n "${{ needs.modules.outputs.sdk_version }}" ]; then
             find . -name go.mod -not -path '*/node_modules/*' -print0 \
