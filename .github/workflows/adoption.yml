@@ -262,14 +262,16 @@ jobs:
           # line alone — no lock edit (refused to a machine account), and no
           # resolution, which a module whose replace points into the not yet
           # generated tree could not do. go.sum follows with `go get` below.
-          if [ -n "${{ needs.modules.outputs.sdk_version }}" ]; then
-            find . -name go.mod -not -path '*/node_modules/*' -not -path '*/w17/services/*' -not -path '*/w17/stubs/*' -print0 \
-              | { xargs -0 grep -l 'wandering-compiler/sdk/go ' || true; } \
-              | while IFS= read -r mod; do
-                  docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off -e GOFLAGS=-mod=mod \
-                    -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
-                    go mod edit -require="github.com/wandering-compiler/sdk/go@${{ needs.modules.outputs.sdk_version }}"
-                done
+          # Only srcgo, the module codegen reads the version from: a module
+          # whose require is raised here without resolution keeps the old
+          # requirements of everything else (genproto, say), and the `go get`
+          # below then finds the SDK already at that version and resolves
+          # nothing for it — its build stops at "missing go.sum entry".
+          if [ -n "${{ needs.modules.outputs.sdk_version }}" ] && [ -f srcgo/go.mod ] \
+            && grep -q 'wandering-compiler/sdk/go ' srcgo/go.mod; then
+            docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off -e GOFLAGS=-mod=mod \
+              -v "$PWD:/w" -w /w/srcgo golang:1.26 \
+              go mod edit -require="github.com/wandering-compiler/sdk/go@${{ needs.modules.outputs.sdk_version }}"
           fi
           # The console queues at most a few codegen runs per organization,
           # and the sdk, plugins and examples CI share one, so a busy moment
