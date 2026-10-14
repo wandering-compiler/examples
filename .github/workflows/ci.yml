@@ -1,9 +1,14 @@
 name: ci
 
 on:
+  # A change to Markdown alone generates, builds and tests nothing, so it runs
+  # nothing; the nightly run still covers main. Comments in protos and code
+  # are not Markdown and still run everything.
   push:
     branches: [main]
+    paths-ignore: ["**/*.md"]
   pull_request:
+    paths-ignore: ["**/*.md"]
   schedule:
     - cron: "17 3 * * *"   # nightly, against the main branches of the SDK and the plugins
   workflow_dispatch:
