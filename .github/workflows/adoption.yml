@@ -135,13 +135,14 @@ jobs:
             printf 'module warm\n\ngo 1.26.1\n' > warm/go.mod; rm -f warm/go.sum
             retry gorun warm "go get github.com/wandering-compiler/sdk/go@$v && go mod download all"
           done
-          # What each committed module lists (srcgo, livetest/, workers). A
-          # module whose local replace points into the generated tree cannot
-          # be resolved before codegen; it is skipped, and its modules come
-          # from the proxy like any other miss.
+          # What each committed module lists (srcgo, livetest/, workers), one
+          # attempt each: a module whose local replace points into the
+          # generated tree (w17/stubs) cannot be resolved before codegen, and
+          # retrying it would only wait. Its modules come from the proxy like
+          # any other miss.
           find examples -name go.mod -not -path '*/node_modules/*' -not -path '*/w17/services/*' -not -path '*/w17/stubs/*' \
             | while IFS= read -r mod; do
-                retry gorun "$(dirname "$mod")" "go mod download" || echo "::notice::skipped $(dirname "$mod")"
+                gorun "$(dirname "$mod")" "go mod download" || echo "::notice::skipped $(dirname "$mod")"
               done
           du -sh "$HOME/gomod"
 
