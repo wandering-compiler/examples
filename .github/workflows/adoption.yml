@@ -310,9 +310,12 @@ jobs:
             # as a consumer does after an SDK bump, and show what changed. A
             # module that only builds inside the workspace (it imports a
             # generated module it does not require) cannot be tidied on its
-            # own: its tidy fails, and it keeps what `go get` wrote.
+            # own: its tidy fails, and it keeps what `go get` wrote. A module
+            # reaching the SDK only through a local `replace` (jobs/worker on
+            # ../srcgo) is tidied too: `go get` above never touched it, and it
+            # still has to list the SDK version its replace target now needs.
             find . -name go.mod -not -path '*/node_modules/*' -print0 \
-              | xargs -0 grep -l 'wandering-compiler/sdk/go ' \
+              | xargs -0 grep -lE 'wandering-compiler/sdk/go |=> \.\.?/' \
               | while IFS= read -r mod; do
                   dir=$(dirname "$mod")
                   cp "$dir/go.mod" "$dir/go.mod.pinned"
