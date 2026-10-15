@@ -332,6 +332,21 @@ jobs:
                 done
             git diff --stat -- '*go.mod' || true
           fi
+          # Pull the stack's images first, each one bounded and retried. A
+          # Docker Hub pull now and then stalls without failing, and inside
+          # `docker compose up` nothing bounds it (`--wait-timeout` covers
+          # health, not the pull): the job then sits until its own timeout —
+          # 43 minutes on billing-postgres, one more on bookshop's. A stalled
+          # pull is killed and retried here instead. Images the stack builds
+          # carry no tag or registry and are skipped; a pull that keeps
+          # failing is left to compose, which reports it.
+          docker compose config --images 2>/dev/null | grep -E '[:@/]' | sort -u \
+            | while IFS= read -r img; do
+                for i in 1 2 3; do
+                  timeout 300 docker pull -q "$img" >/dev/null && break
+                  echo "::warning::pull of $img stalled or failed (attempt $i)"
+                done
+              done || true
           # An example with a live suite runs it: run.sh brings the stack up
           # with the generated suite (`w17ctl test --keep`), runs livetest/
           # inside the stack's network, and tears the stack down. One stack
