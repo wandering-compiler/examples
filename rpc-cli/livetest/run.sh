@@ -52,16 +52,14 @@ fail() { echo "FAILED: $*" >&2; exit 1; }
 # from here.
 mkdir -p w17/certs/dev.local
 
-# The database first, and its schema from the console: the seed step writes
-# rows, so the tables have to exist before the rest of the stack starts.
-# `stack up` syncs through the console the lock names; W17_CONSOLE_ADDR,
-# which `w17ctl codegen` and `w17ctl test` read, names another one.
+# One `stack up`: it starts the database, syncs its schema and only then the
+# rest (w17ctl v0.1.0-rc.76+), so the seed step finds its tables. It syncs
+# through the console the lock names; W17_CONSOLE_ADDR, which `w17ctl codegen`
+# and `w17ctl test` read, names another one.
 console=()
 if [ -n "${W17_CONSOLE_ADDR:-}" ]; then console=(--console "$W17_CONSOLE_ADDR"); fi
-echo "==> the database and its schema"
-w17ctl stack up --build "${console[@]}" ops-postgres
 echo "==> the stack"
-w17ctl stack up --build --no-sync
+w17ctl stack up --build "${console[@]}"
 
 gateway="$(docker compose ps -q ops-gateway)"
 [ -n "$gateway" ] || fail "no ops-gateway container"
