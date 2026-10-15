@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/wandering-compiler/examples/assistant/livetest/device"
 	agentpb "github.com/wandering-compiler/examples/assistant/w17/stubs/pb/domains/assistant/agent"
 )
 
@@ -36,6 +37,14 @@ var (
 	// client bounds every call, so a hung stack fails a test instead of
 	// waiting for go test's own timeout.
 	client = &http.Client{Timeout: 30 * time.Second}
+
+	// gatewayOrigin is the gateway's configured public origin, which device
+	// proofs name (run.sh reads it from the stack); "" when the stack
+	// declares none, and then the proofs name GATEWAY_URL's origin.
+	gatewayOrigin = env("GATEWAY_DPOP_ORIGIN", "")
+	// api sends the REST calls: with device proofs when the gateway binds
+	// tokens to device keys, as Bearer tokens when it does not.
+	api *device.Client
 
 	db *sql.DB
 	// usage is the agent plugin's usage mutations over the storage tier's
@@ -53,6 +62,10 @@ func env(key, def string) string {
 
 func TestMain(m *testing.M) {
 	var err error
+	if api, err = device.New(client, gateway, gatewayOrigin); err != nil {
+		fmt.Fprintln(os.Stderr, "livetest:", err)
+		os.Exit(1)
+	}
 	if db, err = sql.Open("postgres", databaseURL); err != nil {
 		fmt.Fprintln(os.Stderr, "livetest: database:", err)
 		os.Exit(1)
@@ -80,17 +93,30 @@ func signUp(t *testing.T) account {
 		UserID string `json:"user_id"`
 		Token  string `json:"token"`
 	}
-	status, raw, err := do("", http.MethodPost, "/api/v1/auth/register", map[string]any{
+	// The sign-up proves a new device key: one per account.
+	var session *device.Session
+	status, raw, err := exchange(http.MethodPost, "/api/v1/auth/register", map[string]any{
 		"email": "live-" + randomHex(6) + "@assistant.example", "password": "e2eSecret!23",
+	}, func(req *http.Request) (resp *http.Response, err error) {
+		resp, session, err = api.Mint(req)
+		return resp, err
 	})
 	if err != nil || status != http.StatusOK || json.Unmarshal(raw, &resp) != nil {
 		t.Fatalf("sign-up: %d %s %v", status, raw, err)
 	}
+	api.Keep(resp.Token, session)
 	return account{id: resp.UserID, token: resp.Token}
 }
 
 // do makes one REST call. It never touches t, so it may run on any goroutine.
 func do(token, method, path string, body any) (int, []byte, error) {
+	return exchange(method, path, body, func(req *http.Request) (*http.Response, error) {
+		return api.Do(req, token)
+	})
+}
+
+// exchange builds one REST request, sends it with send and reads the answer.
+func exchange(method, path string, body any, send func(*http.Request) (*http.Response, error)) (int, []byte, error) {
 	var rd io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -104,10 +130,7 @@ func do(token, method, path string, body any) (int, []byte, error) {
 		return 0, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	resp, err := client.Do(req)
+	resp, err := send(req)
 	if err != nil {
 		return 0, nil, err
 	}

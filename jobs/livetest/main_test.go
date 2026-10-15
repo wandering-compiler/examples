@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/wandering-compiler/examples/jobs/livetest/device"
 	authpb "github.com/wandering-compiler/examples/jobs/w17/stubs/pb/domains/jobs/auth"
 	workerspb "github.com/wandering-compiler/examples/jobs/w17/stubs/pb/domains/jobs/workers"
 	"github.com/wandering-compiler/examples/jobs/workapi"
@@ -40,6 +41,14 @@ var (
 	storageAddr = env("STORAGE_ADDR", "jobs-storage:50051")
 
 	client = &http.Client{Timeout: 60 * time.Second}
+
+	// gatewayOrigin is the gateway's configured public origin, which device
+	// proofs name (run.sh reads it from the stack); "" when the stack
+	// declares none, and then the proofs name GATEWAY_URL's origin.
+	gatewayOrigin = env("GATEWAY_DPOP_ORIGIN", "")
+	// api sends the REST calls: with device proofs when the gateway binds
+	// tokens to device keys, as Bearer tokens when it does not.
+	api *device.Client
 
 	// The cluster plugin over the storage tier's internal listener: what the
 	// project's own code (and an operator's tooling) calls.
@@ -58,6 +67,11 @@ func env(key, def string) string {
 }
 
 func TestMain(m *testing.M) {
+	var err error
+	if api, err = device.New(client, gateway, gatewayOrigin); err != nil {
+		fmt.Fprintln(os.Stderr, "livetest:", err)
+		os.Exit(1)
+	}
 	conn, err := grpc.NewClient(storageAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "livetest: storage:", err)
@@ -85,8 +99,13 @@ func signUp(t *testing.T) string {
 // signUpAccount signs up a fresh account and returns its id and token.
 func signUpAccount(t *testing.T) (userID, token string) {
 	t.Helper()
-	status, raw, err := do("", "/api/v1/auth/register", map[string]any{
+	// The sign-up proves a new device key: one per account.
+	var session *device.Session
+	status, raw, err := exchange("/api/v1/auth/register", map[string]any{
 		"email": "live-" + randomHex(6) + "@jobs.example", "password": "e2eSecret!23",
+	}, func(req *http.Request) (resp *http.Response, err error) {
+		resp, session, err = api.Mint(req)
+		return resp, err
 	})
 	var resp struct {
 		UserID string `json:"user_id"`
@@ -95,6 +114,7 @@ func signUpAccount(t *testing.T) (userID, token string) {
 	if err != nil || status != http.StatusOK || json.Unmarshal(raw, &resp) != nil {
 		t.Fatalf("sign-up: %d %s %v", status, raw, err)
 	}
+	api.Keep(resp.Token, session)
 	return resp.UserID, resp.Token
 }
 
@@ -120,6 +140,13 @@ func refusalReason(err error) string {
 // do makes one REST POST. It never touches t, so it may run on any
 // goroutine.
 func do(token, path string, body any) (int, []byte, error) {
+	return exchange(path, body, func(req *http.Request) (*http.Response, error) {
+		return api.Do(req, token)
+	})
+}
+
+// exchange builds one REST POST, sends it with send and reads the answer.
+func exchange(path string, body any, send func(*http.Request) (*http.Response, error)) (int, []byte, error) {
 	b, err := json.Marshal(body)
 	if err != nil {
 		return 0, nil, err
@@ -129,10 +156,7 @@ func do(token, path string, body any) (int, []byte, error) {
 		return 0, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	resp, err := client.Do(req)
+	resp, err := send(req)
 	if err != nil {
 		return 0, nil, err
 	}

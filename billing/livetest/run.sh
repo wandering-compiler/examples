@@ -15,6 +15,17 @@ trap cleanup EXIT
 
 w17ctl test --keep --project "$project"
 
+# A gateway whose auth method binds tokens to device keys checks each device
+# proof against its configured public origin (<DOMAIN>_GATEWAY_DPOP_ORIGIN),
+# not against the address the suite reaches it at on the stack's network; the
+# suite signs for that origin. Empty when the gateway declares none: then the
+# proofs name the address dialled, and a gateway that binds nothing ignores
+# them anyway.
+gateway="$(docker compose -p "$project" ps -q billing-gateway)"
+[ -n "$gateway" ] || { echo "livetest: no billing-gateway container" >&2; exit 1; }
+dpop_origin="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$gateway" \
+  | sed -n 's/^[A-Z0-9_]*_GATEWAY_DPOP_ORIGIN=//p' | head -n 1)"
+
 # In CI the job serves its Go module cache as a proxy (W17_GOPROXY_CONTAINER,
 # adoption.yml); the suite's container is on the stack's network, so the
 # proxy joins it and is dialled at its address there.
@@ -28,6 +39,7 @@ if [ -n "${W17_GOPROXY_CONTAINER:-}" ]; then
   goproxy=(-e "GOPROXY=http://$ip,https://proxy.golang.org,direct" -e GODEBUG=http2client=0)
 fi
 docker run --rm --network "${project}_default" "${goproxy[@]}" \
+  -e GATEWAY_DPOP_ORIGIN="$dpop_origin" \
   -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOFLAGS=-buildvcs=false -e GOWORK=off \
   -v "$PWD:/w" -w /w/livetest golang:1.26 \
   go test -count=1 -race ./...

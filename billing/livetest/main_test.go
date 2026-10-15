@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/wandering-compiler/examples/billing/livetest/device"
 	paymentpb "github.com/wandering-compiler/examples/billing/w17/stubs/pb/domains/billing/payment"
 )
 
@@ -40,8 +41,15 @@ var (
 	storageAddr   = env("STORAGE_ADDR", "billing-storage:50051")
 	databaseURL   = env("DATABASE_URL", "postgres://billing:billing@billing-postgres:5432/billing?sslmode=disable")
 	webhookSecret = env("WEBHOOK_SECRET", "whsec_example")
+	// gatewayOrigin is the gateway's configured public origin, which device
+	// proofs name (run.sh reads it from the stack); "" when the stack
+	// declares none, and then the proofs name GATEWAY_URL's origin.
+	gatewayOrigin = env("GATEWAY_DPOP_ORIGIN", "")
 
-	db *sql.DB
+	// api sends the REST calls: with device proofs when the gateway binds
+	// tokens to device keys, as Bearer tokens when it does not.
+	api *device.Client
+	db  *sql.DB
 	// payments is PaymentService over the storage tier's internal gRPC
 	// listener: what the project's own code (a job, a subscriber) calls. It
 	// carries no signed-in caller, so it may name the user it acts for.
@@ -57,6 +65,10 @@ func env(key, def string) string {
 
 func TestMain(m *testing.M) {
 	var err error
+	if api, err = device.New(http.DefaultClient, gateway, gatewayOrigin); err != nil {
+		fmt.Fprintln(os.Stderr, "livetest:", err)
+		os.Exit(1)
+	}
 	if db, err = sql.Open("postgres", databaseURL); err != nil {
 		fmt.Fprintln(os.Stderr, "livetest: database:", err)
 		os.Exit(1)
@@ -85,10 +97,20 @@ func signUp(t *testing.T) account {
 		UserID string `json:"user_id"`
 		Token  string `json:"token"`
 	}
-	call(t, "", http.MethodPost, "/api/v1/auth/register", map[string]any{
+	// The sign-up proves a new device key: one per account.
+	var session *device.Session
+	const path = "/api/v1/auth/register"
+	status, raw, err := exchange(http.MethodPost, path, map[string]any{
 		"email":    "live-" + randomHex(6) + "@billing.example",
 		"password": "e2eSecret!23",
-	}, http.StatusOK, &resp)
+	}, func(req *http.Request) (resp *http.Response, err error) {
+		resp, session, err = api.Mint(req)
+		return resp, err
+	})
+	if err := expect(http.MethodPost, path, status, raw, err, http.StatusOK, &resp); err != nil {
+		t.Fatal(err)
+	}
+	api.Keep(resp.Token, session)
 	return account{id: resp.UserID, token: resp.Token}
 }
 
@@ -107,6 +129,11 @@ func call(t *testing.T, token, method, path string, body any, want int, out any)
 
 func tryCall(token, method, path string, body any, want int, out any) error {
 	status, raw, err := do(token, method, path, body)
+	return expect(method, path, status, raw, err, want, out)
+}
+
+// expect checks an answer's status against want and decodes it into out.
+func expect(method, path string, status int, raw []byte, err error, want int, out any) error {
 	if err != nil {
 		return err
 	}
@@ -122,6 +149,13 @@ func tryCall(token, method, path string, body any, want int, out any) error {
 }
 
 func do(token, method, path string, body any) (int, []byte, error) {
+	return exchange(method, path, body, func(req *http.Request) (*http.Response, error) {
+		return api.Do(req, token)
+	})
+}
+
+// exchange builds one REST request, sends it with send and reads the answer.
+func exchange(method, path string, body any, send func(*http.Request) (*http.Response, error)) (int, []byte, error) {
 	var rd io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -135,10 +169,7 @@ func do(token, method, path string, body any) (int, []byte, error) {
 		return 0, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := send(req)
 	if err != nil {
 		return 0, nil, fmt.Errorf("%s %s: %v", method, path, err)
 	}

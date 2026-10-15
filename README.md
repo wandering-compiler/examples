@@ -40,8 +40,11 @@ The examples pin released versions of the SDK and the plugins. The SDK and the
 plugins repositories run them, on every pull request, against the change under
 review — so a change that breaks a project built on it fails before it is
 merged. Each example runs in a job of its own, and an example with a live suite
-(`livetest/run.sh`) runs it on the same stack as its end-to-end suite. The
-reusable workflow is
+(`livetest/run.sh`) runs it on the same stack as its end-to-end suite. A live
+suite proves a device key (DPoP) on every sign-up and, when the gateway binds
+the token to that key, sends it with proofs by the key — as a Bearer token
+otherwise — so it runs against an auth plugin that binds devices and one that
+does not (`livetest/device/`). The reusable workflow is
 [`.github/workflows/adoption.yml`](.github/workflows/adoption.yml):
 
 ```yaml
