@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-10-05 14:29+0000\n"
+"POT-Creation-Date: 2026-10-15 12:06+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -69,6 +69,9 @@ msgstr "Enter your credentials to continue."
 
 msgid "Inline target page {page} is missing from the spec."
 msgstr "Inline target page {page} is missing from the spec."
+
+msgid "Keep me signed in only until the browser closes."
+msgstr "Keep me signed in only until the browser closes."
 
 msgid "Leave empty to keep current"
 msgstr "Leave empty to keep current"
@@ -151,11 +154,23 @@ msgstr "Something went wrong"
 msgid "System theme"
 msgstr "System theme"
 
+msgid "This browser cannot start a secure sign-in here — it needs HTTPS"
+msgstr "This browser cannot start a secure sign-in here — it needs HTTPS"
+
+msgid "This device was signed out. Sign in again."
+msgstr "This device was signed out. Sign in again."
+
+msgid "This is a public computer"
+msgstr "This is a public computer"
+
 msgid "This page has no detail view."
 msgstr "This page has no detail view."
 
 msgid "This page has no list configured."
 msgstr "This page has no list configured."
+
+msgid "This sign-in link cannot be used here. Sign in again."
+msgstr "This sign-in link cannot be used here. Sign in again."
 
 msgid "Unavailable"
 msgstr "Unavailable"
