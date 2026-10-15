@@ -1,15 +1,18 @@
 # Disabling an account ends its sessions (auth rc.19): the admin's Disable is
-# AuthMutation.DisableUsers, which deletes every token of the disabled
-# accounts in the same transaction as the flag.
+# AuthMutation.DisableUsers, which ends every token of the disabled accounts
+# in the same transaction as the flag.
 #
-# b3 is b2's seeded session and 0120 has just disabled b2, so the session row
-# is gone. Before rc.19 it survived the disable and this read found it; the
-# control that the row existed and was readable is 0150's shape, run against
-# b7's session, which no step disables.
-method: admin.Sessions.Read
-pre:
-    - auth/admin.yaml
-input:
-    id: 00000000-0000-0000-0000-0000000000b3
+# b3 is b2's seeded session (token e2e-throwaway-session-token-b3) and 0120
+# has just disabled b2. What the disable guarantees is that the session no
+# longer authenticates, so that is what this step asserts: presenting b3's
+# token is refused at authentication. Up to auth rc.23 the token row was
+# deleted; from the device-identity release on it stays, revoked (nothing in
+# the auth tables is deleted), so asserting that the row is gone would test
+# how the end is recorded rather than that it happened. The control that b3
+# was a working session before the disable is 0150's shape, run against b7's
+# session, which no step disables.
+method: admin.Sessions.List
+credential: Bearer e2e-throwaway-session-token-b3
+input: {}
 expect_error:
-    code: NOT_FOUND
+    code: UNAUTHENTICATED
