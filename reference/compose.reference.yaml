@@ -12,6 +12,7 @@ services:
     build:
       context: .
       dockerfile: w17/services/app-storage/Dockerfile
+      args: [GOPROXY, GOSUMDB, GODEBUG]
     environment:
       # The database a `fixtures apply` seeds is the connection's target.
       W17_TARGET_APP_POSTGRES: postgres://app:${W17_APP_POSTGRES_DB_PASSWORD:-app}@app-postgres:5432/app?sslmode=disable
@@ -28,7 +29,7 @@ services:
       app-seed: { condition: service_completed_successfully }
 
   app-business:
-    build: { context: ., dockerfile: business/Dockerfile }
+    build: { context: ., dockerfile: business/Dockerfile, args: [GOPROXY, GOSUMDB, GODEBUG] }
     restart: unless-stopped
     environment:
       APP_LISTEN_ADDR: ":50051"

@@ -6,7 +6,9 @@ services:
   # A stateful stand-in for the Stripe API (fakestripe/), so the example
   # runs without a Stripe account. Not for production.
   fakestripe:
-    build: fakestripe
+    build:
+      context: fakestripe
+      args: [GOPROXY, GOSUMDB, GODEBUG]
     restart: unless-stopped
 
   billing-storage:

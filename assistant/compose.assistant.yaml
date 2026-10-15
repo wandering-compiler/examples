@@ -5,7 +5,9 @@ services:
   # runs without a provider account. It serves HTTPS with a certificate
   # authority it makes at start and writes to the fakellm-ca volume.
   fakellm:
-    build: fakellm
+    build:
+      context: fakellm
+      args: [GOPROXY, GOSUMDB, GODEBUG]
     restart: unless-stopped
     volumes:
       - fakellm-ca:/ca

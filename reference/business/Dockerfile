@@ -3,6 +3,11 @@
 # it. It hosts the facade services and reaches the generated storage
 # tier over gRPC.
 FROM golang:1.26-alpine AS build
+# The module proxy the CI job serves, when there is one (compose passes it
+# through build.args); unset, go uses its default.
+ARG GOPROXY
+ARG GOSUMDB
+ARG GODEBUG
 WORKDIR /src
 COPY srcgo/ .
 RUN CGO_ENABLED=0 GOWORK=off go build -buildvcs=false -o /business ./domains/app/cmd/grpcapi-business
