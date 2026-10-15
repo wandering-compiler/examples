@@ -11,6 +11,7 @@ services:
     build:
       context: .
       dockerfile: w17/services/app-server/Dockerfile
+      args: [GOPROXY, GOSUMDB, GODEBUG]
     environment:
       # The database a `fixtures apply` seeds is the connection's target.
       W17_TARGET_APP_POSTGRES: postgres://app:${W17_APP_POSTGRES_DB_PASSWORD:-app}@app-postgres:5432/app?sslmode=disable

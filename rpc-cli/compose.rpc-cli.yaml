@@ -9,6 +9,7 @@ services:
     build:
       context: .
       dockerfile: w17/services/ops-storage/Dockerfile
+      args: [GOPROXY, GOSUMDB, GODEBUG]
     environment:
       # The database a `fixtures apply` seeds is the connection's target.
       W17_TARGET_OPS_POSTGRES: postgres://ops:${W17_OPS_POSTGRES_DB_PASSWORD:-ops}@ops-postgres:5432/ops?sslmode=disable

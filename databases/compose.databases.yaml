@@ -11,6 +11,7 @@ services:
     build:
       context: .
       dockerfile: w17/services/catalog-storage/Dockerfile
+      args: [GOPROXY, GOSUMDB, GODEBUG]
     environment:
       # The database a `fixtures apply` seeds is the connection's target.
       W17_TARGET_CATALOG_POSTGRES: postgres://catalog:${W17_CATALOG_POSTGRES_DB_PASSWORD:-catalog}@catalog-postgres:5432/catalog?sslmode=disable
