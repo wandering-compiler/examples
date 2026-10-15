@@ -300,20 +300,32 @@ jobs:
                     -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
                     go get "github.com/wandering-compiler/sdk/go@${{ needs.modules.outputs.sdk_version }}"
                 done
-            # A module that reaches the SDK through a local `replace` — a
-            # hand-written worker on the vendored plugin tree or on srcgo — is
-            # built on its own (GOWORK=off, in its image), and the move above
-            # raises what it has to list (a newer genproto, say): its build
-            # then stops at "updates to go.mod needed". Tidy those, as a
-            # consumer does after an SDK bump, and show what changed. Only
-            # those: a module without a local replace (srcgo) builds inside
-            # the workspace and cannot be tidied on its own.
+            # The move above raises what a module has to list: the SDK's new
+            # dependencies (golang.org/x/image, say) and anything it bumped
+            # (x/sys, x/text). `go get` resolves the SDK's own packages, not
+            # every package of the module, so a module built on its own
+            # (GOWORK=off, in its image — srcgo behind the business
+            # Dockerfile, a worker on the vendored plugin tree) then stops at
+            # "missing go.sum entry" or "updates to go.mod needed". Tidy each,
+            # as a consumer does after an SDK bump, and show what changed. A
+            # module that only builds inside the workspace (it imports a
+            # generated module it does not require) cannot be tidied on its
+            # own: its tidy fails, and it keeps what `go get` wrote.
             find . -name go.mod -not -path '*/node_modules/*' -print0 \
-              | { xargs -0 grep -lE '=> \.\.?/' || true; } \
+              | xargs -0 grep -l 'wandering-compiler/sdk/go ' \
               | while IFS= read -r mod; do
-                  retry docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off -e GOPROXY -e GODEBUG \
-                    -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
-                    go mod tidy
+                  dir=$(dirname "$mod")
+                  cp "$dir/go.mod" "$dir/go.mod.pinned"
+                  [ -f "$dir/go.sum" ] && cp "$dir/go.sum" "$dir/go.sum.pinned"
+                  if retry docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off -e GOPROXY -e GODEBUG \
+                    -v "$PWD:/w" -w "/w/$dir" golang:1.26 \
+                    go mod tidy; then
+                    rm -f "$dir/go.mod.pinned" "$dir/go.sum.pinned"
+                  else
+                    echo "::notice::$dir does not tidy on its own (a workspace-only module); keeping what go get wrote"
+                    mv "$dir/go.mod.pinned" "$dir/go.mod"
+                    [ -f "$dir/go.sum.pinned" ] && mv "$dir/go.sum.pinned" "$dir/go.sum"
+                  fi
                 done
             git diff --stat -- '*go.mod' || true
           fi
