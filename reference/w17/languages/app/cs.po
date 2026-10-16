@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-10-14 11:58+0000\n"
+"POT-Creation-Date: 2026-10-16 09:01+0000\n"
 "Language: cs\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -301,6 +301,9 @@ msgstr "Tasks · Task Mutation · Update Task Status"
 msgid "Tasks · Task Mutation · Upload Attachment"
 msgstr "Tasks · Task Mutation · Upload Attachment"
 
+msgid "Tasks · Task Mutation · Upload Task Cover"
+msgstr ""
+
 msgid "Tasks · Task Query · Count Tasks By Category"
 msgstr "Tasks · Task Query · Count Tasks By Category"
 
@@ -339,6 +342,9 @@ msgstr "Tasks · Task Query · Get Task Category Row"
 
 msgid "Tasks · Task Query · Get Task Category Row Optional"
 msgstr "Tasks · Task Query · Get Task Category Row Optional"
+
+msgid "Tasks · Task Query · Get Task Cover"
+msgstr ""
 
 msgid "Tasks · Task Query · Get Task For Update"
 msgstr "Tasks · Task Query · Get Task For Update"

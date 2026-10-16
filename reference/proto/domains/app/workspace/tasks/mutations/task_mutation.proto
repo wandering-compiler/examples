@@ -240,6 +240,31 @@ message UploadAttachmentResp {
   int64 id = 1;
 }
 
+// The cover upload: the same shape as UploadAttachmentReq, for an image —
+// and the field's `variants` are what the gateway renders in the background
+// once the insert succeeded.
+message UploadTaskCoverReq {
+  int64  task_id    = 1;
+  string image_path = 2 [(w17.field) = {
+      type: UPLOADED_IMAGE,
+      extensions: ["png", "jpg", "jpeg"],
+      upload: {
+        connection:       "app-uploads",
+        bucket_path:      "/task-covers",
+        expected_objects: 100000,
+        max_per_bucket:   100,
+        max_size_bytes:   1048576,
+        variants: [
+          { name: "thumb", max_width: 64, max_height: 64 },
+          { name: "card",  max_width: 320, format: IMAGE_FORMAT_JPEG, quality: 80 }
+        ]
+      }
+    }];
+}
+message UploadTaskCoverResp {
+  int64 id = 1;
+}
+
 message DeleteTaskCommentReq {
   int64 id = 1;
 }
@@ -891,6 +916,21 @@ service TaskMutation {
           "INSERT INTO tasks.TaskUpload SET "
           "task_id = :task_id, "
           "stored_path = :stored_path "
+          "RETURNING id"
+      }
+    };
+  }
+
+  // UploadTaskCover — an image upload: stored under a derived key, its
+  // declared variants rendered in the background after the insert.
+  rpc UploadTaskCover(UploadTaskCoverReq) returns (UploadTaskCoverResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "INSERT INTO tasks.TaskCover SET "
+          "task_id = :task_id, "
+          "image_path = :image_path "
           "RETURNING id"
       }
     };

@@ -498,6 +498,45 @@ message TaskUpload {
   google.protobuf.Timestamp uploaded_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
 }
 
+// TaskCover — a task's cover image: an UPLOADED_IMAGE with declared
+// variants, the image half of the upload surface TaskUpload covers for
+// plain files.
+//
+// `variants` are sizes the image is ALSO served at: `/files/<key>?variant=
+// thumb` is the stored image fitted inside 64×64, `card` inside 320 px wide
+// and re-encoded as JPEG. Only the declared names exist (any other is a 400)
+// — a server that resized to whatever a URL asked for would render and store
+// a new image per request. They are rendered in the background right after
+// the upload (`pregenerate`, on by default) and stored beside the original,
+// so a viewer reads them back instead of waiting; one not there yet is
+// rendered on its first request. The live suite (livetest/) proves both
+// halves against the S3 store this example runs on.
+message TaskCover {
+  option (w17.db.table) = { name: "task_covers" };
+
+  int64 id      = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+  int64 task_id = 2 [
+    (w17.field)     = { related_name: "covers" },
+    (w17.db.column) = { fk: "tasks.Task", deletion_rule: CASCADE, index: true }
+  ];
+  string image_path = 3 [(w17.field) = {
+      type: UPLOADED_IMAGE,
+      extensions: ["png", "jpg", "jpeg"],
+      upload: {
+        connection:       "app-uploads",
+        bucket_path:      "/task-covers",
+        expected_objects: 100000,
+        max_per_bucket:   100,
+        max_size_bytes:   1048576,
+        variants: [
+          { name: "thumb", max_width: 64, max_height: 64 },
+          { name: "card",  max_width: 320, format: IMAGE_FORMAT_JPEG, quality: 80 }
+        ]
+      }
+    }];
+  google.protobuf.Timestamp uploaded_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
 // Milestone — a named checkpoint the tasks in a category are
 // working towards. Small reference-shaped table, like TaskCategory:
 // no create endpoint on this surface, rows come from the seed.

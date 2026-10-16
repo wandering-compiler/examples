@@ -12,8 +12,8 @@ package w17lock.app.acl;
 import "w17/lock.proto";
 import "w17/field.proto";
 
-option (w17.lock_checksum) = "sha256:fcd2058cca9546c7cc097f76f158ca2fc63b4bcbc48f80c609a5f657043f91cd";
-option (w17.lock_signature) = "ed25519/v1:23d27661419033712ba5605f726034f2e89e811526a448f398810f0d0f7cdea1397745da7f8f1ccf4529033bad9641e68aacf47e8051ce59ff8c08b1e4655402";
+option (w17.lock_checksum) = "sha256:9390ff27d196771276b4b82014da4ce2e45b4188d3b56954d5f6e69f360ba28c";
+option (w17.lock_signature) = "ed25519/v1:c5764c236794ebad7b115c2c898eeceae6de170f3388fa74f51ab96672a27b7c3c5f3a53a95590a4daa370722b6b3d8447d3dc78353f21bfb8144afccdbaa30a";
 option (w17.lock_derivation) = 1;
 
 // AclPermission — every permission allocated by the cascade for
@@ -136,6 +136,7 @@ enum AclPermission {
   TASKS_TASK_MUTATION_UPDATE_TASK_COMMENT = 94 [(w17.value_display) = { label: "Tasks · Task Mutation · Update Task Comment" }];
   TASKS_TASK_MUTATION_UPDATE_TASK_STATUS = 95 [(w17.value_display) = { label: "Tasks · Task Mutation · Update Task Status" }];
   TASKS_TASK_MUTATION_UPLOAD_ATTACHMENT = 96 [(w17.value_display) = { label: "Tasks · Task Mutation · Upload Attachment" }];
+  TASKS_TASK_MUTATION_UPLOAD_TASK_COVER = 166 [(w17.value_display) = { label: "Tasks · Task Mutation · Upload Task Cover" }];
   TASKS_TASK_QUERY_COUNT_TASKS_BY_CATEGORY = 97 [(w17.value_display) = { label: "Tasks · Task Query · Count Tasks By Category" }];
   TASKS_TASK_QUERY_COUNT_TASKS_BY_STATUS = 98 [(w17.value_display) = { label: "Tasks · Task Query · Count Tasks By Status" }];
   TASKS_TASK_QUERY_COUNT_TASKS_PER_DAY = 99 [(w17.value_display) = { label: "Tasks · Task Query · Count Tasks Per Day" }];
@@ -149,6 +150,7 @@ enum AclPermission {
   TASKS_TASK_QUERY_GET_TASK_CATEGORY = 107 [(w17.value_display) = { label: "Tasks · Task Query · Get Task Category" }];
   TASKS_TASK_QUERY_GET_TASK_CATEGORY_ROW = 108 [(w17.value_display) = { label: "Tasks · Task Query · Get Task Category Row" }];
   TASKS_TASK_QUERY_GET_TASK_CATEGORY_ROW_OPTIONAL = 109 [(w17.value_display) = { label: "Tasks · Task Query · Get Task Category Row Optional" }];
+  TASKS_TASK_QUERY_GET_TASK_COVER = 167 [(w17.value_display) = { label: "Tasks · Task Query · Get Task Cover" }];
   TASKS_TASK_QUERY_GET_TASK_FOR_UPDATE = 110 [(w17.value_display) = { label: "Tasks · Task Query · Get Task For Update" }];
   TASKS_TASK_QUERY_GET_TASK_IF_UNRESOLVED = 111 [(w17.value_display) = { label: "Tasks · Task Query · Get Task If Unresolved" }];
   TASKS_TASK_QUERY_GET_TASK_UPLOAD = 112 [(w17.value_display) = { label: "Tasks · Task Query · Get Task Upload" }];
