@@ -14,8 +14,8 @@ require (
 require (
 	github.com/go-jose/go-jose/v4 v4.1.5 // indirect
 	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 )
 
 // The contract shared with the workers, and the generated pb stubs
