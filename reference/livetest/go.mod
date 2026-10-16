@@ -23,4 +23,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.43.3 // indirect
 	github.com/aws/smithy-go v1.27.3 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.5 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
+	google.golang.org/grpc v1.83.2 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )
