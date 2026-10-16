@@ -51,10 +51,10 @@ plugins:
       version: 0.1.0-rc.23
 project: examples-single-binary
 project_id: d1ef82a1-ffe4-4220-af2e-2bdeb3c99889
-sdk_version: v0.1.0-rc.22
+sdk_version: v0.1.0-rc.23
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 06675d149f209677dd63b649f18f006407ede3742e4ef7dbd9d6165d4284dd28eaeecc65824f66908bb1963f1848551e109a396859c41ececb02cf5a39e28b0c
+    body: 2a6844f652287429e5e700eb9e1a2f155d968d87fef0daac8ef1294a1c6fc5b2b5c43e5a33349285ca3689b1575e4df836ebbc3b2e0ba2087f3e56250e9d590e
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

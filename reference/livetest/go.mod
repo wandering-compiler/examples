@@ -2,7 +2,7 @@ module github.com/wandering-compiler/examples/reference/livetest
 
 go 1.26.1
 
-require github.com/wandering-compiler/sdk/go v0.1.0-rc.22
+require github.com/wandering-compiler/sdk/go v0.1.0-rc.23
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.42.0 // indirect
