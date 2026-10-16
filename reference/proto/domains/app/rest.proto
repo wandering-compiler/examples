@@ -567,6 +567,15 @@ option (w17.rest_api) = {
           ]
         },
         { ref: "tasks.TaskQuery.GetTaskUpload",       method: GET,  path: "/uploads/{id}" },
+        // The image upload: one FILE_PART, like the attachment, and the
+        // field's variants served by `/files` below.
+        { ref: "tasks.TaskMutation.UploadTaskCover", method: POST, path: "/{task_id}/cover",
+          multipart: true,
+          fields: [
+            { ref: "image_path", from: FILE_PART, http_name: "image" }
+          ]
+        },
+        { ref: "tasks.TaskQuery.GetTaskCover",        method: GET,  path: "/covers/{id}" },
 
         { ref: "tasks.TaskMutation.UpdateTaskStatus", method: POST, path: "/{task_id}/status" },
         { ref: "tasks.TaskMutation.CompleteTask",     method: POST, path: "/{task_id}/complete" },

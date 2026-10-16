@@ -1,0 +1,13 @@
+# The cover's `extensions` are png / jpg / jpeg: a `.gif` is refused for
+# what it is, before any byte is stored.
+method: tasks.TaskMutation.UploadTaskCover
+pre:
+    - auth/auth.yaml
+input:
+    task_id: 700001
+files:
+    - part: image
+      filename: cover.gif
+      content: "GIF89a"
+expect_error:
+    code: INVALID_ARGUMENT

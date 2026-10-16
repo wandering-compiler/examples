@@ -47,5 +47,27 @@ services:
     environment:
       APP_GATEWAY_STORAGE_BACKEND_ADDR: app-storage:50051
       APP_GATEWAY_BUSINESS_BACKEND_ADDR: app-business:50051
+      # The `app-uploads` store is a bucket here, not a directory: the root is
+      # an s3:// URL, and the binary picks the driver from it (a path is a
+      # directory, the generated default). The gateway creates the bucket at
+      # boot, as it creates a directory root. The live suite (livetest/)
+      # reads the bucket back to prove the image variants landed in it.
+      APP_GATEWAY_UPLOAD_APP_UPLOADS_ROOT: s3://minioadmin:minioadmin@app-uploads?endpoint=http://minio:9000&region=us-east-1&path_style=true
     depends_on:
       app-business: { condition: service_started }
+      minio: { condition: service_healthy }
+
+  # An S3-compatible object store for the uploads (MinIO). Its image comes
+  # from Chainguard: the Docker Hub and Quay images are gone.
+  minio:
+    image: cgr.dev/chainguard/minio@sha256:2136d593beacf4461187035eca949fe49abd589d5079735025c711ca58fee0c8
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MC_HOST_local: http://minioadmin:minioadmin@localhost:9000
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 5s
+      retries: 30

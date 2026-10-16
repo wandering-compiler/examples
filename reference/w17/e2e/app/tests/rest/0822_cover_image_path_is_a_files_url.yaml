@@ -1,0 +1,10 @@
+# The stored handle comes back rewritten by the `/files` download, which
+# covers `tasks.*`: a RELATIVE URL under the cover's bucket path. A variant
+# is that URL with `?variant=thumb` or `?variant=card`.
+method: tasks.TaskQuery.GetTaskCover
+pre:
+    - auth/auth.yaml
+input:
+    id: ${task_cover.id}
+expect:
+    image_path: {matcher: regex, pattern: "^/api/v1/tasks/files/task-covers/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}
