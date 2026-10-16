@@ -30,6 +30,8 @@ import (
 
 	"github.com/wandering-compiler/sdk/go/lib/kvfs"
 	kvfsstore "github.com/wandering-compiler/sdk/go/lib/kvfs/store"
+
+	"github.com/wandering-compiler/examples/reference/livetest/device"
 )
 
 var (
@@ -37,7 +39,14 @@ var (
 	// bucket is the gateway's own upload root (compose.reference.yaml), read
 	// back to see what the gateway stored.
 	bucket = env("UPLOADS_ROOT", "s3://minioadmin:minioadmin@app-uploads?endpoint=http://minio:9000&region=us-east-1&path_style=true")
+	// gatewayOrigin is the gateway's configured public origin, which device
+	// proofs name (run.sh reads it from the stack); "" when the stack
+	// declares none, and then the proofs name GATEWAY_URL's origin.
+	gatewayOrigin = env("GATEWAY_DPOP_ORIGIN", "")
 
+	// api sends the REST calls: with device proofs when the gateway binds
+	// tokens to device keys, as Bearer tokens when it does not.
+	api   *device.Client
 	store kvfs.Driver
 )
 
@@ -57,6 +66,10 @@ func env(key, def string) string {
 
 func TestMain(m *testing.M) {
 	var err error
+	if api, err = device.New(http.DefaultClient, gateway, gatewayOrigin); err != nil {
+		fmt.Fprintln(os.Stderr, "livetest:", err)
+		os.Exit(1)
+	}
 	if store, err = kvfsstore.Open(context.Background(), bucket, false); err != nil {
 		fmt.Fprintln(os.Stderr, "livetest: the uploads bucket:", err)
 		os.Exit(1)
@@ -149,10 +162,17 @@ func signUp(t *testing.T) string {
 		"email":    fmt.Sprintf("live-%d@reference.example", time.Now().UnixNano()),
 		"password": "e2eSecret!23",
 	})
-	raw := send(t, http.MethodPost, "/api/v1/auth/tenant-alpha/register", "", "application/json", bytes.NewReader(body), http.StatusOK)
+	// The sign-up proves a new device key: one per account.
+	var session *device.Session
+	raw := exchange(t, http.MethodPost, "/api/v1/auth/tenant-alpha/register", "application/json", bytes.NewReader(body), http.StatusOK,
+		func(req *http.Request) (resp *http.Response, err error) {
+			resp, session, err = api.Mint(req)
+			return resp, err
+		})
 	if err := json.Unmarshal(raw, &resp); err != nil || resp.Token == "" {
 		t.Fatalf("sign-up answer %s: %v", raw, err)
 	}
+	api.Keep(resp.Token, session)
 	return resp.Token
 }
 
@@ -197,7 +217,11 @@ func download(t *testing.T, key, variant string, want int) ([]byte, string) {
 	if variant != "" {
 		url += "?variant=" + variant
 	}
-	resp, err := http.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := api.Do(req, "")
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)
 	}
@@ -209,7 +233,18 @@ func download(t *testing.T, key, variant string, want int) ([]byte, string) {
 	return body, resp.Header.Get("Content-Type")
 }
 
+// send makes one REST call on behalf of token ("" for none), with a proof
+// by its device key when the gateway bound it to one.
 func send(t *testing.T, method, path, token, contentType string, body io.Reader, want int) []byte {
+	t.Helper()
+	return exchange(t, method, path, contentType, body, want, func(req *http.Request) (*http.Response, error) {
+		return api.Do(req, token)
+	})
+}
+
+// exchange builds one REST request, sends it with do and returns the answer,
+// failing the test unless the status is want.
+func exchange(t *testing.T, method, path, contentType string, body io.Reader, want int, do func(*http.Request) (*http.Response, error)) []byte {
 	t.Helper()
 	req, err := http.NewRequest(method, gateway+path, body)
 	if err != nil {
@@ -218,10 +253,7 @@ func send(t *testing.T, method, path, token, contentType string, body io.Reader,
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := do(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
