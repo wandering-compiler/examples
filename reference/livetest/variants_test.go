@@ -93,13 +93,14 @@ func TestCoverVariants_RenderedInTheBackgroundAndServedFromTheBucket(t *testing.
 		variant, contentType string
 		w, h                 int
 	}{
-		// The original, untouched — and served as application/octet-stream
-		// with nosniff, as every upload is: the upload checks only the
-		// filename's extension, so an uploaded HTML or SVG must never be
-		// served as something a browser renders. A variant is decoded and
-		// re-encoded by the server, so it is known to be the JPEG or PNG
-		// its Content-Type says.
-		{"", "application/octet-stream", 400, 200},
+		// The original, untouched — and, since this is an image field, served
+		// as the raster type its bytes are (sdk #75): the gateway sniffs
+		// JPEG / PNG / GIF / WebP from the bytes, never from the filename,
+		// so an uploaded HTML or SVG still goes out as
+		// application/octet-stream, nosniff always. A variant is decoded and
+		// re-encoded by the server, so it is the JPEG or PNG its
+		// Content-Type says.
+		{"", "image/png", 400, 200},
 		{"thumb", "image/png", 64, 32},
 		{"card", "image/jpeg", 320, 160},
 	} {
