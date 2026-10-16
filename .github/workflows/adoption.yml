@@ -29,6 +29,11 @@ on:
       W17_TOKEN:
         description: API token of a machine account on the console
         required: true
+      W17_DEVICE_KEY:
+        description: >-
+          The private key W17_TOKEN is bound to (PKCS #8 PEM, as `w17ctl key
+          public` writes it). Empty while the console binds no devices.
+        required: false
 
 permissions:
   contents: read
@@ -213,6 +218,31 @@ jobs:
           chmod +x "$shim/curl"
           curl -fsSL https://get.w17.dev/install.sh | PATH="$shim:$PATH" sh -s -- "${sel[@]}" --dir "$HOME/bin"
           echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      # A console that binds devices accepts W17_TOKEN only with a DPoP proof
+      # signed by the key the token was issued for. w17ctl reads that key from
+      # the file W17_DPOP_KEY names, so the secret is written to a file only
+      # this user can read. With the secret empty the variable stays unset:
+      # set, it makes w17ctl send the token as DPoP, which a console that
+      # binds no devices refuses. The key is never echoed (no set -x), and
+      # RUNNER_TEMP is emptied when the job ends.
+      - name: Device key
+        env:
+          W17_DEVICE_KEY: ${{ secrets.W17_DEVICE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$W17_DEVICE_KEY" ]; then
+            echo "no W17_DEVICE_KEY: W17_TOKEN goes out as a plain bearer token"
+            exit 0
+          fi
+          key="$RUNNER_TEMP/w17-device.key"
+          (umask 077 && printf '%s\n' "$W17_DEVICE_KEY" > "$key")
+          chmod 600 "$key"
+          if ! grep -q -- '-----BEGIN PRIVATE KEY-----' "$key"; then
+            echo "::error::W17_DEVICE_KEY is not a PKCS #8 PEM private key (the file \`w17ctl key public\` makes, not its JWK)"
+            exit 1
+          fi
+          echo "W17_DPOP_KEY=$key" >> "$GITHUB_ENV"
 
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
