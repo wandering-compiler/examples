@@ -70,6 +70,10 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "livetest:", err)
 		os.Exit(1)
 	}
+	if err = startFakeSentry(); err != nil {
+		fmt.Fprintln(os.Stderr, "livetest: the fake Sentry:", err)
+		os.Exit(1)
+	}
 	if store, err = kvfsstore.Open(context.Background(), bucket, false); err != nil {
 		fmt.Fprintln(os.Stderr, "livetest: the uploads bucket:", err)
 		os.Exit(1)

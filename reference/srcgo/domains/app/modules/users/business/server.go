@@ -19,11 +19,15 @@ package business
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"log"
 
 	"google.golang.org/grpc/metadata"
+
+	"github.com/wandering-compiler/sdk/go/core/observx"
 
 	userspb "github.com/wandering-compiler/examples/reference/gen/pb/domains/app/workspace/users"
 
@@ -173,6 +177,21 @@ func (s *UsersServer) IngestSignedWebhook(_ context.Context, req *userspb.Ingest
 		SignatureOk:   req.GetSignature() == digest,
 		InternalRoute: "app.webhooks.inbound",
 	}, nil
+}
+
+// ReportClientFault reports a client's crash to error tracking.
+//
+// The report carries the request being served: the runtime's recovery
+// interceptor stored it in the context, and observx writes it into the
+// report by its fields' labels — the contact e-mail in, the device secret
+// and the plan terms out. Nothing here filters anything; this handler
+// passing the whole request along is the case the labels exist for.
+func (s *UsersServer) ReportClientFault(ctx context.Context, req *userspb.ReportClientFaultReq) (*userspb.ReportClientFaultResp, error) {
+	id := make([]byte, 8)
+	_, _ = rand.Read(id)
+	reportID := hex.EncodeToString(id)
+	observx.ReportError(ctx, fmt.Errorf("client fault %s: %s", reportID, req.GetMessage()))
+	return &userspb.ReportClientFaultResp{ReportId: reportID}, nil
 }
 
 // StreamDirectoryUpdates replays the public directory card list as

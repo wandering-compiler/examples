@@ -4,6 +4,7 @@ package e2e.app.users;
 
 
 import "w17/field.proto";
+import "w17/request_events.proto";
 import "domains/app/workspace/users/types/models.proto";
 import "domains/app/workspace/users/queries/user_query.proto";
 import "domains/app/workspace/users/queries/directory_card_query.proto";
@@ -101,6 +102,34 @@ message IngestSignedWebhookResp {
 
 message StreamDirectoryUpdatesReq {}
 
+// ReportClientFaultReq is a crash a client hit, sent so the backend reports
+// it to error tracking with the request that carried it. Its fields are the
+// three classes a request field can be in, which is why the method exists in
+// this example: where each one may travel is what the live suite reads, in
+// the error report and in the request event stream.
+message ReportClientFaultReq {
+  // What the client saw. Unlabelled: it travels everywhere.
+  string message = 1;
+  // Who to contact about it. `type: EMAIL` makes it gdpr: it travels, and
+  // what handles a data subject's rights can find it.
+  string contact_email = 2 [(w17.field) = { type: EMAIL }];
+  // The device's pairing secret, attached by a client that dumps its state.
+  // `type: SECRET` makes it sensitive: it never leaves the request.
+  string device_secret = 3 [(w17.field) = { type: SECRET }];
+  // The plan the client was on, with its price. Labelled sensitive by hand:
+  // commercial terms, with no type to say so.
+  string plan_terms = 4 [(w17.field) = { sensitive: true }];
+  // Who reported it. Labelled gdpr by hand — a name has no type that says
+  // personal data — so it travels like the e-mail.
+  string contact_name = 5 [(w17.field) = { gdpr: true }];
+}
+
+// ReportClientFaultResp is the error report's id, so a support conversation
+// can name it.
+message ReportClientFaultResp {
+  string report_id = 1;
+}
+
 // DirectoryPlanAck is what a subscriber handler answers with. The bus
 // reads the ERROR, not the body — a nil error is the ack — so the
 // message is deliberately empty of meaning and non-empty of shape:
@@ -132,7 +161,13 @@ service UsersService {
   // reads them back — so without a backend that says what it
   // received, every one of those knobs is configuration whose
   // effect nothing observes.
-  rpc EchoRequestContext(EchoRequestContextReq) returns (EchoRequestContextResp) {}
+  //
+  // Not recorded into the request event stream: a diagnostic mirror whose
+  // record would only repeat headers the surface's own audit already holds
+  // on every other request.
+  rpc EchoRequestContext(EchoRequestContextReq) returns (EchoRequestContextResp) {
+    option (w17.request_events) = { exclude: true };
+  }
 
   // IngestSignedWebhook is the raw-body receiver. It hashes the
   // bytes it was handed and compares them against the signature the
@@ -141,6 +176,14 @@ service UsersService {
   // is not merely wasteful but wrong: a re-marshaled body has a
   // different MAC than the one the sender computed.
   rpc IngestSignedWebhook(IngestSignedWebhookReq) returns (IngestSignedWebhookResp) {}
+
+  // ReportClientFault reports a client's crash to error tracking. Its audit
+  // record is stored before it answers (AUDIT_MODE_SYNC), and records its
+  // response too: the report id is what an auditor joins the error tracker
+  // on.
+  rpc ReportClientFault(ReportClientFaultReq) returns (ReportClientFaultResp) {
+    option (w17.request_events) = { response: true, audit_mode: AUDIT_MODE_SYNC };
+  }
 
   // StreamDirectoryUpdates replays the public directory as a
   // stream. Server-streaming, so the registry would auto-derive

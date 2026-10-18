@@ -38,7 +38,9 @@ if [ -n "${W17_GOPROXY_CONTAINER:-}" ]; then
   ip="$(docker inspect -f "{{(index .NetworkSettings.Networks \"${project}_default\").IPAddress}}" "$W17_GOPROXY_CONTAINER")"
   goproxy=(-e "GOPROXY=http://$ip,https://proxy.golang.org,direct" -e GODEBUG=http2client=0)
 fi
-docker run --rm --network "${project}_default" "${goproxy[@]}" \
+# The suite serves the fake Sentry the stack reports its errors to
+# (compose.yaml: W17_SENTRY_DSN names livetest-sentry).
+docker run --rm --network "${project}_default" --network-alias livetest-sentry "${goproxy[@]}" \
   -e GATEWAY_DPOP_ORIGIN="$dpop_origin" \
   -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOFLAGS=-buildvcs=false -e GOWORK=off \
   -v "$PWD:/w" -w /w/livetest golang:1.26 \

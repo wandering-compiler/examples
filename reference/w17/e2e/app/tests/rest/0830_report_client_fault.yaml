@@ -1,0 +1,16 @@
+# A client's crash report is accepted and answered with the error report's id
+# (16 hex digits). Where its fields travel — the e-mail and name into the
+# error report and the request stream, the device secret and the plan terms
+# into neither — is what livetest/requestdata_test.go reads back; this case
+# proves the endpoint answers.
+method: users.UsersService.ReportClientFault
+pre:
+    - auth/auth.yaml
+input:
+    message: the editor crashed
+    contact_email: user${seq}@example.com
+    contact_name: Ada Lovelace
+    device_secret: SECRET-e2e-decoy
+    plan_terms: PLAN-e2e-decoy 1299 EUR/month
+expect:
+    report_id: {matcher: regex, pattern: "^[0-9a-f]{16}$"}

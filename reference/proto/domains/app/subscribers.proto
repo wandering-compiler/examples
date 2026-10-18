@@ -135,4 +135,10 @@ option (w17.event_subscribers) = {
       handler: "users.UsersService.OnDirectoryPlanRetired"
     }
   ]
+
+  // The domain's request event consumers: the subscriber binary runs
+  // RegisterRequestConsumers of this package beside its event dispatch.
+  // It keeps an audit trail of the stream in Redis, which the live suite
+  // (livetest/) reads back.
+  request_consumers: { register: "domains/app/requestaudit" }
 };
