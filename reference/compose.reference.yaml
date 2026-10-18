@@ -37,8 +37,22 @@ services:
       # The cross-domain usage calls are best-effort; this example runs
       # without them.
       APP_BILLING_BACKEND_ADDR: disabled
+      # Error reports go to a fake Sentry the live suite serves on the
+      # stack's network (livetest/run.sh starts it under this name), which
+      # reads back what a report carries. Reports sent before it is up are
+      # lost, and none are.
+      W17_SENTRY_DSN: http://livetest@livetest-sentry:8090/1
     depends_on:
       app-storage: { condition: service_started }
+
+  # The domain's subscriber keeps an audit trail and a usage log of the
+  # request event stream in Redis (the app domain's requestaudit package),
+  # which the live suite reads.
+  app-eventbus:
+    environment:
+      APP_REQUEST_AUDIT_REDIS_ADDR: app-redis:6379
+    depends_on:
+      app-redis: { condition: service_healthy }
 
   # The gateway sends storage methods to app-storage and the facade
   # methods to the business server. (The admin's defaults already name

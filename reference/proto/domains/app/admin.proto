@@ -19,6 +19,10 @@ import "w17/admin.proto";
 
 option (w17.admin_api) = {
   name: "admin",
+
+  // Every admin page load and action is recorded for audit into the request
+  // event stream (w17.requests.app.admin), with the signed-in operator.
+  request_events: { audit: true },
   prefix: "/admin",
 
   // The admin's own default locale, independent of the REST surface's

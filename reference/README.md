@@ -32,6 +32,14 @@ examples.
   read access to one note.
 - **Events:** lifecycle events on a durable NATS channel, consumed by
   subscribers in the same domain (`subscribers.proto`).
+- **Request data:** every request to the REST API, the MCP server and the
+  admin is recorded on the domain's request stream, for audit and — a
+  signed-in one, outside the admin — for marketing, and an error report
+  carries the request that caused it; neither has the fields marked `SECRET`
+  or `sensitive`. A client fault report (`ReportClientFault`) is recorded
+  before it is answered, with its response. Two consumers of the stream keep
+  an audit trail and a usage log in Redis (the `requestaudit` package under
+  `srcgo`). The live suite reads them all back.
 - **Validation** from field annotations, including a hand-written validator
   that codegen calls (the `validators` package of the app domain under
   `srcgo`).

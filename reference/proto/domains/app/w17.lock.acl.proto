@@ -12,8 +12,8 @@ package w17lock.app.acl;
 import "w17/lock.proto";
 import "w17/field.proto";
 
-option (w17.lock_checksum) = "sha256:9390ff27d196771276b4b82014da4ce2e45b4188d3b56954d5f6e69f360ba28c";
-option (w17.lock_signature) = "ed25519/v1:c5764c236794ebad7b115c2c898eeceae6de170f3388fa74f51ab96672a27b7c3c5f3a53a95590a4daa370722b6b3d8447d3dc78353f21bfb8144afccdbaa30a";
+option (w17.lock_checksum) = "sha256:8c15a02cd5b2656b47745c2e7adf98e83c6e0a3317164d2b9b74879081c3423e";
+option (w17.lock_signature) = "ed25519/v1:c542bccc1c32c20efa2a1b3c6fa3d26b0320017cacc6241c92edc0432aa0333de81ae98969c45f6c2af8c86b5fd7fc89f901d8b6ea32595f2ce9ad7db98d990c";
 option (w17.lock_derivation) = 1;
 
 // AclPermission — every permission allocated by the cascade for
@@ -202,6 +202,7 @@ enum AclPermission {
   USERS_USERS_SERVICE_GET_USERS_BY_IDS = 158 [(w17.value_display) = { label: "Users · Users Service · Get Users By Ids" }];
   USERS_USERS_SERVICE_INGEST_SIGNED_WEBHOOK = 159 [(w17.value_display) = { label: "Users · Users Service · Ingest Signed Webhook" }];
   USERS_USERS_SERVICE_LIST_USERS = 160 [(w17.value_display) = { label: "Users · Users Service · List Users" }];
+  USERS_USERS_SERVICE_REPORT_CLIENT_FAULT = 168 [(w17.value_display) = { label: "Users · Users Service · Report Client Fault" }];
   USERS_USER_QUERY_COUNT_USERS = 161 [(w17.value_display) = { label: "Users · User Query · Count Users" }];
   USERS_USER_QUERY_GET_USER = 162 [(w17.value_display) = { label: "Users · User Query · Get User" }];
   USERS_USER_QUERY_LIST_USERS = 163 [(w17.value_display) = { label: "Users · User Query · List Users" }];

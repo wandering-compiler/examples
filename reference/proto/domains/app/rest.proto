@@ -115,6 +115,14 @@ option (w17.rest_api) = {
     ]
   },
 
+  // Every request of this surface is recorded into the request event stream
+  // (w17.requests.app.rest): the request without its sensitive fields, who
+  // sent it and how it ended. Every request serves audit; a signed-in one
+  // serves marketing too. The auth plugin keeps no `marketing_consent`, so
+  // the records carry none — whether a user may be sent a marketing message
+  // is for the tool that sends it.
+  request_events: { audit: true, marketing: true },
+
   groups: [
     {
       prefix:      "/auth",
@@ -867,7 +875,13 @@ option (w17.rest_api) = {
           response_omit_fields: ["internal_route"],
           fields: [
             { ref: "signature", from: HEADER, http_name: "X-Signature" }
-          ] }
+          ] },
+
+        // A client's crash report. The backend reports it to error
+        // tracking with this request, which the live suite reads back
+        // from a fake Sentry and from the request event stream: the e-mail
+        // in both, the device secret and the plan terms in neither.
+        { ref: "users.UsersService.ReportClientFault", method: POST, path: "/faults" }
       ],
       streams: [
         // The public directory feed — the one stream on this

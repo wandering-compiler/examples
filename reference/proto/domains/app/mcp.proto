@@ -41,6 +41,11 @@ option (w17.mcp_api) = {
   description: "App MCP surface — the auth plugin's session tools plus the public directory reads.",
   include: [ "auth" ],
 
+  // Every tool call is recorded into the request event stream
+  // (w17.requests.app.mcp), for audit and marketing, as the REST surface's
+  // requests are.
+  request_events: { audit: true, marketing: true },
+
   tools: [
     {
       ref: "users.DirectoryCardQuery.ListDirectoryCards",
