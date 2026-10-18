@@ -10,8 +10,8 @@ package livetest
 //   - the error report, at a fake Sentry this package serves on the stack's
 //     network (compose.yaml points the business tier's W17_SENTRY_DSN at it);
 //   - the request event stream, read off JetStream as bytes;
-//   - the domain's own request consumer, an audit trail in Redis
-//     (the app domain's requestaudit package).
+//   - the domain's own request consumers, an audit trail and a usage log in
+//     Redis (the app domain's requestaudit package).
 //
 // In each the message and the e-mail are present and neither decoy is.
 
@@ -267,7 +267,10 @@ func readStream(t *testing.T) (raw [][]byte, records []streamRecord) {
 // Every fault report of the run is in the request stream the moment it is
 // answered — the method audits synchronously, so its record is stored before
 // the response is written — with its caller, its status, the e-mail and the
-// response; no message of the stream carries either decoy.
+// response; no message of the stream carries either decoy. A signed-in
+// request serves audit and marketing, an anonymous one audit only, and no
+// record carries a marketing consent: the auth plugin keeps none, and the
+// stream records the request anyway.
 func TestRequestData_TheStreamHoldsEveryRequestWithoutItsSensitiveFields(t *testing.T) {
 	token := signUp(t)
 	n := nonce()
@@ -308,9 +311,29 @@ func TestRequestData_TheStreamHoldsEveryRequestWithoutItsSensitiveFields(t *test
 			!bytes.Contains(got.ResponseRaw, []byte(ids[i])) {
 			t.Errorf("record of fault %d lacks its message, its name or its response", i)
 		}
-		if p := m.GetPurposes(); len(p) != 1 || p[0] != w17pb.RequestPurpose_REQUEST_PURPOSE_AUDIT {
-			t.Errorf("record purposes %v, want audit only", p)
+		if p := m.GetPurposes(); len(p) != 2 || p[0] != w17pb.RequestPurpose_REQUEST_PURPOSE_AUDIT || p[1] != w17pb.RequestPurpose_REQUEST_PURPOSE_MARKETING {
+			t.Errorf("record purposes %v, want audit and marketing", p)
 		}
+	}
+
+	// The suite before this package sent anonymous requests too (failed
+	// sign-ins, reads without a token): audit records them, marketing does not.
+	anonymous := 0
+	for _, r := range records {
+		m := r.Meta
+		if m.MarketingConsent != nil {
+			t.Errorf("record of %s carries a marketing consent the auth plugin does not keep: %v", m.GetMethod(), m)
+		}
+		if r.subject != "w17.requests.app.rest" || m.GetUserId() != "" {
+			continue
+		}
+		anonymous++
+		if p := m.GetPurposes(); len(p) != 1 || p[0] != w17pb.RequestPurpose_REQUEST_PURPOSE_AUDIT {
+			t.Errorf("anonymous record of %s: purposes %v, want audit only", m.GetMethod(), p)
+		}
+	}
+	if anonymous == 0 {
+		t.Errorf("no anonymous REST request in the stream (%d records)", len(records))
 	}
 
 	// The suite that ran before this package drove the admin too, and it
@@ -334,32 +357,26 @@ func TestRequestData_TheStreamHoldsEveryRequestWithoutItsSensitiveFields(t *test
 	}
 }
 
-// The domain's audit trail (its request consumer, decoding with the
-// method's own types) gets the fault report, as JSON, with the e-mail and
-// without the decoys.
-func TestRequestData_TheDomainsConsumerKeepsTheTrail(t *testing.T) {
+// The domain's request consumers, decoding with the method's own types, get
+// the fault report as JSON, with the e-mail and without the decoys: the audit
+// trail and the usage log (marketing), whose entry carries no consent.
+func TestRequestData_TheDomainsConsumersKeepTheTrailAndTheUsage(t *testing.T) {
 	token := signUp(t)
 	f := newFault(nonce())
 	id := reportFault(t, token, f)
 
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
 	defer rdb.Close()
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		lines, err := rdb.LRange(context.Background(), "reference:request-audit", 0, -1).Result()
-		if err != nil {
-			t.Fatalf("the audit trail: %v", err)
-		}
-		for _, line := range lines {
-			if !strings.Contains(line, f.ContactEmail) {
-				continue
-			}
-			assertAbsent(t, "the audit trail", []byte(line), f.decoys())
+	for _, key := range []string{"reference:request-audit", "reference:request-usage"} {
+		t.Run(key, func(t *testing.T) {
+			line := waitForEntry(t, rdb, key, f.ContactEmail)
+			assertAbsent(t, key, []byte(line), f.decoys())
 			var e struct {
-				API     string `json:"api"`
-				Method  string `json:"method"`
-				UserID  string `json:"user_id"`
-				Request struct {
+				API              string `json:"api"`
+				Method           string `json:"method"`
+				UserID           string `json:"user_id"`
+				MarketingConsent *bool  `json:"marketing_consent"`
+				Request          struct {
 					Message      string `json:"message"`
 					ContactEmail string `json:"contactEmail"`
 				} `json:"request"`
@@ -368,16 +385,33 @@ func TestRequestData_TheDomainsConsumerKeepsTheTrail(t *testing.T) {
 				} `json:"response"`
 			}
 			if err := json.Unmarshal([]byte(line), &e); err != nil {
-				t.Fatalf("trail entry %s: %v", line, err)
+				t.Fatalf("entry %s: %v", line, err)
 			}
-			if e.Method != faultMethod || e.API != "REQUEST_API_REST" || e.UserID == "" ||
+			if e.Method != faultMethod || e.API != "REQUEST_API_REST" || e.UserID == "" || e.MarketingConsent != nil ||
 				e.Request.Message != f.Message || e.Request.ContactEmail != f.ContactEmail || e.Response.ReportID != id {
-				t.Errorf("trail entry %s", line)
+				t.Errorf("entry %s", line)
 			}
-			return
+		})
+	}
+}
+
+// waitForEntry returns the first entry of the list that contains needle,
+// waiting for the consumer to append it.
+func waitForEntry(t *testing.T, rdb *redis.Client, key, needle string) string {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		lines, err := rdb.LRange(context.Background(), key, 0, -1).Result()
+		if err != nil {
+			t.Fatalf("%s: %v", key, err)
+		}
+		for _, line := range lines {
+			if strings.Contains(line, needle) {
+				return line
+			}
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("the fault report never reached the audit trail (%d entries)", len(lines))
+			t.Fatalf("the fault report never reached %s (%d entries)", key, len(lines))
 		}
 		time.Sleep(200 * time.Millisecond)
 	}

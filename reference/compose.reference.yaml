@@ -45,8 +45,9 @@ services:
     depends_on:
       app-storage: { condition: service_started }
 
-  # The domain's subscriber keeps an audit trail of the request event stream
-  # in Redis (the app domain's requestaudit package), which the live suite reads.
+  # The domain's subscriber keeps an audit trail and a usage log of the
+  # request event stream in Redis (the app domain's requestaudit package),
+  # which the live suite reads.
   app-eventbus:
     environment:
       APP_REQUEST_AUDIT_REDIS_ADDR: app-redis:6379

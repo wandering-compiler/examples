@@ -115,12 +115,13 @@ option (w17.rest_api) = {
     ]
   },
 
-  // Every request of this surface is recorded for audit into the request
-  // event stream (w17.requests.app.rest): the request without its sensitive
-  // fields, who sent it and how it ended. Marketing is not recorded — the
-  // auth plugin's AuthResp has no `marketing_consent` to read the consent
-  // from.
-  request_events: { audit: true },
+  // Every request of this surface is recorded into the request event stream
+  // (w17.requests.app.rest): the request without its sensitive fields, who
+  // sent it and how it ended. Every request serves audit; a signed-in one
+  // serves marketing too. The auth plugin keeps no `marketing_consent`, so
+  // the records carry none — whether a user may be sent a marketing message
+  // is for the tool that sends it.
+  request_events: { audit: true, marketing: true },
 
   groups: [
     {
