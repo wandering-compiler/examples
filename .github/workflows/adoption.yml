@@ -330,14 +330,20 @@ jobs:
                     -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
                     go get "github.com/wandering-compiler/sdk/go@${{ needs.modules.outputs.sdk_version }}"
                 done
-            # The move above raises what a module has to list: the SDK's new
-            # dependencies (golang.org/x/image, say) and anything it bumped
-            # (x/sys, x/text). `go get` resolves the SDK's own packages, not
-            # every package of the module, so a module built on its own
-            # (GOWORK=off, in its image — srcgo behind the business
-            # Dockerfile, a worker on the vendored plugin tree) then stops at
-            # "missing go.sum entry" or "updates to go.mod needed". Tidy each,
-            # as a consumer does after an SDK bump, and show what changed. A
+          fi
+          # The move above raises what a module has to list: the SDK's new
+          # dependencies (golang.org/x/image, say) and anything it bumped
+          # (x/sys, x/text). So do the plugins under review, copied over the
+          # vendored trees: a plugin that moves to a newer SDK raises the
+          # requirements of every module that replaces onto its tree. `go
+          # get` resolves the SDK's own packages, not every package of the
+          # module, and nothing resolves anything for a plugin, so a module
+          # built on its own (GOWORK=off, in its image — srcgo behind the
+          # business Dockerfile, a worker on the vendored plugin tree) then
+          # stops at "missing go.sum entry" or "updates to go.mod needed".
+          if [ -n "${{ needs.modules.outputs.sdk_version }}" ] || [ -n "${{ inputs.plugins_ref }}" ]; then
+            # Tidy each, as a consumer does after an SDK or plugin bump, and
+            # show what changed. A
             # module that only builds inside the workspace (it imports a
             # generated module it does not require) cannot be tidied on its
             # own: its tidy fails, and it keeps what `go get` wrote. A module

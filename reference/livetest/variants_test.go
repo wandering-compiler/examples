@@ -94,7 +94,7 @@ func TestCoverVariants_RenderedInTheBackgroundAndServedFromTheBucket(t *testing.
 		w, h                 int
 	}{
 		// The original, untouched — and, since this is an image field, served
-		// as the raster type its bytes are (sdk #75): the gateway sniffs
+		// as the raster type its bytes are: the gateway sniffs
 		// JPEG / PNG / GIF / WebP from the bytes, never from the filename,
 		// so an uploaded HTML or SVG still goes out as
 		// application/octet-stream, nosniff always. A variant is decoded and
