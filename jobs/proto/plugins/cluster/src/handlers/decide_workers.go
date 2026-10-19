@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -38,17 +39,19 @@ func (h *ClusterServiceHandler) decide(ctx context.Context, req *pb.DecideWorker
 		return nil, err
 	}
 	h.forgetBans() // the next set sent reads the decision just made
-	h.pushBans(ctx)
+	h.pushBans(ctx, true)
 	return &pb.DecideWorkersActionResp{}, nil
 }
 
-// pushBans delivers the new ban set to every registered relay now, rather
+// pushBans delivers the current ban set to every registered relay now, rather
 // than with the next call that happens to reach each one. An enabled relay
 // would have it before its next placement anyway; a disabled one would
 // otherwise never hear of it and go on renewing the banned worker's
 // certificate. Best effort: the decision is recorded, and a relay that
-// cannot be reached gets the set with its next call.
-func (h *ClusterServiceHandler) pushBans(ctx context.Context) {
+// cannot be reached gets the set with the next delivery (KeepBansDelivered).
+// logFailures is off for the periodic delivery, which would otherwise log a
+// relay that is deliberately down every few minutes.
+func (h *ClusterServiceHandler) pushBans(ctx context.Context, logFailures bool) {
 	if h.Relays == nil || h.Dial == nil {
 		return
 	}
@@ -61,6 +64,9 @@ func (h *ClusterServiceHandler) pushBans(ctx context.Context) {
 		log.Printf("cluster: cannot list relays to deliver the ban set: %v", err)
 		return
 	}
+	// The complete registry is in hand: connections to relays deleted since,
+	// or re-registered under another url or pin, are closed here.
+	h.pruneConns(relays)
 	// In parallel, so the operator waits at most one dial timeout however
 	// many relays there are, not one per unreachable relay.
 	var wg sync.WaitGroup
@@ -70,15 +76,52 @@ func (h *ClusterServiceHandler) pushBans(ctx context.Context) {
 			defer wg.Done()
 			pctx, cancel := context.WithTimeout(ctx, h.dialTimeout())
 			defer cancel()
-			conn, err := h.dialReady(pctx, r)
+			// The shared connection, so the periodic delivery costs no
+			// handshake. Always the complete set (withFreshBans): this is
+			// what corrects a relay whose report of the version it holds
+			// cannot be trusted.
+			conn, err := h.acquire(pctx, r)
 			if err == nil {
 				_, err = newRelayClient(conn).RelayStats(pctx, &pb.RelayStatsReq{})
-				_ = conn.Close()
+				h.release(conn)
+				if err != nil {
+					h.retireRelay(r.ID)
+				}
 			}
-			if err != nil {
-				log.Printf("cluster: relay %q did not take the new ban set now (it gets it with its next call): %v", r.Name, err)
+			if err != nil && logFailures {
+				log.Printf("cluster: relay %q did not take the new ban set now (it gets it with the next delivery): %v", r.Name, err)
 			}
 		}(r)
 	}
 	wg.Wait()
+}
+
+// BanRedeliveryInterval is how often every control-plane replica re-delivers
+// the ban set to every registered relay, enabled or not. A relay refuses
+// renewals when it has not been delivered one for --ban-set-max-age (an hour
+// by default), so this keeps an idle pool's renewals flowing.
+const BanRedeliveryInterval = 5 * time.Minute
+
+// KeepBansDelivered re-delivers the ban set to every registered relay every
+// interval until ctx ends.
+//
+// A decision is delivered when it is taken, but a relay unreachable at that
+// moment, or restarted without a saved set, would otherwise wait for a
+// placement — and a disabled relay gets none. Every replica runs this
+// without coordination: the set is versioned and a relay ignores an older
+// one, so two deliveries in any order leave the newest.
+func (h *ClusterServiceHandler) KeepBansDelivered(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = BanRedeliveryInterval
+	}
+	tick := time.NewTicker(interval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			h.pushBans(ctx, false)
+		}
+	}
 }

@@ -55,6 +55,10 @@ import (
 	"github.com/wandering-compiler/plugins/cluster/workerpb"
 )
 
+// minBanSetMaxAge is the lowest --ban-set-max-age: twice the control plane's
+// re-delivery interval, so one missed delivery does not refuse renewals.
+const minBanSetMaxAge = 10 * time.Minute
+
 type config struct {
 	listen         string
 	tunnelListen   string
@@ -68,6 +72,7 @@ type config struct {
 	capacity       int
 	maxWorkerSlots int
 	maxQueue       int
+	maxQueueCaller int
 	ticketTTL      time.Duration
 	drainTimeout   time.Duration
 	pollInterval   time.Duration
@@ -76,6 +81,7 @@ type config struct {
 	caKeyPath      string
 	certLifetime   time.Duration
 	codeTTL        time.Duration
+	banSetMaxAge   time.Duration
 
 	// netListen opens every listener; nil is net.Listen. A test seam, never
 	// set from flags: it lets a test make one bind fail deterministically
@@ -154,6 +160,10 @@ func parseConfig(args []string, out io.Writer) (config, error) {
 	fs.DurationVar(&cfg.certLifetime, "worker-cert-lifetime",
 		envDuration("worker-cert-lifetime", "RELAY_WORKER_CERT_LIFETIME", relayserver.DefaultWorkerCertLifetime),
 		"how long an issued worker certificate lasts; workers renew well before, and a forgotten ban runs out with it")
+	fs.DurationVar(&cfg.banSetMaxAge, "ban-set-max-age",
+		envDuration("ban-set-max-age", "RELAY_BAN_SET_MAX_AGE", relayserver.DefaultBanSetMaxAge),
+		"renew a worker certificate only if a control plane delivered the ban set within this long "+
+			"(it re-delivers every few minutes); at least "+minBanSetMaxAge.String())
 	fs.DurationVar(&cfg.codeTTL, "registration-code-ttl", envDuration("registration-code-ttl", "RELAY_REGISTRATION_CODE_TTL", 15*time.Minute),
 		"how long a one-time registration code stays usable")
 	fs.StringVar(&cfg.controlPin, "control-plane-fingerprint", os.Getenv("RELAY_CONTROL_PLANE_FINGERPRINT"),
@@ -162,6 +172,9 @@ func parseConfig(args []string, out io.Writer) (config, error) {
 		"the most slots one worker may announce; a higher count is held to this")
 	fs.IntVar(&cfg.maxQueue, "max-queue", envInt("max-queue", "RELAY_MAX_QUEUE", relaycore.DefaultMaxQueue),
 		"the most callers that may wait for a slot at once; more are refused (QUEUE_FULL) so the control plane places elsewhere")
+	fs.IntVar(&cfg.maxQueueCaller, "max-queue-per-caller", envInt("max-queue-per-caller", "RELAY_MAX_QUEUE_PER_CALLER", 0),
+		"the most places ONE caller (as the control plane names it) may hold in the queue; more are refused "+
+			"(CALLER_QUEUE_FULL); 0 means half of --max-queue")
 	fs.IntVar(&cfg.capacity, "capacity", envInt("capacity", "RELAY_CAPACITY", 0),
 		"OPTIONAL ceiling on concurrent tasks; 0 means whatever the attached workers add up to")
 	fs.DurationVar(&cfg.ticketTTL, "ticket-ttl", envDuration("ticket-ttl", "RELAY_TICKET_TTL", 30*time.Second),
@@ -207,6 +220,11 @@ func parseConfig(args []string, out io.Writer) (config, error) {
 		// Named by both spellings: the value may have come from either, and
 		// every other refusal here names the variable an operator would grep.
 		errs = append(errs, fmt.Errorf("--max-queue (RELAY_MAX_QUEUE) must be at least 1, got %d", cfg.maxQueue))
+	}
+	if cfg.maxQueueCaller < 0 || (cfg.maxQueue >= 1 && cfg.maxQueueCaller > cfg.maxQueue) {
+		errs = append(errs, fmt.Errorf(
+			"--max-queue-per-caller (RELAY_MAX_QUEUE_PER_CALLER) must be between 0 (half of --max-queue) and --max-queue (%d), got %d",
+			cfg.maxQueue, cfg.maxQueueCaller))
 	}
 	if err := errors.Join(errs...); err != nil {
 		return config{}, err
@@ -264,12 +282,17 @@ func serve(cfg config, stop <-chan os.Signal, started func(listening)) (err erro
 	log.Printf("certificate fingerprint: %s", relaydial.Fingerprint(leaf))
 	log.Printf("  ^ paste this into the relay's row in the control plane, after checking it matches")
 
+	if cfg.banSetMaxAge < minBanSetMaxAge {
+		// Below the control plane's re-delivery interval with some slack,
+		// every renewal would be refused between deliveries.
+		return fmt.Errorf("--ban-set-max-age (%s) must be at least %s", cfg.banSetMaxAge, minBanSetMaxAge)
+	}
 	if cfg.pollTimeout < 2*cfg.pollInterval {
 		// A client told to come back every interval must survive one late
 		// poll, or obedient clients lose their place to jitter.
 		return fmt.Errorf("--poll-timeout (%s) must be at least twice --poll-interval (%s)", cfg.pollTimeout, cfg.pollInterval)
 	}
-	pool, err := relaycore.New(relaycore.Options{Capacity: cfg.capacity, TicketTTL: cfg.ticketTTL, PollTimeout: cfg.pollTimeout, MaxQueue: cfg.maxQueue})
+	pool, err := relaycore.New(relaycore.Options{Capacity: cfg.capacity, TicketTTL: cfg.ticketTTL, PollTimeout: cfg.pollTimeout, MaxQueue: cfg.maxQueue, MaxQueuePerOwner: cfg.maxQueueCaller})
 	if err != nil {
 		return err
 	}
@@ -283,12 +306,18 @@ func serve(cfg config, stop <-chan os.Signal, started func(listening)) (err erro
 	}
 	workers := workeradmit.New()
 	// With an identity directory the ban set is kept there, so a restarted
-	// relay refuses banned workers (and their renewals) from the start
-	// instead of only after the control plane next calls it.
+	// relay refuses banned workers from the start. Without one (or before
+	// the first set was saved) the relay admits NO worker — attach, tunnel
+	// and renewal are refused BAN_SET_UNKNOWN — until a control plane
+	// delivers the set, which it does every few minutes: closed, because an
+	// empty set would admit a banned key.
 	if dir := strings.TrimSpace(cfg.identityDir); dir != "" {
 		if err := workers.KeepIn(filepath.Join(dir, "bans.json")); err != nil {
 			return err
 		}
+	}
+	if !workers.HoldsBanSet() {
+		log.Printf("no saved ban set: workers are refused until the control plane delivers one")
 	}
 
 	controlPin := strings.ToLower(strings.TrimSpace(cfg.controlPin))
@@ -352,8 +381,12 @@ func serve(cfg config, stop <-chan os.Signal, started func(listening)) (err erro
 	// out its full complement of tickets and every caller found out at the
 	// proxy.
 	backends.OnCapacityChange(pool.SetCapacity)
+	// A tunnel whose certificate expired takes no new work; what is running
+	// on it gets as long as a drain would before the tunnel is closed.
+	backends.SetExpiryGrace(cfg.drainTimeout)
 	// A ban cuts the banned worker's open tunnel at once, and with it any
-	// call still running there; the attach stream notices on its next poll.
+	// call still running there (it ends WORKER_LOST); the attach stream
+	// notices on its next poll.
 	workers.OnBansChanged(func() {
 		backends.DropWhere(func(fp string) bool { return !workers.Admitted(fp) })
 	})
@@ -422,6 +455,9 @@ func serve(cfg config, stop <-chan os.Signal, started func(listening)) (err erro
 		Codes:    regCodes,
 		Workers:  workers,
 		Lifetime: cfg.certLifetime,
+		// Renewal needs a ban set a control plane delivered recently (see
+		// relayserver.DefaultBanSetMaxAge).
+		MaxBanSetAge: cfg.banSetMaxAge,
 	})
 	attachLis, err := cfg.bind(cfg.attachListen)
 	if err != nil {

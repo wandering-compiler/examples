@@ -2,7 +2,9 @@
 package cluster
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -17,8 +19,10 @@ import (
 
 // RegisterPlugin wires the control plane's half of the cluster.
 //
-// The signature is fixed by the v4 bundle codegen and is checked by nothing in
-// this module — see the warning in gen/interfaces.go. Three arguments.
+// The signature is fixed by the v4 bundle codegen. The gen types are generated
+// (`make gen`) from plugin.yaml and the protos, the same way a consumer's
+// staging generates them, so a build here compiles against the shape a
+// consumer's bundle hands over.
 func RegisterPlugin(cfg *gen.EnvConfig, registry gen.HandlerRegistry, clients gen.ClientSet) error {
 	if cfg == nil {
 		cfg = &gen.EnvConfig{}
@@ -45,13 +49,38 @@ func RegisterPlugin(cfg *gen.EnvConfig, registry gen.HandlerRegistry, clients ge
 	if dialTimeout <= 0 {
 		dialTimeout = 5 * time.Second
 	}
-	registry.RegisterClusterServiceServer(&handlers.ClusterServiceHandler{
+	h := &handlers.ClusterServiceHandler{
 		Relays:      handlers.NewRelayStore(clients.RelayQuery(), clients.RelayMutation()),
 		Workers:     handlers.NewWorkerStore(clients.WorkerQuery(), clients.WorkerMutation()),
 		DialTimeout: dialTimeout,
 		Dial: func(target, fingerprint string) (*grpc.ClientConn, error) {
 			return relaydial.Dial(dialCfg, target, fingerprint)
 		},
+	}
+	registry.RegisterClusterServiceServer(h)
+	// Every relay, enabled or not, is handed the ban set every few minutes:
+	// it refuses workers until it holds one after a restart, and refuses
+	// renewals when it has not been handed one recently. Stopped at the
+	// bundle's shutdown, which waits for a delivery under way to finish, then
+	// closes the shared relay connections and lets the queued observed-state
+	// writes land.
+	ctx, stop := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		h.KeepBansDelivered(ctx, handlers.BanRedeliveryInterval)
+	}()
+	registry.RegisterShutdown(func(sctx context.Context) error {
+		stop()
+		var late error
+		select {
+		case <-done:
+		case <-sctx.Done():
+			late = sctx.Err()
+		}
+		// Always: the connections close even when the delivery outlived the
+		// deadline, and the queued writes get what is left of it.
+		return errors.Join(late, h.Close(sctx))
 	})
 	return nil
 }
