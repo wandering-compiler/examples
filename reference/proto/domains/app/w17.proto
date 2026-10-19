@@ -94,6 +94,23 @@ option (w17.domain) = {
       features:   { names: [ "rbac", "authenticate_turnkey", "sign_in_turnkey", "user_admin", "org_membership" ] }
     },
 
+    // **The request stream into a marketing tool.** The `marketing` plugin
+    // turns every marketing record of a signed-in user (rest.proto and
+    // mcp.proto record marketing) into a Brevo event on the user's
+    // contact, and keeps the contacts in step with the `auth` activation
+    // above, whose events it subscribes to. It runs in the storage bundle;
+    // compose.reference.yaml points it at a stub of the Brevo API that the
+    // live suite reads back (livetest/marketing_test.go).
+    //
+    // `auth` here declares neither user_admin nor marketing_consent, so of
+    // its subscriptions only UserCreated is active: the other three are
+    // optional and stage as absent.
+    {
+      source_name:   "marketing"
+      registered_as: "marketing"
+      features:      { names: [ "brevo" ] }
+    },
+
     // **The connection-alias fixture.** `auditsink` is TEST-ONLY and
     // lives in this example's proto tree (proto/plugins/auditsink), for
     // the same reason `probe` lives in plugin-surfaces': it is a

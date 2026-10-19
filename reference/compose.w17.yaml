@@ -90,6 +90,15 @@ services:
       timeout: 3s
       retries: 30
 
+  # Dev-only sandbox — Fake Brevo API (dev-only) for the brevo feature (from a plugin's sandboxes[]).
+  # Tool-owned: override env in the sibling compose.yaml, not here.
+  brevostub:
+    image: ${W17_WORKSPACE:-w17}-w17-brevostub:dev
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      API_KEY: stub-key
+
   # Distributed tracing backend — Jaeger all-in-one. Default-on:
   # every bundle ships W17_OTEL_ENDPOINT=w17-tracing:4317 in its
   # .env.defaults, so OTLP/gRPC spans land here and you can open

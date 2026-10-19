@@ -160,11 +160,17 @@ func TestCoverVariants_RefusesAnUndeclaredVariantAndANonImage(t *testing.T) {
 
 func signUp(t *testing.T) string {
 	t.Helper()
+	return signUpAs(t, fmt.Sprintf("live-%d@reference.example", time.Now().UnixNano()))
+}
+
+// signUpAs signs a new account up under email and returns its token.
+func signUpAs(t *testing.T, email string) string {
+	t.Helper()
 	var resp struct {
 		Token string `json:"token"`
 	}
 	body, _ := json.Marshal(map[string]string{
-		"email":    fmt.Sprintf("live-%d@reference.example", time.Now().UnixNano()),
+		"email":    email,
 		"password": "e2eSecret!23",
 	})
 	// The sign-up proves a new device key: one per account.

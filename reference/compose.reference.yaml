@@ -25,8 +25,20 @@ services:
       app-postgres: { condition: service_healthy }
 
   app-storage:
+    environment:
+      # The marketing plugin's Brevo is the stub below, which the live suite
+      # reads back (livetest/marketing_test.go).
+      APP_MARKETING_BREVO_BASE_URL: http://brevostub:8080/v3
+      APP_MARKETING_BREVO_API_KEY: stub-key
     depends_on:
       app-seed: { condition: service_completed_successfully }
+      brevostub: { condition: service_started }
+
+  # The plugin's Brevo sandbox, built from a copy of its source (brevostub/):
+  # a vendored plugin carries no sandboxes/, so the image the generated
+  # stack names has nothing to be built from.
+  brevostub:
+    build: { context: brevostub, args: [GOPROXY, GOSUMDB, GODEBUG] }
 
   app-business:
     build: { context: ., dockerfile: business/Dockerfile, args: [GOPROXY, GOSUMDB, GODEBUG] }
