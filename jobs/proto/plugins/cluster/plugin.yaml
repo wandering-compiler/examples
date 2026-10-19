@@ -1,5 +1,5 @@
 name: cluster
-version: 0.1.0-rc.12
+version: 0.1.0-rc.13
 requires_w17: ">=1.8"
 
 # v3 — explicit Go module anchor. Staging text-rewrites every
@@ -272,7 +272,7 @@ presets:
           - name: ban
             source: ClusterService.BanWorkers
             label: "Ban"
-            confirm: "Ban the selected workers? Their relays refuse them on the next placement, drop their connections, and refuse to renew their certificates."
+            confirm: "Ban the selected workers? Every relay that hears of it cuts their connections at once, cancelling the work running on them, and refuses to renew their certificates. A relay unreachable now hears of it within minutes of coming back."
             target: both
           - name: unban
             source: ClusterService.UnbanWorkers

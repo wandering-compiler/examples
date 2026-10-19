@@ -6,11 +6,17 @@
 // whether an operator has BANNED that worker since. That set, and the workers
 // the relay has met, are what this holds.
 //
-// All of it is in memory and none of it survives a restart, which is safe only
-// because the control plane sends the COMPLETE ban set on every call it makes
-// to a relay (BannedHeader). A relay that just came up learns it from the first
-// contact — and every placement begins with a contact, so no work is placed on
-// a restarted relay before it knows whom to refuse.
+// The control plane names the ban set's version on every call it makes to a
+// relay (BannedVersionHeader), and sends the COMPLETE set beside it
+// (BannedHeader) unless the relay confirmed holding that version already
+// (BannedHeldHeader); a relay named a newer version than it holds, without
+// the set, refuses the call so the control plane sends it (see Current). It
+// is delivered to every registered relay on each decision and periodically.
+// The set therefore travels once per version per relay connection, not on
+// every placement and poll. A relay keeps the set in its
+// identity directory when it has one (KeepIn). Until it holds a set — loaded
+// from there, or delivered — it does not know whom to refuse, and says so
+// (HoldsBanSet) instead of admitting everyone.
 package workeradmit
 
 import (
@@ -25,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc/metadata"
 )
@@ -52,6 +59,33 @@ func WithBansAt(ctx context.Context, ids []string, version int64) context.Contex
 		ctx = metadata.AppendToOutgoingContext(ctx, BannedVersionHeader, strconv.FormatInt(version, 10))
 	}
 	return ctx
+}
+
+// BannedHeldHeader is a relay's answer, on every call that named a ban set
+// version: the version it holds after the call's set (if any) was applied.
+// A control plane that reads one sends the version alone to that relay while
+// the relay holds it; a relay too old to send it gets the complete set, as
+// before.
+const BannedHeldHeader = "w17-cluster-banned-held"
+
+// WithBanVersion returns ctx naming the ban set's version WITHOUT the set:
+// for a relay that confirmed holding it (BannedHeldHeader).
+func WithBanVersion(ctx context.Context, version int64) context.Context {
+	return metadata.AppendToOutgoingContext(ctx, BannedVersionHeader, strconv.FormatInt(version, 10))
+}
+
+// HeldFrom reads a relay's BannedHeldHeader; false when it sent none or an
+// unreadable one.
+func HeldFrom(md metadata.MD) (int64, bool) {
+	vals := md.Get(BannedHeldHeader)
+	if len(vals) == 0 {
+		return 0, false
+	}
+	v, err := strconv.ParseInt(vals[0], 10, 64)
+	if err != nil || v < 0 {
+		return 0, false
+	}
+	return v, true
 }
 
 // BanVersionFrom reads the version sent with the ban set; 0 when absent or
@@ -113,6 +147,12 @@ type Registry struct {
 	// version is the newest ban set's version seen (see BannedVersionHeader);
 	// a set older than it is ignored. 0 = none seen yet.
 	version int64
+	// holds is whether a ban set is known at all: loaded by KeepIn or
+	// delivered by a control plane. A fresh registry knows none.
+	holds bool
+	// delivered is when a control plane last delivered a set (not when one
+	// was loaded from disk). Zero = never since start.
+	delivered time.Time
 	// path, when set, is where the ban set is kept across restarts.
 	path string
 	// persistMu serialises writes of path, so the last write is always of
@@ -140,6 +180,10 @@ func (r *Registry) SetBanned(ids []string) {
 // Version 0 (a control plane that sends none) is always applied, as before.
 func (r *Registry) SetBannedAt(ids []string, version int64) {
 	r.mu.Lock()
+	// A delivery, even an ignored older one: the set held is at least as new
+	// as what a control plane just read.
+	r.delivered = time.Now()
+	r.holds = true
 	if version != 0 && version < r.version {
 		r.mu.Unlock()
 		return
@@ -171,6 +215,48 @@ func (r *Registry) SetBannedAt(ids []string, version int64) {
 	if added && notify != nil {
 		notify() // outside the lock: it asks Admitted
 	}
+}
+
+// Current reports whether the relay holds a ban set at least as new as
+// version, which a control plane named without sending the set. When it does,
+// that counts as a delivery (LastDelivered): the control plane read the set at
+// that version moments ago, so the one held is as fresh as a delivered one.
+// When it does not, nothing changes and the caller must be sent the set.
+func (r *Registry) Current(version int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.holds || version <= 0 || r.version < version {
+		return false
+	}
+	r.delivered = time.Now()
+	return true
+}
+
+// Version is the version of the ban set held; 0 when none, or one sent
+// without a version.
+func (r *Registry) Version() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.version
+}
+
+// HoldsBanSet reports whether the relay knows a ban set at all — one loaded
+// from its identity directory, or one a control plane delivered since it
+// started. Until then a banned key cannot be told from any other, so the
+// worker-facing calls refuse (fail closed) rather than admit everyone.
+func (r *Registry) HoldsBanSet() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.holds
+}
+
+// LastDelivered is when a control plane last delivered a ban set, and false
+// when none has since this relay started. A set loaded from disk does not
+// count: it says nothing about decisions taken while the relay was down.
+func (r *Registry) LastDelivered() (time.Time, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.delivered, !r.delivered.IsZero()
 }
 
 // OnBansChanged registers f to run after a SetBanned that bans someone who
@@ -235,7 +321,8 @@ func (r *Registry) snapshotLocked() savedBans {
 // control plane next called it, and a banned worker could renew its
 // certificate in that window. A missing file is an empty start; an
 // unreadable one is an error, because starting with no bans is the failure
-// this exists to prevent.
+// this exists to prevent. A missing file loads nothing, so the relay holds no
+// set (HoldsBanSet) until a control plane delivers one.
 func (r *Registry) KeepIn(path string) error {
 	raw, err := os.ReadFile(path)
 	switch {
@@ -253,6 +340,7 @@ func (r *Registry) KeepIn(path string) error {
 			r.banned[strings.ToLower(id)] = struct{}{}
 		}
 		r.version = saved.Version
+		r.holds = true
 		r.mu.Unlock()
 	}
 	r.mu.Lock()

@@ -40,19 +40,19 @@ plugins:
       source: git
       version: 0.1.0-rc.25
     - git:
-        commit: 8521cfff2befb88b50982771e22086eb42b4f5c8
-        digest: 7eaa85110fafbdac8850a101d3e72da911a76fd0767f4b56fca156015ac5501e
-        ref: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        commit: 9f990eeda47a9346f85340ba8944cbbc11564202
+        digest: d05b18bf335dc5c90fbaf290d4a47ec4c6dcbb75c30b361503d884467d83f279
+        ref: cluster/v0.1.0-rc.13
         repo: https://github.com/wandering-compiler/plugins
       name: cluster
       source: git
-      version: 0.1.0-rc.12
+      version: 0.1.0-rc.13
 project: examples-jobs
 project_id: 0e9d85e2-b985-4fea-9297-e721e9d2e520
 sdk_version: v0.1.0-rc.25
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 336c7b4ecb4e2d767e8aad8b9687e89dfd5994d0e306086e07da49354c35cf9501b8270c083fa8369906acd646c236df4d35f71c704cf4ffd2b9067396543f0e
+    body: 4baeb9bfde19b5a0c4f08536f21132f86f29d7b536bfbb2f52287cca549d091a97818326e4309fa787840b38118b6ed1c5970b0bfbcfdf45409894208f78c207
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
