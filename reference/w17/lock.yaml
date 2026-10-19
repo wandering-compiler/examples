@@ -69,12 +69,20 @@ plugins:
       name: auth
       source: local
       version: 0.1.0-rc.23
+    - git:
+        commit: 9904c19dc2432dd74f538c506a679640336e1bb7
+        digest: 194216b82a5bad5fdfef84045f24490c9a25579c9393bed9a8abc23f6119d42a
+        ref: marketing/v0.1.0-rc.2
+        repo: https://github.com/wandering-compiler/plugins
+      name: marketing
+      source: git
+      version: 0.1.0-rc.2
 project: examples-reference
 project_id: dceefc0e-edfb-477a-a230-ed461733de9a
 sdk_version: v0.1.0-rc.27
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 16d29ef94c5f56dbc3e9eed0f5330ef61f4d49c46f61f04ef906005cd954e7cf22d8b31b422b2b33bb952a82287f40b22fdf6ef5217bcf1b8e9a46a060b01d07
+    body: 79e0f20e2f6a968c3dc57980348785da09a2be49e1f5a6e2d04720e2f6388119a4b50dc2ff932305e505ab32beff487b24457ce73f3a91abe487425374240209
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
