@@ -71,9 +71,12 @@ func TestMarketing_ASignUpAndAMutationReachBrevo(t *testing.T) {
 
 	const event = "UsersService_ReportClientFault"
 	c := contactUntil(t, user, func(c stubContact) bool {
+		// The plugin creates W17_ORG_ID in the background, and the stub
+		// drops an attribute it does not have yet: wait for it as well.
+		_, org := c.Attributes["W17_ORG_ID"]
 		for _, e := range c.Events {
 			if e.EventName == event {
-				return c.Email != ""
+				return c.Email != "" && org
 			}
 		}
 		return false
@@ -93,7 +96,11 @@ func TestMarketing_ASignUpAndAMutationReachBrevo(t *testing.T) {
 		raw, _ := json.Marshal(e)
 		assertAbsent(t, "the Brevo event", raw, append(f.decoys(), f.Message, f.ContactEmail))
 	}
-	// No W17_ORG_ID: a record names the caller's organization from the
-	// `org_id` scope, and this project's users are scoped by `tenant_id`
-	// (auth's tenant_scope) — they belong to no organization.
+	// The organization: this project's users are scoped by tenant_id (auth's
+	// tenant_scope), whose tenant is the record's organization. The sign-up
+	// was in tenant-alpha; tenant-beta (fixtures/app/test.json) is the decoy.
+	const tenantAlpha, tenantBeta = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
+	if org, _ := c.Attributes["W17_ORG_ID"].(string); org != tenantAlpha {
+		t.Errorf("contact %s has W17_ORG_ID %q, want tenant-alpha's %s, not tenant-beta's %s (attributes %v)", user, org, tenantAlpha, tenantBeta, c.Attributes)
+	}
 }
