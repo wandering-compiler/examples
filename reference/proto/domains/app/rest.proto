@@ -145,7 +145,18 @@ option (w17.rest_api) = {
         // spends on every request (the default). Endpoints declared here
         // rather than through the plugin's preset carry their own mode.
         { ref: "auth.AuthService.SignUp", method: POST, path: "/{tenant_slug}/register", exclude_auth: true },
-        { ref: "auth.AuthService.SignIn", method: POST, path: "/login",    exclude_auth: true, public_limit: PUBLIC_LIMIT_FAILED_ONLY }
+        { ref: "auth.AuthService.SignIn", method: POST, path: "/login",    exclude_auth: true, public_limit: PUBLIC_LIMIT_FAILED_ONLY },
+        // The OAuth 2.1 authorization server's consent page and the user's
+        // connected apps (the plugin's oauth_server). An MCP client — Claude,
+        // Cursor — is sent to the authorization endpoint the gateway serves
+        // at the root (/oauth/authorize), which sends the browser to the
+        // project's consent page; that page reads and decides the request
+        // here, with the user's session.
+        { ref: "auth.AuthService.GetOAuthAuthorization",     method: GET,    path: "/oauth/authorizations/{request_id}" },
+        { ref: "auth.AuthService.ApproveOAuthAuthorization", method: POST,   path: "/oauth/authorizations/{request_id}/approve", body: "*" },
+        { ref: "auth.AuthService.DenyOAuthAuthorization",    method: POST,   path: "/oauth/authorizations/{request_id}/deny", body: "*" },
+        { ref: "auth.AuthService.ListMyOAuthGrants",         method: GET,    path: "/oauth/connected-apps" },
+        { ref: "auth.AuthService.RevokeMyOAuthGrant",        method: DELETE, path: "/oauth/connected-apps/{grant_id}" }
       ]
     },
     {

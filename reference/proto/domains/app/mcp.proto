@@ -41,6 +41,12 @@ option (w17.mcp_api) = {
   description: "App MCP surface — the auth plugin's session tools plus the public directory reads.",
   include: [ "auth" ],
 
+  // An OAuth 2.1 protected resource (the MCP authorization spec): a client
+  // without a valid token is answered 401 naming this surface's metadata,
+  // which names the authorization server — this domain's auth plugin
+  // (`oauth_server`). Its tokens are issued for this surface alone.
+  oauth: {},
+
   // Every tool call is recorded into the request event stream
   // (w17.requests.app.mcp), for audit and marketing, as the REST surface's
   // requests are.
