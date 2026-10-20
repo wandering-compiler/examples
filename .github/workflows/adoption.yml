@@ -303,6 +303,17 @@ jobs:
               -v "$PWD:/w" -w /w/srcgo golang:1.26 \
               go mod edit -require="github.com/wandering-compiler/sdk/go@${{ needs.modules.outputs.sdk_version }}"
           fi
+          # A project with no hand-written module requiring sdk/go (billing,
+          # bookshop, databases, rpc-cli) has nothing for the edit above to
+          # raise: codegen wrote its generated modules at the lock's pin and
+          # refused that pin as older than the console's code, before the SDK
+          # under review was ever applied (every SDK PR once the console moved
+          # to rc.29). W17_SDK_VERSION (`codegen --sdk-version`) writes the
+          # generated modules at the version under review and checks the floor
+          # against it, without the lock edit. An environment variable, not
+          # the flag: a w17ctl older than the flag ignores it instead of
+          # refusing the run.
+          export W17_SDK_VERSION="${{ needs.modules.outputs.sdk_version }}"
           # The console queues at most a few codegen runs per organization,
           # and the sdk, plugins and examples CI share one, so a busy moment
           # refuses the run with ORG_PLACEMENT_LIMIT. That refusal, and only
