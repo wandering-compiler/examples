@@ -1,0 +1,13 @@
+# Disconnecting an app that is not the caller's — here none at all — is
+# NOT_FOUND with OAUTH_APP_UNKNOWN: another user's grant answers exactly
+# as one that does not exist.
+method: auth.AuthService.RevokeMyOAuthGrant
+pre:
+    - auth/auth.yaml
+input:
+    grant_id: 00000000-0000-0000-0000-00000000c0de
+expect_error:
+    code: NOT_FOUND
+    details:
+        - field: grant_id
+          code: OAUTH_APP_UNKNOWN

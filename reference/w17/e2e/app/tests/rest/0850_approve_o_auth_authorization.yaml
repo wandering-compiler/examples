@@ -1,0 +1,13 @@
+# Approving a request that is not pending mints no code: NOT_FOUND with
+# OAUTH_REQUEST_GONE. (A real approval is made by the runner's MCP caller
+# for every MCP scenario.)
+method: auth.AuthService.ApproveOAuthAuthorization
+pre:
+    - auth/auth.yaml
+input:
+    request_id: e2e-no-such-request
+expect_error:
+    code: NOT_FOUND
+    details:
+        - field: request_id
+          code: OAUTH_REQUEST_GONE

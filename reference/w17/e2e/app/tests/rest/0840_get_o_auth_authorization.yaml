@@ -1,0 +1,17 @@
+# The OAuth consent page reads an authorization request by the opaque id
+# the authorization endpoint sent the browser with. An id that names no
+# live request — unknown, already decided, or expired — is NOT_FOUND with
+# OAUTH_REQUEST_GONE on request_id, so the page can tell the user to start
+# again from the application. The happy path (a real request, approved) is
+# what every MCP scenario walks: the runner's MCP caller obtains its token
+# through this same consent RPC (tests/mcp/).
+method: auth.AuthService.GetOAuthAuthorization
+pre:
+    - auth/auth.yaml
+input:
+    request_id: e2e-no-such-request
+expect_error:
+    code: NOT_FOUND
+    details:
+        - field: request_id
+          code: OAUTH_REQUEST_GONE

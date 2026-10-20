@@ -1,0 +1,12 @@
+# Denying a request that is not pending is the same NOT_FOUND: a request is
+# decided once.
+method: auth.AuthService.DenyOAuthAuthorization
+pre:
+    - auth/auth.yaml
+input:
+    request_id: e2e-no-such-request
+expect_error:
+    code: NOT_FOUND
+    details:
+        - field: request_id
+          code: OAUTH_REQUEST_GONE

@@ -1,0 +1,7 @@
+# A fresh account has connected no application yet.
+method: auth.AuthService.ListMyOAuthGrants
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    grants: {matcher: count, op: '==', value: 0}
