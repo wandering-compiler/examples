@@ -213,6 +213,22 @@ option (w17.acl_roles) = {
   default:         true
 };
 
+// e2e-mcp — the same grant for what an MCP client does on the user's behalf.
+// An MCP client holds an access token the auth plugin's OAuth authorization
+// server issued (oauth_server), and such a token carries the user's roles of
+// realm `mcp` alone — never their session roles, never a bot's `api` roles —
+// so a user reaches the MCP surface only through a role of this realm.
+option (w17.acl_roles) = {
+  key:             "e2e-mcp"
+  name:            "e2e-mcp"
+  activation:      "auth"
+  scope:           ACL_ROLE_SCOPE_REALM
+  realm:           "mcp"
+  all_permissions: true
+  first_user:      true
+  default:         true
+};
+
 option (w17.acl_roles) = {
   key:             "platform-staff"
   name:            "platform-staff"

@@ -1,27 +1,26 @@
-# THE refusal half of the MCP permission gate — the half that was
-# unassertable until `expect_transport_error` existed.
+# THE refusal half of the MCP permission gate.
 #
-# A gated tool the caller may not use is filtered out of `tools/list`
-# (mcp.Server.filterTools, fail-closed so tool existence does not leak),
-# so calling it by name answers mcp-go's `tool not found` at the JSON-RPC
-# layer. That IS the ACL refusal, but it carries no gRPC status, and
-# `expect_error` requires a code — for good reason, since an assertion
-# that only says "the call failed" holds for a malformed request too.
+# The MCP surface is an OAuth protected resource ((w17.mcp_api).oauth), so a
+# caller reaches it with an MCP access token the auth plugin's authorization
+# server issued — the runner obtains one through the consent RPC with the
+# scenario's session — and that token holds the user's roles of realm `mcp`
+# alone. `auth_nogrant.yaml` is a seeded account that holds none, so its
+# token holds no permission on this surface at all, and the resource refuses
+# it at the door: HTTP 403 with `WWW-Authenticate: Bearer
+# error="insufficient_scope"` (RFC 6750 §3.1), before any JSON-RPC — the
+# runner reads it as PERMISSION_DENIED. A caller holding some mcp
+# permission but not this tool's would instead find the tool filtered out
+# of tools/list (mcp.Server.filterTools) and answered `tool not found`.
 #
 # 0020 is the other half: the same surface, the same transport, a caller
-# who HAS the permission, and the call goes through. Neither case means
-# anything alone — `tool not found` is also what a never-registered tool
-# answers, so only the pair separates "the filter hid it" from "the
-# sentinel never reached the gateway".
+# who HAS the permission, and the call goes through.
 #
 # `auth_nogrant.yaml` goes LAST: every auth fixture captures the same
-# reserved `auth.token` slot, so the final one wins. The caller is
-# authenticated (the step still needs a token — an open surface is not an
-# anonymous one) and holds an empty UserRole set.
+# reserved `auth.token` slot, so the final one wins.
 method: auth.AuthService.WhoAmI
 pre:
     - auth/auth.yaml
     - auth/auth_nogrant.yaml
 input: {}
-expect_transport_error:
-    message: {matcher: regex, pattern: "tool not found"}
+expect_error:
+    code: PERMISSION_DENIED
