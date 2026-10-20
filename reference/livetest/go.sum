@@ -111,8 +111,8 @@ github.com/redis/go-redis/v9 v9.21.0 h1:FPBE4hhbAke+TLmcY3WkpbDffJEomdqPn3HYiqAt
 github.com/redis/go-redis/v9 v9.21.0/go.mod h1:v/M13XI1PVCDcm01VtPFOADfZtHf8YW3baQf57KlIkA=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/wandering-compiler/sdk/go v0.1.0-rc.30 h1:hjL01oITzfB1cAwaevy46NZPr3JPEKM8ogMisRr6lks=
-github.com/wandering-compiler/sdk/go v0.1.0-rc.30/go.mod h1:vXK/wLhjJqdWZoQxvXl6o5aKp/ytyhlaSK2lqrj3/qw=
+github.com/wandering-compiler/sdk/go v0.1.0-rc.31 h1:dr5F71Goh3XFuZveuKyn27ztE+k5Hca8ERFXA98Us+E=
+github.com/wandering-compiler/sdk/go v0.1.0-rc.31/go.mod h1:vXK/wLhjJqdWZoQxvXl6o5aKp/ytyhlaSK2lqrj3/qw=
 github.com/zeebo/xxh3 v1.1.0 h1:s7DLGDK45Dyfg7++yxI0khrfwq9661w9EN78eP/UZVs=
 github.com/zeebo/xxh3 v1.1.0/go.mod h1:IisAie1LELR4xhVinxWS5+zf1lA4p0MW4T+w+W07F5s=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
