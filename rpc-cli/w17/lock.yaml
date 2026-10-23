@@ -31,10 +31,10 @@ org_slug: wandering-compiler
 plugins: []
 project: examples-rpc-cli
 project_id: 2634d995-9103-44d3-90e4-d312721f21b0
-sdk_version: v0.1.0-rc.36
+sdk_version: v0.1.0-rc.37
 secrets: null
 signature:
     alg: ed25519/v1
-    body: a55bfd93a626910d5f35644d3d417c2a2ec5a7bb342f7044b322ac757a2b5caf0fbe788ed1536f196f1b38129288aeb2e030d78e7c75565881c80fbd4c2b5a05
+    body: 726ec5955fba275551b72003c093e3418eaa670c96c37105865509323d822ed4d556076d978202200ec966fe2ce883751935d6c9b620e00824ef65f8b31bff00
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
