@@ -1,0 +1,21 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# `(w17.admin_filter)` over a proto3 `optional` field. The list handler
+# decodes the query param behind a pointer: given, it filters; absent
+# (1040, every other case), the field stays unset and `?m.weight = :weight`
+# drops out of the WHERE clause. Before the fix the handler assigned the
+# decoded int32 to the *int32 field and the admin bundle did not build.
+#
+# Two of the three seeded milestones weigh 5 (fixtures/app/test.json; 1060
+# rewrites 710001 with the same weight), so the row set tells a working
+# predicate from an ignored one (3 rows) and from a mis-bound one (0).
+method: admin.MilestoneAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    weight: 5
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    items.0.id: {matcher: eq, value: "710001"}
+    items.1.id: {matcher: eq, value: "710002"}

@@ -615,6 +615,7 @@ service TaskQuery {
           "FROM tasks.Milestone m "
           "WHERE (:status_note = \'\' OR m.status_note = :status_note) "
           "AND (:q = \'\' OR m.name LIKE \'%\' || :q || \'%\') "
+          "AND ?m.weight = :weight "
           "ORDER BY m.id ASC"
       }
     };
@@ -2056,6 +2057,11 @@ message ListMilestonesAdminReq {
   // places and the storage method owns what "search" means — here a
   // LIKE over the name.
   string q = 2 [(w17.admin_search) = true];
+  // An OPTIONAL filter: proto3 `optional`, a pointer in Go, and how a
+  // filter says "not given". An empty box leaves it unset, and the DQL's
+  // optional condition (`?m.weight = :weight`) drops out; a plain int32
+  // would filter on 0 instead. Asking for 0 is a real filter here.
+  optional int32 weight = 3 [(w17.admin_filter) = true];
 }
 
 message MilestoneAdminRow {
