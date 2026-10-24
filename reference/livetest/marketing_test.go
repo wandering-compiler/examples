@@ -76,7 +76,7 @@ func TestMarketing_ASignUpAndAMutationReachBrevo(t *testing.T) {
 	c := contactUntil(t, user, func(c stubContact) bool {
 		for _, e := range c.Events {
 			if e.EventName == event {
-				return c.Email != "" && eventOrg(c, e) != ""
+				return c.Email != "" && e.EventProperties["w17_org_id"] != nil
 			}
 		}
 		return false
@@ -95,15 +95,13 @@ func TestMarketing_ASignUpAndAMutationReachBrevo(t *testing.T) {
 		if st, _ := e.EventProperties["w17_status"].(float64); st != 200 {
 			t.Errorf("event %s has w17_status %v, want 200", event, e.EventProperties["w17_status"])
 		}
-		if org := eventOrg(c, e); org != tenantAlpha {
-			t.Errorf("event %s ran in organization %q, want tenant-alpha's %s, not tenant-beta's %s (properties %v, attributes %v)", event, org, tenantAlpha, tenantBeta, e.EventProperties, c.Attributes)
+		if org, _ := e.EventProperties["w17_org_id"].(string); org != tenantAlpha {
+			t.Errorf("event %s ran in organization %q, want tenant-alpha's %s, not tenant-beta's %s (properties %v)", event, org, tenantAlpha, tenantBeta, e.EventProperties)
 		}
-		if _, ok := e.EventProperties["w17_org_id"]; ok {
-			// The organization travels with the request, so the contact no
-			// longer carries one (a user belongs to several).
-			if _, stale := c.Attributes["W17_ORG_ID"]; stale {
-				t.Errorf("contact %s still has a W17_ORG_ID attribute %v; the organization is the event's w17_org_id", user, c.Attributes["W17_ORG_ID"])
-			}
+		// The organization travels with the request, so the contact does not
+		// carry one (a user belongs to several).
+		if _, stale := c.Attributes["W17_ORG_ID"]; stale {
+			t.Errorf("contact %s has a W17_ORG_ID attribute %v; the organization is the event's w17_org_id", user, c.Attributes["W17_ORG_ID"])
 		}
 		// The project leaves auth's membership_kinds off: no account type,
 		// and no empty property standing in for one.
@@ -115,17 +113,4 @@ func TestMarketing_ASignUpAndAMutationReachBrevo(t *testing.T) {
 		raw, _ := json.Marshal(e)
 		assertAbsent(t, "the Brevo event", raw, append(f.decoys(), f.Message, f.ContactEmail))
 	}
-}
-
-// eventOrg is the organization an event ran in: its w17_org_id property.
-// A marketing plugin released before the property kept the organization on
-// the contact as W17_ORG_ID instead, created in the background (the stub
-// drops an attribute it does not have yet); that is read while the
-// project's lock still installs one, and goes once the lock moves past it.
-func eventOrg(c stubContact, e stubEvent) string {
-	if org, _ := e.EventProperties["w17_org_id"].(string); org != "" {
-		return org
-	}
-	org, _ := c.Attributes["W17_ORG_ID"].(string)
-	return org
 }
