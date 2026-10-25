@@ -25,6 +25,14 @@ on:
         description: w17ctl release to run (empty = the newest, prereleases included)
         type: string
         default: ''
+      test_transport:
+        description: >-
+          transports the e2e suites run, as w17ctl test --transport takes them (empty = all).
+          A caller that cannot run one names the rest on purpose: a plugins branch whose auth
+          binds devices cannot run reference's MCP scenarios (its MCP is no OAuth resource),
+          and a run that selects them and skips them fails.
+        type: string
+        default: ""
     secrets:
       W17_TOKEN:
         description: API token of a machine account on the console
@@ -398,6 +406,9 @@ jobs:
           # with the generated suite (`w17ctl test --keep`), runs livetest/
           # inside the stack's network, and tears the stack down. One stack
           # for both, so the generated suite is not run twice.
+          # The transports the caller chose (test_transport), as w17ctl test
+          # reads them from the environment — livetest/run.sh calls it itself.
+          export W17_TEST_TRANSPORT="${{ inputs.test_transport }}"
           if [ -x livetest/run.sh ]; then
             livetest/run.sh
           else
