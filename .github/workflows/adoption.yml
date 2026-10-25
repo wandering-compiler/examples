@@ -413,7 +413,9 @@ jobs:
           # Narrowed only where something is left out — an example with no
           # such transport runs every one it has, as before.
           skip="${{ inputs.skip_transports }}"
-          present=$(ls -d w17/e2e/*/tests/*/ 2>/dev/null | xargs -rn1 basename | sort -u | tr '\n' ' ')
+          # No suite at all (rpc-cli) is no transport; ls exits 2 then, and
+          # the step's bash -e -o pipefail would stop on it.
+          present=$( { ls -d w17/e2e/*/tests/*/ 2>/dev/null || true; } | xargs -rn1 basename | sort -u | tr '\n' ' ')
           keep=""
           for t in $present; do
             case ",$skip," in *",$t,"*) ;; *) keep="$keep${keep:+,}$t" ;; esac
