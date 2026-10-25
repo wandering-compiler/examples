@@ -25,12 +25,13 @@ on:
         description: w17ctl release to run (empty = the newest, prereleases included)
         type: string
         default: ''
-      test_transport:
+      skip_transports:
         description: >-
-          transports the e2e suites run, as w17ctl test --transport takes them (empty = all).
-          A caller that cannot run one names the rest on purpose: a plugins branch whose auth
-          binds devices cannot run reference's MCP scenarios (its MCP is no OAuth resource),
-          and a run that selects them and skips them fails.
+          comma-separated transports the e2e suites leave out (empty = none). Each example then
+          runs the transports its suite has, minus these; an example that has none of them runs
+          as before. A plugins branch whose auth binds devices cannot run reference's MCP
+          scenarios (its MCP is no OAuth resource), and a run that selects them and skips them
+          fails, so the plugins CI leaves mcp out on purpose.
         type: string
         default: ""
     secrets:
@@ -406,9 +407,23 @@ jobs:
           # with the generated suite (`w17ctl test --keep`), runs livetest/
           # inside the stack's network, and tears the stack down. One stack
           # for both, so the generated suite is not run twice.
-          # The transports the caller chose (test_transport), as w17ctl test
-          # reads them from the environment — livetest/run.sh calls it itself.
-          export W17_TEST_TRANSPORT="${{ inputs.test_transport }}"
+          # The transports the caller leaves out (skip_transports): this
+          # example's suite runs the ones it has minus those, as w17ctl test
+          # reads them from the environment (livetest/run.sh calls it itself).
+          # Narrowed only where something is left out — an example with no
+          # such transport runs every one it has, as before.
+          skip="${{ inputs.skip_transports }}"
+          present=$(ls -d w17/e2e/*/tests/*/ 2>/dev/null | xargs -rn1 basename | sort -u | tr '\n' ' ')
+          keep=""
+          for t in $present; do
+            case ",$skip," in *",$t,"*) ;; *) keep="$keep${keep:+,}$t" ;; esac
+          done
+          W17_TEST_TRANSPORT=""
+          if [ -n "$skip" ] && [ "$keep" != "$(echo $present | tr ' ' ',')" ]; then
+            W17_TEST_TRANSPORT="$keep"
+            echo "e2e transports: $keep (left out: $skip)"
+          fi
+          export W17_TEST_TRANSPORT
           if [ -x livetest/run.sh ]; then
             livetest/run.sh
           else
