@@ -17,7 +17,9 @@ examples.
 - **billing** (`proto/domains/billing/`): accounts, plans, subscriptions,
   usage, invoices, payments and a ledger on its own Postgres
   (`billing-postgres`). It activates `auditsink` again under another name, so
-  one plugin serves two domains.
+  one plugin serves two domains. The app reaches it through billing's private
+  surface (`proto/domains/billing/private.proto`) — another domain's gateway,
+  mutual TLS — never billing's tiers.
 
 ## What it shows
 

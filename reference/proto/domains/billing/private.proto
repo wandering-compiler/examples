@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+// billing's PRIVATE surface: the one way the app domain reaches it. The
+// app's business tier reads a user's billing account and records usage here
+// — never at billing's storage tier, which serves billing alone. Each hop is
+// mutual TLS, through the private proxy; nothing is published.
+package e2e.billing;
+
+import "w17/private.proto";
+
+option (w17.private_api) = {
+  description: "A user's billing account and usage, for the app domain."
+  groups: [
+    {
+      name: "subscriptions"
+      refs: [ "core.SubscriptionQuery.GetAccountByUser", "core.SubscriptionMutation.RecordUsage" ]
+    }
+  ]
+  callers: [ "app" ]
+};
