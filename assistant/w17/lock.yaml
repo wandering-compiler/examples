@@ -49,10 +49,10 @@ plugins:
       version: 0.1.0-rc.25
 project: examples-assistant
 project_id: 69eff853-3d53-4330-bd4d-9764220f4153
-sdk_version: v0.1.0-rc.43
+sdk_version: v0.1.0-rc.44
 secrets: null
 signature:
     alg: ed25519/v1
-    body: f9dc53fa7b6f9715abfde60a8bc2116434225a9858efca5e4cb9fe0198b921eba564e69122c200356264450d7b6cc818a313c65aadf91fa6e4954a5551a2d50c
+    body: 97b53e1c1103c4a755fd2afabad252b73863eff54ec752bfb7940846e84f508e98098a31f2464063f1cc654e3a4642732f5b3cb980982747b36c2a2039f80405
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
