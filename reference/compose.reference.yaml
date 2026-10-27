@@ -47,8 +47,8 @@ services:
       APP_LISTEN_ADDR: ":50051"
       APP_STORAGE_BACKEND_ADDR: app-storage:50051
       # The cross-domain usage calls are best-effort; this example runs
-      # without them.
-      APP_BILLING_BACKEND_ADDR: disabled
+      # without them (they go to billing's private surface when on).
+      APP_BILLING: disabled
       # Error reports go to a fake Sentry the live suite serves on the
       # stack's network (livetest/run.sh starts it under this name), which
       # reads back what a report carries. Reports sent before it is up are
