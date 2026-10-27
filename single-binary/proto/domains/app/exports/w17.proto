@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+// Module-level cascade for the app domain's `exports` module — the
+// file-storage connection behind NoteExport.file.
+//
+// A connection of its own, next to `app-uploads`, because of who WRITES
+// it. `app-uploads` is the gateway's: it streams an upload in and derives
+// the key. `app-exports` is the BUSINESS tier's: NotesFacade.ExportNote
+// renders a file and puts it (its fields declare `upload.writer:
+// BUSINESS`). A connection has one writer — the tier that derives its keys —
+// so the two kinds of file never share one.
+//
+// File is a SENTINEL — options only, no messages.
+
+package single_binary.app.exports;
+
+import "w17/module.proto";
+
+option (w17.module) = {
+  connection: { name: "app-exports", dialect: LOCAL_FS, version: "1", used_capability: KV }
+};

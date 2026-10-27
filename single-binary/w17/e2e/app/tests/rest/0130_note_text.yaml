@@ -1,0 +1,14 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+# raw_response: the answer is the rendered file itself, not JSON — the runner
+# reports it through w17_wire.
+method: example.NotesFacade.NoteText
+input:
+    note_id: 700001
+expect:
+    w17_wire.content_type: {matcher: eq, value: text/plain}
+    w17_wire.body: {matcher: eq, value: "seeded note\n\nread by the REST and admin cases\n"}
+    w17_wire.content_disposition: {matcher: eq, value: "inline; filename=note-700001.txt"}
+    w17_wire.json: {matcher: eq, value: false}

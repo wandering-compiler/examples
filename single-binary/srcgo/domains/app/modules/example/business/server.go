@@ -2,12 +2,14 @@ package business
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
 
+	appbiz "github.com/wandering-compiler/examples/single-binary/w17/stubs/business/app"
 	examplepb "github.com/wandering-compiler/examples/single-binary/w17/stubs/pb/domains/app/example"
 	"github.com/wandering-compiler/sdk/go/lib/kvfs"
 	distxpb "github.com/wandering-compiler/sdk/go/pb/common/distx"
@@ -18,14 +20,16 @@ import (
 
 // NotesFacadeServer is the hand-written NotesFacade implementation. Its
 // downstreams are the storage clients — reached by direct in-process call
-// when this facade runs inside the single app-server — plus the read-only
-// store for the `app-uploads` connection, which is how it reaches the
-// bytes of a file the gateway wrote.
+// when this facade runs inside the single app-server — plus two file
+// stores: the read-only one for `app-uploads`, which is how it reaches the
+// bytes of a file the gateway wrote, and the writable one for
+// `app-exports`, where it puts the files it makes.
 type NotesFacadeServer struct {
 	examplepb.UnimplementedNotesFacadeServer
 	noteMut   examplepb.NoteMutationClient
 	noteQuery examplepb.NoteQueryClient
 	uploads   kvfs.Reader
+	exports   kvfs.Driver
 	distTx    distxpb.W17DistributedTransactionClient
 
 	// self is THIS service as the bundle serves it — wrapped by its emit
@@ -36,9 +40,56 @@ type NotesFacadeServer struct {
 }
 
 // NewNotesFacadeServer builds the facade from the injected storage
-// clients + upload store + transaction client.
-func NewNotesFacadeServer(noteMut examplepb.NoteMutationClient, noteQuery examplepb.NoteQueryClient, uploads kvfs.Reader, distTx distxpb.W17DistributedTransactionClient) *NotesFacadeServer {
-	return &NotesFacadeServer{noteMut: noteMut, noteQuery: noteQuery, uploads: uploads, distTx: distTx}
+// clients + file stores + transaction client.
+func NewNotesFacadeServer(noteMut examplepb.NoteMutationClient, noteQuery examplepb.NoteQueryClient, uploads kvfs.Reader, exports kvfs.Driver, distTx distxpb.W17DistributedTransactionClient) *NotesFacadeServer {
+	return &NotesFacadeServer{noteMut: noteMut, noteQuery: noteQuery, uploads: uploads, exports: exports, distTx: distTx}
+}
+
+// ExportNote renders the note as a text file, PUTS it on the business
+// tier's own connection and records the handle.
+//
+// kvfs.Put derives the key from NoteExportFilePlacement — NoteExport.file's
+// own (w17.field).upload, generated into the contract — so nothing here
+// names a bucket path or a sub-bucket rule, exactly as ReadAttachment names
+// none: change the field's upload config and this handler follows.
+func (s *NotesFacadeServer) ExportNote(ctx context.Context, req *examplepb.ExportNoteReq) (*examplepb.NoteExport, error) {
+	note, err := s.noteQuery.GetNote(ctx, &examplepb.GetNoteReq{NoteId: req.GetNoteId()})
+	if err != nil {
+		return nil, err
+	}
+	handle, err := kvfs.Put(ctx, s.exports, appbiz.NoteExportFilePlacement, bytes.NewReader(noteText(note)))
+	if err != nil {
+		return nil, fmt.Errorf("put export: %w", err)
+	}
+	row, err := s.noteMut.RecordNoteExport(ctx, &examplepb.RecordNoteExportReq{NoteId: note.GetId(), File: handle})
+	if err != nil {
+		// No row names the object, so nothing ever reads or deletes it:
+		// remove what this call stored, as the gateway rolls back an upload
+		// whose request failed. The handle is this call's own (kvfs.Put
+		// keys every write uniquely), so no other row loses its file.
+		_ = s.exports.Delete(context.WithoutCancel(ctx), handle)
+		return nil, err
+	}
+	return row, nil
+}
+
+// NoteText answers the same rendering per request, as the HTTP body
+// (`raw_response`): nothing is stored.
+func (s *NotesFacadeServer) NoteText(ctx context.Context, req *examplepb.NoteTextReq) (*examplepb.NoteTextResp, error) {
+	note, err := s.noteQuery.GetNote(ctx, &examplepb.GetNoteReq{NoteId: req.GetNoteId()})
+	if err != nil {
+		return nil, err
+	}
+	return &examplepb.NoteTextResp{
+		Body:     noteText(note),
+		Mime:     "text/plain; charset=utf-8",
+		FileName: fmt.Sprintf("note-%d.txt", note.GetId()),
+	}, nil
+}
+
+// noteText is the file both methods make: the title, a blank line, the body.
+func noteText(n *examplepb.Note) []byte {
+	return []byte(n.GetTitle() + "\n\n" + n.GetBody() + "\n")
 }
 
 // CreateNoteCheckedComposed reuses CreateNoteChecked THROUGH s.self — the

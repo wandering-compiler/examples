@@ -90,6 +90,36 @@ message NoteAttachment {
   google.protobuf.Timestamp uploaded_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
 }
 
+// NoteExport — a file the BUSINESS tier made from a note
+// (NotesFacade.ExportNote) and put on its own connection.
+//
+// `file` is the storage handle `kvfs.Put` returned. `writer: BUSINESS` is
+// what gives the facade a WRITABLE store for `app-exports` and the
+// placement it puts with (the field's own bucket_path and sub-bucketing),
+// and what keeps the gateway from ever writing the connection: no upload
+// may target the field. The download endpoint serves it like any upload.
+message NoteExport {
+  option (w17.db.table) = { name: "note_exports" };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  int64 note_id = 2;
+
+  string file = 3 [(w17.field) = {
+    type: UPLOADED_FILE,
+    upload: {
+      connection:       "app-exports",
+      bucket_path:      "/note-exports",
+      expected_objects: 10000,
+      max_per_bucket:   100,
+      max_size_bytes:   65536,
+      writer:           BUSINESS
+    }
+  }];
+
+  google.protobuf.Timestamp created_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
 // ApiKeyAudit — the side-effect row written by IssueApiKey's FINAL
 // op. It records which key was issued (api_key_id ← the intermediate
 // op's :issue.id) without storing the secret token itself.

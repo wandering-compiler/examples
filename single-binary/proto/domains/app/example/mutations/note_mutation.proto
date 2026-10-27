@@ -44,6 +44,22 @@ message AttachNoteReq {
   }];
 }
 
+// RecordNoteExportReq — the handle the facade's kvfs.Put returned.
+message RecordNoteExportReq {
+  int64  note_id = 1;
+  string file    = 2 [(w17.field) = {
+    type: UPLOADED_FILE,
+    upload: {
+      connection:       "app-exports",
+      bucket_path:      "/note-exports",
+      expected_objects: 10000,
+      max_per_bucket:   100,
+      max_size_bytes:   65536,
+      writer:           BUSINESS
+    }
+  }];
+}
+
 message IssueApiKeyReq {
   string owner_id = 1 [(w17.field) = { type: UUID }];
   string label    = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 100 }];
@@ -112,6 +128,16 @@ service NoteMutation {
       ops: {
         name: "main",
         dql:  "INSERT INTO example.NoteAttachment SET note_id = :note_id, stored_path = :stored_path RETURNING id, note_id, stored_path, uploaded_at"
+      }
+    };
+  }
+
+  // RecordNoteExport — stores the handle of a file the business tier put.
+  rpc RecordNoteExport(RecordNoteExportReq) returns (NoteExport) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO example.NoteExport SET note_id = :note_id, file = :file RETURNING id, note_id, file, created_at"
       }
     };
   }
