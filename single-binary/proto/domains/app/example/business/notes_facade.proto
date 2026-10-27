@@ -25,6 +25,19 @@ message ReadAttachmentResp {
   string first_line = 2;
 }
 
+message ExportNoteReq { int64 note_id = 1; }
+
+message NoteTextReq { int64 note_id = 1; }
+
+// NoteTextResp — a note rendered as a text file, answered as the HTTP body
+// (rest.proto's `raw_response`): `body` IS the response, `mime` its
+// Content-Type and `file_name` the name the browser saves it under.
+message NoteTextResp {
+  bytes  body      = 1;
+  string mime      = 2;
+  string file_name = 3;
+}
+
 // NotesFacade — hand-written BUSINESS tier. CreateNoteChecked applies a
 // trivial business rule (tags the title) then delegates to the storage
 // NoteMutation. In the single binary the facade reaches storage by
@@ -61,6 +74,17 @@ service NotesFacade {
   // pipeline needs: the gateway owns the bytes landing safely, the
   // facade owns what they MEAN.
   rpc ReadAttachment(ReadAttachmentReq) returns (ReadAttachmentResp);
+
+  // ExportNote — the business tier MAKING a file and storing it: it renders
+  // the note as text, puts it through the writable store the bundle built
+  // for `app-exports` (`clients.AppExportsStore()`, keyed by
+  // `NoteExportFilePlacement`), and records the handle. The REST answer
+  // carries the download URL the gateway rewrote the handle into.
+  rpc ExportNote(ExportNoteReq) returns (NoteExport);
+
+  // NoteText — the same file, rendered per request and never stored: the
+  // response's bytes are the HTTP body (rest.proto's `raw_response`).
+  rpc NoteText(NoteTextReq) returns (NoteTextResp);
 
   // CreateNoteCheckedComposed — COMPOSITION: no annotation of its own; it
   // reuses CreateNoteChecked through the server the registry returned, so

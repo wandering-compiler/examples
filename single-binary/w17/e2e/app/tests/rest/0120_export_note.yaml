@@ -1,0 +1,15 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+# The business tier renders the seeded note, puts the file on its own
+# connection (app-exports) and records the handle; the answer carries the
+# download URL the gateway rewrote it into.
+method: example.NotesFacade.ExportNote
+input:
+    note_id: 700001
+expect:
+    id: {matcher: not_empty}
+    note_id: {matcher: eq, value: "700001"}
+    file: {matcher: not_empty}
+    created_at: {matcher: not_empty}

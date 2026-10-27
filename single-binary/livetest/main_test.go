@@ -5,9 +5,10 @@
 // The admin answers on its own listener inside the process; the REST
 // surface reaches the storage tier; the business facade runs; an event is
 // delivered exactly once, so no second subscriber runs beside the binary;
-// a facade's event is published; and the business tier reads a file the
-// gateway wrote. run.sh brings the stack up with `w17ctl test --keep` and
-// runs this package inside the stack's network.
+// a facade's event is published; the business tier reads a file the
+// gateway wrote, stores a file it made, and answers one as the body. run.sh
+// brings the stack up with `w17ctl test --keep` and runs this package inside
+// the stack's network.
 package livetest
 
 import (
@@ -241,6 +242,97 @@ func TestComposed_BusinessTierReadsAnUploadedFile(t *testing.T) {
 	if string(dl) != content {
 		t.Errorf("download body = %q, want %q", trunc(dl), content)
 	}
+}
+
+// TestComposed_BusinessTierStoresAFileItMade: the facade renders a file,
+// puts it on its own connection (`app-exports`, `upload.writer: BUSINESS`)
+// and records the handle; the answer carries the download URL, and the
+// GATEWAY serves the bytes from that connection with its download headers.
+//
+// The facade writes through the store its bundle built from the bucket-root
+// variable, the gateway reads through the driver it built from the same
+// variable — one process, two resolutions — so a mismatch is a 404 here.
+func TestComposed_BusinessTierStoresAFileItMade(t *testing.T) {
+	id := createNote(t, "export proof")
+	code, body, _ := post(t, fmt.Sprintf("%s/api/v1/notes/%d/export", *restTarget, id), map[string]any{})
+	if code != http.StatusOK {
+		t.Fatalf("POST /notes/%d/export: got %d, want 200\nbody: %s", id, code, trunc(body))
+	}
+	var row map[string]any
+	if err := json.Unmarshal(body, &row); err != nil {
+		t.Fatalf("decode export: %v\nbody: %s", err, trunc(body))
+	}
+	file, _ := row["file"].(string)
+	if !strings.HasPrefix(file, "/api/v1/notes/attachments/note-exports/") {
+		t.Fatalf("file = %q, want a download URL under the business connection's bucket path", file)
+	}
+	resp := fetch(t, *restTarget+file, nil)
+	want := "export proof\n\nb\n"
+	if resp.code != http.StatusOK || string(resp.body) != want {
+		t.Fatalf("GET %s: got %d %q, want 200 %q", file, resp.code, trunc(resp.body), want)
+	}
+	if resp.header.Get("ETag") == "" {
+		t.Errorf("the download answered no ETag: the file is not served with the download endpoint's cache semantics")
+	}
+}
+
+// TestComposed_RawResponseIsTheFile: an endpoint declared `raw_response`
+// answers with the handler's bytes as the body — its type, its file name,
+// a strong ETag — and a revalidation naming that ETag is a 304.
+func TestComposed_RawResponseIsTheFile(t *testing.T) {
+	id := createNote(t, "raw proof")
+	url := fmt.Sprintf("%s/api/v1/notes/%d/text", *restTarget, id)
+	resp := fetch(t, url, nil)
+	if resp.code != http.StatusOK {
+		t.Fatalf("GET %s: got %d, want 200\nbody: %s", url, resp.code, trunc(resp.body))
+	}
+	if want := "raw proof\n\nb\n"; string(resp.body) != want {
+		t.Errorf("body = %q, want %q — the bytes, not a JSON document", trunc(resp.body), want)
+	}
+	for k, want := range map[string]string{
+		"Content-Type":        "text/plain; charset=utf-8",
+		"Content-Disposition": fmt.Sprintf("inline; filename=note-%d.txt", id),
+		"Cache-Control":       "private, max-age=0, must-revalidate",
+	} {
+		if got := resp.header.Get(k); got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+	etag := resp.header.Get("ETag")
+	if etag == "" {
+		t.Fatal("no ETag")
+	}
+	again := fetch(t, url, map[string]string{"If-None-Match": etag})
+	if again.code != http.StatusNotModified || len(again.body) != 0 {
+		t.Errorf("revalidation: got %d with %d bytes, want 304 and none", again.code, len(again.body))
+	}
+}
+
+type fetched struct {
+	code   int
+	body   []byte
+	header http.Header
+}
+
+func fetch(t *testing.T, url string, hdr map[string]string) fetched {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("new request %s: %v", url, err)
+	}
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
+	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body %s: %v", url, err)
+	}
+	return fetched{code: resp.StatusCode, body: body, header: resp.Header}
 }
 
 // attach uploads a file against a note through the multipart endpoint and

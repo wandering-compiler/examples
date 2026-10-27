@@ -30,7 +30,10 @@ func RegisterBusiness(cfg *appbiz.EnvConfig, registry appbiz.HandlerRegistry, cl
 	// served, wrapped by the emit wrapper, and composing through it is what
 	// keeps CreateNoteChecked's NoteChecked when another facade method reuses
 	// it (CreateNoteCheckedComposed, CreateNoteCheckedInTx).
-	facade := NewNotesFacadeServer(clients.NoteMutation(), clients.NoteQuery(), clients.AppUploadsStore(), clients.DistributedTransaction())
+	//
+	// AppExportsStore is the WRITABLE `app-exports` connection: its fields
+	// declare `upload.writer: BUSINESS`, so this tier is its one writer.
+	facade := NewNotesFacadeServer(clients.NoteMutation(), clients.NoteQuery(), clients.AppUploadsStore(), clients.AppExportsStore(), clients.DistributedTransaction())
 	facade.self = registry.RegisterNotesFacadeServer(facade)
 	registry.RegisterNotesEventsServer(NewNotesEventsServer(clients.NoteMutation(), clients.NoteQuery()))
 	return nil
