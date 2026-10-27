@@ -28,9 +28,9 @@ import (
 // Storage refs are the typed gRPC server interfaces (NOT
 // `*Server` concrete types) so tests can stub them freely.
 // Billing clients are real gRPC clients to the `billing`
-// domain's binary — that's a separate process (and a
-// separate PG database, intentionally) so the calls go over
-// the wire even from inside the same compose stack.
+// domain's PRIVATE surface — another domain is reached through
+// its gateway, never its tiers — so the calls go over the wire
+// (mutual TLS) even from inside the same compose stack.
 // Billing clients may be nil in deploys that opt out of the
 // billing tier (the self-hosted scenario): the facade's
 // quota / usage paths short-circuit when nil and behave as

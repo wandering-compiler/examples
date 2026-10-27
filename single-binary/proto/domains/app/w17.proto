@@ -13,6 +13,7 @@ syntax = "proto3";
 
 package single_binary.app;
 
+import "w17/acl.proto";
 import "w17/domain.proto";
 import "w17/module.proto";
 
@@ -34,6 +35,18 @@ option (w17.domain) = {
       presets: { admin: { enabled: false } }
     }
   ]
+};
+
+// Who enters the admin. Its ACL is forced — every page carries a permission
+// whatever the domain's ACL switches say for its REST surface — so someone
+// must hold them: `superadmin`, the admin realm's wildcard. `first_user`
+// gives it to the first admin_auth account.
+option (w17.acl_roles) = {
+  name:            "superadmin"
+  key:             "superadmin"
+  activation:      "admin_auth"
+  all_permissions: true
+  first_user:      true
 };
 
 option (w17.module) = {

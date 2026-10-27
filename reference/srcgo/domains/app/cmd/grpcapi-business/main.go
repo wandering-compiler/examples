@@ -8,8 +8,10 @@
 //
 // This is the "use srcgo/gen" path: the binary builds its downstream
 // clients from the project's OWN generated `gen/clients` packages —
-// per-domain/tier (gen/clients/app/storage, .../billing/storage,
-// gen/clients/app/platform), typed against srcgo/gen/pb — and wires them into the
+// per-domain/tier (gen/clients/app/storage, gen/clients/app/platform) and,
+// for the OTHER domain, billing's private surface (gen/clients/billing/private:
+// mutual TLS through its private proxy, never billing's tiers), typed against
+// srcgo/gen/pb — and wires them into the
 // facade's Deps. It never imports the w17/services bundles — generated ⟂
 // hand-written, sharing types over the wire (srcgo/pb ↔ w17/stubs/pb,
 // wire-compatible) only.
@@ -33,7 +35,7 @@ import (
 	"github.com/wandering-compiler/examples/reference/domains/app/appwire"
 	platform "github.com/wandering-compiler/examples/reference/gen/clients/app/platform"
 	appstorage "github.com/wandering-compiler/examples/reference/gen/clients/app/storage"
-	billingstorage "github.com/wandering-compiler/examples/reference/gen/clients/billing/storage"
+	billingprivate "github.com/wandering-compiler/examples/reference/gen/clients/billing/private"
 
 	"github.com/wandering-compiler/sdk/go/core/grpcx"
 	"github.com/wandering-compiler/sdk/go/lib/i18n"
@@ -45,7 +47,7 @@ import (
 const (
 	envListenAddr     = "APP_LISTEN_ADDR"
 	envI18nDir        = "APP_I18N_DIR"
-	envBillingBackend = "APP_BILLING_BACKEND_ADDR"
+	envBilling        = "APP_BILLING"
 	envServiceVersion = "W17_SERVICE_VERSION"
 	envEnvironment    = "W17_ENV"
 	envSentryDSN      = "W17_SENTRY_DSN"
@@ -123,12 +125,17 @@ func main() {
 		SessionCacheMutation: appStore.SessionCacheMutation(),
 		Registry:             distxCoordinator{c: plat.DistributedTransaction()},
 	}
-	// Cross-domain billing — best-effort; `disabled` opts out (the
-	// facade short-circuits to the unlimited tier on nil clients).
-	if os.Getenv(envBillingBackend) != "disabled" {
-		billStore := billingstorage.New(billingstorage.AddrFromEnv(), pool, tls)
-		facadeDeps.BillingQueryClient = billStore.SubscriptionQuery()
-		facadeDeps.BillingMutationClient = billStore.SubscriptionMutation()
+	// Cross-domain billing — best-effort, through billing's private surface
+	// (BILLING_PRIVATE_ADDR, this process's own identity in
+	// W17_PRIVATE_TLS_*); APP_BILLING=disabled opts out (the facade
+	// short-circuits to the unlimited tier on nil clients).
+	if os.Getenv(envBilling) != "disabled" {
+		billing, err := billingprivate.New(billingprivate.AddrFromEnv(), os.Getenv)
+		if err != nil {
+			log.Fatalf("%s: billing's private surface: %v", serviceName, err)
+		}
+		facadeDeps.BillingQueryClient = billing.SubscriptionQuery()
+		facadeDeps.BillingMutationClient = billing.SubscriptionMutation()
 	}
 
 	addr := os.Getenv(envListenAddr)

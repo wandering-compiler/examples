@@ -143,4 +143,6 @@ include:
   - w17/services/app-gateway/compose.yaml
   - w17/services/app-storage/compose.yaml
   - w17/services/billing-eventbus/compose.yaml
+  - w17/services/billing-gateway-private/compose.yaml
   - w17/services/billing-storage/compose.yaml
+  - w17/services/private-proxy/compose.yaml
