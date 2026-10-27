@@ -38,10 +38,10 @@ org_slug: wandering-compiler
 plugins: []
 project: examples-databases
 project_id: 6660fe96-cf06-4803-96ee-8ddb9997c494
-sdk_version: v0.1.0-rc.42
+sdk_version: v0.1.0-rc.43
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 06ef6674b158ac98fec03c3b40446481015a53744e77032188f9d6f5257bc6e622dd0f896b6acc884e1d67977fe933510e031bca8ca9cb12bb046b3028990e0e
+    body: e7af59aab9de9eef869982dc7f22560f7cf033959794cd2469cd3c3b0747653bec3c4f7e0442d5e6285ea94db06c7f2ecdce3ce93f3acaffd00bf28bb1d4430f
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
