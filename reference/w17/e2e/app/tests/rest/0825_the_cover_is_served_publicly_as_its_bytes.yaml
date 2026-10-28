@@ -1,0 +1,13 @@
+# `/files` sets `exclude_auth`: a browser rendering the image carries no
+# bearer, so the original is served to a caller with none. It goes out as
+# the type its BYTES are — an UPLOADED_IMAGE original is image/png here,
+# not application/octet-stream — at the size it was uploaded, with the
+# route's immutable caching.
+download:
+    url: ${task_cover_image.url}
+anonymous: true
+expect:
+    w17_wire.content_type: image/png
+    w17_wire.width: {matcher: num, op: "==", value: 900}
+    w17_wire.height: {matcher: num, op: "==", value: 600}
+    w17_wire.cache_control: "public, max-age=31536000, immutable"

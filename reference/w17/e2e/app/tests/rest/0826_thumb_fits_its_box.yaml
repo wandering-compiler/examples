@@ -1,0 +1,11 @@
+# `thumb` is declared `max_width: 64, max_height: 64`: the 900×600 cover
+# is fitted inside the box with its aspect ratio kept — 64 wide, the
+# height whatever 600/900 of that is — not stretched to a square.
+download:
+    url: ${task_cover_image.url}
+    variant: thumb
+anonymous: true
+expect:
+    w17_wire.content_type: image/png
+    w17_wire.width: {matcher: num, op: "==", value: 64}
+    w17_wire.height: {matcher: num, op: "<", value: 64}

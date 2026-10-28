@@ -1,0 +1,13 @@
+# `/blobs` runs behind auth (it does not set `exclude_auth`), so the
+# attachment the response named under it is refused to a caller with no
+# credential. This is the boundary a public/private pair of download
+# routes exists for: were the route to drop its auth, every case that
+# reads the file signed in would still pass, and only this one fails.
+#
+# The URL is ABSOLUTE — its host is APP_GATEWAY_PUBLIC_HOST, not where
+# this run's gateway listens — and the runner uses only its path.
+download:
+    url: ${task_upload.blob_url}
+anonymous: true
+expect_error:
+    code: UNAUTHENTICATED

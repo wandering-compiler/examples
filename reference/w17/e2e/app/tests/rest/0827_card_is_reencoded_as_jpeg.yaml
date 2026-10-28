@@ -1,0 +1,9 @@
+# `card` declares a width and a format: 320 px wide, re-encoded as JPEG
+# whatever the original was.
+download:
+    url: ${task_cover_image.url}
+    variant: card
+anonymous: true
+expect:
+    w17_wire.content_type: image/jpeg
+    w17_wire.width: {matcher: num, op: "==", value: 320}

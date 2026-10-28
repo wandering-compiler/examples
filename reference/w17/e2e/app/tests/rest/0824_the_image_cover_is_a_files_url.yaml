@@ -1,0 +1,8 @@
+# The URL the rest of these cases fetch, as a client receives it.
+method: tasks.TaskQuery.GetTaskCover
+pre:
+    - auth/auth.yaml
+input:
+    id: ${task_cover_image.id}
+expect:
+    image_path: {matcher: regex, pattern: "^/api/v1/tasks/files/task-covers/", capture: task_cover_image.url}

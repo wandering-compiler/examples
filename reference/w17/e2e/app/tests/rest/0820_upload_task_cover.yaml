@@ -1,13 +1,11 @@
 # A task cover: an UPLOADED_IMAGE whose `variants` (thumb, card) the gateway
 # renders in the background once this insert has succeeded.
 #
-# This runner sends text, so the file here only has to pass what the
-# gateway checks while streaming — the part name `image`, an extension on
-# the field's allow-list, the size cap. That the bytes are an image, and
-# what happens to its variants, is the live suite's to prove: it sends
-# PNGs and reads the S3 bucket back (livetest/variants_test.go). A
-# non-image under `.png` is stored as any upload is; its variants answer
-# 415 when asked for.
+# The file here is text, so it only has to pass what the gateway checks
+# while streaming — the part name `image`, an extension on the field's
+# allow-list, the size cap. A non-image under `.png` is stored as any
+# upload is; its variants answer 415 when asked for. 0823 uploads a
+# generated PNG, and 0825–0829 fetch it and its variants back.
 method: tasks.TaskMutation.UploadTaskCover
 pre:
     - auth/auth.yaml

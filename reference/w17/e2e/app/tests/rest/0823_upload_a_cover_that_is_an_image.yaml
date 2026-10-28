@@ -1,0 +1,14 @@
+# A cover whose bytes ARE an image: `image:` makes the runner generate a
+# 900×600 PNG, which inline text cannot be. 0820's text cover proves the
+# upload binding; this one is what the variants below render from.
+method: tasks.TaskMutation.UploadTaskCover
+pre:
+    - auth/auth.yaml
+input:
+    task_id: 700001
+files:
+    - part: image
+      filename: cover.png
+      image: {format: png, width: 900, height: 600}
+expect:
+    id: {capture: task_cover_image.id, match: {matcher: not_empty}}

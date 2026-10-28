@@ -27,6 +27,8 @@
 # The trailing key is the same in both, and asserting it twice is the
 # point: the rewrite must change the PREFIX and leave the object
 # identity alone.
+#
+# The `/blobs` URL is captured for 0351 and 0352, which fetch it.
 method: tasks.TaskQuery.GetTaskUpload
 pre:
     - auth/auth.yaml
@@ -34,4 +36,4 @@ input:
     id: ${task_upload.id}
 expect:
     stored_path: {matcher: regex, pattern: "^/api/v1/tasks/attachments/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}
-    storage_key: {matcher: regex, pattern: "^http://[^/]+/api/v1/tasks/blobs/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}
+    storage_key: {matcher: regex, pattern: "^http://[^/]+/api/v1/tasks/blobs/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$", capture: task_upload.blob_url}

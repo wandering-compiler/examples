@@ -1,0 +1,8 @@
+# Only the declared variants exist. A server that resized to whatever a
+# URL asked for would render and store a new image per request.
+download:
+    url: ${task_cover_image.url}
+    variant: huge
+anonymous: true
+expect_error:
+    code: INVALID_ARGUMENT

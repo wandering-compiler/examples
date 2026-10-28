@@ -1,0 +1,14 @@
+# Signed in, `/blobs` serves the attachment with the contract it
+# declares: `content_disposition: ATTACHMENT`, `cache_control: no-store`,
+# and no ETag (`disable_etag` — a strong ETag over a content hash is a
+# fingerprint oracle on an internal route). The bytes are the ones 0330
+# uploaded.
+download:
+    url: ${task_upload.blob_url}
+pre:
+    - auth/auth.yaml
+expect:
+    w17_wire.body: "hello from the e2e upload"
+    w17_wire.content_disposition: {matcher: regex, pattern: "^attachment"}
+    w17_wire.cache_control: no-store
+    w17_wire.etag: {matcher: empty}

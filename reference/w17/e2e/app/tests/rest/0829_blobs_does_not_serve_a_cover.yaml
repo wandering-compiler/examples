@@ -1,0 +1,11 @@
+# The same object asked of `/blobs`, signed in: that route serves only the
+# fields it includes (`GetTaskUploadResp.storage_key`, the attachments'
+# bucket), so a cover is not found there. A route's `include` decides what
+# it serves, not only which URL a response renders.
+download:
+    url: ${task_cover_image.url}
+    route: /blobs
+pre:
+    - auth/auth.yaml
+expect_error:
+    code: NOT_FOUND
