@@ -1,0 +1,12 @@
+# The attachment asked of the public `/files`, with no credential. A
+# download serves BUCKETS, not fields, so an attachment is private only if
+# no public route covers a field of its bucket — `/files` excludes every
+# one of them (rest.proto), and codegen refuses a public route that would
+# not. This is the step that keeps it so: were a field of the attachments'
+# bucket ever included in `/files`, it would answer the file instead.
+download:
+    url: ${task_upload.blob_url}
+    route: /files
+anonymous: true
+expect_error:
+    code: NOT_FOUND

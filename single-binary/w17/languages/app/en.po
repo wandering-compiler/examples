@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-10-13 14:34+0000\n"
+"POT-Creation-Date: 2026-10-28 12:54+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -24,6 +24,33 @@ msgstr "Authenticator apps are not available here. Your sign-in codes arrive by 
 
 msgid "Confirm your email address before accepting this invitation."
 msgstr "Confirm your email address before accepting this invitation."
+
+msgid "Example · Note Mutation · Create Note"
+msgstr "Example · Note Mutation · Create Note"
+
+msgid "Example · Note Mutation · Delete Note"
+msgstr "Example · Note Mutation · Delete Note"
+
+msgid "Example · Note Mutation · Update Note"
+msgstr "Example · Note Mutation · Update Note"
+
+msgid "Example · Note Query · Get Note"
+msgstr "Example · Note Query · Get Note"
+
+msgid "Example · Note Query · List Notes"
+msgstr "Example · Note Query · List Notes"
+
+msgid "Example · Note · Add"
+msgstr "Example · Note · Add"
+
+msgid "Example · Note · Change"
+msgstr "Example · Note · Change"
+
+msgid "Example · Note · Delete"
+msgstr "Example · Note · Delete"
+
+msgid "Example · Note · View"
+msgstr "Example · Note · View"
 
 msgid "No file was attached."
 msgstr "No file was attached."
