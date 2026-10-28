@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/redis/go-redis/v9 v9.21.0
-	github.com/wandering-compiler/sdk/go v0.1.0-rc.45
+	github.com/wandering-compiler/sdk/go v0.1.0-rc.46
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
 )
