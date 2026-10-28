@@ -5,19 +5,20 @@
 # read's DQL selects the column twice. Everything that differs between
 # them below was decided by the download endpoints, not by the data.
 #
-#   stored_path — `/files` includes `tasks.*`        → RELATIVE URL
-#   storage_key — `/files` EXCLUDES it, `/blobs`
-#                 includes it exactly                → ABSOLUTE URL
+#   stored_path — `/attachments` includes it exactly → RELATIVE URL
+#   storage_key — `/blobs` includes it exactly       → ABSOLUTE URL
+#
+# The public `/files` includes `tasks.*` and EXCLUDES both: attachments
+# are private, and a download serves the whole bucket of every field it
+# covers.
 #
 # Three declarations are each refuted by a different half of this:
 #
 #   * `include` — a selector resolving to nothing would leave both
 #     fields carrying the raw handle, with no prefix at all.
-#   * `exclude` — ignored, `tasks.*` covers storage_key too and BOTH
-#     values come back under `/files`. The two prefixes are the only
-#     way to tell that apart, which is why there are two endpoints:
-#     with one, `include: ["*"]` minus nothing is indistinguishable
-#     from no selector.
+#   * `exclude` — ignored, `tasks.*` on `/files` would claim both fields
+#     a second time, which codegen refuses, and a selector that let it
+#     through would render one of them under `/files`.
 #   * `url_form` — the two endpoints declare different forms, so a
 #     renderer that ignored the field would emit the same shape twice.
 #     RELATIVE starts at `/`; ABSOLUTE carries the origin the gateway
@@ -32,5 +33,5 @@ pre:
 input:
     id: ${task_upload.id}
 expect:
-    stored_path: {matcher: regex, pattern: "^/api/v1/tasks/files/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}
+    stored_path: {matcher: regex, pattern: "^/api/v1/tasks/attachments/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}
     storage_key: {matcher: regex, pattern: "^http://[^/]+/api/v1/tasks/blobs/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}
