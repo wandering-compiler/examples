@@ -10,6 +10,9 @@ tmp/
 # Local dev PKI (self-signed CA + server leaf) — machine-local TLS material.
 certs/dev.local/
 
+# Private-surface dev PKI (CA + a leaf per caller) — machine-local key material.
+certs/private/
+
 # age secret keys — private key material, mounted at deploy, never committed.
 keys/
 
