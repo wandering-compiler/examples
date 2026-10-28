@@ -15,6 +15,8 @@ message CreateUserReq {
   // service fronts UserMutation) computes the hash via
   // `passwordhash.Settings.Hash` before calling.
   string password_hash = 3 [(w17.field) = { type: PASSWORD }];
+  // Optional; empty = NULL (the value form of a nullable CRYPTED_SECRET).
+  string recovery_hint = 4 [(w17.field) = { null: true }];
 }
 message CreateUserResp {
   int64 id = 1;
@@ -24,6 +26,14 @@ message UpdateProfileReq {
   int64  user_id      = 1;
   string display_name = 2;
 }
+// Sets or clears the recovery hint. Unset = NULL (the presence form of a
+// nullable CRYPTED_SECRET).
+message SetRecoveryHintReq {
+  int64           user_id       = 1;
+  optional string recovery_hint = 2;
+}
+message SetRecoveryHintResp {}
+
 message UpdateProfileResp {
   int64  id           = 1;
   string display_name = 2;
@@ -42,7 +52,16 @@ service UserMutation {
     option (w17.db.method) = {
       ops: {
         name: "main",
-        dql:  "INSERT INTO users.User SET email = :email, display_name = :display_name, password_hash = :password_hash, status = 1 RETURNING id"
+        dql:  "INSERT INTO users.User SET email = :email, display_name = :display_name, password_hash = :password_hash, recovery_hint = :recovery_hint, status = 1 RETURNING id"
+      }
+    };
+  }
+
+  rpc SetRecoveryHint(SetRecoveryHintReq) returns (SetRecoveryHintResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "UPDATE users.User SET recovery_hint = :recovery_hint WHERE id = :user_id"
       }
     };
   }
