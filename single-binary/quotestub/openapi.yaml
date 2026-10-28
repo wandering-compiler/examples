@@ -1,0 +1,41 @@
+# The contract of the third-party API this example calls — a stand-in,
+# served by the stub in this directory: the document an egress client is
+# generated from (`w17ctl client generate quotestub/openapi.yaml --name quotes`).
+openapi: 3.0.3
+info:
+  title: Quotes
+  version: "1"
+servers:
+  - url: https://quotes.example
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    Quote:
+      type: object
+      required: [id, text]
+      properties:
+        id: { type: string }
+        text: { type: string }
+        author: { type: string }
+paths:
+  /quotes/{id}:
+    get:
+      operationId: getQuote
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The quote.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+        "404":
+          description: No such quote.
