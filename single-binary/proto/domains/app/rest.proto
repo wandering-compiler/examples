@@ -76,12 +76,12 @@ option (w17.rest_api) = {
         // by the same download endpoint as an upload.
         { ref: "example.NotesFacade.ExportNote", method: POST, path: "/{note_id}/export", exclude_auth: true },
 
-        // The same file made per request and answered as the body, not
-        // JSON: a link to this URL is the file.
         // A third-party API behind the business tier: the facade calls the
         // egress client proto/clients/quotes, which calls the Quotes API.
         { ref: "example.NotesFacade.Quote", method: GET, path: "/quotes/{id}", exclude_auth: true },
 
+        // The same file made per request and answered as the body, not
+        // JSON: a link to this URL is the file.
         { ref: "example.NotesFacade.NoteText", method: GET, path: "/{note_id}/text", exclude_auth: true,
           raw_response: {
             body_field:         "body",
