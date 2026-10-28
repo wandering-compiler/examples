@@ -29,6 +29,10 @@ message User {
   string                      password_hash = 6 [(w17.field) = { type: PASSWORD }];
   Status                      status        = 4;
   google.protobuf.Timestamp   created_at    = 5 [(w17.field) = { default_auto: NOW, immutable: true }];
+  // An optional account-recovery hint, encrypted at rest. NULL when the
+  // person set none: an absent value is stored as NULL, never as the
+  // ciphertext of an empty string.
+  string                      recovery_hint = 7 [(w17.field) = { type: CRYPTED_SECRET, null: true }];
 
   enum Status {
     STATUS_UNSPECIFIED = 0;
