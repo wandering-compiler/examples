@@ -2102,10 +2102,13 @@ message GetTaskUploadReq {
 // handle with a URL under that endpoint's prefix. So which endpoint
 // covers a field is legible from the value the caller receives:
 //
-//   stored_path — covered by the `/files` download → a RELATIVE URL
-//                 under that prefix, which is what a browser fetches.
-//   storage_key — EXCLUDED from `/files` and covered by `/blobs`
-//                 instead → an ABSOLUTE URL under the other prefix.
+//   stored_path — covered by the `/attachments` download → a RELATIVE
+//                 URL under that prefix, which is what the SPA fetches.
+//   storage_key — covered by `/blobs` → an ABSOLUTE URL under the other
+//                 prefix.
+//
+// Both are behind auth, and the public `/files` (`tasks.*`) EXCLUDES them:
+// it may not serve the bucket they share.
 //
 // Two prefixes and two URL forms in one response. A selector that
 // ignored `exclude` would put both under `/files`; one that ignored

@@ -687,7 +687,16 @@ option (w17.rest_api) = {
           // would 401 every image the SPA renders.
           path: "/files"
           include: ["tasks.*"]
-          exclude: ["tasks.GetTaskUploadResp.storage_key"]
+          // Attachments are private, so every field stored in their
+          // bucket stays off this route: a download serves BUCKETS, not
+          // fields, and codegen refuses a public route whose bucket holds
+          // a field served behind auth. They live behind `/attachments`
+          // and `/blobs` below.
+          exclude: [
+            "tasks.UploadAttachmentReq.stored_path",
+            "tasks.TaskUpload.stored_path",
+            "tasks.GetTaskUploadResp.*"
+          ]
           exclude_auth: true
           // The object key IS the sha256 of the content, so the URL
           // changes whenever the bytes do — which is exactly the
@@ -700,8 +709,17 @@ option (w17.rest_api) = {
           url_form: URL_FORM_RELATIVE
         },
         {
-          // The internal blob route. Same objects, different contract:
-          // addressed by key by tooling that is not a browser.
+          // A task's attachments, behind auth: the SPA fetches them with
+          // the caller's credential.
+          path: "/attachments"
+          include: ["tasks.GetTaskUploadResp.stored_path"]
+          content_disposition: CONTENT_DISPOSITION_ATTACHMENT
+          url_form: URL_FORM_RELATIVE
+        },
+        {
+          // The internal blob route. Same objects as `/attachments`,
+          // different contract: addressed by key by tooling that is not a
+          // browser.
           path: "/blobs"
           include: ["tasks.GetTaskUploadResp.storage_key"]
           cache_control: "no-store"

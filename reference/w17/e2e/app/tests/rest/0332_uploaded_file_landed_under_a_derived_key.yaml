@@ -30,11 +30,11 @@ pre:
 input:
     id: ${task_upload.id}
 # 🔴 The handle is no longer what this endpoint RETURNS. Declaring the
-# `/files` download endpoint made the gateway rewrite every covered
+# `/attachments` download endpoint made the gateway rewrite every covered
 # UPLOADED_* response field into a URL, so the raw key now appears only
 # inside one. That is the feature working, not a regression — and it is
 # why the pattern below is anchored on the PREFIX plus the key rather
 # than on the key alone. 0350 is what asserts the rewriting itself.
 expect:
     task_id: {matcher: eq, value: "700001"}
-    stored_path: {matcher: regex, pattern: "^/api/v1/tasks/files/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}
+    stored_path: {matcher: regex, pattern: "^/api/v1/tasks/attachments/task-attachments/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}-[0-9a-f]{32}$"}
