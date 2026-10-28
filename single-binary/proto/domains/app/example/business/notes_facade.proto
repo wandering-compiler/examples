@@ -38,6 +38,16 @@ message NoteTextResp {
   string file_name = 3;
 }
 
+message QuoteReq { string id = 1; }
+
+// QuoteResp — a quote as the third-party Quotes API answered it, through the
+// egress client proto/clients/quotes.
+message QuoteResp {
+  string id     = 1;
+  string text   = 2;
+  string author = 3;
+}
+
 // NotesFacade — hand-written BUSINESS tier. CreateNoteChecked applies a
 // trivial business rule (tags the title) then delegates to the storage
 // NoteMutation. In the single binary the facade reaches storage by
@@ -97,4 +107,11 @@ service NotesFacade {
   // dropped if it rolls back; a title starting with "rollback:" makes this
   // method fail after the composed call, so the live suite can see both.
   rpc CreateNoteCheckedInTx(CreateNoteCheckedReq) returns (Note);
+
+  // Quote — the business tier calling a third-party REST API through a
+  // generated egress client (proto/clients/quotes): `egress.Quotes()` is a
+  // gRPC client served in-process by this bundle, each call an HTTP request
+  // with the credential from W17_CLIENT_QUOTES_DSN, retried when the API is
+  // briefly unavailable, its errors coded for this caller.
+  rpc Quote(QuoteReq) returns (QuoteResp);
 }

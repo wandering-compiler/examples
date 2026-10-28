@@ -1,0 +1,7 @@
+# The API's 404 is mapped onto the caller's situation — NOT_FOUND — and the
+# facade passes the error on as it is, so the REST caller gets a 404.
+method: example.NotesFacade.Quote
+input:
+    id: nope
+expect_error:
+    code: NOT_FOUND
