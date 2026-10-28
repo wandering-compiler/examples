@@ -1,6 +1,6 @@
 # What this example adds to the generated stack (compose.w17.yaml), merged
 # over it by the include in compose.yaml: the seed rows the suite starts
-# from.
+# from, and the third-party API the egress client calls.
 services:
   # One-shot: applies the rendered seed of fixtures/app/test.json (rendered
   # into w17/fixtures by `w17ctl fixtures render`) with the app-server
@@ -24,5 +24,16 @@ services:
       app-postgres: { condition: service_healthy }
 
   app-server:
+    environment:
+      # The egress client proto/clients/quotes calls the stand-in below: the
+      # base URL and the credential, one secret (a real deployment resolves
+      # it through the secret chain, never from a compose file).
+      W17_CLIENT_QUOTES_DSN: http://quotestub:8080?auth=bearer&token=test-token
     depends_on:
       app-seed: { condition: service_completed_successfully }
+      quotestub: { condition: service_started }
+
+  # The third-party Quotes API, stood in for by quotestub/ (its openapi.yaml
+  # is what the client was generated from).
+  quotestub:
+    build: { context: quotestub, args: [GOPROXY, GOSUMDB, GODEBUG] }
