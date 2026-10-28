@@ -10,8 +10,8 @@ package clients.quotes;
 import "w17/egress.proto";
 import "w17/lock.proto";
 
-option (w17.lock_checksum) = "sha256:e16d21e9dc99c885862b85a098eb93fe6f892f61152d474ad3f22060a1f090bd";
-option (w17.lock_signature) = "ed25519/v1:1b6dc01554fd00ce91a1c2e7fca49bdaa06ba92e1a82f30d53a782e513daddd9ee18773702825b2c835c3549cc0200537dba91ed8b4574a5fb82eaaf0e14b70b";
+option (w17.lock_checksum) = "sha256:62a12f7b5b253fc287ee133f24207f068a8cae4b01cc74fa5ffac964df8a81f2";
+option (w17.lock_signature) = "ed25519/v1:132010084803e65d39bb203f320771cee262d7c614ae7dd9e6869617562f544117427e7b4f0184b4be3421dd463cbaf6351aefd6bb17c68f0fa6b8e6b0dd6909";
 option (w17.egress_client) = {
   name: "quotes"
   title: "Quotes"

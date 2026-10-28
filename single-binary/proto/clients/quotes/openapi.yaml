@@ -1,6 +1,6 @@
 # The contract of the third-party API this example calls — a stand-in,
-# served by the stub in this directory. `w17ctl client generate` turned it
-# into the egress client under proto/clients/quotes/ (which vendors a copy).
+# served by the stub in this directory: the document an egress client is
+# generated from (`w17ctl client generate quotestub/openapi.yaml --name quotes`).
 openapi: 3.0.3
 info:
   title: Quotes
