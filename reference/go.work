@@ -10,4 +10,5 @@ use (
 	./w17/stubs
 	./w17/services/app-eventbus
 	./w17/services/billing-eventbus
+	./w17/services/billing-gateway-private
 )
