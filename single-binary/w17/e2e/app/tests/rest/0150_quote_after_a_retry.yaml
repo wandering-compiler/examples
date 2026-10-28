@@ -1,0 +1,9 @@
+# `flaky` answers 503 to the first request and the quote to the next: the
+# answer is the client's retry (a GET may be repeated; the back-off is
+# 200 ms), not the stand-in being up.
+method: example.NotesFacade.Quote
+input:
+    id: flaky
+expect:
+    id: flaky
+    text: Try again.

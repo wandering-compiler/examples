@@ -1,0 +1,13 @@
+# The business tier calling a third-party REST API through a generated
+# egress client (proto/clients/quotes): the facade calls egress.Quotes(), the
+# composed binary serves the client in-process, and the call reaches the
+# Quotes stand-in (quotestub/) as an HTTP GET carrying the bearer token from
+# W17_CLIENT_QUOTES_DSN — the stand-in answers 401 without it, so a quote
+# coming back proves the credential travelled.
+method: example.NotesFacade.Quote
+input:
+    id: q1
+expect:
+    id: q1
+    text: Simple things should be simple.
+    author: Alan Kay

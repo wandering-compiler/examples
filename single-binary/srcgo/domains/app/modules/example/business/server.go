@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	appbiz "github.com/wandering-compiler/examples/single-binary/w17/stubs/business/app"
+	"github.com/wandering-compiler/examples/single-binary/w17/stubs/egress"
+	quotespb "github.com/wandering-compiler/examples/single-binary/w17/stubs/pb/clients/quotes"
 	examplepb "github.com/wandering-compiler/examples/single-binary/w17/stubs/pb/domains/app/example"
 	"github.com/wandering-compiler/sdk/go/lib/kvfs"
 	distxpb "github.com/wandering-compiler/sdk/go/pb/common/distx"
@@ -71,6 +73,20 @@ func (s *NotesFacadeServer) ExportNote(ctx context.Context, req *examplepb.Expor
 		return nil, err
 	}
 	return row, nil
+}
+
+// Quote asks the third-party Quotes API for a quote, through the egress
+// client generated from its OpenAPI document (proto/clients/quotes). The
+// call is an ordinary gRPC call: the bundle serves the client in-process,
+// so the HTTP request, the credential, the retry and the error mapping are
+// not this handler's — an unknown quote comes back NOT_FOUND, as the API's
+// 404 maps, and passes through as it is.
+func (s *NotesFacadeServer) Quote(ctx context.Context, req *examplepb.QuoteReq) (*examplepb.QuoteResp, error) {
+	q, err := egress.Quotes().GetQuote(ctx, &quotespb.GetQuoteRequest{Id: req.GetId()})
+	if err != nil {
+		return nil, err
+	}
+	return &examplepb.QuoteResp{Id: q.GetId(), Text: q.GetText(), Author: q.GetAuthor()}, nil
 }
 
 // NoteText answers the same rendering per request, as the HTTP body
