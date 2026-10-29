@@ -61,6 +61,24 @@ message CoveringDocument {
 
 message DocumentsCoveringResp { repeated CoveringDocument rows = 1; }
 
+// DocumentsNearestReq carries the query vector in pgvector's text form
+// (`[1,0,0]`) — the column's own carrier, so the database parses it as the
+// vector the operator compares against.
+message DocumentsNearestReq {
+  string query = 1;
+}
+
+message NearestDocument {
+  int64  id       = 1;
+  string title    = 2;
+  // Cosine distance to the query: 0 is the same direction, 1 orthogonal.
+  // `optional` because 0 is the answer for the query vector itself, and a
+  // plain proto3 scalar equal to its default is omitted from JSON.
+  optional double distance = 3;
+}
+
+message DocumentsNearestResp { repeated NearestDocument rows = 1; }
+
 message CountByDepthReq {}
 
 // DepthGroup is one GROUP BY row. `titles` is produced by
@@ -321,6 +339,25 @@ service DocumentQuery {
           "FROM docs.Document d "
           "WHERE ST_Contains(d.footprint, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)) "
           "ORDER BY d.id"
+      }
+    };
+  }
+
+  // DocumentsNearest: the query a vector column exists for — the nearest
+  // documents to a query vector by cosine distance, which the HNSW index
+  // over vector_cosine_ops answers. The distance is projected too, so the
+  // ordering is visible rather than inferred.
+  rpc DocumentsNearest(DocumentsNearestReq) returns (DocumentsNearestResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id AS id, d.title AS title, "
+          "d.embedding <=> :query AS distance "
+          "FROM docs.Document d "
+          "WHERE d.embedding IS NOT NULL "
+          "ORDER BY d.embedding <=> :query "
+          "LIMIT 2"
       }
     };
   }

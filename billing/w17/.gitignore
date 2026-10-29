@@ -47,3 +47,6 @@ keys/
 
 # The lock file w17ctl holds while it rewrites lock.yaml.
 /lock.yaml.lock
+
+# Private-surface dev PKI (CA + a leaf per caller) — machine-local key material.
+certs/private/

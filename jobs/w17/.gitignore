@@ -45,3 +45,6 @@ keys/
 # Base rsync ignore for `w17ctl stack` remote mode — regenerated every codegen.
 /rsync.ignore
 /lock.yaml.lock
+
+# Private-surface dev PKI (CA + a leaf per caller) — machine-local key material.
+certs/private/

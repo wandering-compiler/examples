@@ -4,7 +4,7 @@
   "seeds": {
     "catalog/test": {
       "source": "catalog/test.json",
-      "sha256": "9d87bd2d35ebbd7f3064e3894fd9b69d455bd118122c07a33c555500bed9e3fd"
+      "sha256": "7c1e22c4e292c893171623791d0c61b2296456b15b64649ff6635391ae0a766b"
     }
   }
 }
