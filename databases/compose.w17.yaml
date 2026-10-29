@@ -19,7 +19,15 @@ name: w17-examples-databases
 
 services:
   catalog-postgres:
-    image: postgis/postgis:18-3.6
+    image: w17-postgis-pgvector:18-3.6
+    # No published image carries every extension this schema needs, so the
+    # stack builds one (see the generator's postgresImage).
+    build:
+      dockerfile_inline: |
+        FROM postgis/postgis:18-3.6
+        RUN apt-get update \
+            && apt-get install -y --no-install-recommends postgresql-18-pgvector \
+            && rm -rf /var/lib/apt/lists/*
     environment:
       POSTGRES_USER: catalog
       POSTGRES_PASSWORD: ${W17_CATALOG_POSTGRES_DB_PASSWORD:-catalog}
