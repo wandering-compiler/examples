@@ -33,6 +33,25 @@ message Document {
         name:   "documents_footprint_gist"
         method: GIST
         fields: [{ name: "footprint" }]
+      },
+      // HNSW over the embedding, serving COSINE distance — the opclass is
+      // the distance, and a query ordering by another one (`<->`) would not
+      // use it. Required for that reason rather than left to pgvector's
+      // default (L2).
+      {
+        name:    "documents_embedding_hnsw"
+        method:  HNSW
+        fields:  [{ name: "embedding", opclass: "vector_cosine_ops" }]
+        storage: { key: "m" value: "16" }
+      },
+      // IVFFlat, the other pgvector method, over L2 distance: one index per
+      // distance a query orders by. `lists` is the build knob; one list is
+      // right for a table of a handful of rows.
+      {
+        name:    "documents_embedding_ivfflat"
+        method:  IVFFLAT
+        fields:  [{ name: "embedding", opclass: "vector_l2_ops" }]
+        storage: { key: "lists" value: "1" }
       }
     ]
   };
@@ -126,4 +145,18 @@ message Document {
     geometry_type: "Polygon"
     srid: 4326
   }, (w17.db.column) = { db_type: GEOGRAPHY }];
+
+  // VECTOR — pgvector's `vector(N)`, an embedding searched by distance
+  // (DocumentQuery.DocumentsNearest). `float[]` or JSONB would store the
+  // same numbers and have no distance operator, so every search would read
+  // every row; a vector column takes the HNSW / IVFFlat indexes above.
+  //
+  // Carried as `string` in pgvector's text form both ways: `[1,0,0]`.
+  //
+  // `dimensions` is REQUIRED: an undimensioned vector column accepts
+  // embeddings of any width, so two models' vectors would land side by
+  // side and compare as if they meant something.
+  optional string embedding = 13 [(w17.field) = {
+    dimensions: 3
+  }, (w17.db.column) = { db_type: VECTOR }];
 }

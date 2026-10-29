@@ -1,0 +1,23 @@
+# The vector column, answering the question it exists for: which documents
+# are nearest to a query vector, by cosine distance.
+#
+# A TEXT column holding the same `[1,0,0]` characters would round-trip them
+# and could answer nothing here — there is no `<=>` over text, and the query
+# dies at PREPARE. Only a pgvector column measures a distance.
+#
+# THE DECOY IS THE POINT. Three documents carry an embedding:
+#   700001 [1,0,0]      — the query itself, distance 0
+#   700003 [0.9,0.1,0]  — close, distance ~0.006
+#   700002 [0,1,0]      — orthogonal, distance 1
+# LIMIT 2 must return the first two in that order. An ordering by id, by
+# insertion, or by the wrong distance returns 700002 among them and fails.
+method: docs.DocumentQuery.DocumentsNearest
+input:
+    query: "[1,0,0]"
+expect:
+    rows: {matcher: count, op: '==', value: 2}
+    rows.0.id: {matcher: eq, value: "700001"}
+    rows.0.title: {matcher: eq, value: seed alpha}
+    rows.0.distance: {matcher: num, op: '<', value: 0.000001}
+    rows.1.id: {matcher: eq, value: "700003"}
+    rows.1.distance: {matcher: num, op: '<', value: 0.01}

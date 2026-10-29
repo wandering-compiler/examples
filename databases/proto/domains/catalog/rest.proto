@@ -50,6 +50,7 @@ option (w17.rest_api) = {
         // reason as the rest of this block. Takes the point as two query
         // parameters, which is how a caller has one.
         { ref: "docs.DocumentQuery.DocumentsCovering", method: GET,  path: "/covering" },
+        { ref: "docs.DocumentQuery.DocumentsNearest",  method: GET,  path: "/nearest" },
         { ref: "docs.DocumentQuery.GetDocument",      method: GET,  path: "/{document_id}" },
         { ref: "docs.DocumentQuery.GetDocumentShape", method: GET,  path: "/{document_id}/shape" },
         { ref: "docs.DocumentMutation.CreateDocument", method: POST, path: "", body: "*" },
