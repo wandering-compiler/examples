@@ -1,5 +1,7 @@
 package stripe
 
+import "encoding/json"
+
 // This file is the single place documenting the Stripe API wire surface
 // the driver depends on — the JSON RESPONSE shapes it decodes and the
 // webhook envelope it parses. (Requests are form-encoded `url.Values`
@@ -16,6 +18,17 @@ type customerResp struct {
 	ID string `json:"id"`
 }
 
+// customerList ← GET /v1/customers
+type customerList struct {
+	Data []struct {
+		ID       string            `json:"id"`
+		Email    string            `json:"email"`
+		Metadata map[string]string `json:"metadata"`
+		Created  int64             `json:"created"`
+	} `json:"data"`
+	HasMore bool `json:"has_more"`
+}
+
 // paymentIntentResp ← POST /v1/payment_intents
 type paymentIntentResp struct {
 	ID           string `json:"id"`
@@ -23,13 +36,37 @@ type paymentIntentResp struct {
 	ClientSecret string `json:"client_secret"`
 }
 
+// paymentIntentList ← GET /v1/payment_intents
+type paymentIntentList struct {
+	Data    []paymentIntentObject `json:"data"`
+	HasMore bool                  `json:"has_more"`
+}
+
+// paymentIntentObject is one payment intent, listed or read by id.
+type paymentIntentObject struct {
+	ID          string            `json:"id"`
+	Status      string            `json:"status"`
+	Amount      int64             `json:"amount"` // minor units
+	Currency    string            `json:"currency"`
+	Customer    string            `json:"customer"` // the id (not expanded)
+	Description string            `json:"description"`
+	Metadata    map[string]string `json:"metadata"`
+	Created     int64             `json:"created"`
+	// The last attempt's error; null when no attempt failed.
+	LastPaymentError json.RawMessage `json:"last_payment_error"`
+	// What the intent took, in minor units of Currency.
+	AmountReceived *int64 `json:"amount_received"`
+}
+
 // refundResp ← POST /v1/refunds
 type refundResp struct {
-	ID       string            `json:"id"`
-	Status   string            `json:"status"`
-	Amount   int64             `json:"amount"`   // minor units
-	Currency string            `json:"currency"` // lowercase ISO-4217
-	Metadata map[string]string `json:"metadata"`
+	ID            string            `json:"id"`
+	Status        string            `json:"status"`
+	Amount        int64             `json:"amount"`   // minor units
+	Currency      string            `json:"currency"` // lowercase ISO-4217
+	Metadata      map[string]string `json:"metadata"`
+	PaymentIntent string            `json:"payment_intent"` // on a list item
+	Created       int64             `json:"created"`
 }
 
 // refundList ← GET /v1/refunds
@@ -46,6 +83,8 @@ type priceResp struct {
 // subscriptionResp ← POST /v1/subscriptions
 type subscriptionResp struct {
 	ID               string            `json:"id"`
+	Customer         string            `json:"customer"` // the id (not expanded)
+	Created          int64             `json:"created"`
 	Status           string            `json:"status"`
 	CurrentPeriodEnd int64             `json:"current_period_end"`
 	Metadata         map[string]string `json:"metadata"`
@@ -85,7 +124,8 @@ type apiError struct {
 // webhookEnvelope is the parsed shape of an inbound webhook event. For
 // payment_intent.* events data.object.id is the payment-intent id; for
 // customer.subscription.* it is the subscription id (+ status /
-// current_period_end).
+// current_period_end); for charge.dispute.* the dispute id (+ status, amount,
+// currency, payment_intent); for refund.* the refund id.
 type webhookEnvelope struct {
 	ID      string `json:"id"`
 	Type    string `json:"type"`
@@ -100,6 +140,12 @@ type webhookEnvelope struct {
 			// is fully refunded.
 			PaymentIntent string `json:"payment_intent"`
 			Refunded      bool   `json:"refunded"`
+			// On a refund or a dispute: its amount (minor units) and currency.
+			Amount   int64  `json:"amount"`
+			Currency string `json:"currency"`
+			// On a payment intent: what it took (minor units of Currency);
+			// absent on other objects.
+			AmountReceived *int64 `json:"amount_received"`
 		} `json:"object"`
 	} `json:"data"`
 }

@@ -32,17 +32,38 @@ by the `payment_provider` env. **The core ships with one driver, Stripe.**
     before refunding: a retry after the provider has forgotten its
     idempotency key does not refund twice, even when the first attempt's
     local record failed. A refund made before rc.5 carries no such
-    metadata.
+    metadata. The provider's answer is recorded as the refund's `status`
+    (`PENDING`, `SUCCEEDED`, `FAILED`, `CANCELED`); a refund that fails
+    later is settled by the refund webhooks below.
+    Before any provider is asked, the refund is checked against the plugin's
+    own records under the payment's row lock: a payment that failed or was
+    canceled is refused (`FailedPrecondition`), one whose success webhook has
+    not arrived is read from the provider first, and an amount past what
+    remains (the payment less its pending and succeeded refunds) is refused
+    (`InvalidArgument`). Two refunds of one payment run one after the other,
+    so together they never exceed it.
     Privileged / internal (not REST-exposed).
   - `IngestStripe` — webhook sink (gated `stripe_webhooks`): verify the
     `Stripe-Signature` HMAC (constant-time, multi-`v1`) + timestamp
     tolerance (5-min replay window), dispatch the terminal state to
     `MarkPaymentSucceeded` / `MarkPaymentFailed` / `MarkPaymentCanceled`
-    (`payment_intent.canceled`) / `MarkPaymentRefunded` (`charge.refunded`
-    with the charge fully refunded) (transition-guarded, so a
-    redelivered or out-of-order event changes and emits nothing; CANCELED
-    and REFUNDED are terminal, and an older subscription event never
-    overwrites a newer one), then record the event id. Every object the
+    (`payment_intent.canceled`) (transition-guarded, so a redelivered or
+    out-of-order event changes and emits nothing; CANCELED is terminal, and
+    an older subscription event never overwrites a newer one), then record
+    the event id. A refund event (`charge.refunded`, `refund.created`,
+    `refund.updated`, `refund.failed`, `charge.refund.updated`) makes the
+    plugin read the payment's refunds from the provider and reconcile
+    them: a refund it does not know (made at the provider directly) is
+    recorded, a known one takes the provider's outcome (`FAILED` and
+    `CANCELED` never move back), and the payment moves to `REFUNDED` when
+    the pending and succeeded refunds reach its amount — and back to
+    `SUCCEEDED` (`PaymentRefundReversed`) when one that completed it
+    fails; the status always follows the local refund rows, never one
+    read of the provider. Subscribe the endpoint to the `refund.*` and
+    `charge.dispute.*` events: without the first a refund's later failure
+    is seen only on the next `charge.refunded`, without the second no
+    dispute is recorded. `charge.dispute.*` records a `Dispute` (see
+    "Refunding a top-up"). Every object the
     plugin creates carries `metadata[w17_payment]` (what it is) and
     `metadata[w17_install]` (which installation made it: a keyed hash of
     the webhook signing secret); an event for an object THIS installation
@@ -72,14 +93,28 @@ before any provider call.
 `PaymentService.GetMy*`, which answer only with the signed-in caller's
 rows (see "Who a request acts for"). The storage `PaymentQuery` tier
 takes any id and is for the project's own code only.
-- **Events** — `PaymentSucceeded`, `PaymentFailed`, `PaymentCanceled`,
-  `PaymentRefunded` (provider-neutral), emitted from the reconciliation
-  mutations after the provider confirms. A payment reads `REFUNDED` once its
-  refunds reach its amount: `RefundPayment` sets it when its refund completes
-  the amount, and the provider's `charge.refunded` settles it otherwise.
+- **Events** — `PaymentCreated`, `PaymentSucceeded`, `PaymentAmountMismatch`, `PaymentFailed`,
+  `PaymentCanceled`, `PaymentRefunded`, `PaymentRefundReversed`,
+  `RefundCreated` (a refund this plugin made, partial or full),
+  `ProviderRefundRecorded` (one made at the provider directly, found by the
+  webhook or the reconciliation), `RefundStatusChanged` (a refund's outcome)
+  and, with `stripe_webhooks`, `DisputeOpened` / `DisputeClosed` (WON or
+  LOST), all provider-neutral and each emitted once by the write that records
+  the fact. A subscriber that wants every refund listens to both refund
+  events. A payment
+  reads `REFUNDED` once its pending and succeeded refunds reach its amount:
+  `RefundPayment` sets it when its refund completes the amount, and the
+  refund webhooks settle it otherwise; a failed or canceled refund does not
+  count.
+  A success is checked first: a payment the provider reports took another
+  amount or currency than its row holds (its intent was changed at the
+  provider) is held at `AMOUNT_MISMATCH` instead, with what it took
+  (`received_amount`, `received_currency`), and `PaymentAmountMismatch` says
+  so — no `PaymentSucceeded`, no top-up credit. An operator decides;
+  `RefundPayment` returns up to what it took.
 - **Stripe driver** (`src/lib/backend/stripe`) — `EnsureCustomer`,
   `CreatePayment`, `RefundPayment`, `FindRefund` (and the subscription
-  calls below) over the Stripe REST API (no vendored SDK), plus webhook
+  calls below), `ListRefunds` over the Stripe REST API (no vendored SDK), plus webhook
   signature verification. Exact money handling
   (decimal string → integer minor units, no float64).
 
@@ -159,6 +194,10 @@ must be exact. Amounts cross the API as decimal strings (`"19.99"`).
 
 ## Configuration (`env`)
 
+Each entry's full text is its `description:` in `plugin.yaml`; the generated
+`gen.EnvConfig` carries it as the field's comment. Secret entries arrive as
+`secret.String`, revealed once, when `RegisterPlugin` builds the backend.
+
 | env | secret | purpose |
 |---|---|---|
 | `payment_provider` | no | driver; v1: `stripe` (default) |
@@ -166,6 +205,7 @@ must be exact. Amounts cross the API as decimal strings (`"19.99"`).
 | `webhook_signing_secret` | **yes** while `stripe_webhooks` is on (the default); the bundle refuses to boot without it | webhook HMAC secret (`whsec_…`) |
 | `provider_api_base` | no | root of a Stripe-compatible API instead of `https://api.stripe.com` (e.g. the `stripemock` sandbox, `http://stripemock:12111`); empty = the real API; test keys only |
 | `default_currency` | no | ISO-4217 applied when a charge omits one |
+| `previous_install_marks` | no | comma-separated installation marks written under earlier signing secrets (see below); a malformed one fails boot |
 
 ## Prepaid credit wallet (feature `prepaid`)
 
@@ -196,12 +236,33 @@ charge). Off by default.
   - read the caller's balance via `GET /credit/balance` →
     `PaymentService.GetMyCreditBalance` (zero before the first credit);
     grant/spend/top-up are privileged business ops, not REST-exposed.
-- **Refunding a top-up** — `RefundPayment` on a top-up payment spends the
+- **A top-up's credit is reconciled, not patched.** One rule decides what
+  a top-up is worth: its amount, less its pending and succeeded refunds and
+  its lost disputes, never below zero, and nothing until its payment has
+  succeeded. After every change to those — the success, a refund (through
+  `RefundPayment` or made at the provider directly), a refund's outcome, a
+  dispute, a retry — the plugin moves the credit it holds for the top-up to
+  that target. An increase cancels what the owner owes first, then adds
+  spendable credit. A decrease takes only what the balance holds — never
+  below zero; the rest is recorded as `CreditTopup.credit_owed`, credit the
+  owner spent and now owes, taken later if the balance grows while the
+  top-up is reconciled again. The plugin does not otherwise collect it;
+  query `credit_owed > 0` to find owners who owe credit.
+- **Refunding a top-up** — `RefundPayment` on a top-up payment takes the
   refunded amount from the owner's credit before the provider is asked.
   Credit already spent, or not granted yet, makes the refund
   `FailedPrecondition`; a refusal the provider will repeat gives the credit
-  back. A refund made at the provider directly, or a dispute, leaves the
-  credit.
+  back, and so does a refund the provider fails later.
+- **Refunds and disputes at the provider** (needs `stripe_webhooks`) — a
+  refund made at the provider directly (its dashboard, its API), and a lost
+  dispute, lower the top-up's target when their webhook arrives; a webhook
+  cannot refuse, so spent credit is owed. An open dispute lowers nothing
+  (most are won; the credit stays spendable until it is lost), and an
+  inquiry, a won dispute or a refund first seen failed change nothing. A
+  refund or dispute that arrives before the top-up's grant is simply left
+  out of it. The ledger reasons `topup`, `topup-refund`,
+  `topup-refund-refused` and `topup-reconcile` are the plugin's own:
+  `GrantCredit` and `SpendCredit` refuse them.
 - **Event** — `CreditApplied` (signed delta + new balance).
 
 ## Metered / pay-as-you-go (feature `usage`)
@@ -270,10 +331,93 @@ webhooks). Off by default. This is the one feature that extends
   the `SubscriptionStatusChanged` that moves it there; never on
   `SubscriptionStarted` alone.
 
+## Reconciling with the provider (`ReconcileProvider`)
+
+The webhooks keep the local rows in step with the provider, but two things
+can lose a change for good: a local write that failed after the provider
+call and was never retried (an intent, a refund, a subscription or a
+customer with no row), and a webhook endpoint that was down or refusing for
+longer than the provider redelivers (about three days), which leaves a row
+whose status never moves again — a charge that reads pending although it was
+paid, a top-up whose credit was never granted, a dashboard refund never
+recorded.
+
+`PaymentService.ReconcileProvider` (feature `stripe_webhooks`) closes both.
+It walks the provider's customers, payment intents, refunds and (with
+`subscriptions`) subscriptions created at or after `since`, and for every
+object **this installation** made — recognised by the `w17_payment` /
+`w17_install` marks the plugin writes — it records the missing row or brings
+the lagging one up to date, through the same paths the create calls and the
+webhook use. So the events fire as they would have (`PaymentSucceeded` once,
+not on every run), a top-up's credit is granted or taken back once, and a
+run is safe beside webhook deliveries and beside another run. Objects
+without this installation's marks are counted `foreign` and left alone.
+Nothing is ever deleted.
+
+The plugin schedules nothing, and no preset exposes the method (it is not
+for end users). Call it from your own code — a scheduled job, an operator
+action — through the plugin's service in your bundle:
+
+```go
+req := &paymentpb.ReconcileProviderReq{Since: timestamppb.New(time.Now().Add(-96 * time.Hour))}
+for {
+	resp, err := payments.ReconcileProvider(ctx, req)
+	if err != nil {
+		return err // an invalid request, or no installation id
+	}
+	log(resp) // counts per kind: created, updated, in_sync, foreign, superseded, failed
+	if resp.GetStopped() != "" {
+		saveForLater(resp.GetNextCursor()) // a provider list failed: resume later, not now
+		break
+	}
+	if resp.GetNextCursor() == "" {
+		break
+	}
+	req = &paymentpb.ReconcileProviderReq{Cursor: resp.GetNextCursor()}
+}
+```
+
+- **`since`** is required; `limit` caps the objects one call examines
+  (default 1000, at most 10000); `next_cursor` continues the walk (send it
+  alone — it carries its `since`).
+- **A provider list that fails does not lose the walk.** A rate limit, a
+  5xx or a timeout is retried three times (about five seconds, never past
+  the call's deadline); a list that still fails, or that the provider
+  refuses, ends the call with the counts so far, `stopped` saying which list,
+  and `next_cursor` at the page that failed. A cursor whose object was since
+  deleted at the provider continues from that object's creation time.
+- **Suggested cadence:** hourly with `since` four days back (a little more
+  than the provider's redelivery window, so a webhook still being retried is
+  usually there first), and after any webhook outage once with `since` at the
+  outage's start. Each run lists every object created since `since`, so keep
+  the window as short as your outages allow.
+- **`failed`** objects are logged server-side with their cause and retried
+  by the next run; a count that stays above zero needs a look. `superseded`
+  is a customer whose principal is already linked to another one (the loser
+  of two concurrent first charges): harmless.
+- **Rotating `webhook_signing_secret` changes the installation mark**
+  (`w17_install` derives from it). Every object created before the rotation
+  then reads as foreign: the reconciliation never touches it again, and its
+  webhooks are acknowledged without effect. List the old mark — read it off
+  any older object's metadata in the provider's dashboard — in
+  `previous_install_marks` to keep those objects this installation's.
+- **Not covered:** provider prices (`CreatePlan` is locally authoritative; an
+  orphan price is never referenced and moves no money), disputes (only the
+  webhook records them), and customers created before this version (they
+  carry no marks and count as `foreign`; their payments are still matched).
+
+## Audit tables are never pruned
+
+`ProcessedWebhookEvent`, `CreditLedger`, `UsageRecord`, `Refund` and
+`Dispute` are audit logs: the plugin never deletes a row from any table, and
+does not expect you to. Archiving them at scale (partitioning, moving old
+rows to cold storage) is a deployment concern.
+
 ## Features
 
 - `stripe_webhooks` (default on) — the webhook ingestion surface
-  (`IngestStripe` + `ProcessedWebhookEvent` + `MarkWebhookProcessed`).
+  (`IngestStripe` + `ProcessedWebhookEvent` + `MarkWebhookProcessed`), and
+  `ReconcileProvider`.
 - `prepaid` (default off) — the credit wallet. The wallet is local;
   `TopUpCredit` needs `stripe_webhooks` too (a top-up's credit is granted
   from the webhook) and refuses to charge without it.
@@ -316,12 +460,16 @@ there is no compile coupling when a feature is absent):
   (the standalone slices prove handler logic + the Stripe driver; the
   multi-op / UPSERT / CHECK DQL validates at project codegen).
 
-## Regenerating the committed `src/gen/pb`
+## Generating `src/gen`
 
-The `src/gen/pb/*.pb.go` stubs are author-only (the local `go test`
-loop); the project codegen generates its own per-activation pb. After
-editing any `proto/` file:
+`src/gen` is generated and never committed: the pb, the contract
+`RegisterPlugin` takes (`EnvConfig`, `ClientSet`, `HandlerRegistry`) and the
+feature constants. After cloning, and after editing `plugin.yaml` or any
+`proto/` file:
 
 ```
-w17ctl plugin gen-pb plugins/payment
+make gen PLUGIN=payment     # or: w17ctl plugin gen payment
 ```
+
+It needs a reachable console (a w17ctl login). A consumer's staging generates
+the same package for each activation, so nothing here is published.

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -20,6 +21,117 @@ import (
 // customer.subscription.* events here only when the feature is on.
 func init() {
 	onSubscriptionWebhook = reconcileSubscriptionWebhook
+	reconcileSubscription = reconcileProviderSubscription
+}
+
+// reconcileProviderSubscription is the provider reconciliation of one
+// subscription (see ReconcileProvider). One this installation did not start
+// is foreign. One without a local row gets it, the way Subscribe writes it
+// (CreateSubscription, which emits SubscriptionStarted), in the provider's
+// current status. One whose row lags takes the provider's status the way
+// the webhook gives it (MarkSubscriptionStatus, which emits
+// SubscriptionStatusChanged).
+//
+// Both writes carry the time of the read as the provider event time, so the
+// webhook's out-of-order guard holds across the two writers: an event created
+// before the read (a redelivery still in flight) cannot put an older status
+// back, and one created after it applies. The time is the PROVIDER's
+// (sub.ReadAt, its answer's Date), the clock it stamps its events with: a
+// local clock running ahead would refuse every newer event until the next
+// run. A row that already holds a newer event, or is CANCELED, refuses the
+// update: in sync.
+func reconcileProviderSubscription(ctx context.Context, h *PaymentServiceHandler, sub backend.SubscriptionObject) (reconcileOutcome, error) {
+	if sub.Origin != backend.OriginSubscription || !h.markedHere(sub.Marks) {
+		return reconcileForeign, nil
+	}
+	st := mapSubscriptionStatus(sub.Status)
+	end := unixToTimestamp(sub.CurrentPeriodEnd)
+	var at *timestamppb.Timestamp // NULL without the provider's time: the next event wins
+	if sub.ReadAt > 0 {
+		at = timestamppb.New(time.Unix(sub.ReadAt, 0))
+	}
+	row, err := h.subscriptionByProviderID(ctx, sub.ProviderSubscriptionID)
+	if err != nil {
+		return reconcileFailed, err
+	}
+	if row == nil {
+		cust, err := h.customerByProviderID(ctx, sub.ProviderCustomerID)
+		if err != nil {
+			return reconcileFailed, err
+		}
+		if cust == nil {
+			return reconcileFailed, fmt.Errorf("subscription %s: no local customer for %s", sub.ProviderSubscriptionID, sub.ProviderCustomerID)
+		}
+		plan, err := h.Query.GetPlanByProviderPriceId(ctx, &pb.GetPlanByProviderPriceIdReq{ProviderPriceId: sub.ProviderPriceID})
+		if err != nil && !absent(err) {
+			return reconcileFailed, err
+		}
+		if plan.GetPlan() == nil {
+			return reconcileFailed, fmt.Errorf("subscription %s: no local plan for price %s", sub.ProviderSubscriptionID, sub.ProviderPriceID)
+		}
+		_, err = h.Mutation.CreateSubscription(ctx, &pb.CreateSubscriptionReq{
+			CustomerId:             cust.GetId(),
+			PlanId:                 plan.GetPlan().GetId(),
+			ProviderSubscriptionId: sub.ProviderSubscriptionID,
+			Status:                 int32(st),
+			CurrentPeriodEnd:       end,
+			ProviderEventAt:        at,
+		})
+		if err == nil {
+			return reconcileCreated, nil
+		}
+		if constraintCode(err) != codeUniqueViolation {
+			return reconcileFailed, err
+		}
+		// Subscribe's retry or a concurrent run recorded it first: bring
+		// that row up to date like any other.
+		if row, err = h.subscriptionByProviderID(ctx, sub.ProviderSubscriptionID); err != nil {
+			return reconcileFailed, err
+		}
+		if row == nil {
+			return reconcileFailed, fmt.Errorf("subscription %s: the insert was refused and no row holds it", sub.ProviderSubscriptionID)
+		}
+	}
+	if row.GetStatus() == st && sameInstant(row.GetCurrentPeriodEnd(), end) {
+		return reconcileInSync, nil
+	}
+	if at == nil {
+		// Unordered against the webhook's events, an update could put back
+		// a status a newer event already replaced.
+		return reconcileFailed, fmt.Errorf("subscription %s: the provider's answer carried no time to order the update by", sub.ProviderSubscriptionID)
+	}
+	_, err = h.Mutation.MarkSubscriptionStatus(ctx, &pb.MarkSubscriptionStatusReq{
+		ProviderSubscriptionId: sub.ProviderSubscriptionID,
+		Status:                 int32(st),
+		CurrentPeriodEnd:       end,
+		ProviderEventAt:        at,
+	})
+	switch {
+	case err == nil:
+		return reconcileUpdated, nil
+	case guardRefused(err):
+		return reconcileInSync, nil // CANCELED, or a newer event already applied
+	}
+	return reconcileFailed, err
+}
+
+// subscriptionByProviderID is the local subscription of a provider id, nil
+// when there is none.
+func (h *PaymentServiceHandler) subscriptionByProviderID(ctx context.Context, providerSubscriptionID string) (*pb.Subscription, error) {
+	got, err := h.Query.GetSubscriptionByProviderId(ctx, &pb.GetSubscriptionByProviderIdReq{ProviderSubscriptionId: providerSubscriptionID})
+	if err != nil && !absent(err) {
+		return nil, err
+	}
+	return got.GetSubscription(), nil
+}
+
+// sameInstant reports whether two optional timestamps name the same second
+// (both absent counts).
+func sameInstant(a, b *timestamppb.Timestamp) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.AsTime().Unix() == b.AsTime().Unix()
 }
 
 // reconcileSubscriptionWebhook maps a provider customer.subscription.*
@@ -100,11 +212,16 @@ func (h *PaymentServiceHandler) CreatePlan(ctx context.Context, req *pb.DefinePl
 		return sameTerms(existing.GetPlan())
 	}
 
+	// Keyed by everything it sends (subscriptions gap 4): a retried or
+	// racing CreatePlan gets the price the first attempt made instead of an
+	// orphan at the provider.
+	name := orDefault(req.GetName(), slug)
 	priceID, err := h.Backend.UpsertPlan(ctx, backend.PlanSpec{
-		Slug:     slug,
-		Name:     orDefault(req.GetName(), slug),
-		Amount:   backend.Money{Amount: amount, Currency: currency},
-		Interval: req.GetInterval(),
+		Slug:           slug,
+		Name:           name,
+		Amount:         backend.Money{Amount: amount, Currency: currency},
+		Interval:       req.GetInterval(),
+		IdempotencyKey: scopedKey("plan", h.installID(), slug, name, amount, currency, req.GetInterval()),
 	})
 	if err != nil {
 		return nil, providerFailure(err)
@@ -270,16 +387,6 @@ func unixToTimestamp(sec int64) *timestamppb.Timestamp {
 		return nil
 	}
 	return timestamppb.New(time.Unix(sec, 0).UTC())
-}
-
-// eventTime is the provider's creation time of an event — its order, which
-// delivery order is not. An event without one (the provider always sends it)
-// counts as now.
-func eventTime(unix int64) *timestamppb.Timestamp {
-	if unix <= 0 {
-		return timestamppb.Now()
-	}
-	return timestamppb.New(time.Unix(unix, 0))
 }
 
 // GetMySubscription returns one of the caller's subscriptions. Another
