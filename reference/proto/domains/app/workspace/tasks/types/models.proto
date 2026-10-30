@@ -251,12 +251,19 @@ message Tag {
 // names the pivot rows; from there `JOIN tl.tag` reaches the
 // Tag itself. Same shape from the Tag side via
 // `tag.tag_links`.
+//
+// The task_id key is `deferrable`: it is checked at COMMIT, not after each
+// statement, so one transaction may write a task's tag links before the task
+// itself (an import that writes the pivot rows first). A link whose task is
+// still missing at COMMIT fails the transaction. CASCADE still deletes the
+// links when their task goes — deferral changes when the reference is
+// checked, not what a delete does.
 message TaskTag {
   option (w17.db.table) = { name: "task_tags" };
 
   int64 task_id = 1 [
     (w17.field)     = { pk: true, related_name: "tag_links" },
-    (w17.db.column) = { fk: "tasks.Task", deletion_rule: CASCADE }
+    (w17.db.column) = { fk: "tasks.Task", deletion_rule: CASCADE, deferrable: true }
   ];
   int64 tag_id  = 2 [
     (w17.field)     = { pk: true, related_name: "tag_links" },
