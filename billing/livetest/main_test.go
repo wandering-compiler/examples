@@ -253,11 +253,15 @@ func event(typ string, obj map[string]any) []byte {
 	return b
 }
 
-// succeeded is the provider's payment_intent.succeeded for a payment intent.
+// succeeded is the provider's payment_intent.succeeded for a payment intent:
+// the intent as the fake holds it, succeeded, having taken its amount — a
+// real event carries amount_received, and the plugin checks the success
+// against it.
 func succeeded(t *testing.T, providerPaymentID string) []byte {
 	t.Helper()
 	o := providerObject(t, providerPaymentID)
 	o["status"] = "succeeded"
+	o["amount_received"] = o["amount"]
 	return event("payment_intent.succeeded", o)
 }
 

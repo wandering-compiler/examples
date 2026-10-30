@@ -89,6 +89,7 @@ func main() {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	mux.HandleFunc("POST /v1/customers", s.handle(s.createCustomer))
 	mux.HandleFunc("POST /v1/payment_intents", s.handle(s.createPaymentIntent))
+	mux.HandleFunc("GET /v1/payment_intents/{id}", s.retrieve("payment_intent"))
 	mux.HandleFunc("POST /v1/refunds", s.handle(s.createRefund))
 	mux.HandleFunc("GET /v1/refunds", s.handle(s.listRefunds))
 	mux.HandleFunc("POST /v1/prices", s.handle(s.createPrice))
@@ -111,13 +112,7 @@ type apiFunc func(form url.Values) (int, object)
 // how the plugin copes with that 409.
 func (s *store) handle(fn apiFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		key, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		switch {
-		case !ok || !strings.HasPrefix(key, "sk_test_"):
-			writeErr(w, http.StatusUnauthorized, "invalid_request_error", "", "You did not provide an API key.")
-			return
-		case key == rejectedKey:
-			writeErr(w, http.StatusUnauthorized, "invalid_request_error", "api_key_invalid", "Invalid API Key provided: "+key)
+		if !authorized(w, r) {
 			return
 		}
 		if err := r.ParseForm(); err != nil {
@@ -157,6 +152,42 @@ func (s *store) handle(fn apiFunc) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_, _ = w.Write(raw)
+	}
+}
+
+// authorized answers the call's authentication failure, if any, the way
+// Stripe does, and reports whether the call may go on.
+func authorized(w http.ResponseWriter, r *http.Request) bool {
+	key, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	switch {
+	case !ok || !strings.HasPrefix(key, "sk_test_"):
+		writeErr(w, http.StatusUnauthorized, "invalid_request_error", "", "You did not provide an API key.")
+		return false
+	case key == rejectedKey:
+		writeErr(w, http.StatusUnauthorized, "invalid_request_error", "api_key_invalid", "Invalid API Key provided: "+key)
+		return false
+	}
+	return true
+}
+
+// retrieve answers GET /v1/<kind>s/{id} with the object as the fake holds it
+// (the plugin reads an intent to learn what it took), or Stripe's
+// resource_missing.
+func (s *store) retrieve(kind string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(w, r) {
+			return
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		id := r.PathValue("id")
+		o, ok := s.objs[kind][id]
+		if !ok {
+			writeErr(w, http.StatusNotFound, "invalid_request_error", "resource_missing", "No such "+kind+": '"+id+"'")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(o)
 	}
 }
 
@@ -200,7 +231,10 @@ func (s *store) createPaymentIntent(form url.Values) (int, object) {
 		"amount": amount, "currency": form.Get("currency"),
 		"customer": form.Get("customer"), "description": form.Get("description"),
 		"status": "requires_payment_method", "client_secret": id + "_secret_" + s.newID("cs"),
-		"metadata": metadata(form), "created": time.Now().Unix(),
+		// Nothing is taken until the payment succeeds; the fake sends no
+		// events, so it never moves (the live suite's events say it).
+		"amount_received": int64(0),
+		"metadata":        metadata(form), "created": time.Now().Unix(),
 	}
 	s.put("payment_intent", o)
 	return http.StatusOK, o
