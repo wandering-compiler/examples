@@ -24,8 +24,9 @@ import (
 // codes.InvalidArgument gRPC status carrying a w17.ErrorDetail; the
 // specific kind lives in ErrorDetail.code, NOT the top-level code.
 const (
-	codeUniqueViolation = "UNIQUE_VIOLATION" // duplicate key (PK / unique)
-	codeInvalidValue    = "INVALID_VALUE"    // FK / CHECK constraint
+	codeUniqueViolation = "UNIQUE_VIOLATION"   // duplicate key (PK / unique)
+	codeInvalidValue    = "INVALID_VALUE"      // FK / CHECK constraint
+	codeValueOutOfRange = "VALUE_OUT_OF_RANGE" // a value the column cannot hold (numeric overflow)
 )
 
 // constraintCode returns the w17 ErrorDetail.code carried by a storage
@@ -43,6 +44,25 @@ func constraintCode(err error) string {
 		}
 	}
 	return ""
+}
+
+// isOverdraw reports whether an ApplyCredit refusal is the balance going
+// below zero: an INVALID_VALUE from the CreditBalance CHECKs, which are the
+// table's raw credit_balance_nonneg (no field) and the balance column's own
+// gte (field "balance"). Any other INVALID_VALUE on that path — a reason that
+// is not a slug, a value another column refuses — names its field, and is
+// the caller's input, not a balance problem (prepaid gap 1).
+func isOverdraw(err error) bool {
+	st, ok := status.FromError(err)
+	if !ok {
+		return false
+	}
+	for _, d := range st.Details() {
+		if ed, ok := d.(*w17pb.ErrorDetail); ok {
+			return ed.GetCode() == codeInvalidValue && (ed.GetField() == "" || ed.GetField() == "balance")
+		}
+	}
+	return false
 }
 
 // invalidArg returns a codes.InvalidArgument status for a caller-input
@@ -209,6 +229,61 @@ func decimalAtLeast(a, b string) bool {
 	x, ok1 := new(big.Rat).SetString(strings.TrimSpace(a))
 	y, ok2 := new(big.Rat).SetString(strings.TrimSpace(b))
 	return ok1 && ok2 && x.Cmp(y) >= 0
+}
+
+// decimalSum is a + b for two decimal strings, at the columns' scale; a value
+// that does not parse counts as zero (the provider's amounts always parse).
+func decimalSum(a, b string) string {
+	x, _ := new(big.Rat).SetString(strings.TrimSpace(a))
+	y, _ := new(big.Rat).SetString(strings.TrimSpace(b))
+	if x == nil {
+		x = new(big.Rat)
+	}
+	if y == nil {
+		y = new(big.Rat)
+	}
+	return new(big.Rat).Add(x, y).FloatString(amountMaxFracDigits)
+}
+
+// decimalSub is a - b for two decimal strings, at the columns' scale; a value
+// that does not parse counts as zero.
+func decimalSub(a, b string) string {
+	x, _ := new(big.Rat).SetString(strings.TrimSpace(a))
+	y, _ := new(big.Rat).SetString(strings.TrimSpace(b))
+	if x == nil {
+		x = new(big.Rat)
+	}
+	if y == nil {
+		y = new(big.Rat)
+	}
+	return new(big.Rat).Sub(x, y).FloatString(amountMaxFracDigits)
+}
+
+// decimalSign is -1, 0 or +1 for a decimal string; one that does not parse
+// is 0.
+func decimalSign(a string) int {
+	x, ok := new(big.Rat).SetString(strings.TrimSpace(a))
+	if !ok {
+		return 0
+	}
+	return x.Sign()
+}
+
+// decimalMin is the smaller of two decimal strings, at the columns' scale;
+// a value that does not parse counts as zero.
+func decimalMin(a, b string) string {
+	if decimalAtLeast(a, b) {
+		return decimalSum(b, "0")
+	}
+	return decimalSum(a, "0")
+}
+
+// decimalShortfall is amount - taken, never below zero.
+func decimalShortfall(amount, taken string) string {
+	if d := decimalSub(amount, taken); decimalSign(d) > 0 {
+		return d
+	}
+	return "0"
 }
 
 // isCurrencyCode reports whether c (already trimmed + lowercased) has

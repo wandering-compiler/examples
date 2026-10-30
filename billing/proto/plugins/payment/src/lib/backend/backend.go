@@ -78,6 +78,13 @@ type Money struct {
 type CustomerSpec struct {
 	UserID string
 	Email  string
+	// IdempotencyKey is sent with the create, so a retried first charge (the
+	// customer created, the local link not yet written) gets the customer the
+	// first attempt made instead of a second, unreferenced one.
+	IdempotencyKey string
+	// Install is written as the customer's install mark, beside the origin
+	// mark OriginCustomer (see PaymentSpec.Install). Empty writes neither.
+	Install string
 }
 
 // PaymentSpec is the input to CreatePayment.
@@ -106,6 +113,7 @@ const (
 	OriginCharge       = "charge"
 	OriginTopup        = "topup"
 	OriginSubscription = "subscription"
+	OriginCustomer     = "customer"
 )
 
 // InstallMetadataKey is the provider metadata key carrying the InstallID of
@@ -160,11 +168,17 @@ type PaymentResult struct {
 // RefundResult is what the provider returns for a refund.
 type RefundResult struct {
 	ProviderRefundID string
-	Status           string
+	// Status is the provider's refund status ("pending", "succeeded",
+	// "failed", "canceled", "requires_action"), mapped by the caller onto
+	// the local Refund.Status.
+	Status string
 	// Amount is the refund's amount, in the payment's currency. FindRefund
-	// must set it: the caller compares it with the amount a retry asks
-	// for, and a key that names a refund of another amount is refused.
+	// and ListRefunds must set it: the caller compares it with the amount a
+	// retry asks for, and records it for a refund it did not make.
 	Amount Money
+	// Key is the idempotency key RefundPayment stored on the refund (empty
+	// on a refund it did not make). FindRefund and ListRefunds set it.
+	Key string
 }
 
 // PlanSpec is the input to UpsertPlan — a recurring price the provider
@@ -174,6 +188,9 @@ type PlanSpec struct {
 	Name     string
 	Amount   Money
 	Interval string
+	// IdempotencyKey is sent with the create, so a retried or racing
+	// CreatePlan gets the price the first attempt made instead of an orphan.
+	IdempotencyKey string
 }
 
 // SubscriptionSpec is the input to StartSubscription.
@@ -199,6 +216,89 @@ type SubscriptionResult struct {
 	ProviderPriceID string
 }
 
+// ListQuery selects one page of a provider list, newest object first.
+type ListQuery struct {
+	// Since bounds the list to objects created at or after it (Unix seconds).
+	Since int64
+	// After continues the list after this object id, the last of the previous
+	// page; empty starts at the newest.
+	After string
+	// Until bounds the list to objects created at or before it (Unix
+	// seconds); 0 = no bound. How a walk continues when the object After
+	// names is gone (ErrListCursorGone): from that object's creation time.
+	Until int64
+	// Limit is the page size, 1 to 100.
+	Limit int
+}
+
+// Marks are the metadata marks this plugin writes on an object it creates:
+// the origin (OriginMetadataKey) and the installation (InstallMetadataKey).
+// Both empty on an object no installation of the plugin made.
+type Marks struct {
+	Origin  string
+	Install string
+}
+
+// CustomerObject is a provider customer as a list returns it.
+type CustomerObject struct {
+	ProviderCustomerID string
+	// UserID is the principal EnsureCustomer wrote into the customer's
+	// metadata; Email its e-mail.
+	UserID string
+	Email  string
+	// Created is the object's creation time (Unix seconds), on every listed
+	// object.
+	Created int64
+	Marks
+}
+
+// PaymentObject is a provider payment as a list returns it.
+type PaymentObject struct {
+	ProviderPaymentID  string
+	ProviderCustomerID string
+	// Status is the provider's payment status (see PaymentResult.Status).
+	Status      string
+	Amount      Money
+	Description string
+	// Failed reports that the last attempt to pay failed: the provider
+	// keeps such a payment open for another attempt, under the same status
+	// a payment nobody has tried to pay yet has.
+	Failed  bool
+	Created int64
+	Marks
+	// Received is what the payment took (amount_received), in its currency;
+	// empty (no Currency) when the provider reports none. A succeeded payment
+	// is checked against its local row by it (verifyReceived).
+	Received Money
+}
+
+// ListedRefund is a refund as the account-wide refund list returns it, with
+// the payment it belongs to.
+type ListedRefund struct {
+	RefundResult
+	ProviderPaymentID string
+	Created           int64
+}
+
+// SubscriptionObject is a provider subscription as a list returns it, with
+// ProviderPriceID set.
+type SubscriptionObject struct {
+	SubscriptionResult
+	ProviderCustomerID string
+	Created            int64
+	// ReadAt is the provider's own clock when it answered the list (Unix
+	// seconds; 0 when it did not say). The provider stamps its webhook events
+	// on the same clock, so a status recorded from this read is ordered
+	// against them without trusting the local clock.
+	ReadAt int64
+	Marks
+}
+
+// ErrListCursorGone is a list page refused because the object ListQuery.After
+// names no longer exists (deleted at the provider). Continue with Until set
+// to that object's creation time instead.
+var ErrListCursorGone = errors.New("payment provider: the object a list continues after is gone")
+
 // Backend is a payment provider. Implementations are constructed with
 // their API credentials and are safe for concurrent use.
 type Backend interface {
@@ -213,6 +313,12 @@ type Backend interface {
 	// the given idempotency key (so retries never double-charge).
 	CreatePayment(ctx context.Context, spec PaymentSpec) (PaymentResult, error)
 
+	// GetPayment reads one payment object as the provider holds it now.
+	// RefundPayment asks it when the local status does not yet say whether
+	// the payment succeeded (its webhook has not arrived): the refund goes
+	// ahead only for a payment the provider reports succeeded.
+	GetPayment(ctx context.Context, providerPaymentID string) (PaymentObject, error)
+
 	// RefundPayment reverses (part of) a payment. idemKey guards retries.
 	RefundPayment(ctx context.Context, providerPaymentID string, amount Money, idemKey string) (RefundResult, error)
 	// FindRefund returns the refund of providerPaymentID made under idemKey,
@@ -221,6 +327,12 @@ type Backend interface {
 	// provider has forgotten the idempotency key. A provider that cannot
 	// look a refund up by key returns (_, false, nil): the old behaviour.
 	FindRefund(ctx context.Context, providerPaymentID, idemKey string) (RefundResult, bool, error)
+	// ListRefunds returns every refund of providerPaymentID the provider
+	// holds, in their current state, with Amount and Key set — the refunds
+	// made through RefundPayment and those made at the provider directly. The
+	// refund webhooks reconcile against it rather than against the event's
+	// own snapshot, which may be older than the refund's current state.
+	ListRefunds(ctx context.Context, providerPaymentID string) ([]RefundResult, error)
 
 	// UpsertPlan creates (or returns) the provider price object for a
 	// recurring plan and returns its opaque provider price id.
@@ -232,4 +344,13 @@ type Backend interface {
 	// idemKey, if the provider holds one, whatever its status, with its
 	// ProviderPriceID set (see FindRefund).
 	FindSubscription(ctx context.Context, providerCustomerID, idemKey string) (SubscriptionResult, bool, error)
+
+	// The account-wide lists the provider reconciliation walks
+	// (ReconcileProvider): one page each, newest first, of the objects
+	// created at or after q.Since, and whether more follow. Subscriptions are
+	// listed whatever their status.
+	ListCustomerPage(ctx context.Context, q ListQuery) ([]CustomerObject, bool, error)
+	ListPaymentPage(ctx context.Context, q ListQuery) ([]PaymentObject, bool, error)
+	ListRefundPage(ctx context.Context, q ListQuery) ([]ListedRefund, bool, error)
+	ListSubscriptionPage(ctx context.Context, q ListQuery) ([]SubscriptionObject, bool, error)
 }

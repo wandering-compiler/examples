@@ -194,6 +194,9 @@ const (
 	statusRequiresAction = 1
 	statusSucceeded      = 3
 	statusFailed         = 4
+	// statusAmountMismatch holds a payment the provider reports took
+	// another amount than was asked.
+	statusAmountMismatch = 7
 )
 
 func pay(t *testing.T, a account, amount string) payment {

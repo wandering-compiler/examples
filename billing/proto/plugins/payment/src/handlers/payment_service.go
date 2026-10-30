@@ -8,8 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	distxpb "github.com/wandering-compiler/sdk/go/pb/common/distx"
+	"github.com/wandering-compiler/sdk/go/service/tx/distx"
 	"log/slog"
+	"math/big"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -33,6 +37,16 @@ type PaymentServiceHandler struct {
 	// DefaultCurrency (ISO-4217, lowercase) applies when a charge omits
 	// a currency.
 	DefaultCurrency string
+	// PreviousInstallMarks are the installation marks this installation
+	// wrote under earlier webhook signing secrets (previous_install_marks):
+	// objects carrying one are still its own (markedHere).
+	PreviousInstallMarks []string
+
+	// DistTx + Connection open the transaction RefundPayment holds a
+	// payment's row lock in (underRefundLock). Wired by RegisterPlugin;
+	// ValidateConfig refuses a handler without DistTx.
+	DistTx     distxpb.W17DistributedTransactionClient
+	Connection string
 }
 
 // ValidateConfig fails loud at startup on a mis-wired handler so a
@@ -43,6 +57,11 @@ func ValidateConfig(h *PaymentServiceHandler) error {
 	}
 	if h.Query == nil || h.Mutation == nil {
 		return fmt.Errorf("payment plugin: storage clients not wired")
+	}
+	// Without it every refund is refused (underRefundLock): an unlocked
+	// remaining-amount check lets two refunds both pass it.
+	if h.DistTx == nil {
+		return fmt.Errorf("payment plugin: no distributed-transaction client wired (refunds need it)")
 	}
 	// With webhooks on, a bundle without the signing secret boots and then
 	// refuses every delivery: payments stay pending forever and nothing says
@@ -96,10 +115,16 @@ func (h *PaymentServiceHandler) CreateCustomer(ctx context.Context, req *pb.NewC
 // createCustomer creates the provider customer and persists the link.
 // Two first-charges for one principal can race past the existence check;
 // the loser's INSERT hits the unique user_id, and the winner's row is
-// the answer (the loser's provider customer is left unreferenced — the
-// provider offers no create-if-absent to avoid it).
+// the answer. The create carries an idempotency key derived from what it
+// sends (base gap 3), so the provider returns the SAME customer to a retry
+// or a racing twin within its window instead of a second, unreferenced one;
+// a different address is a different create, and a different key.
 func (h *PaymentServiceHandler) createCustomer(ctx context.Context, userID, email string) (*pb.Customer, error) {
-	providerID, err := h.Backend.EnsureCustomer(ctx, backend.CustomerSpec{UserID: userID, Email: email})
+	install := h.installID()
+	providerID, err := h.Backend.EnsureCustomer(ctx, backend.CustomerSpec{
+		UserID: userID, Email: email, Install: install,
+		IdempotencyKey: scopedKey("customer", install, userID, email),
+	})
 	if err != nil {
 		return nil, providerFailure(err)
 	}
@@ -201,6 +226,12 @@ func (h *PaymentServiceHandler) charge(ctx context.Context, cust *pb.Customer, a
 	if err != nil {
 		return nil, "", err
 	}
+	if callerKey != "" {
+		recorded, err := h.recordedCharge(ctx, cust, idemKey, amount, currency)
+		if err != nil || recorded != nil {
+			return recorded, "", err
+		}
+	}
 	pr, err := h.Backend.CreatePayment(ctx, backend.PaymentSpec{
 		ProviderCustomerID: cust.GetProviderCustomerId(),
 		Amount:             backend.Money{Amount: amount, Currency: currency},
@@ -232,10 +263,58 @@ func (h *PaymentServiceHandler) charge(ctx context.Context, cust *pb.Customer, a
 	if gerr != nil && !absent(gerr) {
 		return nil, "", gerr
 	}
-	if p := got.GetPayment(); p != nil && p.GetIdempotencyKey() == idemKey && p.GetCustomerId() == cust.GetId() {
+	// A row the provider reconciliation recorded for this intent carries its
+	// stand-in key (the intent does not hold the one it was created under):
+	// the provider replayed this very intent for this request's key, so the
+	// row is this request's too.
+	if p := got.GetPayment(); p != nil && p.GetCustomerId() == cust.GetId() &&
+		(p.GetIdempotencyKey() == idemKey || p.GetIdempotencyKey() == reconciledChargeKey(pr.ProviderPaymentID)) {
 		return p, pr.ClientSecret, nil
 	}
 	return nil, "", status.Error(codes.AlreadyExists, "idempotency_key already used for a different payment")
+}
+
+// recordedCharge answers a retried charge from the local row, before the
+// provider is asked (base gap 2): the provider forgets an idempotency key after
+// its window (a day), and a retry after that minted a NEW, unconfirmed intent —
+// an orphan at the provider — and answered AlreadyExists instead of the
+// payment the key recorded.
+//
+// Only a payment past confirmation is answered here: SUCCEEDED, FAILED,
+// CANCELED, REFUNDED, or PROCESSING (confirmed, the outcome pending). Those
+// need no client secret. One still REQUIRES_ACTION goes to the provider as
+// before: inside the window the provider replays it WITH the secret the client
+// needs to confirm it, and nothing stores that secret here. A recorded payment
+// of another customer, or of another amount or currency under the same key,
+// is AlreadyExists — the key names a different payment.
+func (h *PaymentServiceHandler) recordedCharge(ctx context.Context, cust *pb.Customer, idemKey, amount, currency string) (*pb.Payment, error) {
+	got, err := h.Query.GetPaymentByIdempotencyKey(ctx, &pb.GetPaymentByIdempotencyKeyReq{IdempotencyKey: idemKey})
+	if err != nil {
+		if absent(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	p := got.GetPayment()
+	if p == nil {
+		return nil, nil
+	}
+	if p.GetCustomerId() != cust.GetId() || !sameAmount(p.GetAmount(), amount) || !strings.EqualFold(p.GetCurrency(), currency) {
+		return nil, status.Error(codes.AlreadyExists, "idempotency_key already used for a different payment")
+	}
+	switch p.GetStatus() {
+	case pb.Payment_SUCCEEDED, pb.Payment_FAILED, pb.Payment_CANCELED, pb.Payment_REFUNDED, pb.Payment_PROCESSING, pb.Payment_AMOUNT_MISMATCH:
+		return p, nil
+	}
+	return nil, nil
+}
+
+// sameAmount compares two decimal amounts by value: the column renders its
+// scale ("12.5000") where the request may not ("12.5").
+func sameAmount(a, b string) bool {
+	x, okA := new(big.Rat).SetString(a)
+	y, okB := new(big.Rat).SetString(b)
+	return okA && okB && x.Cmp(y) == 0
 }
 
 // chargeKey is the key a charge is stored under and sent to the provider
@@ -273,6 +352,26 @@ func (h *PaymentServiceHandler) chargeKey(ctx context.Context, cust *pb.Customer
 		}
 	}
 	return scopedKey("charge", origin, cust.GetUserId(), callerKey), nil
+}
+
+// reconciledChargeKey is the idempotency key of a Payment row the provider
+// reconciliation recorded for an intent whose own row never landed. The
+// intent does not carry the key it was created under (the provider holds it
+// for a day, and never shows it), and the column is unique and required; the
+// provider id is unique too, so the stand-in is. In the scoped-key namespace,
+// so no caller's key can name it.
+func reconciledChargeKey(providerPaymentID string) string {
+	return scopedKey("charge", "reconciled", providerPaymentID)
+}
+
+// customerByProviderID is the local link of a provider customer, nil when
+// there is none.
+func (h *PaymentServiceHandler) customerByProviderID(ctx context.Context, providerCustomerID string) (*pb.Customer, error) {
+	got, err := h.Query.GetCustomerByProviderId(ctx, &pb.GetCustomerByProviderIdReq{ProviderCustomerId: providerCustomerID})
+	if err != nil && !absent(err) {
+		return nil, err
+	}
+	return got.GetCustomer(), nil
 }
 
 // topupDescription is the description every version gave a top-up's payment.
@@ -337,7 +436,7 @@ func (h *PaymentServiceHandler) RefundPayment(ctx context.Context, req *pb.Refun
 		return nil, notFound("payment not found")
 	}
 	if amount == "" {
-		amount = payment.GetAmount() // full refund
+		amount, _ = refundBasis(payment) // full refund: what the payment took
 	}
 
 	// The key is looked up HERE, before the provider is asked. The provider
@@ -350,12 +449,17 @@ func (h *PaymentServiceHandler) RefundPayment(ctx context.Context, req *pb.Refun
 			return nil, err
 		}
 		resp, err := sameRefund(prior, payment, amount)
-		if err == nil {
-			// A retry is where a first attempt's missed status settle is
-			// caught up (no-op once REFUNDED).
-			h.markRefundedIfFull(ctx, payment)
+		if err != nil {
+			return nil, err
 		}
-		return resp, err
+		// A retry is where a first attempt's missed follow-ups are caught up:
+		// the status settle (no-op once REFUNDED), and a top-up's credit
+		// (no-op once reconciled).
+		h.markRefundedIfFull(ctx, payment)
+		if err := reconcileTopupCredit(ctx, h, payment); err != nil {
+			return nil, err
+		}
+		return resp, nil
 	}
 
 	// The provider gets the caller's key VERBATIM, so one key names one
@@ -385,70 +489,275 @@ func (h *PaymentServiceHandler) RefundPayment(ctx context.Context, req *pb.Refun
 		// idempotency check would refuse too: answered like sameRefund.
 		return nil, status.Error(codes.AlreadyExists, "idempotency_key already used for a different refund")
 	}
-	if !found {
-		// A top-up's credit leaves with its money (prepaid; no-op otherwise).
-		// Taken before the provider is asked, so a refund of spent credit is
-		// refused instead of paid out.
-		undo, err := takeBackRefundedCredit(ctx, h, payment, amount, req.GetIdempotencyKey())
-		if err != nil {
-			return nil, err
-		}
-		res, err = h.Backend.RefundPayment(ctx, payment.GetProviderPaymentId(),
-			backend.Money{Amount: amount, Currency: payment.GetCurrency()},
-			req.GetIdempotencyKey())
-		if err != nil {
-			// A refusal the provider will repeat on every retry gives the
-			// credit back; a transient failure keeps it taken, for the retry.
-			// An undo that fails is reported as transient, so the caller
-			// retries and the retry gives the credit back; reporting the
-			// permanent refusal instead would strand it.
-			if undo != nil && (errors.Is(err, backend.ErrInvalidRequest) || errors.Is(err, backend.ErrDeclined)) {
-				if uerr := undo(); uerr != nil {
-					// The provider's text stays in the log, like every other
-					// provider failure: it can carry the request's details.
-					slog.Warn("payment: refund refused, credit not given back yet", "err", err, "undo_err", uerr)
-					return nil, status.Error(codes.Unavailable, "payment: the refund was refused and its credit could not be given back yet; retry")
-				}
+	var resp *pb.RefundPaymentResp
+	var fresh bool
+	if found {
+		resp, fresh, err = h.recordOwnRefund(ctx, payment, res, amount, storedKey)
+	} else {
+		// Checked and made under the payment's row lock, held until the
+		// refund is recorded: a second refund of this payment waits here and
+		// then counts the first one (refundAllowed).
+		err = h.underRefundLock(ctx, payment.GetId(), func(txCtx context.Context, locked *pb.LockPaymentForRefundResp) error {
+			if err := h.refundAllowed(ctx, txCtx, payment, locked, amount); err != nil {
+				return err
 			}
-			return nil, providerFailure(err)
+			// A top-up's credit leaves with its money (prepaid; no-op
+			// otherwise). Taken before the provider is asked, so a refund of
+			// spent credit is refused instead of paid out.
+			undo, err := takeBackRefundedCredit(ctx, h, payment, amount, req.GetIdempotencyKey())
+			if err != nil {
+				return err
+			}
+			res, err = h.Backend.RefundPayment(ctx, payment.GetProviderPaymentId(),
+				backend.Money{Amount: amount, Currency: refundCurrency(payment)},
+				req.GetIdempotencyKey())
+			if err != nil {
+				// A refusal the provider will repeat on every retry gives the
+				// credit back; a transient failure keeps it taken, for the retry.
+				// An undo that fails is reported as transient, so the caller
+				// retries and the retry gives the credit back; reporting the
+				// permanent refusal instead would strand it.
+				if undo != nil && (errors.Is(err, backend.ErrInvalidRequest) || errors.Is(err, backend.ErrDeclined)) {
+					if uerr := undo(); uerr != nil {
+						// The provider's text stays in the log, like every other
+						// provider failure: it can carry the request's details.
+						slog.Warn("payment: refund refused, credit not given back yet", "err", err, "undo_err", uerr)
+						return status.Error(codes.Unavailable, "payment: the refund was refused and its credit could not be given back yet; retry")
+					}
+				}
+				return providerFailure(err)
+			}
+			resp, fresh, err = h.recordOwnRefund(ctx, payment, res, amount, storedKey)
+			return err
+		})
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !fresh {
+		return resp, nil
+	}
+	// After the lock is released: the status settle writes the payment row
+	// the lock held.
+	h.markRefundedIfFull(ctx, payment)
+	// The refund is recorded: a top-up's credit follows it — nothing more
+	// once the take-back above counted it, back if the provider answered
+	// failed or canceled. A failure here leaves the refund recorded; the
+	// caller's retry finds it and reconciles again.
+	if err := reconcileTopupCredit(ctx, h, payment); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// refundLockTimeout bounds the transaction that holds a payment's row lock
+// through a refund: the provider call is bounded at 20 s, and the lock is
+// released when the refund is recorded.
+const refundLockTimeout = 60 * time.Second
+
+// underRefundLock runs fn inside a transaction that first locks the payment's
+// row (LockPaymentForRefund), and ends it — the lock with it — when fn
+// returns. fn makes its writes on the CALLER's ctx, not txCtx: they commit on
+// their own, so the refund row is visible to the next refund the moment the
+// lock passes to it, and a refund recorded at the provider is never rolled
+// back with an error after it. Nothing written under the lock may touch the
+// payment row (another connection would wait on this lock).
+//
+// Refused without a transaction client: an unlocked check lets two refunds
+// under different keys both pass it. ValidateConfig refuses such a bundle.
+func (h *PaymentServiceHandler) underRefundLock(ctx context.Context, paymentID string, fn func(txCtx context.Context, locked *pb.LockPaymentForRefundResp) error) error {
+	if h.DistTx == nil {
+		return status.Error(codes.Internal, "payment: no transaction client is wired; refunds are refused rather than made unguarded")
+	}
+	tx, txCtx, err := distx.Begin(ctx, h.DistTx, &distxpb.BeginRequest{
+		ConnectionName: h.Connection,
+		TxTimeoutMs:    int32(refundLockTimeout / time.Millisecond),
+	})
+	if err != nil {
+		return err
+	}
+	locked, err := h.Query.LockPaymentForRefund(txCtx, &pb.LockPaymentForRefundReq{Id: paymentID})
+	if err == nil && locked.GetId() == "" {
+		err = notFound("payment not found")
+	}
+	if err == nil {
+		err = fn(txCtx, locked)
+	}
+	end := context.WithoutCancel(ctx)
+	if err != nil {
+		_ = tx.Rollback(end)
+		return err
+	}
+	// The transaction wrote nothing; a failed commit only means the lock
+	// waits for the timeout to pass.
+	if cerr := tx.Commit(end); cerr != nil {
+		slog.Warn("payment: releasing a refund lock failed", "err", cerr)
+	}
+	return nil
+}
+
+// refundAllowed refuses, from this plugin's own records and before any
+// provider is asked, a refund the payment cannot carry:
+//
+//   - a payment that did not succeed (FAILED, CANCELED): FailedPrecondition;
+//   - one whose local status does not say yet (REQUIRES_ACTION, PROCESSING:
+//     its webhook has not arrived) is asked of the provider (GetPayment) and
+//     goes ahead only when the provider reports it succeeded;
+//   - an amount past what remains — the payment's amount less its PENDING and
+//     SUCCEEDED refunds: InvalidArgument (base/refund-within-captured).
+//
+// A REFUNDED payment is judged by what remains: a refund that failed after
+// the payment was settled refunded leaves the rest refundable. A payment held
+// at AMOUNT_MISMATCH is judged by what it took (received_amount, in
+// received_currency), not by what was asked; and one whose success webhook
+// has not arrived is refused while the provider reports it took another amount
+// (its hold is on the way).
+//
+// locked is the payment row read under the lock; the sum is read under it
+// too, so a refund recorded by the refund before this one is counted.
+func (h *PaymentServiceHandler) refundAllowed(ctx, txCtx context.Context, payment *pb.Payment, locked *pb.LockPaymentForRefundResp, amount string) error {
+	took, currency := locked.GetAmount(), payment.GetCurrency()
+	switch st := pb.Payment_Status(locked.GetStatus()); st {
+	case pb.Payment_SUCCEEDED, pb.Payment_REFUNDED:
+	case pb.Payment_AMOUNT_MISMATCH:
+		took, currency = locked.GetReceivedAmount(), locked.GetReceivedCurrency()
+	case pb.Payment_FAILED, pb.Payment_CANCELED:
+		return status.Errorf(codes.FailedPrecondition, "payment %s did not succeed (%s); there is nothing to refund", payment.GetId(), st)
+	default:
+		obj, err := h.Backend.GetPayment(ctx, payment.GetProviderPaymentId())
+		if err != nil {
+			return providerFailure(err)
+		}
+		if obj.Status != "succeeded" {
+			return status.Errorf(codes.FailedPrecondition, "payment %s has not succeeded at the provider (%s); it cannot be refunded yet", payment.GetId(), obj.Status)
+		}
+		if r := obj.Received; r.Currency != "" && (!strings.EqualFold(r.Currency, currency) || !sameDecimal(r.Amount, took)) {
+			return status.Errorf(codes.FailedPrecondition, "payment %s took %s %s at the provider, not the %s %s asked; it is being held — retry once its webhook has arrived",
+				payment.GetId(), r.Amount, r.Currency, took, currency)
 		}
 	}
+	// The refund is made in the currency of the payment as read before the
+	// lock; a payment held in the meantime may have taken another one.
+	if !strings.EqualFold(currency, refundCurrency(payment)) {
+		return status.Errorf(codes.FailedPrecondition, "payment %s changed while the refund waited; retry", payment.GetId())
+	}
+	sum, err := h.Query.SumRefundsForPayment(txCtx, &pb.SumRefundsForPaymentReq{PaymentId: payment.GetId()})
+	if err != nil {
+		return err
+	}
+	remaining := decimalSub(took, orDefault(sum.GetTotal(), "0"))
+	if !decimalAtLeast(remaining, amount) {
+		if decimalSign(remaining) < 0 {
+			remaining = "0"
+		}
+		return status.Errorf(codes.InvalidArgument, "a refund of %s exceeds what remains of payment %s: %s of %s %s",
+			amount, payment.GetId(), remaining, took, currency)
+	}
+	return nil
+}
 
+// refundBasis is what a refund of p can return at most, and in which
+// currency: what was asked, or for a payment held at AMOUNT_MISMATCH what it
+// actually took.
+func refundBasis(p *pb.Payment) (amount, currency string) {
+	if p.GetStatus() == pb.Payment_AMOUNT_MISMATCH && p.GetReceivedCurrency() != "" {
+		return p.GetReceivedAmount(), p.GetReceivedCurrency()
+	}
+	return p.GetAmount(), p.GetCurrency()
+}
+
+// refundCurrency is the currency a refund of p is made and recorded in.
+func refundCurrency(p *pb.Payment) string {
+	_, c := refundBasis(p)
+	return c
+}
+
+// recordOwnRefund records a refund this call made (or found at the provider
+// under its key). fresh is false when the answer is a row another writer
+// recorded first — its follow-ups are that writer's.
+func (h *PaymentServiceHandler) recordOwnRefund(ctx context.Context, payment *pb.Payment, res backend.RefundResult, amount, storedKey string) (resp *pb.RefundPaymentResp, fresh bool, err error) {
+	// The provider's answer is recorded, not assumed: a refund can be pending
+	// (and fail later), or fail at once. Only pending and succeeded refunds
+	// count toward REFUNDED (SumRefundsForPayment).
+	outcome := mapRefundStatus(res.Status)
 	created, err := h.Mutation.CreateRefund(ctx, &pb.CreateRefundReq{
 		PaymentId:        payment.GetId(),
 		ProviderRefundId: res.ProviderRefundID,
 		Amount:           amount,
-		Currency:         payment.GetCurrency(),
+		Currency:         refundCurrency(payment),
 		IdempotencyKey:   storedKey,
+		Status:           int32(outcome),
 	})
 	if err != nil {
 		// A concurrent call with the same key recorded it first: its refund
 		// is the answer only when it is the refund this request asks for.
 		if constraintCode(err) == codeUniqueViolation {
 			if prior, gerr := h.refundByKey(ctx, storedKey); gerr == nil && prior != nil {
-				return sameRefund(prior, payment, amount)
+				resp, err := sameRefund(prior, payment, amount)
+				return resp, false, err
 			}
 		}
 		// A retried refund (same key) gets the same provider refund
 		// replayed, and its local row already exists: that row is the
 		// answer. Only when it belongs to THIS payment.
 		if constraintCode(err) == codeUniqueViolation {
+			// It may also be the refund webhook's row: the provider's event can
+			// outrun this insert, and the webhook records the refund it finds.
 			r, gerr := h.Query.GetRefundByProviderId(ctx, &pb.GetRefundByProviderIdReq{ProviderRefundId: res.ProviderRefundID})
 			if gerr != nil && !absent(gerr) {
-				return nil, gerr
+				return nil, false, gerr
 			}
 			if r.GetRefund() != nil && r.GetRefund().GetPaymentId() == payment.GetId() {
 				if err := h.stampRefundKey(ctx, r.GetRefund().GetId(), storedKey); err != nil {
-					return nil, err
+					return nil, false, err
 				}
-				return &pb.RefundPaymentResp{Refund: r.GetRefund()}, nil
+				return &pb.RefundPaymentResp{Refund: r.GetRefund()}, false, nil
 			}
-			return nil, status.Error(codes.AlreadyExists, "idempotency_key already used for a different refund")
+			return nil, false, status.Error(codes.AlreadyExists, "idempotency_key already used for a different refund")
 		}
-		return nil, err
+		return nil, false, err
 	}
-	h.markRefundedIfFull(ctx, payment)
-	return &pb.RefundPaymentResp{Refund: created.GetRefund()}, nil
+	return &pb.RefundPaymentResp{Refund: created.GetRefund()}, true, nil
+}
+
+// mapRefundStatus maps the provider's refund status onto Refund.Status.
+// requires_action, an empty status and any status this version does not know
+// are PENDING: not done, and not failed either — the refund webhooks settle it
+// once the provider reports an outcome.
+func mapRefundStatus(providerStatus string) pb.Refund_Status {
+	switch providerStatus {
+	case "succeeded":
+		return pb.Refund_SUCCEEDED
+	case "failed":
+		return pb.Refund_FAILED
+	case "canceled":
+		return pb.Refund_CANCELED
+	default:
+		return pb.Refund_PENDING
+	}
+}
+
+// refundCounts reports whether a refund in this state counts toward the
+// payment's refunded total: pending and succeeded do — the provider holds the
+// money for them and counts them against what is left to refund — failed and
+// canceled returned nothing. Rows an earlier version wrote read SUCCEEDED.
+func refundCounts(st pb.Refund_Status) bool {
+	return st != pb.Refund_FAILED && st != pb.Refund_CANCELED
+}
+
+// reconcileTopupCredit brings the credit of the top-up paid by payment to
+// what the payment's refunds and lost disputes leave of it (see settleTopup in
+// handlers/prepaid.go, which installs it). Called after every change to them;
+// idempotent. Base no-op: top-ups exist only under `prepaid`.
+var reconcileTopupCredit = func(ctx context.Context, h *PaymentServiceHandler, payment *pb.Payment) error {
+	return nil
+}
+
+// lostDisputeTotal is what payment lost to disputes, part of a top-up's
+// reconciliation target. Base "0": disputes are recorded only by
+// handlers/webhook_stripe.go, which installs the real one.
+var lostDisputeTotal = func(ctx context.Context, h *PaymentServiceHandler, payment *pb.Payment) (string, error) {
+	return "0", nil
 }
 
 // markRefundedIfFull moves a payment to REFUNDED once its recorded refunds
@@ -463,7 +772,16 @@ func (h *PaymentServiceHandler) markRefundedIfFull(ctx context.Context, payment 
 	if err != nil || !decimalAtLeast(sum.GetTotal(), payment.GetAmount()) {
 		return
 	}
-	_, _ = h.Mutation.MarkPaymentRefunded(ctx, &pb.MarkPaymentRefundedReq{ProviderPaymentId: payment.GetProviderPaymentId()})
+	if _, err := h.Mutation.MarkPaymentRefunded(ctx, &pb.MarkPaymentRefundedReq{ProviderPaymentId: payment.GetProviderPaymentId()}); err != nil {
+		return
+	}
+	// A refund failure the webhook recorded meanwhile found nothing to
+	// reverse; read the rows again now that REFUNDED has landed (see the
+	// webhook's settleRefundedStatus).
+	sum, err = h.Query.SumRefundsForPayment(ctx, &pb.SumRefundsForPaymentReq{PaymentId: payment.GetId()})
+	if err == nil && !decimalAtLeast(sum.GetTotal(), payment.GetAmount()) {
+		_, _ = h.Mutation.MarkPaymentRefundReversed(ctx, &pb.MarkPaymentRefundReversedReq{ProviderPaymentId: payment.GetProviderPaymentId()})
+	}
 }
 
 // takeBackRefundedCredit removes the credit a refunded top-up granted,
@@ -525,6 +843,16 @@ func (h *PaymentServiceHandler) refundByKey(ctx context.Context, storedKey strin
 		return nil, err
 	}
 	return got.GetRefund(), nil
+}
+
+// paymentByProviderID is the local payment for a provider id, nil when there
+// is none. Here (always staged): the webhook and the prepaid hooks read it.
+func (h *PaymentServiceHandler) paymentByProviderID(ctx context.Context, providerPaymentID string) (*pb.Payment, error) {
+	got, err := h.Query.GetPaymentByProviderId(ctx, &pb.GetPaymentByProviderIdReq{ProviderPaymentId: providerPaymentID})
+	if err != nil && !absent(err) {
+		return nil, err
+	}
+	return got.GetPayment(), nil
 }
 
 // resolveCustomer returns the principal's Customer row, creating it (and
