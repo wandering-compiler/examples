@@ -24,7 +24,12 @@ formats:
         percent: ""
         time: ""
 generated_code:
-    binaries: []
+    binaries:
+        - components:
+            - eventbus
+            - gateway
+            - storage
+          domain: billing
     business_bundles: []
     ci_configs:
         - provider: azure
@@ -83,6 +88,6 @@ sdk_version: v0.1.0-rc.52
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 68364f75cb67b8927bce14d202e3b477b53a1b9fc04369766fe4a30a34ef6423b95704302592b0e1c365f6ddc8a37d5992f3c58f4e01ff319c5d4ccf4171e700
+    body: 7b8ee548572c408a56053aa269e2b12d6d26f722fc37563177e182a643c4eb28362b3caf0dcd9231aa1784f655eef32afdb7f333c9654518869ee527b1784406
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

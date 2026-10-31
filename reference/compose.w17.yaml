@@ -95,6 +95,8 @@ services:
   brevostub:
     image: ${W17_WORKSPACE:-w17}-w17-brevostub:dev
     restart: unless-stopped
+    labels:
+      w17.sandbox: "true"
     environment:
       PORT: 8080
       API_KEY: stub-key
@@ -142,7 +144,5 @@ include:
   - w17/services/app-eventbus/compose.yaml
   - w17/services/app-gateway/compose.yaml
   - w17/services/app-storage/compose.yaml
-  - w17/services/billing-eventbus/compose.yaml
-  - w17/services/billing-gateway-private/compose.yaml
-  - w17/services/billing-storage/compose.yaml
+  - w17/services/billing-server/compose.yaml
   - w17/services/private-proxy/compose.yaml
