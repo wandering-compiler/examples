@@ -47,6 +47,8 @@ option (w17.acl_roles) = {
   activation:      "admin_auth"
   all_permissions: true
   first_user:      true
+  // Every permission to whoever registers first (the bootstrap admin): said out loud.
+  all_permissions_at_signup: true
 };
 
 option (w17.module) = {
