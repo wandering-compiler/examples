@@ -13,6 +13,10 @@ option (w17.rest_api) = {
   prefix:      "/api/v1",
   description: "Catalog REST surface — writes and reads documents with Postgres-specific column types.",
 
+  // Public, and said so: codegen refuses a surface with no auth method
+  // that does not declare it.
+  unauthenticated: true,
+
   groups: [
     {
       prefix:      "/estates",
