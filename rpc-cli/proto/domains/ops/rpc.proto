@@ -33,6 +33,14 @@ option (w17.rpc_api) = {
   // lists the services through it.
   reflection:  true,
 
+  // No auth plugin and no auth method: this surface is public, and says so.
+  // Codegen refuses a gRPC surface with no auth method that does not — it
+  // used to serve it to anyone without a word. A surface that should
+  // authenticate names its method here instead, the same list REST takes:
+  //   auth_methods: [ { ref: "auth.AuthService.Authenticate", token_types: [TOKEN_TYPE_BEARER] } ]
+  // (or activates the auth plugin in the domain's w17.proto, which supplies it).
+  unauthenticated: true,
+
   groups: [
     {
       name:        "JobRead",
