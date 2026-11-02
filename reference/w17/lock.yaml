@@ -84,10 +84,10 @@ plugins:
       version: 0.1.0-rc.3
 project: examples-reference
 project_id: dceefc0e-edfb-477a-a230-ed461733de9a
-sdk_version: v0.1.0-rc.57
+sdk_version: v0.1.0-rc.59
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 1cdb9e008b0577f9dd6793026ffc4bdf6253ef501bbc55983e2526bb11adf4ad2e778909173142f37c8d188750e17a6727a15c723650816fc444f2cbca7ebf02
+    body: 29671252465eeb092dfbfa3f76bc2e75b5b538f6b04c74217db0ada89fc6ffd9abbdc485b0ff65e7f532fb342f52283a9ac948a1622ad5c356c6c4b788dd5407
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
