@@ -110,6 +110,262 @@ func (x *UserCreated) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// ApiTokenRevoked — emitted on AuthMutation.MarkApiTokenRevoked, when a person
+// revokes one of their API tokens (RevokeApiToken). The counterpart of
+// ApiTokenCreated: a long-lived credential ending is as much an audit fact as
+// one being made. A token already revoked emits nothing. Gated api_token.
+type ApiTokenRevoked struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	TokenId string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	UserId  string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// device_id — the key thumbprint of the device that revoked it.
+	DeviceId      string `protobuf:"bytes,3,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApiTokenRevoked) Reset() {
+	*x = ApiTokenRevoked{}
+	mi := &file_events_auth_events_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApiTokenRevoked) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApiTokenRevoked) ProtoMessage() {}
+
+func (x *ApiTokenRevoked) ProtoReflect() protoreflect.Message {
+	mi := &file_events_auth_events_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApiTokenRevoked.ProtoReflect.Descriptor instead.
+func (*ApiTokenRevoked) Descriptor() ([]byte, []int) {
+	return file_events_auth_events_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ApiTokenRevoked) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
+	}
+	return ""
+}
+
+func (x *ApiTokenRevoked) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ApiTokenRevoked) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+// ApiTokenCreated — emitted on AuthMutation.IssueApiToken after the token
+// commits: a person's API token (CreateApiToken) or a machine account's
+// (IssueBotToken). Audit and notification hook ("a new API token was created
+// on your account"). No secret: never the token, its hash or a key — only the
+// key's thumbprint.
+type ApiTokenCreated struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	TokenId string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	// The token's owner: the person, or the machine account.
+	UserId    string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// device_id — the key thumbprint of the device that CREATED it (the value
+	// AuthResp.device_id and principal.DeviceID carry for the creating
+	// request): the browser, or the CLI session's own key when a CLI created
+	// it. Empty when the request carried no device. The token records the
+	// ROOT approver instead (UserToken.approved_by_device_id: for a CLI
+	// session, the browser that approved the CLI), so this is where the
+	// immediate creator stays visible.
+	DeviceId string `protobuf:"bytes,4,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	// key_thumbprint — the thumbprint of the PROGRAM's key the token is bound
+	// to (the device id Authenticate answers for its requests).
+	KeyThumbprint string `protobuf:"bytes,5,opt,name=key_thumbprint,json=keyThumbprint,proto3" json:"key_thumbprint,omitempty"`
+	Name          string `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
+	// created_by — the account that created it: the owner itself for
+	// CreateApiToken, the operator for IssueBotToken.
+	CreatedBy     string `protobuf:"bytes,7,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApiTokenCreated) Reset() {
+	*x = ApiTokenCreated{}
+	mi := &file_events_auth_events_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApiTokenCreated) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApiTokenCreated) ProtoMessage() {}
+
+func (x *ApiTokenCreated) ProtoReflect() protoreflect.Message {
+	mi := &file_events_auth_events_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApiTokenCreated.ProtoReflect.Descriptor instead.
+func (*ApiTokenCreated) Descriptor() ([]byte, []int) {
+	return file_events_auth_events_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ApiTokenCreated) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
+	}
+	return ""
+}
+
+func (x *ApiTokenCreated) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ApiTokenCreated) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *ApiTokenCreated) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *ApiTokenCreated) GetKeyThumbprint() string {
+	if x != nil {
+		return x.KeyThumbprint
+	}
+	return ""
+}
+
+func (x *ApiTokenCreated) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ApiTokenCreated) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
+// OAuthGrantApproved — emitted when a user approves an MCP client on the
+// consent page and the client redeems its code (oauth_server): a connected
+// app came into being. No token value travels.
+type OAuthGrantApproved struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	GrantId   string                 `protobuf:"bytes,1,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	UserId    string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// client_id — what the client is known by: the URL of its metadata
+	// document, or the id this server minted it.
+	ClientId string `protobuf:"bytes,4,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	// resource — the MCP surface the grant is for.
+	Resource      string `protobuf:"bytes,5,opt,name=resource,proto3" json:"resource,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OAuthGrantApproved) Reset() {
+	*x = OAuthGrantApproved{}
+	mi := &file_events_auth_events_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OAuthGrantApproved) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OAuthGrantApproved) ProtoMessage() {}
+
+func (x *OAuthGrantApproved) ProtoReflect() protoreflect.Message {
+	mi := &file_events_auth_events_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OAuthGrantApproved.ProtoReflect.Descriptor instead.
+func (*OAuthGrantApproved) Descriptor() ([]byte, []int) {
+	return file_events_auth_events_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *OAuthGrantApproved) GetGrantId() string {
+	if x != nil {
+		return x.GrantId
+	}
+	return ""
+}
+
+func (x *OAuthGrantApproved) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *OAuthGrantApproved) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *OAuthGrantApproved) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *OAuthGrantApproved) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
 // TokenIssued — emitted on AuthMutation.IssueToken after the
 // UserToken row commits. Subscribers might rate-limit token
 // issuance, populate a per-user session count, fan out to a
@@ -129,7 +385,7 @@ type TokenIssued struct {
 
 func (x *TokenIssued) Reset() {
 	*x = TokenIssued{}
-	mi := &file_events_auth_events_proto_msgTypes[1]
+	mi := &file_events_auth_events_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -141,7 +397,7 @@ func (x *TokenIssued) String() string {
 func (*TokenIssued) ProtoMessage() {}
 
 func (x *TokenIssued) ProtoReflect() protoreflect.Message {
-	mi := &file_events_auth_events_proto_msgTypes[1]
+	mi := &file_events_auth_events_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -154,7 +410,7 @@ func (x *TokenIssued) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenIssued.ProtoReflect.Descriptor instead.
 func (*TokenIssued) Descriptor() ([]byte, []int) {
-	return file_events_auth_events_proto_rawDescGZIP(), []int{1}
+	return file_events_auth_events_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *TokenIssued) GetTokenId() string {
@@ -206,7 +462,7 @@ type TokenRevoked struct {
 
 func (x *TokenRevoked) Reset() {
 	*x = TokenRevoked{}
-	mi := &file_events_auth_events_proto_msgTypes[2]
+	mi := &file_events_auth_events_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -218,7 +474,7 @@ func (x *TokenRevoked) String() string {
 func (*TokenRevoked) ProtoMessage() {}
 
 func (x *TokenRevoked) ProtoReflect() protoreflect.Message {
-	mi := &file_events_auth_events_proto_msgTypes[2]
+	mi := &file_events_auth_events_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -231,7 +487,7 @@ func (x *TokenRevoked) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenRevoked.ProtoReflect.Descriptor instead.
 func (*TokenRevoked) Descriptor() ([]byte, []int) {
-	return file_events_auth_events_proto_rawDescGZIP(), []int{2}
+	return file_events_auth_events_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *TokenRevoked) GetTokenId() string {
@@ -266,7 +522,7 @@ type RoleCreated struct {
 
 func (x *RoleCreated) Reset() {
 	*x = RoleCreated{}
-	mi := &file_events_auth_events_proto_msgTypes[3]
+	mi := &file_events_auth_events_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -278,7 +534,7 @@ func (x *RoleCreated) String() string {
 func (*RoleCreated) ProtoMessage() {}
 
 func (x *RoleCreated) ProtoReflect() protoreflect.Message {
-	mi := &file_events_auth_events_proto_msgTypes[3]
+	mi := &file_events_auth_events_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -291,7 +547,7 @@ func (x *RoleCreated) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoleCreated.ProtoReflect.Descriptor instead.
 func (*RoleCreated) Descriptor() ([]byte, []int) {
-	return file_events_auth_events_proto_rawDescGZIP(), []int{3}
+	return file_events_auth_events_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RoleCreated) GetRoleId() string {
@@ -327,7 +583,7 @@ type RoleDeleted struct {
 
 func (x *RoleDeleted) Reset() {
 	*x = RoleDeleted{}
-	mi := &file_events_auth_events_proto_msgTypes[4]
+	mi := &file_events_auth_events_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -339,7 +595,7 @@ func (x *RoleDeleted) String() string {
 func (*RoleDeleted) ProtoMessage() {}
 
 func (x *RoleDeleted) ProtoReflect() protoreflect.Message {
-	mi := &file_events_auth_events_proto_msgTypes[4]
+	mi := &file_events_auth_events_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -352,7 +608,7 @@ func (x *RoleDeleted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoleDeleted.ProtoReflect.Descriptor instead.
 func (*RoleDeleted) Descriptor() ([]byte, []int) {
-	return file_events_auth_events_proto_rawDescGZIP(), []int{4}
+	return file_events_auth_events_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RoleDeleted) GetRoleId() string {
@@ -374,7 +630,7 @@ type RoleUpdated struct {
 
 func (x *RoleUpdated) Reset() {
 	*x = RoleUpdated{}
-	mi := &file_events_auth_events_proto_msgTypes[5]
+	mi := &file_events_auth_events_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -386,7 +642,7 @@ func (x *RoleUpdated) String() string {
 func (*RoleUpdated) ProtoMessage() {}
 
 func (x *RoleUpdated) ProtoReflect() protoreflect.Message {
-	mi := &file_events_auth_events_proto_msgTypes[5]
+	mi := &file_events_auth_events_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -399,7 +655,7 @@ func (x *RoleUpdated) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoleUpdated.ProtoReflect.Descriptor instead.
 func (*RoleUpdated) Descriptor() ([]byte, []int) {
-	return file_events_auth_events_proto_rawDescGZIP(), []int{5}
+	return file_events_auth_events_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RoleUpdated) GetRoleId() string {
@@ -421,7 +677,7 @@ type UserRoleAssigned struct {
 
 func (x *UserRoleAssigned) Reset() {
 	*x = UserRoleAssigned{}
-	mi := &file_events_auth_events_proto_msgTypes[6]
+	mi := &file_events_auth_events_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -433,7 +689,7 @@ func (x *UserRoleAssigned) String() string {
 func (*UserRoleAssigned) ProtoMessage() {}
 
 func (x *UserRoleAssigned) ProtoReflect() protoreflect.Message {
-	mi := &file_events_auth_events_proto_msgTypes[6]
+	mi := &file_events_auth_events_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -446,7 +702,7 @@ func (x *UserRoleAssigned) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserRoleAssigned.ProtoReflect.Descriptor instead.
 func (*UserRoleAssigned) Descriptor() ([]byte, []int) {
-	return file_events_auth_events_proto_rawDescGZIP(), []int{6}
+	return file_events_auth_events_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *UserRoleAssigned) GetUserRoleId() string {
@@ -489,7 +745,7 @@ type UserRoleRevoked struct {
 
 func (x *UserRoleRevoked) Reset() {
 	*x = UserRoleRevoked{}
-	mi := &file_events_auth_events_proto_msgTypes[7]
+	mi := &file_events_auth_events_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -501,7 +757,7 @@ func (x *UserRoleRevoked) String() string {
 func (*UserRoleRevoked) ProtoMessage() {}
 
 func (x *UserRoleRevoked) ProtoReflect() protoreflect.Message {
-	mi := &file_events_auth_events_proto_msgTypes[7]
+	mi := &file_events_auth_events_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -514,7 +770,7 @@ func (x *UserRoleRevoked) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserRoleRevoked.ProtoReflect.Descriptor instead.
 func (*UserRoleRevoked) Descriptor() ([]byte, []int) {
-	return file_events_auth_events_proto_rawDescGZIP(), []int{7}
+	return file_events_auth_events_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *UserRoleRevoked) GetUserId() string {
@@ -550,7 +806,7 @@ type RolePermissionAdded struct {
 
 func (x *RolePermissionAdded) Reset() {
 	*x = RolePermissionAdded{}
-	mi := &file_events_auth_events_proto_msgTypes[8]
+	mi := &file_events_auth_events_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -562,7 +818,7 @@ func (x *RolePermissionAdded) String() string {
 func (*RolePermissionAdded) ProtoMessage() {}
 
 func (x *RolePermissionAdded) ProtoReflect() protoreflect.Message {
-	mi := &file_events_auth_events_proto_msgTypes[8]
+	mi := &file_events_auth_events_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -575,7 +831,7 @@ func (x *RolePermissionAdded) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RolePermissionAdded.ProtoReflect.Descriptor instead.
 func (*RolePermissionAdded) Descriptor() ([]byte, []int) {
-	return file_events_auth_events_proto_rawDescGZIP(), []int{8}
+	return file_events_auth_events_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RolePermissionAdded) GetRolePermissionId() string {
@@ -619,7 +875,7 @@ type RolePermissionRemoved struct {
 
 func (x *RolePermissionRemoved) Reset() {
 	*x = RolePermissionRemoved{}
-	mi := &file_events_auth_events_proto_msgTypes[9]
+	mi := &file_events_auth_events_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -631,7 +887,7 @@ func (x *RolePermissionRemoved) String() string {
 func (*RolePermissionRemoved) ProtoMessage() {}
 
 func (x *RolePermissionRemoved) ProtoReflect() protoreflect.Message {
-	mi := &file_events_auth_events_proto_msgTypes[9]
+	mi := &file_events_auth_events_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -644,7 +900,7 @@ func (x *RolePermissionRemoved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RolePermissionRemoved.ProtoReflect.Descriptor instead.
 func (*RolePermissionRemoved) Descriptor() ([]byte, []int) {
-	return file_events_auth_events_proto_rawDescGZIP(), []int{9}
+	return file_events_auth_events_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RolePermissionRemoved) GetRoleId() string {
@@ -671,7 +927,31 @@ const file_events_auth_events_proto_rawDesc = "" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x129\n" +
 	"\n" +
 	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt:\x1f\x92\xbd\x18\x1b\n" +
-	"\x06events\x12\x11auth.user.created\"\xb8\x01\n" +
+	"\x06events\x12\x11auth.user.created\"\x95\x01\n" +
+	"\x0fApiTokenRevoked\x12\x19\n" +
+	"\btoken_id\x18\x01 \x01(\tR\atokenId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1b\n" +
+	"\tdevice_id\x18\x03 \x01(\tR\bdeviceId:1\x92\xbd\x18 \n" +
+	"\x06events\x12\x16auth.api_token.revoked\xfa\xf4\x18\tapi_token\"\xaa\x02\n" +
+	"\x0fApiTokenCreated\x12\x19\n" +
+	"\btoken_id\x18\x01 \x01(\tR\atokenId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x129\n" +
+	"\n" +
+	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1b\n" +
+	"\tdevice_id\x18\x04 \x01(\tR\bdeviceId\x12%\n" +
+	"\x0ekey_thumbprint\x18\x05 \x01(\tR\rkeyThumbprint\x12\x12\n" +
+	"\x04name\x18\x06 \x01(\tR\x04name\x12\x1d\n" +
+	"\n" +
+	"created_by\x18\a \x01(\tR\tcreatedBy:1\x92\xbd\x18 \n" +
+	"\x06events\x12\x16auth.api_token.created\xfa\xf4\x18\tapi_token\"\xf5\x01\n" +
+	"\x12OAuthGrantApproved\x12\x19\n" +
+	"\bgrant_id\x18\x01 \x01(\tR\agrantId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x129\n" +
+	"\n" +
+	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1b\n" +
+	"\tclient_id\x18\x04 \x01(\tR\bclientId\x12\x1a\n" +
+	"\bresource\x18\x05 \x01(\tR\bresource:7\x92\xbd\x18#\n" +
+	"\x06events\x12\x19auth.oauth_grant.approved\xfa\xf4\x18\foauth_server\"\xb8\x01\n" +
 	"\vTokenIssued\x12\x19\n" +
 	"\btoken_id\x18\x01 \x01(\tR\atokenId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x127\n" +
@@ -731,31 +1011,36 @@ func file_events_auth_events_proto_rawDescGZIP() []byte {
 	return file_events_auth_events_proto_rawDescData
 }
 
-var file_events_auth_events_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_events_auth_events_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_events_auth_events_proto_goTypes = []any{
 	(*UserCreated)(nil),           // 0: w17.contrib.auth.UserCreated
-	(*TokenIssued)(nil),           // 1: w17.contrib.auth.TokenIssued
-	(*TokenRevoked)(nil),          // 2: w17.contrib.auth.TokenRevoked
-	(*RoleCreated)(nil),           // 3: w17.contrib.auth.RoleCreated
-	(*RoleDeleted)(nil),           // 4: w17.contrib.auth.RoleDeleted
-	(*RoleUpdated)(nil),           // 5: w17.contrib.auth.RoleUpdated
-	(*UserRoleAssigned)(nil),      // 6: w17.contrib.auth.UserRoleAssigned
-	(*UserRoleRevoked)(nil),       // 7: w17.contrib.auth.UserRoleRevoked
-	(*RolePermissionAdded)(nil),   // 8: w17.contrib.auth.RolePermissionAdded
-	(*RolePermissionRemoved)(nil), // 9: w17.contrib.auth.RolePermissionRemoved
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(*ApiTokenRevoked)(nil),       // 1: w17.contrib.auth.ApiTokenRevoked
+	(*ApiTokenCreated)(nil),       // 2: w17.contrib.auth.ApiTokenCreated
+	(*OAuthGrantApproved)(nil),    // 3: w17.contrib.auth.OAuthGrantApproved
+	(*TokenIssued)(nil),           // 4: w17.contrib.auth.TokenIssued
+	(*TokenRevoked)(nil),          // 5: w17.contrib.auth.TokenRevoked
+	(*RoleCreated)(nil),           // 6: w17.contrib.auth.RoleCreated
+	(*RoleDeleted)(nil),           // 7: w17.contrib.auth.RoleDeleted
+	(*RoleUpdated)(nil),           // 8: w17.contrib.auth.RoleUpdated
+	(*UserRoleAssigned)(nil),      // 9: w17.contrib.auth.UserRoleAssigned
+	(*UserRoleRevoked)(nil),       // 10: w17.contrib.auth.UserRoleRevoked
+	(*RolePermissionAdded)(nil),   // 11: w17.contrib.auth.RolePermissionAdded
+	(*RolePermissionRemoved)(nil), // 12: w17.contrib.auth.RolePermissionRemoved
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
 }
 var file_events_auth_events_proto_depIdxs = []int32{
-	10, // 0: w17.contrib.auth.UserCreated.created_at:type_name -> google.protobuf.Timestamp
-	10, // 1: w17.contrib.auth.TokenIssued.issued_at:type_name -> google.protobuf.Timestamp
-	10, // 2: w17.contrib.auth.RoleCreated.created_at:type_name -> google.protobuf.Timestamp
-	10, // 3: w17.contrib.auth.UserRoleAssigned.assigned_at:type_name -> google.protobuf.Timestamp
-	10, // 4: w17.contrib.auth.RolePermissionAdded.added_at:type_name -> google.protobuf.Timestamp
-	5,  // [5:5] is the sub-list for method output_type
-	5,  // [5:5] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	13, // 0: w17.contrib.auth.UserCreated.created_at:type_name -> google.protobuf.Timestamp
+	13, // 1: w17.contrib.auth.ApiTokenCreated.created_at:type_name -> google.protobuf.Timestamp
+	13, // 2: w17.contrib.auth.OAuthGrantApproved.created_at:type_name -> google.protobuf.Timestamp
+	13, // 3: w17.contrib.auth.TokenIssued.issued_at:type_name -> google.protobuf.Timestamp
+	13, // 4: w17.contrib.auth.RoleCreated.created_at:type_name -> google.protobuf.Timestamp
+	13, // 5: w17.contrib.auth.UserRoleAssigned.assigned_at:type_name -> google.protobuf.Timestamp
+	13, // 6: w17.contrib.auth.RolePermissionAdded.added_at:type_name -> google.protobuf.Timestamp
+	7,  // [7:7] is the sub-list for method output_type
+	7,  // [7:7] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_events_auth_events_proto_init() }
@@ -769,7 +1054,7 @@ func file_events_auth_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_events_auth_events_proto_rawDesc), len(file_events_auth_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
@@ -782,4 +1067,4 @@ func file_events_auth_events_proto_init() {
 	file_events_auth_events_proto_depIdxs = nil
 }
 
-// emit-sha256: 01d020326dfcb9fa5a22c1f3526aba7295ca957d6fa91d4cc4be838bbc6f9eb4
+// emit-sha256: 66f61a051ab7f2a11591b224bb5b98b3072ed53fe0efb8d23353c0674663360b

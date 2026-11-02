@@ -12,8 +12,8 @@ package w17lock.app.acl;
 import "w17/lock.proto";
 import "w17/field.proto";
 
-option (w17.lock_checksum) = "sha256:de32eec6533ebd0fd1830a392a82a9a2a42b9720b703db2c7c57b8cf8da7e923";
-option (w17.lock_signature) = "ed25519/v1:d9a3bdfda214bad388fbf2df2faedde0cfc9f975e0197e0a3635988dd1ec2940b92b67816a201c181fc158c4e3f3cdec4a5ed874638ccbd7ae0493924326840d";
+option (w17.lock_checksum) = "sha256:77dc700f3ac898419eb53b66d89125b5b0d5f2343d6ecd4999abd862191efa06";
+option (w17.lock_signature) = "ed25519/v1:52e7fa9b23e5047dbdd4c67d91ffe3c277b0f84677255c6d522ac328f9c630ed11444264d859c1613e339dae06be1dc6df794c2240e07db54ab5e37f040dce0e";
 option (w17.lock_derivation) = 1;
 
 // AclPermission — every permission allocated by the cascade for
@@ -76,6 +76,11 @@ enum AclPermission {
   AUTH_AUTH_MUTATION_UPDATE_ROLE = 32 [(w17.value_display) = { label: "Auth · Auth Mutation · Update Role" }];
   AUTH_AUTH_QUERY_GET_ROLE = 33 [(w17.value_display) = { label: "Auth · Auth Query · Get Role" }];
   AUTH_AUTH_QUERY_LIST_ROLES = 34 [(w17.value_display) = { label: "Auth · Auth Query · List Roles" }];
+  AUTH_AUTH_SERVICE_APPROVE_OAUTH_AUTHORIZATION = 175 [(w17.value_display) = { label: "Auth · Auth Service · Approve Oauth Authorization" }];
+  AUTH_AUTH_SERVICE_DENY_OAUTH_AUTHORIZATION = 176 [(w17.value_display) = { label: "Auth · Auth Service · Deny Oauth Authorization" }];
+  AUTH_AUTH_SERVICE_GET_OAUTH_AUTHORIZATION = 177 [(w17.value_display) = { label: "Auth · Auth Service · Get Oauth Authorization" }];
+  AUTH_AUTH_SERVICE_LIST_MY_OAUTH_GRANTS = 178 [(w17.value_display) = { label: "Auth · Auth Service · List My Oauth Grants" }];
+  AUTH_AUTH_SERVICE_REVOKE_MY_OAUTH_GRANT = 179 [(w17.value_display) = { label: "Auth · Auth Service · Revoke My Oauth Grant" }];
   AUTH_AUTH_SERVICE_WHO_AM_I = 35 [(w17.value_display) = { label: "Auth · Auth Service · Who Am I" }];
   AUTH_ROLE_CHANGE = 36 [(w17.value_display) = { label: "Auth · Role · Change" }];
   AUTH_ROLE_DELETE = 37 [(w17.value_display) = { label: "Auth · Role · Delete" }];

@@ -21,8 +21,13 @@ func init() {
 		"w17.contrib.auth.RolePermission":       {},
 		"w17.contrib.auth.RolePermissionChange": {},
 		"w17.contrib.auth.UserRole":             {},
+		"w17.contrib.auth.TokenPermission":      {},
 		"w17.contrib.auth.BootstrapClaim":       {},
+		"w17.contrib.auth.OAuthClient":          {},
+		"w17.contrib.auth.OAuthAuthorization":   {},
+		"w17.contrib.auth.OAuthGrant":           {},
+		"w17.contrib.auth.OAuthRefreshToken":    {},
 	})
 }
 
-// emit-sha256: ac508af72fa5b34169ec752f1ec588d80b33b43775b59711e8118237489cb65e
+// emit-sha256: 8fad21ac75d3784d3b5455af0a33ed26b9fc8109fba006e8b1159f6bffcc687d

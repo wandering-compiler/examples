@@ -64,7 +64,7 @@ import (
 	_ "github.com/wandering-compiler/sdk/go/pb/w17"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	_ "google.golang.org/protobuf/types/known/timestamppb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -895,6 +895,1764 @@ func (x *ListMySignInEventsResp) GetEvents() []*SignInEvent {
 	return nil
 }
 
+type CreateApiTokenReq struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Optional least-privilege subset — permission IDs this token may use.
+	// The effective set is always the INTERSECTION with the caller's
+	// API-realm perms (an out-of-realm entry is dropped at Authenticate),
+	// so a token can never escalate. Empty = full API-realm perms.
+	PermissionSubset []int32 `protobuf:"varint,2,rep,packed,name=permission_subset,json=permissionSubset,proto3" json:"permission_subset,omitempty"`
+	// When the token stops working. Optional: absent takes the deployment's
+	// default lifetime (api_token_default_ttl_hours, 90 days unless changed;
+	// 0 there means "never"). Present, it must be in the future. A token is
+	// rotated by issuing a new one and revoking the old — the expiry is what
+	// makes forgetting the second step safe.
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// public_key — the PUBLIC key of the program that will use the token, as
+	// the JSON of a JWK (RFC 7517): {"kty":"EC","crv":"P-256","x":…,"y":…} or
+	// {"kty":"OKP","crv":"Ed25519","x":…}. REQUIRED: the token is bound to this
+	// key (its RFC 7638 thumbprint, computed by the handler) and works only with
+	// DPoP proofs signed by it. A JWK with any private member ("d", …) is
+	// refused and never stored or logged; the private key stays where the
+	// program runs.
+	PublicKey     string `protobuf:"bytes,4,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateApiTokenReq) Reset() {
+	*x = CreateApiTokenReq{}
+	mi := &file_business_auth_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateApiTokenReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateApiTokenReq) ProtoMessage() {}
+
+func (x *CreateApiTokenReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateApiTokenReq.ProtoReflect.Descriptor instead.
+func (*CreateApiTokenReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *CreateApiTokenReq) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateApiTokenReq) GetPermissionSubset() []int32 {
+	if x != nil {
+		return x.PermissionSubset
+	}
+	return nil
+}
+
+func (x *CreateApiTokenReq) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *CreateApiTokenReq) GetPublicKey() string {
+	if x != nil {
+		return x.PublicKey
+	}
+	return ""
+}
+
+type CreateApiTokenResp struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The opaque token string — returned ONCE at creation; never
+	// retrievable again (ListApiTokens omits it).
+	Token   string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	TokenId string `protobuf:"bytes,2,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	// When it expires; absent = never (the deployment's default is 0).
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// The thumbprint of the key the token is bound to — the device id
+	// Authenticate answers for its requests.
+	DeviceId      string `protobuf:"bytes,4,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateApiTokenResp) Reset() {
+	*x = CreateApiTokenResp{}
+	mi := &file_business_auth_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateApiTokenResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateApiTokenResp) ProtoMessage() {}
+
+func (x *CreateApiTokenResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateApiTokenResp.ProtoReflect.Descriptor instead.
+func (*CreateApiTokenResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *CreateApiTokenResp) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *CreateApiTokenResp) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
+	}
+	return ""
+}
+
+func (x *CreateApiTokenResp) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *CreateApiTokenResp) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+type ListApiTokensReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListApiTokensReq) Reset() {
+	*x = ListApiTokensReq{}
+	mi := &file_business_auth_service_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListApiTokensReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListApiTokensReq) ProtoMessage() {}
+
+func (x *ListApiTokensReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListApiTokensReq.ProtoReflect.Descriptor instead.
+func (*ListApiTokensReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{15}
+}
+
+type ListApiTokensResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tokens        []*ApiTokenInfo        `protobuf:"bytes,1,rep,name=tokens,proto3" json:"tokens,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListApiTokensResp) Reset() {
+	*x = ListApiTokensResp{}
+	mi := &file_business_auth_service_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListApiTokensResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListApiTokensResp) ProtoMessage() {}
+
+func (x *ListApiTokensResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListApiTokensResp.ProtoReflect.Descriptor instead.
+func (*ListApiTokensResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListApiTokensResp) GetTokens() []*ApiTokenInfo {
+	if x != nil {
+		return x.Tokens
+	}
+	return nil
+}
+
+type RevokeApiTokenReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TokenId       string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeApiTokenReq) Reset() {
+	*x = RevokeApiTokenReq{}
+	mi := &file_business_auth_service_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeApiTokenReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeApiTokenReq) ProtoMessage() {}
+
+func (x *RevokeApiTokenReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeApiTokenReq.ProtoReflect.Descriptor instead.
+func (*RevokeApiTokenReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RevokeApiTokenReq) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
+	}
+	return ""
+}
+
+type RevokeApiTokenResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeApiTokenResp) Reset() {
+	*x = RevokeApiTokenResp{}
+	mi := &file_business_auth_service_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeApiTokenResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeApiTokenResp) ProtoMessage() {}
+
+func (x *RevokeApiTokenResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeApiTokenResp.ProtoReflect.Descriptor instead.
+func (*RevokeApiTokenResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{18}
+}
+
+type GetOAuthServerSettingsReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetOAuthServerSettingsReq) Reset() {
+	*x = GetOAuthServerSettingsReq{}
+	mi := &file_business_auth_service_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetOAuthServerSettingsReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetOAuthServerSettingsReq) ProtoMessage() {}
+
+func (x *GetOAuthServerSettingsReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetOAuthServerSettingsReq.ProtoReflect.Descriptor instead.
+func (*GetOAuthServerSettingsReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{19}
+}
+
+type GetOAuthServerSettingsResp struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	DynamicRegistration bool                   `protobuf:"varint,1,opt,name=dynamic_registration,json=dynamicRegistration,proto3" json:"dynamic_registration,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *GetOAuthServerSettingsResp) Reset() {
+	*x = GetOAuthServerSettingsResp{}
+	mi := &file_business_auth_service_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetOAuthServerSettingsResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetOAuthServerSettingsResp) ProtoMessage() {}
+
+func (x *GetOAuthServerSettingsResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetOAuthServerSettingsResp.ProtoReflect.Descriptor instead.
+func (*GetOAuthServerSettingsResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *GetOAuthServerSettingsResp) GetDynamicRegistration() bool {
+	if x != nil {
+		return x.DynamicRegistration
+	}
+	return false
+}
+
+type RegisterOAuthClientReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RedirectUris  []string               `protobuf:"bytes,1,rep,name=redirect_uris,json=redirectUris,proto3" json:"redirect_uris,omitempty"`
+	ClientName    string                 `protobuf:"bytes,2,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	ClientUri     string                 `protobuf:"bytes,3,opt,name=client_uri,json=clientUri,proto3" json:"client_uri,omitempty"`
+	LogoUri       string                 `protobuf:"bytes,4,opt,name=logo_uri,json=logoUri,proto3" json:"logo_uri,omitempty"`
+	SoftwareId    string                 `protobuf:"bytes,5,opt,name=software_id,json=softwareId,proto3" json:"software_id,omitempty"`
+	GrantTypes    []string               `protobuf:"bytes,6,rep,name=grant_types,json=grantTypes,proto3" json:"grant_types,omitempty"`
+	ResponseTypes []string               `protobuf:"bytes,7,rep,name=response_types,json=responseTypes,proto3" json:"response_types,omitempty"`
+	Scope         string                 `protobuf:"bytes,8,opt,name=scope,proto3" json:"scope,omitempty"`
+	ClientAddr    string                 `protobuf:"bytes,9,opt,name=client_addr,json=clientAddr,proto3" json:"client_addr,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterOAuthClientReq) Reset() {
+	*x = RegisterOAuthClientReq{}
+	mi := &file_business_auth_service_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterOAuthClientReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterOAuthClientReq) ProtoMessage() {}
+
+func (x *RegisterOAuthClientReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterOAuthClientReq.ProtoReflect.Descriptor instead.
+func (*RegisterOAuthClientReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *RegisterOAuthClientReq) GetRedirectUris() []string {
+	if x != nil {
+		return x.RedirectUris
+	}
+	return nil
+}
+
+func (x *RegisterOAuthClientReq) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *RegisterOAuthClientReq) GetClientUri() string {
+	if x != nil {
+		return x.ClientUri
+	}
+	return ""
+}
+
+func (x *RegisterOAuthClientReq) GetLogoUri() string {
+	if x != nil {
+		return x.LogoUri
+	}
+	return ""
+}
+
+func (x *RegisterOAuthClientReq) GetSoftwareId() string {
+	if x != nil {
+		return x.SoftwareId
+	}
+	return ""
+}
+
+func (x *RegisterOAuthClientReq) GetGrantTypes() []string {
+	if x != nil {
+		return x.GrantTypes
+	}
+	return nil
+}
+
+func (x *RegisterOAuthClientReq) GetResponseTypes() []string {
+	if x != nil {
+		return x.ResponseTypes
+	}
+	return nil
+}
+
+func (x *RegisterOAuthClientReq) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *RegisterOAuthClientReq) GetClientAddr() string {
+	if x != nil {
+		return x.ClientAddr
+	}
+	return ""
+}
+
+type RegisterOAuthClientResp struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	ClientId              string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	IssuedAt              *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
+	OauthError            string                 `protobuf:"bytes,3,opt,name=oauth_error,json=oauthError,proto3" json:"oauth_error,omitempty"`
+	OauthErrorDescription string                 `protobuf:"bytes,4,opt,name=oauth_error_description,json=oauthErrorDescription,proto3" json:"oauth_error_description,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *RegisterOAuthClientResp) Reset() {
+	*x = RegisterOAuthClientResp{}
+	mi := &file_business_auth_service_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterOAuthClientResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterOAuthClientResp) ProtoMessage() {}
+
+func (x *RegisterOAuthClientResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterOAuthClientResp.ProtoReflect.Descriptor instead.
+func (*RegisterOAuthClientResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *RegisterOAuthClientResp) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *RegisterOAuthClientResp) GetIssuedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.IssuedAt
+	}
+	return nil
+}
+
+func (x *RegisterOAuthClientResp) GetOauthError() string {
+	if x != nil {
+		return x.OauthError
+	}
+	return ""
+}
+
+func (x *RegisterOAuthClientResp) GetOauthErrorDescription() string {
+	if x != nil {
+		return x.OauthErrorDescription
+	}
+	return ""
+}
+
+type BeginOAuthAuthorizationReq struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	ResponseType        string                 `protobuf:"bytes,1,opt,name=response_type,json=responseType,proto3" json:"response_type,omitempty"`
+	ClientId            string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	RedirectUri         string                 `protobuf:"bytes,3,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
+	State               string                 `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	Scope               string                 `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"`
+	CodeChallenge       string                 `protobuf:"bytes,6,opt,name=code_challenge,json=codeChallenge,proto3" json:"code_challenge,omitempty"`
+	CodeChallengeMethod string                 `protobuf:"bytes,7,opt,name=code_challenge_method,json=codeChallengeMethod,proto3" json:"code_challenge_method,omitempty"`
+	Resources           []string               `protobuf:"bytes,8,rep,name=resources,proto3" json:"resources,omitempty"`
+	Issuer              string                 `protobuf:"bytes,9,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	ClientAddr          string                 `protobuf:"bytes,10,opt,name=client_addr,json=clientAddr,proto3" json:"client_addr,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *BeginOAuthAuthorizationReq) Reset() {
+	*x = BeginOAuthAuthorizationReq{}
+	mi := &file_business_auth_service_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BeginOAuthAuthorizationReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BeginOAuthAuthorizationReq) ProtoMessage() {}
+
+func (x *BeginOAuthAuthorizationReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BeginOAuthAuthorizationReq.ProtoReflect.Descriptor instead.
+func (*BeginOAuthAuthorizationReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *BeginOAuthAuthorizationReq) GetResponseType() string {
+	if x != nil {
+		return x.ResponseType
+	}
+	return ""
+}
+
+func (x *BeginOAuthAuthorizationReq) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *BeginOAuthAuthorizationReq) GetRedirectUri() string {
+	if x != nil {
+		return x.RedirectUri
+	}
+	return ""
+}
+
+func (x *BeginOAuthAuthorizationReq) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *BeginOAuthAuthorizationReq) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *BeginOAuthAuthorizationReq) GetCodeChallenge() string {
+	if x != nil {
+		return x.CodeChallenge
+	}
+	return ""
+}
+
+func (x *BeginOAuthAuthorizationReq) GetCodeChallengeMethod() string {
+	if x != nil {
+		return x.CodeChallengeMethod
+	}
+	return ""
+}
+
+func (x *BeginOAuthAuthorizationReq) GetResources() []string {
+	if x != nil {
+		return x.Resources
+	}
+	return nil
+}
+
+func (x *BeginOAuthAuthorizationReq) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *BeginOAuthAuthorizationReq) GetClientAddr() string {
+	if x != nil {
+		return x.ClientAddr
+	}
+	return ""
+}
+
+type BeginOAuthAuthorizationResp struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The pending request's opaque id, for the consent page.
+	RequestId             string `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	OauthError            string `protobuf:"bytes,2,opt,name=oauth_error,json=oauthError,proto3" json:"oauth_error,omitempty"`
+	OauthErrorDescription string `protobuf:"bytes,3,opt,name=oauth_error_description,json=oauthErrorDescription,proto3" json:"oauth_error_description,omitempty"`
+	// The refusal concerns the client or the redirect itself: shown to the
+	// user, never sent to the redirect (RFC 6749 §4.1.2.1).
+	NoRedirect    bool `protobuf:"varint,4,opt,name=no_redirect,json=noRedirect,proto3" json:"no_redirect,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BeginOAuthAuthorizationResp) Reset() {
+	*x = BeginOAuthAuthorizationResp{}
+	mi := &file_business_auth_service_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BeginOAuthAuthorizationResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BeginOAuthAuthorizationResp) ProtoMessage() {}
+
+func (x *BeginOAuthAuthorizationResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BeginOAuthAuthorizationResp.ProtoReflect.Descriptor instead.
+func (*BeginOAuthAuthorizationResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *BeginOAuthAuthorizationResp) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *BeginOAuthAuthorizationResp) GetOauthError() string {
+	if x != nil {
+		return x.OauthError
+	}
+	return ""
+}
+
+func (x *BeginOAuthAuthorizationResp) GetOauthErrorDescription() string {
+	if x != nil {
+		return x.OauthErrorDescription
+	}
+	return ""
+}
+
+func (x *BeginOAuthAuthorizationResp) GetNoRedirect() bool {
+	if x != nil {
+		return x.NoRedirect
+	}
+	return false
+}
+
+// GetOAuthAuthorization — what the consent page shows. The signed-in caller
+// only: the request id alone proves nothing about who may decide it.
+type GetOAuthAuthorizationReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetOAuthAuthorizationReq) Reset() {
+	*x = GetOAuthAuthorizationReq{}
+	mi := &file_business_auth_service_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetOAuthAuthorizationReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetOAuthAuthorizationReq) ProtoMessage() {}
+
+func (x *GetOAuthAuthorizationReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetOAuthAuthorizationReq.ProtoReflect.Descriptor instead.
+func (*GetOAuthAuthorizationReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *GetOAuthAuthorizationReq) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+type OAuthConsentOrg struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OAuthConsentOrg) Reset() {
+	*x = OAuthConsentOrg{}
+	mi := &file_business_auth_service_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OAuthConsentOrg) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OAuthConsentOrg) ProtoMessage() {}
+
+func (x *OAuthConsentOrg) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OAuthConsentOrg.ProtoReflect.Descriptor instead.
+func (*OAuthConsentOrg) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *OAuthConsentOrg) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OAuthConsentOrg) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *OAuthConsentOrg) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type GetOAuthAuthorizationResp struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The client as it named itself — unverified; redirect_host is what it
+	// cannot choose: where the code will go.
+	ClientName   string `protobuf:"bytes,1,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	ClientUri    string `protobuf:"bytes,2,opt,name=client_uri,json=clientUri,proto3" json:"client_uri,omitempty"`
+	LogoUri      string `protobuf:"bytes,3,opt,name=logo_uri,json=logoUri,proto3" json:"logo_uri,omitempty"`
+	ClientId     string `protobuf:"bytes,4,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	RedirectHost string `protobuf:"bytes,5,opt,name=redirect_host,json=redirectHost,proto3" json:"redirect_host,omitempty"`
+	// MCP (an app acting through the MCP surface named by resource) or SESSION
+	// (a program on this computer signing in as the user — w17ctl).
+	Kind      OAuthGrantKind         `protobuf:"varint,6,opt,name=kind,proto3,enum=w17.contrib.auth.OAuthGrantKind" json:"kind,omitempty"`
+	Resource  string                 `protobuf:"bytes,7,opt,name=resource,proto3" json:"resource,omitempty"`
+	Scope     string                 `protobuf:"bytes,8,opt,name=scope,proto3" json:"scope,omitempty"`
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// The organizations the user may choose for the grant (org_membership);
+	// empty without organizations.
+	Orgs          []*OAuthConsentOrg `protobuf:"bytes,10,rep,name=orgs,proto3" json:"orgs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetOAuthAuthorizationResp) Reset() {
+	*x = GetOAuthAuthorizationResp{}
+	mi := &file_business_auth_service_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetOAuthAuthorizationResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetOAuthAuthorizationResp) ProtoMessage() {}
+
+func (x *GetOAuthAuthorizationResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetOAuthAuthorizationResp.ProtoReflect.Descriptor instead.
+func (*GetOAuthAuthorizationResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *GetOAuthAuthorizationResp) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *GetOAuthAuthorizationResp) GetClientUri() string {
+	if x != nil {
+		return x.ClientUri
+	}
+	return ""
+}
+
+func (x *GetOAuthAuthorizationResp) GetLogoUri() string {
+	if x != nil {
+		return x.LogoUri
+	}
+	return ""
+}
+
+func (x *GetOAuthAuthorizationResp) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *GetOAuthAuthorizationResp) GetRedirectHost() string {
+	if x != nil {
+		return x.RedirectHost
+	}
+	return ""
+}
+
+func (x *GetOAuthAuthorizationResp) GetKind() OAuthGrantKind {
+	if x != nil {
+		return x.Kind
+	}
+	return OAuthGrantKind_OAUTH_GRANT_KIND_UNSPECIFIED
+}
+
+func (x *GetOAuthAuthorizationResp) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *GetOAuthAuthorizationResp) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *GetOAuthAuthorizationResp) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *GetOAuthAuthorizationResp) GetOrgs() []*OAuthConsentOrg {
+	if x != nil {
+		return x.Orgs
+	}
+	return nil
+}
+
+type ApproveOAuthAuthorizationReq struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// The organization the grant belongs to; required with organizations,
+	// ignored without.
+	OrgId         string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApproveOAuthAuthorizationReq) Reset() {
+	*x = ApproveOAuthAuthorizationReq{}
+	mi := &file_business_auth_service_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApproveOAuthAuthorizationReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApproveOAuthAuthorizationReq) ProtoMessage() {}
+
+func (x *ApproveOAuthAuthorizationReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApproveOAuthAuthorizationReq.ProtoReflect.Descriptor instead.
+func (*ApproveOAuthAuthorizationReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ApproveOAuthAuthorizationReq) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *ApproveOAuthAuthorizationReq) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+type ApproveOAuthAuthorizationResp struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Where the page sends the browser: the client's redirect with the code,
+	// state and iss.
+	RedirectUrl   string `protobuf:"bytes,1,opt,name=redirect_url,json=redirectUrl,proto3" json:"redirect_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApproveOAuthAuthorizationResp) Reset() {
+	*x = ApproveOAuthAuthorizationResp{}
+	mi := &file_business_auth_service_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApproveOAuthAuthorizationResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApproveOAuthAuthorizationResp) ProtoMessage() {}
+
+func (x *ApproveOAuthAuthorizationResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApproveOAuthAuthorizationResp.ProtoReflect.Descriptor instead.
+func (*ApproveOAuthAuthorizationResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ApproveOAuthAuthorizationResp) GetRedirectUrl() string {
+	if x != nil {
+		return x.RedirectUrl
+	}
+	return ""
+}
+
+type DenyOAuthAuthorizationReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DenyOAuthAuthorizationReq) Reset() {
+	*x = DenyOAuthAuthorizationReq{}
+	mi := &file_business_auth_service_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DenyOAuthAuthorizationReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DenyOAuthAuthorizationReq) ProtoMessage() {}
+
+func (x *DenyOAuthAuthorizationReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DenyOAuthAuthorizationReq.ProtoReflect.Descriptor instead.
+func (*DenyOAuthAuthorizationReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *DenyOAuthAuthorizationReq) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+type DenyOAuthAuthorizationResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RedirectUrl   string                 `protobuf:"bytes,1,opt,name=redirect_url,json=redirectUrl,proto3" json:"redirect_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DenyOAuthAuthorizationResp) Reset() {
+	*x = DenyOAuthAuthorizationResp{}
+	mi := &file_business_auth_service_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DenyOAuthAuthorizationResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DenyOAuthAuthorizationResp) ProtoMessage() {}
+
+func (x *DenyOAuthAuthorizationResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DenyOAuthAuthorizationResp.ProtoReflect.Descriptor instead.
+func (*DenyOAuthAuthorizationResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *DenyOAuthAuthorizationResp) GetRedirectUrl() string {
+	if x != nil {
+		return x.RedirectUrl
+	}
+	return ""
+}
+
+type ExchangeOAuthTokenReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GrantType     string                 `protobuf:"bytes,1,opt,name=grant_type,json=grantType,proto3" json:"grant_type,omitempty"`
+	Code          string                 `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	RedirectUri   string                 `protobuf:"bytes,3,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
+	CodeVerifier  string                 `protobuf:"bytes,4,opt,name=code_verifier,json=codeVerifier,proto3" json:"code_verifier,omitempty"`
+	ClientId      string                 `protobuf:"bytes,5,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	RefreshToken  string                 `protobuf:"bytes,6,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	Resources     []string               `protobuf:"bytes,7,rep,name=resources,proto3" json:"resources,omitempty"`
+	Scope         string                 `protobuf:"bytes,8,opt,name=scope,proto3" json:"scope,omitempty"`
+	ClientAddr    string                 `protobuf:"bytes,9,opt,name=client_addr,json=clientAddr,proto3" json:"client_addr,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExchangeOAuthTokenReq) Reset() {
+	*x = ExchangeOAuthTokenReq{}
+	mi := &file_business_auth_service_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeOAuthTokenReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeOAuthTokenReq) ProtoMessage() {}
+
+func (x *ExchangeOAuthTokenReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeOAuthTokenReq.ProtoReflect.Descriptor instead.
+func (*ExchangeOAuthTokenReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ExchangeOAuthTokenReq) GetGrantType() string {
+	if x != nil {
+		return x.GrantType
+	}
+	return ""
+}
+
+func (x *ExchangeOAuthTokenReq) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *ExchangeOAuthTokenReq) GetRedirectUri() string {
+	if x != nil {
+		return x.RedirectUri
+	}
+	return ""
+}
+
+func (x *ExchangeOAuthTokenReq) GetCodeVerifier() string {
+	if x != nil {
+		return x.CodeVerifier
+	}
+	return ""
+}
+
+func (x *ExchangeOAuthTokenReq) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *ExchangeOAuthTokenReq) GetRefreshToken() string {
+	if x != nil {
+		return x.RefreshToken
+	}
+	return ""
+}
+
+func (x *ExchangeOAuthTokenReq) GetResources() []string {
+	if x != nil {
+		return x.Resources
+	}
+	return nil
+}
+
+func (x *ExchangeOAuthTokenReq) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *ExchangeOAuthTokenReq) GetClientAddr() string {
+	if x != nil {
+		return x.ClientAddr
+	}
+	return ""
+}
+
+type ExchangeOAuthTokenResp struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	AccessToken string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	// "Bearer" (an MCP grant) or "DPoP" (a session grant, bound to the key of
+	// the request's proof).
+	TokenType             string `protobuf:"bytes,2,opt,name=token_type,json=tokenType,proto3" json:"token_type,omitempty"`
+	ExpiresIn             int64  `protobuf:"varint,3,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
+	RefreshToken          string `protobuf:"bytes,4,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	Scope                 string `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"`
+	OauthError            string `protobuf:"bytes,6,opt,name=oauth_error,json=oauthError,proto3" json:"oauth_error,omitempty"`
+	OauthErrorDescription string `protobuf:"bytes,7,opt,name=oauth_error_description,json=oauthErrorDescription,proto3" json:"oauth_error_description,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *ExchangeOAuthTokenResp) Reset() {
+	*x = ExchangeOAuthTokenResp{}
+	mi := &file_business_auth_service_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeOAuthTokenResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeOAuthTokenResp) ProtoMessage() {}
+
+func (x *ExchangeOAuthTokenResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeOAuthTokenResp.ProtoReflect.Descriptor instead.
+func (*ExchangeOAuthTokenResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ExchangeOAuthTokenResp) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
+func (x *ExchangeOAuthTokenResp) GetTokenType() string {
+	if x != nil {
+		return x.TokenType
+	}
+	return ""
+}
+
+func (x *ExchangeOAuthTokenResp) GetExpiresIn() int64 {
+	if x != nil {
+		return x.ExpiresIn
+	}
+	return 0
+}
+
+func (x *ExchangeOAuthTokenResp) GetRefreshToken() string {
+	if x != nil {
+		return x.RefreshToken
+	}
+	return ""
+}
+
+func (x *ExchangeOAuthTokenResp) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *ExchangeOAuthTokenResp) GetOauthError() string {
+	if x != nil {
+		return x.OauthError
+	}
+	return ""
+}
+
+func (x *ExchangeOAuthTokenResp) GetOauthErrorDescription() string {
+	if x != nil {
+		return x.OauthErrorDescription
+	}
+	return ""
+}
+
+type RevokeOAuthTokenReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	TokenTypeHint string                 `protobuf:"bytes,2,opt,name=token_type_hint,json=tokenTypeHint,proto3" json:"token_type_hint,omitempty"`
+	ClientId      string                 `protobuf:"bytes,3,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientAddr    string                 `protobuf:"bytes,4,opt,name=client_addr,json=clientAddr,proto3" json:"client_addr,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeOAuthTokenReq) Reset() {
+	*x = RevokeOAuthTokenReq{}
+	mi := &file_business_auth_service_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeOAuthTokenReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeOAuthTokenReq) ProtoMessage() {}
+
+func (x *RevokeOAuthTokenReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeOAuthTokenReq.ProtoReflect.Descriptor instead.
+func (*RevokeOAuthTokenReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *RevokeOAuthTokenReq) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *RevokeOAuthTokenReq) GetTokenTypeHint() string {
+	if x != nil {
+		return x.TokenTypeHint
+	}
+	return ""
+}
+
+func (x *RevokeOAuthTokenReq) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *RevokeOAuthTokenReq) GetClientAddr() string {
+	if x != nil {
+		return x.ClientAddr
+	}
+	return ""
+}
+
+type RevokeOAuthTokenResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeOAuthTokenResp) Reset() {
+	*x = RevokeOAuthTokenResp{}
+	mi := &file_business_auth_service_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeOAuthTokenResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeOAuthTokenResp) ProtoMessage() {}
+
+func (x *RevokeOAuthTokenResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeOAuthTokenResp.ProtoReflect.Descriptor instead.
+func (*RevokeOAuthTokenResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{35}
+}
+
+type ListMyOAuthGrantsReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyOAuthGrantsReq) Reset() {
+	*x = ListMyOAuthGrantsReq{}
+	mi := &file_business_auth_service_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyOAuthGrantsReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyOAuthGrantsReq) ProtoMessage() {}
+
+func (x *ListMyOAuthGrantsReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyOAuthGrantsReq.ProtoReflect.Descriptor instead.
+func (*ListMyOAuthGrantsReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{36}
+}
+
+type MyOAuthGrant struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ClientName    string                 `protobuf:"bytes,2,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	ClientUri     string                 `protobuf:"bytes,3,opt,name=client_uri,json=clientUri,proto3" json:"client_uri,omitempty"`
+	LogoUri       string                 `protobuf:"bytes,4,opt,name=logo_uri,json=logoUri,proto3" json:"logo_uri,omitempty"`
+	ClientId      string                 `protobuf:"bytes,5,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	Resource      string                 `protobuf:"bytes,6,opt,name=resource,proto3" json:"resource,omitempty"`
+	OrgId         string                 `protobuf:"bytes,7,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	LastUsedAt    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MyOAuthGrant) Reset() {
+	*x = MyOAuthGrant{}
+	mi := &file_business_auth_service_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MyOAuthGrant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MyOAuthGrant) ProtoMessage() {}
+
+func (x *MyOAuthGrant) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MyOAuthGrant.ProtoReflect.Descriptor instead.
+func (*MyOAuthGrant) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *MyOAuthGrant) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MyOAuthGrant) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *MyOAuthGrant) GetClientUri() string {
+	if x != nil {
+		return x.ClientUri
+	}
+	return ""
+}
+
+func (x *MyOAuthGrant) GetLogoUri() string {
+	if x != nil {
+		return x.LogoUri
+	}
+	return ""
+}
+
+func (x *MyOAuthGrant) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *MyOAuthGrant) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *MyOAuthGrant) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *MyOAuthGrant) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *MyOAuthGrant) GetLastUsedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastUsedAt
+	}
+	return nil
+}
+
+func (x *MyOAuthGrant) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+type ListMyOAuthGrantsResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Grants        []*MyOAuthGrant        `protobuf:"bytes,1,rep,name=grants,proto3" json:"grants,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyOAuthGrantsResp) Reset() {
+	*x = ListMyOAuthGrantsResp{}
+	mi := &file_business_auth_service_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyOAuthGrantsResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyOAuthGrantsResp) ProtoMessage() {}
+
+func (x *ListMyOAuthGrantsResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyOAuthGrantsResp.ProtoReflect.Descriptor instead.
+func (*ListMyOAuthGrantsResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *ListMyOAuthGrantsResp) GetGrants() []*MyOAuthGrant {
+	if x != nil {
+		return x.Grants
+	}
+	return nil
+}
+
+type RevokeMyOAuthGrantReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GrantId       string                 `protobuf:"bytes,1,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeMyOAuthGrantReq) Reset() {
+	*x = RevokeMyOAuthGrantReq{}
+	mi := &file_business_auth_service_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeMyOAuthGrantReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeMyOAuthGrantReq) ProtoMessage() {}
+
+func (x *RevokeMyOAuthGrantReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeMyOAuthGrantReq.ProtoReflect.Descriptor instead.
+func (*RevokeMyOAuthGrantReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *RevokeMyOAuthGrantReq) GetGrantId() string {
+	if x != nil {
+		return x.GrantId
+	}
+	return ""
+}
+
+type RevokeMyOAuthGrantResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeMyOAuthGrantResp) Reset() {
+	*x = RevokeMyOAuthGrantResp{}
+	mi := &file_business_auth_service_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeMyOAuthGrantResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeMyOAuthGrantResp) ProtoMessage() {}
+
+func (x *RevokeMyOAuthGrantResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeMyOAuthGrantResp.ProtoReflect.Descriptor instead.
+func (*RevokeMyOAuthGrantResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{40}
+}
+
 var File_business_auth_service_proto protoreflect.FileDescriptor
 
 const file_business_auth_service_proto_rawDesc = "" +
@@ -957,7 +2715,158 @@ const file_business_auth_service_proto_rawDesc = "" +
 	"LogoutResp:\x18\xfa\xf4\x18\x14authenticate_turnkey\"1\n" +
 	"\x15ListMySignInEventsReq:\x18\xfa\xf4\x18\x14authenticate_turnkey\"i\n" +
 	"\x16ListMySignInEventsResp\x125\n" +
-	"\x06events\x18\x01 \x03(\v2\x1d.w17.contrib.auth.SignInEventR\x06events:\x18\xfa\xf4\x18\x14authenticate_turnkey2\xb5\x06\n" +
+	"\x06events\x18\x01 \x03(\v2\x1d.w17.contrib.auth.SignInEventR\x06events:\x18\xfa\xf4\x18\x14authenticate_turnkey\"\xdd\x01\n" +
+	"\x11CreateApiTokenReq\x12\x1f\n" +
+	"\x04name\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x01R\x04name\x12+\n" +
+	"\x11permission_subset\x18\x02 \x03(\x05R\x10permissionSubset\x12A\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\texpiresAt\x12(\n" +
+	"\n" +
+	"public_key\x18\x04 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\bR\tpublicKey:\r\xfa\xf4\x18\tapi_token\"\xc7\x01\n" +
+	"\x12CreateApiTokenResp\x12\x1f\n" +
+	"\x05token\x18\x01 \x01(\tB\t\xca\xf3\x18\x050\x01\xa0\x02\x01R\x05token\x12!\n" +
+	"\btoken_id\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\atokenId\x12A\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\texpiresAt\x12\x1b\n" +
+	"\tdevice_id\x18\x04 \x01(\tR\bdeviceId:\r\xfa\xf4\x18\tapi_token\"!\n" +
+	"\x10ListApiTokensReq:\r\xfa\xf4\x18\tapi_token\"Z\n" +
+	"\x11ListApiTokensResp\x126\n" +
+	"\x06tokens\x18\x01 \x03(\v2\x1e.w17.contrib.auth.ApiTokenInfoR\x06tokens:\r\xfa\xf4\x18\tapi_token\"E\n" +
+	"\x11RevokeApiTokenReq\x12!\n" +
+	"\btoken_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\atokenId:\r\xfa\xf4\x18\tapi_token\"#\n" +
+	"\x12RevokeApiTokenResp:\r\xfa\xf4\x18\tapi_token\"-\n" +
+	"\x19GetOAuthServerSettingsReq:\x10\xfa\xf4\x18\foauth_server\"a\n" +
+	"\x1aGetOAuthServerSettingsResp\x121\n" +
+	"\x14dynamic_registration\x18\x01 \x01(\bR\x13dynamicRegistration:\x10\xfa\xf4\x18\foauth_server\"\xca\x02\n" +
+	"\x16RegisterOAuthClientReq\x12#\n" +
+	"\rredirect_uris\x18\x01 \x03(\tR\fredirectUris\x12\x1f\n" +
+	"\vclient_name\x18\x02 \x01(\tR\n" +
+	"clientName\x12\x1d\n" +
+	"\n" +
+	"client_uri\x18\x03 \x01(\tR\tclientUri\x12\x19\n" +
+	"\blogo_uri\x18\x04 \x01(\tR\alogoUri\x12\x1f\n" +
+	"\vsoftware_id\x18\x05 \x01(\tR\n" +
+	"softwareId\x12\x1f\n" +
+	"\vgrant_types\x18\x06 \x03(\tR\n" +
+	"grantTypes\x12%\n" +
+	"\x0eresponse_types\x18\a \x03(\tR\rresponseTypes\x12\x14\n" +
+	"\x05scope\x18\b \x01(\tR\x05scope\x12\x1f\n" +
+	"\vclient_addr\x18\t \x01(\tR\n" +
+	"clientAddr:\x10\xfa\xf4\x18\foauth_server\"\xda\x01\n" +
+	"\x17RegisterOAuthClientResp\x12\x1b\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\x127\n" +
+	"\tissued_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bissuedAt\x12\x1f\n" +
+	"\voauth_error\x18\x03 \x01(\tR\n" +
+	"oauthError\x126\n" +
+	"\x17oauth_error_description\x18\x04 \x01(\tR\x15oauthErrorDescription:\x10\xfa\xf4\x18\foauth_server\"\xf1\x02\n" +
+	"\x1aBeginOAuthAuthorizationReq\x12#\n" +
+	"\rresponse_type\x18\x01 \x01(\tR\fresponseType\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12!\n" +
+	"\fredirect_uri\x18\x03 \x01(\tR\vredirectUri\x12\x14\n" +
+	"\x05state\x18\x04 \x01(\tR\x05state\x12\x14\n" +
+	"\x05scope\x18\x05 \x01(\tR\x05scope\x12%\n" +
+	"\x0ecode_challenge\x18\x06 \x01(\tR\rcodeChallenge\x122\n" +
+	"\x15code_challenge_method\x18\a \x01(\tR\x13codeChallengeMethod\x12\x1c\n" +
+	"\tresources\x18\b \x03(\tR\tresources\x12\x16\n" +
+	"\x06issuer\x18\t \x01(\tR\x06issuer\x12\x1f\n" +
+	"\vclient_addr\x18\n" +
+	" \x01(\tR\n" +
+	"clientAddr:\x10\xfa\xf4\x18\foauth_server\"\xc8\x01\n" +
+	"\x1bBeginOAuthAuthorizationResp\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1f\n" +
+	"\voauth_error\x18\x02 \x01(\tR\n" +
+	"oauthError\x126\n" +
+	"\x17oauth_error_description\x18\x03 \x01(\tR\x15oauthErrorDescription\x12\x1f\n" +
+	"\vno_redirect\x18\x04 \x01(\bR\n" +
+	"noRedirect:\x10\xfa\xf4\x18\foauth_server\"V\n" +
+	"\x18GetOAuthAuthorizationReq\x12(\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x01R\trequestId:\x10\xfa\xf4\x18\foauth_server\"[\n" +
+	"\x0fOAuthConsentOrg\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04slug\x18\x02 \x01(\tR\x04slug\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name:\x10\xfa\xf4\x18\foauth_server\"\xa4\x03\n" +
+	"\x19GetOAuthAuthorizationResp\x12\x1f\n" +
+	"\vclient_name\x18\x01 \x01(\tR\n" +
+	"clientName\x12\x1d\n" +
+	"\n" +
+	"client_uri\x18\x02 \x01(\tR\tclientUri\x12\x19\n" +
+	"\blogo_uri\x18\x03 \x01(\tR\alogoUri\x12\x1b\n" +
+	"\tclient_id\x18\x04 \x01(\tR\bclientId\x12#\n" +
+	"\rredirect_host\x18\x05 \x01(\tR\fredirectHost\x124\n" +
+	"\x04kind\x18\x06 \x01(\x0e2 .w17.contrib.auth.OAuthGrantKindR\x04kind\x12\x1a\n" +
+	"\bresource\x18\a \x01(\tR\bresource\x12\x14\n" +
+	"\x05scope\x18\b \x01(\tR\x05scope\x129\n" +
+	"\n" +
+	"expires_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x125\n" +
+	"\x04orgs\x18\n" +
+	" \x03(\v2!.w17.contrib.auth.OAuthConsentOrgR\x04orgs:\x10\xfa\xf4\x18\foauth_server\"}\n" +
+	"\x1cApproveOAuthAuthorizationReq\x12(\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x01R\trequestId\x12!\n" +
+	"\x06org_id\x18\x02 \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x010\x01@@R\x05orgId:\x10\xfa\xf4\x18\foauth_server\"T\n" +
+	"\x1dApproveOAuthAuthorizationResp\x12!\n" +
+	"\fredirect_url\x18\x01 \x01(\tR\vredirectUrl:\x10\xfa\xf4\x18\foauth_server\"W\n" +
+	"\x19DenyOAuthAuthorizationReq\x12(\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x01R\trequestId:\x10\xfa\xf4\x18\foauth_server\"Q\n" +
+	"\x1aDenyOAuthAuthorizationResp\x12!\n" +
+	"\fredirect_url\x18\x01 \x01(\tR\vredirectUrl:\x10\xfa\xf4\x18\foauth_server\"\xdc\x02\n" +
+	"\x15ExchangeOAuthTokenReq\x12\x1d\n" +
+	"\n" +
+	"grant_type\x18\x01 \x01(\tR\tgrantType\x12\x1d\n" +
+	"\x04code\x18\x02 \x01(\tB\t\xca\xf3\x18\x050\x01\xa0\x02\x01R\x04code\x12!\n" +
+	"\fredirect_uri\x18\x03 \x01(\tR\vredirectUri\x12.\n" +
+	"\rcode_verifier\x18\x04 \x01(\tB\t\xca\xf3\x18\x050\x01\xa0\x02\x01R\fcodeVerifier\x12\x1b\n" +
+	"\tclient_id\x18\x05 \x01(\tR\bclientId\x12.\n" +
+	"\rrefresh_token\x18\x06 \x01(\tB\t\xca\xf3\x18\x050\x01\xa0\x02\x01R\frefreshToken\x12\x1c\n" +
+	"\tresources\x18\a \x03(\tR\tresources\x12\x14\n" +
+	"\x05scope\x18\b \x01(\tR\x05scope\x12\x1f\n" +
+	"\vclient_addr\x18\t \x01(\tR\n" +
+	"clientAddr:\x10\xfa\xf4\x18\foauth_server\"\xb5\x02\n" +
+	"\x16ExchangeOAuthTokenResp\x12,\n" +
+	"\faccess_token\x18\x01 \x01(\tB\t\xca\xf3\x18\x050\x01\xa0\x02\x01R\vaccessToken\x12\x1d\n" +
+	"\n" +
+	"token_type\x18\x02 \x01(\tR\ttokenType\x12\x1d\n" +
+	"\n" +
+	"expires_in\x18\x03 \x01(\x03R\texpiresIn\x12.\n" +
+	"\rrefresh_token\x18\x04 \x01(\tB\t\xca\xf3\x18\x050\x01\xa0\x02\x01R\frefreshToken\x12\x14\n" +
+	"\x05scope\x18\x05 \x01(\tR\x05scope\x12\x1f\n" +
+	"\voauth_error\x18\x06 \x01(\tR\n" +
+	"oauthError\x126\n" +
+	"\x17oauth_error_description\x18\a \x01(\tR\x15oauthErrorDescription:\x10\xfa\xf4\x18\foauth_server\"\xae\x01\n" +
+	"\x13RevokeOAuthTokenReq\x12\x1f\n" +
+	"\x05token\x18\x01 \x01(\tB\t\xca\xf3\x18\x050\x01\xa0\x02\x01R\x05token\x12&\n" +
+	"\x0ftoken_type_hint\x18\x02 \x01(\tR\rtokenTypeHint\x12\x1b\n" +
+	"\tclient_id\x18\x03 \x01(\tR\bclientId\x12\x1f\n" +
+	"\vclient_addr\x18\x04 \x01(\tR\n" +
+	"clientAddr:\x10\xfa\xf4\x18\foauth_server\"(\n" +
+	"\x14RevokeOAuthTokenResp:\x10\xfa\xf4\x18\foauth_server\"(\n" +
+	"\x14ListMyOAuthGrantsReq:\x10\xfa\xf4\x18\foauth_server\"\x8f\x03\n" +
+	"\fMyOAuthGrant\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
+	"\vclient_name\x18\x02 \x01(\tR\n" +
+	"clientName\x12\x1d\n" +
+	"\n" +
+	"client_uri\x18\x03 \x01(\tR\tclientUri\x12\x19\n" +
+	"\blogo_uri\x18\x04 \x01(\tR\alogoUri\x12\x1b\n" +
+	"\tclient_id\x18\x05 \x01(\tR\bclientId\x12\x1a\n" +
+	"\bresource\x18\x06 \x01(\tR\bresource\x12\x15\n" +
+	"\x06org_id\x18\a \x01(\tR\x05orgId\x129\n" +
+	"\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12<\n" +
+	"\flast_used_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"lastUsedAt\x129\n" +
+	"\n" +
+	"expires_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt:\x10\xfa\xf4\x18\foauth_server\"a\n" +
+	"\x15ListMyOAuthGrantsResp\x126\n" +
+	"\x06grants\x18\x01 \x03(\v2\x1e.w17.contrib.auth.MyOAuthGrantR\x06grants:\x10\xfa\xf4\x18\foauth_server\"L\n" +
+	"\x15RevokeMyOAuthGrantReq\x12!\n" +
+	"\bgrant_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\agrantId:\x10\xfa\xf4\x18\foauth_server\"*\n" +
+	"\x16RevokeMyOAuthGrantResp:\x10\xfa\xf4\x18\foauth_server2\x88\x13\n" +
 	"\vAuthService\x12_\n" +
 	"\fAuthenticate\x12\x19.w17.contrib.auth.AuthReq\x1a\x1a.w17.contrib.auth.AuthResp\"\x18\x8a\xf5\x18\x14authenticate_turnkey\x12d\n" +
 	"\x11AuthenticateAdmin\x12\x19.w17.contrib.auth.AuthReq\x1a\x1a.w17.contrib.auth.AuthResp\"\x18\x8a\xf5\x18\x14authenticate_turnkey\x12i\n" +
@@ -966,7 +2875,20 @@ const file_business_auth_service_proto_rawDesc = "" +
 	"\x06SignUp\x12\x1b.w17.contrib.auth.SignUpReq\x1a\x1c.w17.contrib.auth.SignUpResp\"\x13\x8a\xf5\x18\x0fsign_up_turnkey\x12]\n" +
 	"\x06WhoAmI\x12\x1b.w17.contrib.auth.WhoAmIReq\x1a\x1c.w17.contrib.auth.WhoAmIResp\"\x18\x8a\xf5\x18\x14authenticate_turnkey\x12]\n" +
 	"\x06Logout\x12\x1b.w17.contrib.auth.LogoutReq\x1a\x1c.w17.contrib.auth.LogoutResp\"\x18\x8a\xf5\x18\x14authenticate_turnkey\x12\x81\x01\n" +
-	"\x12ListMySignInEvents\x12'.w17.contrib.auth.ListMySignInEventsReq\x1a(.w17.contrib.auth.ListMySignInEventsResp\"\x18\x8a\xf5\x18\x14authenticate_turnkeyB\xbd\x01\n" +
+	"\x12ListMySignInEvents\x12'.w17.contrib.auth.ListMySignInEventsReq\x1a(.w17.contrib.auth.ListMySignInEventsResp\"\x18\x8a\xf5\x18\x14authenticate_turnkey\x12j\n" +
+	"\x0eCreateApiToken\x12#.w17.contrib.auth.CreateApiTokenReq\x1a$.w17.contrib.auth.CreateApiTokenResp\"\r\x8a\xf5\x18\tapi_token\x12g\n" +
+	"\rListApiTokens\x12\".w17.contrib.auth.ListApiTokensReq\x1a#.w17.contrib.auth.ListApiTokensResp\"\r\x8a\xf5\x18\tapi_token\x12j\n" +
+	"\x0eRevokeApiToken\x12#.w17.contrib.auth.RevokeApiTokenReq\x1a$.w17.contrib.auth.RevokeApiTokenResp\"\r\x8a\xf5\x18\tapi_token\x12\x85\x01\n" +
+	"\x16GetOAuthServerSettings\x12+.w17.contrib.auth.GetOAuthServerSettingsReq\x1a,.w17.contrib.auth.GetOAuthServerSettingsResp\"\x10\x8a\xf5\x18\foauth_server\x12|\n" +
+	"\x13RegisterOAuthClient\x12(.w17.contrib.auth.RegisterOAuthClientReq\x1a).w17.contrib.auth.RegisterOAuthClientResp\"\x10\x8a\xf5\x18\foauth_server\x12\x88\x01\n" +
+	"\x17BeginOAuthAuthorization\x12,.w17.contrib.auth.BeginOAuthAuthorizationReq\x1a-.w17.contrib.auth.BeginOAuthAuthorizationResp\"\x10\x8a\xf5\x18\foauth_server\x12\x82\x01\n" +
+	"\x15GetOAuthAuthorization\x12*.w17.contrib.auth.GetOAuthAuthorizationReq\x1a+.w17.contrib.auth.GetOAuthAuthorizationResp\"\x10\x8a\xf5\x18\foauth_server\x12\x8e\x01\n" +
+	"\x19ApproveOAuthAuthorization\x12..w17.contrib.auth.ApproveOAuthAuthorizationReq\x1a/.w17.contrib.auth.ApproveOAuthAuthorizationResp\"\x10\x8a\xf5\x18\foauth_server\x12\x85\x01\n" +
+	"\x16DenyOAuthAuthorization\x12+.w17.contrib.auth.DenyOAuthAuthorizationReq\x1a,.w17.contrib.auth.DenyOAuthAuthorizationResp\"\x10\x8a\xf5\x18\foauth_server\x12y\n" +
+	"\x12ExchangeOAuthToken\x12'.w17.contrib.auth.ExchangeOAuthTokenReq\x1a(.w17.contrib.auth.ExchangeOAuthTokenResp\"\x10\x8a\xf5\x18\foauth_server\x12s\n" +
+	"\x10RevokeOAuthToken\x12%.w17.contrib.auth.RevokeOAuthTokenReq\x1a&.w17.contrib.auth.RevokeOAuthTokenResp\"\x10\x8a\xf5\x18\foauth_server\x12v\n" +
+	"\x11ListMyOAuthGrants\x12&.w17.contrib.auth.ListMyOAuthGrantsReq\x1a'.w17.contrib.auth.ListMyOAuthGrantsResp\"\x10\x8a\xf5\x18\foauth_server\x12y\n" +
+	"\x12RevokeMyOAuthGrant\x12'.w17.contrib.auth.RevokeMyOAuthGrantReq\x1a(.w17.contrib.auth.RevokeMyOAuthGrantResp\"\x10\x8a\xf5\x18\foauth_serverB\xbd\x01\n" +
 	"\x14com.w17.contrib.authB\x10AuthServiceProtoP\x01Z1github.com/wandering-compiler/plugins/auth/gen/pb\xa2\x02\x03WCA\xaa\x02\x10W17.Contrib.Auth\xca\x02\x10W17\\Contrib\\Auth\xe2\x02\x1cW17\\Contrib\\Auth\\GPBMetadata\xea\x02\x12W17::Contrib::Authb\x06proto3"
 
 var (
@@ -981,54 +2903,122 @@ func file_business_auth_service_proto_rawDescGZIP() []byte {
 	return file_business_auth_service_proto_rawDescData
 }
 
-var file_business_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_business_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
 var file_business_auth_service_proto_goTypes = []any{
-	(*AuthReq)(nil),                // 0: w17.contrib.auth.AuthReq
-	(*ResolveUserReq)(nil),         // 1: w17.contrib.auth.ResolveUserReq
-	(*AuthResp)(nil),               // 2: w17.contrib.auth.AuthResp
-	(*SignInReq)(nil),              // 3: w17.contrib.auth.SignInReq
-	(*SignInResp)(nil),             // 4: w17.contrib.auth.SignInResp
-	(*SignUpReq)(nil),              // 5: w17.contrib.auth.SignUpReq
-	(*SignUpResp)(nil),             // 6: w17.contrib.auth.SignUpResp
-	(*WhoAmIReq)(nil),              // 7: w17.contrib.auth.WhoAmIReq
-	(*WhoAmIResp)(nil),             // 8: w17.contrib.auth.WhoAmIResp
-	(*LogoutReq)(nil),              // 9: w17.contrib.auth.LogoutReq
-	(*LogoutResp)(nil),             // 10: w17.contrib.auth.LogoutResp
-	(*ListMySignInEventsReq)(nil),  // 11: w17.contrib.auth.ListMySignInEventsReq
-	(*ListMySignInEventsResp)(nil), // 12: w17.contrib.auth.ListMySignInEventsResp
-	nil,                            // 13: w17.contrib.auth.AuthReq.HeadersEntry
-	nil,                            // 14: w17.contrib.auth.ResolveUserReq.HeadersEntry
-	nil,                            // 15: w17.contrib.auth.AuthResp.ScopesEntry
-	nil,                            // 16: w17.contrib.auth.AuthResp.LabelsEntry
-	(*SignInEvent)(nil),            // 17: w17.contrib.auth.SignInEvent
+	(*AuthReq)(nil),                       // 0: w17.contrib.auth.AuthReq
+	(*ResolveUserReq)(nil),                // 1: w17.contrib.auth.ResolveUserReq
+	(*AuthResp)(nil),                      // 2: w17.contrib.auth.AuthResp
+	(*SignInReq)(nil),                     // 3: w17.contrib.auth.SignInReq
+	(*SignInResp)(nil),                    // 4: w17.contrib.auth.SignInResp
+	(*SignUpReq)(nil),                     // 5: w17.contrib.auth.SignUpReq
+	(*SignUpResp)(nil),                    // 6: w17.contrib.auth.SignUpResp
+	(*WhoAmIReq)(nil),                     // 7: w17.contrib.auth.WhoAmIReq
+	(*WhoAmIResp)(nil),                    // 8: w17.contrib.auth.WhoAmIResp
+	(*LogoutReq)(nil),                     // 9: w17.contrib.auth.LogoutReq
+	(*LogoutResp)(nil),                    // 10: w17.contrib.auth.LogoutResp
+	(*ListMySignInEventsReq)(nil),         // 11: w17.contrib.auth.ListMySignInEventsReq
+	(*ListMySignInEventsResp)(nil),        // 12: w17.contrib.auth.ListMySignInEventsResp
+	(*CreateApiTokenReq)(nil),             // 13: w17.contrib.auth.CreateApiTokenReq
+	(*CreateApiTokenResp)(nil),            // 14: w17.contrib.auth.CreateApiTokenResp
+	(*ListApiTokensReq)(nil),              // 15: w17.contrib.auth.ListApiTokensReq
+	(*ListApiTokensResp)(nil),             // 16: w17.contrib.auth.ListApiTokensResp
+	(*RevokeApiTokenReq)(nil),             // 17: w17.contrib.auth.RevokeApiTokenReq
+	(*RevokeApiTokenResp)(nil),            // 18: w17.contrib.auth.RevokeApiTokenResp
+	(*GetOAuthServerSettingsReq)(nil),     // 19: w17.contrib.auth.GetOAuthServerSettingsReq
+	(*GetOAuthServerSettingsResp)(nil),    // 20: w17.contrib.auth.GetOAuthServerSettingsResp
+	(*RegisterOAuthClientReq)(nil),        // 21: w17.contrib.auth.RegisterOAuthClientReq
+	(*RegisterOAuthClientResp)(nil),       // 22: w17.contrib.auth.RegisterOAuthClientResp
+	(*BeginOAuthAuthorizationReq)(nil),    // 23: w17.contrib.auth.BeginOAuthAuthorizationReq
+	(*BeginOAuthAuthorizationResp)(nil),   // 24: w17.contrib.auth.BeginOAuthAuthorizationResp
+	(*GetOAuthAuthorizationReq)(nil),      // 25: w17.contrib.auth.GetOAuthAuthorizationReq
+	(*OAuthConsentOrg)(nil),               // 26: w17.contrib.auth.OAuthConsentOrg
+	(*GetOAuthAuthorizationResp)(nil),     // 27: w17.contrib.auth.GetOAuthAuthorizationResp
+	(*ApproveOAuthAuthorizationReq)(nil),  // 28: w17.contrib.auth.ApproveOAuthAuthorizationReq
+	(*ApproveOAuthAuthorizationResp)(nil), // 29: w17.contrib.auth.ApproveOAuthAuthorizationResp
+	(*DenyOAuthAuthorizationReq)(nil),     // 30: w17.contrib.auth.DenyOAuthAuthorizationReq
+	(*DenyOAuthAuthorizationResp)(nil),    // 31: w17.contrib.auth.DenyOAuthAuthorizationResp
+	(*ExchangeOAuthTokenReq)(nil),         // 32: w17.contrib.auth.ExchangeOAuthTokenReq
+	(*ExchangeOAuthTokenResp)(nil),        // 33: w17.contrib.auth.ExchangeOAuthTokenResp
+	(*RevokeOAuthTokenReq)(nil),           // 34: w17.contrib.auth.RevokeOAuthTokenReq
+	(*RevokeOAuthTokenResp)(nil),          // 35: w17.contrib.auth.RevokeOAuthTokenResp
+	(*ListMyOAuthGrantsReq)(nil),          // 36: w17.contrib.auth.ListMyOAuthGrantsReq
+	(*MyOAuthGrant)(nil),                  // 37: w17.contrib.auth.MyOAuthGrant
+	(*ListMyOAuthGrantsResp)(nil),         // 38: w17.contrib.auth.ListMyOAuthGrantsResp
+	(*RevokeMyOAuthGrantReq)(nil),         // 39: w17.contrib.auth.RevokeMyOAuthGrantReq
+	(*RevokeMyOAuthGrantResp)(nil),        // 40: w17.contrib.auth.RevokeMyOAuthGrantResp
+	nil,                                   // 41: w17.contrib.auth.AuthReq.HeadersEntry
+	nil,                                   // 42: w17.contrib.auth.ResolveUserReq.HeadersEntry
+	nil,                                   // 43: w17.contrib.auth.AuthResp.ScopesEntry
+	nil,                                   // 44: w17.contrib.auth.AuthResp.LabelsEntry
+	(*SignInEvent)(nil),                   // 45: w17.contrib.auth.SignInEvent
+	(*timestamppb.Timestamp)(nil),         // 46: google.protobuf.Timestamp
+	(*ApiTokenInfo)(nil),                  // 47: w17.contrib.auth.ApiTokenInfo
+	(OAuthGrantKind)(0),                   // 48: w17.contrib.auth.OAuthGrantKind
 }
 var file_business_auth_service_proto_depIdxs = []int32{
-	13, // 0: w17.contrib.auth.AuthReq.headers:type_name -> w17.contrib.auth.AuthReq.HeadersEntry
-	14, // 1: w17.contrib.auth.ResolveUserReq.headers:type_name -> w17.contrib.auth.ResolveUserReq.HeadersEntry
-	15, // 2: w17.contrib.auth.AuthResp.scopes:type_name -> w17.contrib.auth.AuthResp.ScopesEntry
-	16, // 3: w17.contrib.auth.AuthResp.labels:type_name -> w17.contrib.auth.AuthResp.LabelsEntry
-	17, // 4: w17.contrib.auth.ListMySignInEventsResp.events:type_name -> w17.contrib.auth.SignInEvent
-	0,  // 5: w17.contrib.auth.AuthService.Authenticate:input_type -> w17.contrib.auth.AuthReq
-	0,  // 6: w17.contrib.auth.AuthService.AuthenticateAdmin:input_type -> w17.contrib.auth.AuthReq
-	1,  // 7: w17.contrib.auth.AuthService.ResolveUser:input_type -> w17.contrib.auth.ResolveUserReq
-	3,  // 8: w17.contrib.auth.AuthService.SignIn:input_type -> w17.contrib.auth.SignInReq
-	5,  // 9: w17.contrib.auth.AuthService.SignUp:input_type -> w17.contrib.auth.SignUpReq
-	7,  // 10: w17.contrib.auth.AuthService.WhoAmI:input_type -> w17.contrib.auth.WhoAmIReq
-	9,  // 11: w17.contrib.auth.AuthService.Logout:input_type -> w17.contrib.auth.LogoutReq
-	11, // 12: w17.contrib.auth.AuthService.ListMySignInEvents:input_type -> w17.contrib.auth.ListMySignInEventsReq
-	2,  // 13: w17.contrib.auth.AuthService.Authenticate:output_type -> w17.contrib.auth.AuthResp
-	2,  // 14: w17.contrib.auth.AuthService.AuthenticateAdmin:output_type -> w17.contrib.auth.AuthResp
-	2,  // 15: w17.contrib.auth.AuthService.ResolveUser:output_type -> w17.contrib.auth.AuthResp
-	4,  // 16: w17.contrib.auth.AuthService.SignIn:output_type -> w17.contrib.auth.SignInResp
-	6,  // 17: w17.contrib.auth.AuthService.SignUp:output_type -> w17.contrib.auth.SignUpResp
-	8,  // 18: w17.contrib.auth.AuthService.WhoAmI:output_type -> w17.contrib.auth.WhoAmIResp
-	10, // 19: w17.contrib.auth.AuthService.Logout:output_type -> w17.contrib.auth.LogoutResp
-	12, // 20: w17.contrib.auth.AuthService.ListMySignInEvents:output_type -> w17.contrib.auth.ListMySignInEventsResp
-	13, // [13:21] is the sub-list for method output_type
-	5,  // [5:13] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	41, // 0: w17.contrib.auth.AuthReq.headers:type_name -> w17.contrib.auth.AuthReq.HeadersEntry
+	42, // 1: w17.contrib.auth.ResolveUserReq.headers:type_name -> w17.contrib.auth.ResolveUserReq.HeadersEntry
+	43, // 2: w17.contrib.auth.AuthResp.scopes:type_name -> w17.contrib.auth.AuthResp.ScopesEntry
+	44, // 3: w17.contrib.auth.AuthResp.labels:type_name -> w17.contrib.auth.AuthResp.LabelsEntry
+	45, // 4: w17.contrib.auth.ListMySignInEventsResp.events:type_name -> w17.contrib.auth.SignInEvent
+	46, // 5: w17.contrib.auth.CreateApiTokenReq.expires_at:type_name -> google.protobuf.Timestamp
+	46, // 6: w17.contrib.auth.CreateApiTokenResp.expires_at:type_name -> google.protobuf.Timestamp
+	47, // 7: w17.contrib.auth.ListApiTokensResp.tokens:type_name -> w17.contrib.auth.ApiTokenInfo
+	46, // 8: w17.contrib.auth.RegisterOAuthClientResp.issued_at:type_name -> google.protobuf.Timestamp
+	48, // 9: w17.contrib.auth.GetOAuthAuthorizationResp.kind:type_name -> w17.contrib.auth.OAuthGrantKind
+	46, // 10: w17.contrib.auth.GetOAuthAuthorizationResp.expires_at:type_name -> google.protobuf.Timestamp
+	26, // 11: w17.contrib.auth.GetOAuthAuthorizationResp.orgs:type_name -> w17.contrib.auth.OAuthConsentOrg
+	46, // 12: w17.contrib.auth.MyOAuthGrant.created_at:type_name -> google.protobuf.Timestamp
+	46, // 13: w17.contrib.auth.MyOAuthGrant.last_used_at:type_name -> google.protobuf.Timestamp
+	46, // 14: w17.contrib.auth.MyOAuthGrant.expires_at:type_name -> google.protobuf.Timestamp
+	37, // 15: w17.contrib.auth.ListMyOAuthGrantsResp.grants:type_name -> w17.contrib.auth.MyOAuthGrant
+	0,  // 16: w17.contrib.auth.AuthService.Authenticate:input_type -> w17.contrib.auth.AuthReq
+	0,  // 17: w17.contrib.auth.AuthService.AuthenticateAdmin:input_type -> w17.contrib.auth.AuthReq
+	1,  // 18: w17.contrib.auth.AuthService.ResolveUser:input_type -> w17.contrib.auth.ResolveUserReq
+	3,  // 19: w17.contrib.auth.AuthService.SignIn:input_type -> w17.contrib.auth.SignInReq
+	5,  // 20: w17.contrib.auth.AuthService.SignUp:input_type -> w17.contrib.auth.SignUpReq
+	7,  // 21: w17.contrib.auth.AuthService.WhoAmI:input_type -> w17.contrib.auth.WhoAmIReq
+	9,  // 22: w17.contrib.auth.AuthService.Logout:input_type -> w17.contrib.auth.LogoutReq
+	11, // 23: w17.contrib.auth.AuthService.ListMySignInEvents:input_type -> w17.contrib.auth.ListMySignInEventsReq
+	13, // 24: w17.contrib.auth.AuthService.CreateApiToken:input_type -> w17.contrib.auth.CreateApiTokenReq
+	15, // 25: w17.contrib.auth.AuthService.ListApiTokens:input_type -> w17.contrib.auth.ListApiTokensReq
+	17, // 26: w17.contrib.auth.AuthService.RevokeApiToken:input_type -> w17.contrib.auth.RevokeApiTokenReq
+	19, // 27: w17.contrib.auth.AuthService.GetOAuthServerSettings:input_type -> w17.contrib.auth.GetOAuthServerSettingsReq
+	21, // 28: w17.contrib.auth.AuthService.RegisterOAuthClient:input_type -> w17.contrib.auth.RegisterOAuthClientReq
+	23, // 29: w17.contrib.auth.AuthService.BeginOAuthAuthorization:input_type -> w17.contrib.auth.BeginOAuthAuthorizationReq
+	25, // 30: w17.contrib.auth.AuthService.GetOAuthAuthorization:input_type -> w17.contrib.auth.GetOAuthAuthorizationReq
+	28, // 31: w17.contrib.auth.AuthService.ApproveOAuthAuthorization:input_type -> w17.contrib.auth.ApproveOAuthAuthorizationReq
+	30, // 32: w17.contrib.auth.AuthService.DenyOAuthAuthorization:input_type -> w17.contrib.auth.DenyOAuthAuthorizationReq
+	32, // 33: w17.contrib.auth.AuthService.ExchangeOAuthToken:input_type -> w17.contrib.auth.ExchangeOAuthTokenReq
+	34, // 34: w17.contrib.auth.AuthService.RevokeOAuthToken:input_type -> w17.contrib.auth.RevokeOAuthTokenReq
+	36, // 35: w17.contrib.auth.AuthService.ListMyOAuthGrants:input_type -> w17.contrib.auth.ListMyOAuthGrantsReq
+	39, // 36: w17.contrib.auth.AuthService.RevokeMyOAuthGrant:input_type -> w17.contrib.auth.RevokeMyOAuthGrantReq
+	2,  // 37: w17.contrib.auth.AuthService.Authenticate:output_type -> w17.contrib.auth.AuthResp
+	2,  // 38: w17.contrib.auth.AuthService.AuthenticateAdmin:output_type -> w17.contrib.auth.AuthResp
+	2,  // 39: w17.contrib.auth.AuthService.ResolveUser:output_type -> w17.contrib.auth.AuthResp
+	4,  // 40: w17.contrib.auth.AuthService.SignIn:output_type -> w17.contrib.auth.SignInResp
+	6,  // 41: w17.contrib.auth.AuthService.SignUp:output_type -> w17.contrib.auth.SignUpResp
+	8,  // 42: w17.contrib.auth.AuthService.WhoAmI:output_type -> w17.contrib.auth.WhoAmIResp
+	10, // 43: w17.contrib.auth.AuthService.Logout:output_type -> w17.contrib.auth.LogoutResp
+	12, // 44: w17.contrib.auth.AuthService.ListMySignInEvents:output_type -> w17.contrib.auth.ListMySignInEventsResp
+	14, // 45: w17.contrib.auth.AuthService.CreateApiToken:output_type -> w17.contrib.auth.CreateApiTokenResp
+	16, // 46: w17.contrib.auth.AuthService.ListApiTokens:output_type -> w17.contrib.auth.ListApiTokensResp
+	18, // 47: w17.contrib.auth.AuthService.RevokeApiToken:output_type -> w17.contrib.auth.RevokeApiTokenResp
+	20, // 48: w17.contrib.auth.AuthService.GetOAuthServerSettings:output_type -> w17.contrib.auth.GetOAuthServerSettingsResp
+	22, // 49: w17.contrib.auth.AuthService.RegisterOAuthClient:output_type -> w17.contrib.auth.RegisterOAuthClientResp
+	24, // 50: w17.contrib.auth.AuthService.BeginOAuthAuthorization:output_type -> w17.contrib.auth.BeginOAuthAuthorizationResp
+	27, // 51: w17.contrib.auth.AuthService.GetOAuthAuthorization:output_type -> w17.contrib.auth.GetOAuthAuthorizationResp
+	29, // 52: w17.contrib.auth.AuthService.ApproveOAuthAuthorization:output_type -> w17.contrib.auth.ApproveOAuthAuthorizationResp
+	31, // 53: w17.contrib.auth.AuthService.DenyOAuthAuthorization:output_type -> w17.contrib.auth.DenyOAuthAuthorizationResp
+	33, // 54: w17.contrib.auth.AuthService.ExchangeOAuthToken:output_type -> w17.contrib.auth.ExchangeOAuthTokenResp
+	35, // 55: w17.contrib.auth.AuthService.RevokeOAuthToken:output_type -> w17.contrib.auth.RevokeOAuthTokenResp
+	38, // 56: w17.contrib.auth.AuthService.ListMyOAuthGrants:output_type -> w17.contrib.auth.ListMyOAuthGrantsResp
+	40, // 57: w17.contrib.auth.AuthService.RevokeMyOAuthGrant:output_type -> w17.contrib.auth.RevokeMyOAuthGrantResp
+	37, // [37:58] is the sub-list for method output_type
+	16, // [16:37] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_business_auth_service_proto_init() }
@@ -1044,7 +3034,7 @@ func file_business_auth_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_business_auth_service_proto_rawDesc), len(file_business_auth_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   17,
+			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
@@ -1057,4 +3047,4 @@ func file_business_auth_service_proto_init() {
 	file_business_auth_service_proto_depIdxs = nil
 }
 
-// emit-sha256: 28f81c5f61273845b52dc3de94101fd0865da835a843552b359981c5824b345c
+// emit-sha256: 151a95a7c22889aadf777d019ac8849b5114e22da37975df4aee1a02fceef475

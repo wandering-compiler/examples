@@ -449,6 +449,105 @@ func (*UpgradeTokenHashResp) Descriptor() ([]byte, []int) {
 	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{6}
 }
 
+// TouchTokenLastUsed stamps last_used_at on a token Authenticate just
+// accepted, unless it was stamped after :cutoff. See the rpc.
+type TouchTokenLastUsedReq struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	TokenId string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	Cutoff  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=cutoff,proto3" json:"cutoff,omitempty"`
+	// The stamp, from the same clock as cutoff (see the rpc).
+	UsedAt        *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=used_at,json=usedAt,proto3" json:"used_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TouchTokenLastUsedReq) Reset() {
+	*x = TouchTokenLastUsedReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TouchTokenLastUsedReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TouchTokenLastUsedReq) ProtoMessage() {}
+
+func (x *TouchTokenLastUsedReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TouchTokenLastUsedReq.ProtoReflect.Descriptor instead.
+func (*TouchTokenLastUsedReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *TouchTokenLastUsedReq) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
+	}
+	return ""
+}
+
+func (x *TouchTokenLastUsedReq) GetCutoff() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Cutoff
+	}
+	return nil
+}
+
+func (x *TouchTokenLastUsedReq) GetUsedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UsedAt
+	}
+	return nil
+}
+
+type TouchTokenLastUsedResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TouchTokenLastUsedResp) Reset() {
+	*x = TouchTokenLastUsedResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TouchTokenLastUsedResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TouchTokenLastUsedResp) ProtoMessage() {}
+
+func (x *TouchTokenLastUsedResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TouchTokenLastUsedResp.ProtoReflect.Descriptor instead.
+func (*TouchTokenLastUsedResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{8}
+}
+
 // RevokeToken returns the revoked row's identifiers for the
 // caller's response. Consumers that don't need the IDs ignore the
 // response (or pin a `_ = resp` discard). (TokenRevoked is emitted
@@ -463,7 +562,7 @@ type RevokeTokenResp struct {
 
 func (x *RevokeTokenResp) Reset() {
 	*x = RevokeTokenResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[7]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -475,7 +574,7 @@ func (x *RevokeTokenResp) String() string {
 func (*RevokeTokenResp) ProtoMessage() {}
 
 func (x *RevokeTokenResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[7]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -488,7 +587,7 @@ func (x *RevokeTokenResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeTokenResp.ProtoReflect.Descriptor instead.
 func (*RevokeTokenResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{7}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RevokeTokenResp) GetTokenId() string {
@@ -527,7 +626,7 @@ type RevokeSessionTokenReq struct {
 
 func (x *RevokeSessionTokenReq) Reset() {
 	*x = RevokeSessionTokenReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[8]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -539,7 +638,7 @@ func (x *RevokeSessionTokenReq) String() string {
 func (*RevokeSessionTokenReq) ProtoMessage() {}
 
 func (x *RevokeSessionTokenReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[8]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -552,7 +651,7 @@ func (x *RevokeSessionTokenReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeSessionTokenReq.ProtoReflect.Descriptor instead.
 func (*RevokeSessionTokenReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{8}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RevokeSessionTokenReq) GetTokenId() string {
@@ -593,7 +692,7 @@ type RevokeSessionTokenResp struct {
 
 func (x *RevokeSessionTokenResp) Reset() {
 	*x = RevokeSessionTokenResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[9]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -605,7 +704,7 @@ func (x *RevokeSessionTokenResp) String() string {
 func (*RevokeSessionTokenResp) ProtoMessage() {}
 
 func (x *RevokeSessionTokenResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[9]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -618,7 +717,7 @@ func (x *RevokeSessionTokenResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeSessionTokenResp.ProtoReflect.Descriptor instead.
 func (*RevokeSessionTokenResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{9}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RevokeSessionTokenResp) GetTokenId() string {
@@ -631,6 +730,392 @@ func (x *RevokeSessionTokenResp) GetTokenId() string {
 func (x *RevokeSessionTokenResp) GetUserId() string {
 	if x != nil {
 		return x.UserId
+	}
+	return ""
+}
+
+type IssueApiTokenReq struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	UserId    string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Name      string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	TokenType TokenType              `protobuf:"varint,3,opt,name=token_type,json=tokenType,proto3,enum=w17.contrib.auth.TokenType" json:"token_type,omitempty"`
+	// Absent = NULL = never expires; the business handler decides, from the
+	// caller's request and the deployment's default.
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// sha256(token), hex — see IssueTokenReq.token_hash.
+	TokenHash string `protobuf:"bytes,5,opt,name=token_hash,json=tokenHash,proto3" json:"token_hash,omitempty"`
+	// device_id — the Device the token is bound to: the (owner, thumbprint)
+	// row of the public key the request named (RegisterDevice). Empty (NULL)
+	// ONLY for a machine account's bearer token (bearer, device/bot-bearer):
+	// issueApiTokenTx refuses to mint a person's or a keyed token without one.
+	DeviceId string `protobuf:"bytes,6,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	// The ROOT approver of the token (UserToken.approved_by_device_id): the
+	// Device row of the creating caller's device, or — when the caller is a
+	// session that was itself approved by another device (a CLI session) —
+	// that session's approver. Empty (NULL) when the request was bound to none.
+	ApprovedByDeviceId string `protobuf:"bytes,7,opt,name=approved_by_device_id,json=approvedByDeviceId,proto3" json:"approved_by_device_id,omitempty"`
+	// event-only (no w17.field: not persisted, not validated), for
+	// ApiTokenCreated: the creating device's key thumbprint (device_id), the
+	// program key's thumbprint, and the creating account.
+	Thumbprint    string `protobuf:"bytes,8,opt,name=thumbprint,proto3" json:"thumbprint,omitempty"`
+	KeyThumbprint string `protobuf:"bytes,9,opt,name=key_thumbprint,json=keyThumbprint,proto3" json:"key_thumbprint,omitempty"`
+	CreatedBy     string `protobuf:"bytes,10,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueApiTokenReq) Reset() {
+	*x = IssueApiTokenReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueApiTokenReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueApiTokenReq) ProtoMessage() {}
+
+func (x *IssueApiTokenReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueApiTokenReq.ProtoReflect.Descriptor instead.
+func (*IssueApiTokenReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *IssueApiTokenReq) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *IssueApiTokenReq) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *IssueApiTokenReq) GetTokenType() TokenType {
+	if x != nil {
+		return x.TokenType
+	}
+	return TokenType_TOKEN_TYPE_UNSPECIFIED
+}
+
+func (x *IssueApiTokenReq) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *IssueApiTokenReq) GetTokenHash() string {
+	if x != nil {
+		return x.TokenHash
+	}
+	return ""
+}
+
+func (x *IssueApiTokenReq) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *IssueApiTokenReq) GetApprovedByDeviceId() string {
+	if x != nil {
+		return x.ApprovedByDeviceId
+	}
+	return ""
+}
+
+func (x *IssueApiTokenReq) GetThumbprint() string {
+	if x != nil {
+		return x.Thumbprint
+	}
+	return ""
+}
+
+func (x *IssueApiTokenReq) GetKeyThumbprint() string {
+	if x != nil {
+		return x.KeyThumbprint
+	}
+	return ""
+}
+
+func (x *IssueApiTokenReq) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
+type IssueApiTokenResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         *UserToken             `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueApiTokenResp) Reset() {
+	*x = IssueApiTokenResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueApiTokenResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueApiTokenResp) ProtoMessage() {}
+
+func (x *IssueApiTokenResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueApiTokenResp.ProtoReflect.Descriptor instead.
+func (*IssueApiTokenResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *IssueApiTokenResp) GetToken() *UserToken {
+	if x != nil {
+		return x.Token
+	}
+	return nil
+}
+
+type AddTokenPermissionReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TokenId       string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	PermissionId  int32                  `protobuf:"varint,2,opt,name=permission_id,json=permissionId,proto3" json:"permission_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddTokenPermissionReq) Reset() {
+	*x = AddTokenPermissionReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddTokenPermissionReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddTokenPermissionReq) ProtoMessage() {}
+
+func (x *AddTokenPermissionReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddTokenPermissionReq.ProtoReflect.Descriptor instead.
+func (*AddTokenPermissionReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *AddTokenPermissionReq) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
+	}
+	return ""
+}
+
+func (x *AddTokenPermissionReq) GetPermissionId() int32 {
+	if x != nil {
+		return x.PermissionId
+	}
+	return 0
+}
+
+type AddTokenPermissionResp struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TokenPermission *TokenPermission       `protobuf:"bytes,1,opt,name=token_permission,json=tokenPermission,proto3" json:"token_permission,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *AddTokenPermissionResp) Reset() {
+	*x = AddTokenPermissionResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddTokenPermissionResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddTokenPermissionResp) ProtoMessage() {}
+
+func (x *AddTokenPermissionResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddTokenPermissionResp.ProtoReflect.Descriptor instead.
+func (*AddTokenPermissionResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *AddTokenPermissionResp) GetTokenPermission() *TokenPermission {
+	if x != nil {
+		return x.TokenPermission
+	}
+	return nil
+}
+
+// MarkApiTokenRevoked — the storage half of AuthService.RevokeApiToken
+// (named Mark… because the service method owns the RevokeApiToken name).
+type MarkApiTokenRevokedReq struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	TokenId   string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	UserId    string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	TokenType TokenType              `protobuf:"varint,3,opt,name=token_type,json=tokenType,proto3,enum=w17.contrib.auth.TokenType" json:"token_type,omitempty"`
+	// event-only (no w17.field: not persisted, not validated): the key
+	// thumbprint of the revoking device, ApiTokenRevoked's device_id.
+	Thumbprint    string `protobuf:"bytes,4,opt,name=thumbprint,proto3" json:"thumbprint,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MarkApiTokenRevokedReq) Reset() {
+	*x = MarkApiTokenRevokedReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MarkApiTokenRevokedReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MarkApiTokenRevokedReq) ProtoMessage() {}
+
+func (x *MarkApiTokenRevokedReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MarkApiTokenRevokedReq.ProtoReflect.Descriptor instead.
+func (*MarkApiTokenRevokedReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *MarkApiTokenRevokedReq) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
+	}
+	return ""
+}
+
+func (x *MarkApiTokenRevokedReq) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *MarkApiTokenRevokedReq) GetTokenType() TokenType {
+	if x != nil {
+		return x.TokenType
+	}
+	return TokenType_TOKEN_TYPE_UNSPECIFIED
+}
+
+func (x *MarkApiTokenRevokedReq) GetThumbprint() string {
+	if x != nil {
+		return x.Thumbprint
+	}
+	return ""
+}
+
+type MarkApiTokenRevokedResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TokenId       string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MarkApiTokenRevokedResp) Reset() {
+	*x = MarkApiTokenRevokedResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MarkApiTokenRevokedResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MarkApiTokenRevokedResp) ProtoMessage() {}
+
+func (x *MarkApiTokenRevokedResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MarkApiTokenRevokedResp.ProtoReflect.Descriptor instead.
+func (*MarkApiTokenRevokedResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *MarkApiTokenRevokedResp) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
 	}
 	return ""
 }
@@ -653,7 +1138,7 @@ type UpdateUserPasswordReq struct {
 
 func (x *UpdateUserPasswordReq) Reset() {
 	*x = UpdateUserPasswordReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[10]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -665,7 +1150,7 @@ func (x *UpdateUserPasswordReq) String() string {
 func (*UpdateUserPasswordReq) ProtoMessage() {}
 
 func (x *UpdateUserPasswordReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[10]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -678,7 +1163,7 @@ func (x *UpdateUserPasswordReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateUserPasswordReq.ProtoReflect.Descriptor instead.
 func (*UpdateUserPasswordReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{10}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *UpdateUserPasswordReq) GetUserId() string {
@@ -704,7 +1189,7 @@ type UpdateUserPasswordResp struct {
 
 func (x *UpdateUserPasswordResp) Reset() {
 	*x = UpdateUserPasswordResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[11]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -716,7 +1201,7 @@ func (x *UpdateUserPasswordResp) String() string {
 func (*UpdateUserPasswordResp) ProtoMessage() {}
 
 func (x *UpdateUserPasswordResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[11]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -729,7 +1214,7 @@ func (x *UpdateUserPasswordResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateUserPasswordResp.ProtoReflect.Descriptor instead.
 func (*UpdateUserPasswordResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{11}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *UpdateUserPasswordResp) GetUserId() string {
@@ -755,7 +1240,7 @@ type RehashUserPasswordReq struct {
 
 func (x *RehashUserPasswordReq) Reset() {
 	*x = RehashUserPasswordReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[12]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -767,7 +1252,7 @@ func (x *RehashUserPasswordReq) String() string {
 func (*RehashUserPasswordReq) ProtoMessage() {}
 
 func (x *RehashUserPasswordReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[12]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -780,7 +1265,7 @@ func (x *RehashUserPasswordReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RehashUserPasswordReq.ProtoReflect.Descriptor instead.
 func (*RehashUserPasswordReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{12}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RehashUserPasswordReq) GetUserId() string {
@@ -813,7 +1298,7 @@ type RehashUserPasswordResp struct {
 
 func (x *RehashUserPasswordResp) Reset() {
 	*x = RehashUserPasswordResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[13]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -825,7 +1310,7 @@ func (x *RehashUserPasswordResp) String() string {
 func (*RehashUserPasswordResp) ProtoMessage() {}
 
 func (x *RehashUserPasswordResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[13]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -838,7 +1323,7 @@ func (x *RehashUserPasswordResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RehashUserPasswordResp.ProtoReflect.Descriptor instead.
 func (*RehashUserPasswordResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{13}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RehashUserPasswordResp) GetUserId() string {
@@ -863,7 +1348,7 @@ type RegisterDeviceReq struct {
 
 func (x *RegisterDeviceReq) Reset() {
 	*x = RegisterDeviceReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[14]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -875,7 +1360,7 @@ func (x *RegisterDeviceReq) String() string {
 func (*RegisterDeviceReq) ProtoMessage() {}
 
 func (x *RegisterDeviceReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[14]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -888,7 +1373,7 @@ func (x *RegisterDeviceReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterDeviceReq.ProtoReflect.Descriptor instead.
 func (*RegisterDeviceReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{14}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RegisterDeviceReq) GetUserId() string {
@@ -935,7 +1420,7 @@ type RegisterDeviceResp struct {
 
 func (x *RegisterDeviceResp) Reset() {
 	*x = RegisterDeviceResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[15]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -947,7 +1432,7 @@ func (x *RegisterDeviceResp) String() string {
 func (*RegisterDeviceResp) ProtoMessage() {}
 
 func (x *RegisterDeviceResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[15]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -960,7 +1445,7 @@ func (x *RegisterDeviceResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterDeviceResp.ProtoReflect.Descriptor instead.
 func (*RegisterDeviceResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{15}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *RegisterDeviceResp) GetDevice() *Device {
@@ -981,7 +1466,7 @@ type CountSignInAttemptReq struct {
 
 func (x *CountSignInAttemptReq) Reset() {
 	*x = CountSignInAttemptReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[16]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -993,7 +1478,7 @@ func (x *CountSignInAttemptReq) String() string {
 func (*CountSignInAttemptReq) ProtoMessage() {}
 
 func (x *CountSignInAttemptReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[16]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1006,7 +1491,7 @@ func (x *CountSignInAttemptReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountSignInAttemptReq.ProtoReflect.Descriptor instead.
 func (*CountSignInAttemptReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{16}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CountSignInAttemptReq) GetUserId() string {
@@ -1039,7 +1524,7 @@ type CountSignInAttemptResp struct {
 
 func (x *CountSignInAttemptResp) Reset() {
 	*x = CountSignInAttemptResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[17]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1051,7 +1536,7 @@ func (x *CountSignInAttemptResp) String() string {
 func (*CountSignInAttemptResp) ProtoMessage() {}
 
 func (x *CountSignInAttemptResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[17]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1064,7 +1549,7 @@ func (x *CountSignInAttemptResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountSignInAttemptResp.ProtoReflect.Descriptor instead.
 func (*CountSignInAttemptResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{17}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CountSignInAttemptResp) GetAttempts() int64 {
@@ -1086,7 +1571,7 @@ type CountDeviceSignInAttemptReq struct {
 
 func (x *CountDeviceSignInAttemptReq) Reset() {
 	*x = CountDeviceSignInAttemptReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[18]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1098,7 +1583,7 @@ func (x *CountDeviceSignInAttemptReq) String() string {
 func (*CountDeviceSignInAttemptReq) ProtoMessage() {}
 
 func (x *CountDeviceSignInAttemptReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[18]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1111,7 +1596,7 @@ func (x *CountDeviceSignInAttemptReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountDeviceSignInAttemptReq.ProtoReflect.Descriptor instead.
 func (*CountDeviceSignInAttemptReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{18}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CountDeviceSignInAttemptReq) GetUserId() string {
@@ -1151,7 +1636,7 @@ type CountDeviceSignInAttemptResp struct {
 
 func (x *CountDeviceSignInAttemptResp) Reset() {
 	*x = CountDeviceSignInAttemptResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[19]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1163,7 +1648,7 @@ func (x *CountDeviceSignInAttemptResp) String() string {
 func (*CountDeviceSignInAttemptResp) ProtoMessage() {}
 
 func (x *CountDeviceSignInAttemptResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[19]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1176,7 +1661,7 @@ func (x *CountDeviceSignInAttemptResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountDeviceSignInAttemptResp.ProtoReflect.Descriptor instead.
 func (*CountDeviceSignInAttemptResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{19}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CountDeviceSignInAttemptResp) GetAttempts() int64 {
@@ -1196,7 +1681,7 @@ type ResetSignInAttemptsReq struct {
 
 func (x *ResetSignInAttemptsReq) Reset() {
 	*x = ResetSignInAttemptsReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[20]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1208,7 +1693,7 @@ func (x *ResetSignInAttemptsReq) String() string {
 func (*ResetSignInAttemptsReq) ProtoMessage() {}
 
 func (x *ResetSignInAttemptsReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[20]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1221,7 +1706,7 @@ func (x *ResetSignInAttemptsReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetSignInAttemptsReq.ProtoReflect.Descriptor instead.
 func (*ResetSignInAttemptsReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{20}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ResetSignInAttemptsReq) GetUserId() string {
@@ -1246,7 +1731,7 @@ type ResetSignInAttemptsResp struct {
 
 func (x *ResetSignInAttemptsResp) Reset() {
 	*x = ResetSignInAttemptsResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[21]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1258,7 +1743,7 @@ func (x *ResetSignInAttemptsResp) String() string {
 func (*ResetSignInAttemptsResp) ProtoMessage() {}
 
 func (x *ResetSignInAttemptsResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[21]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1271,7 +1756,7 @@ func (x *ResetSignInAttemptsResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetSignInAttemptsResp.ProtoReflect.Descriptor instead.
 func (*ResetSignInAttemptsResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{21}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{29}
 }
 
 // RecordSignInEventReq — one SignInEvent row. Every field is what the mint
@@ -1299,7 +1784,7 @@ type RecordSignInEventReq struct {
 
 func (x *RecordSignInEventReq) Reset() {
 	*x = RecordSignInEventReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[22]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1311,7 +1796,7 @@ func (x *RecordSignInEventReq) String() string {
 func (*RecordSignInEventReq) ProtoMessage() {}
 
 func (x *RecordSignInEventReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[22]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1324,7 +1809,7 @@ func (x *RecordSignInEventReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordSignInEventReq.ProtoReflect.Descriptor instead.
 func (*RecordSignInEventReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{22}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *RecordSignInEventReq) GetUserId() string {
@@ -1399,7 +1884,7 @@ type RecordSignInEventResp struct {
 
 func (x *RecordSignInEventResp) Reset() {
 	*x = RecordSignInEventResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[23]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1411,7 +1896,7 @@ func (x *RecordSignInEventResp) String() string {
 func (*RecordSignInEventResp) ProtoMessage() {}
 
 func (x *RecordSignInEventResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[23]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1424,7 +1909,7 @@ func (x *RecordSignInEventResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordSignInEventResp.ProtoReflect.Descriptor instead.
 func (*RecordSignInEventResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{23}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *RecordSignInEventResp) GetId() string {
@@ -1454,7 +1939,7 @@ type TrustDeviceReq struct {
 
 func (x *TrustDeviceReq) Reset() {
 	*x = TrustDeviceReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[24]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1466,7 +1951,7 @@ func (x *TrustDeviceReq) String() string {
 func (*TrustDeviceReq) ProtoMessage() {}
 
 func (x *TrustDeviceReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[24]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1479,7 +1964,7 @@ func (x *TrustDeviceReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrustDeviceReq.ProtoReflect.Descriptor instead.
 func (*TrustDeviceReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{24}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *TrustDeviceReq) GetUserId() string {
@@ -1512,7 +1997,7 @@ type TrustDeviceResp struct {
 
 func (x *TrustDeviceResp) Reset() {
 	*x = TrustDeviceResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[25]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1524,7 +2009,7 @@ func (x *TrustDeviceResp) String() string {
 func (*TrustDeviceResp) ProtoMessage() {}
 
 func (x *TrustDeviceResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[25]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1537,7 +2022,7 @@ func (x *TrustDeviceResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrustDeviceResp.ProtoReflect.Descriptor instead.
 func (*TrustDeviceResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{25}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *TrustDeviceResp) GetDeviceId() string {
@@ -1568,7 +2053,7 @@ type RevokeDeviceTokensReq struct {
 
 func (x *RevokeDeviceTokensReq) Reset() {
 	*x = RevokeDeviceTokensReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[26]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1580,7 +2065,7 @@ func (x *RevokeDeviceTokensReq) String() string {
 func (*RevokeDeviceTokensReq) ProtoMessage() {}
 
 func (x *RevokeDeviceTokensReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[26]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1593,7 +2078,7 @@ func (x *RevokeDeviceTokensReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeDeviceTokensReq.ProtoReflect.Descriptor instead.
 func (*RevokeDeviceTokensReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{26}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *RevokeDeviceTokensReq) GetUserId() string {
@@ -1632,7 +2117,7 @@ type RevokeDeviceTokensResp struct {
 
 func (x *RevokeDeviceTokensResp) Reset() {
 	*x = RevokeDeviceTokensResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[27]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1644,7 +2129,7 @@ func (x *RevokeDeviceTokensResp) String() string {
 func (*RevokeDeviceTokensResp) ProtoMessage() {}
 
 func (x *RevokeDeviceTokensResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[27]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1657,7 +2142,115 @@ func (x *RevokeDeviceTokensResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeDeviceTokensResp.ProtoReflect.Descriptor instead.
 func (*RevokeDeviceTokensResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{27}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{35}
+}
+
+// RevokeApprovedApiTokens — the owner's API tokens one device created
+// (UserToken.approved_by_device_id). Run beside RevokeDeviceTokens when ONE
+// device is revoked explicitly (the owner's RevokeDevice, the admin Devices
+// revoke); see the rpc. token_type is handler-stamped (API).
+type RevokeApprovedApiTokensReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	DeviceId      string                 `protobuf:"bytes,2,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	RevokedBy     string                 `protobuf:"bytes,3,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
+	TokenType     TokenType              `protobuf:"varint,4,opt,name=token_type,json=tokenType,proto3,enum=w17.contrib.auth.TokenType" json:"token_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeApprovedApiTokensReq) Reset() {
+	*x = RevokeApprovedApiTokensReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeApprovedApiTokensReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeApprovedApiTokensReq) ProtoMessage() {}
+
+func (x *RevokeApprovedApiTokensReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeApprovedApiTokensReq.ProtoReflect.Descriptor instead.
+func (*RevokeApprovedApiTokensReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *RevokeApprovedApiTokensReq) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *RevokeApprovedApiTokensReq) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *RevokeApprovedApiTokensReq) GetRevokedBy() string {
+	if x != nil {
+		return x.RevokedBy
+	}
+	return ""
+}
+
+func (x *RevokeApprovedApiTokensReq) GetTokenType() TokenType {
+	if x != nil {
+		return x.TokenType
+	}
+	return TokenType_TOKEN_TYPE_UNSPECIFIED
+}
+
+type RevokeApprovedApiTokensResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeApprovedApiTokensResp) Reset() {
+	*x = RevokeApprovedApiTokensResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeApprovedApiTokensResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeApprovedApiTokensResp) ProtoMessage() {}
+
+func (x *RevokeApprovedApiTokensResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeApprovedApiTokensResp.ProtoReflect.Descriptor instead.
+func (*RevokeApprovedApiTokensResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{37}
 }
 
 type MarkDeviceRevokedReq struct {
@@ -1670,7 +2263,7 @@ type MarkDeviceRevokedReq struct {
 
 func (x *MarkDeviceRevokedReq) Reset() {
 	*x = MarkDeviceRevokedReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[28]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1682,7 +2275,7 @@ func (x *MarkDeviceRevokedReq) String() string {
 func (*MarkDeviceRevokedReq) ProtoMessage() {}
 
 func (x *MarkDeviceRevokedReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[28]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1695,7 +2288,7 @@ func (x *MarkDeviceRevokedReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkDeviceRevokedReq.ProtoReflect.Descriptor instead.
 func (*MarkDeviceRevokedReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{28}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *MarkDeviceRevokedReq) GetUserId() string {
@@ -1721,7 +2314,7 @@ type MarkDeviceRevokedResp struct {
 
 func (x *MarkDeviceRevokedResp) Reset() {
 	*x = MarkDeviceRevokedResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[29]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1733,7 +2326,7 @@ func (x *MarkDeviceRevokedResp) String() string {
 func (*MarkDeviceRevokedResp) ProtoMessage() {}
 
 func (x *MarkDeviceRevokedResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[29]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1746,7 +2339,7 @@ func (x *MarkDeviceRevokedResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkDeviceRevokedResp.ProtoReflect.Descriptor instead.
 func (*MarkDeviceRevokedResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{29}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *MarkDeviceRevokedResp) GetDeviceId() string {
@@ -1766,7 +2359,7 @@ type CreateRoleReq struct {
 
 func (x *CreateRoleReq) Reset() {
 	*x = CreateRoleReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[30]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1778,7 +2371,7 @@ func (x *CreateRoleReq) String() string {
 func (*CreateRoleReq) ProtoMessage() {}
 
 func (x *CreateRoleReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[30]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1791,7 +2384,7 @@ func (x *CreateRoleReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRoleReq.ProtoReflect.Descriptor instead.
 func (*CreateRoleReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{30}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *CreateRoleReq) GetName() string {
@@ -1817,7 +2410,7 @@ type CreateRoleResp struct {
 
 func (x *CreateRoleResp) Reset() {
 	*x = CreateRoleResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[31]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1829,7 +2422,7 @@ func (x *CreateRoleResp) String() string {
 func (*CreateRoleResp) ProtoMessage() {}
 
 func (x *CreateRoleResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[31]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1842,7 +2435,7 @@ func (x *CreateRoleResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRoleResp.ProtoReflect.Descriptor instead.
 func (*CreateRoleResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{31}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *CreateRoleResp) GetRole() *Role {
@@ -1861,7 +2454,7 @@ type DeleteRoleReq struct {
 
 func (x *DeleteRoleReq) Reset() {
 	*x = DeleteRoleReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[32]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1873,7 +2466,7 @@ func (x *DeleteRoleReq) String() string {
 func (*DeleteRoleReq) ProtoMessage() {}
 
 func (x *DeleteRoleReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[32]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1886,7 +2479,7 @@ func (x *DeleteRoleReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRoleReq.ProtoReflect.Descriptor instead.
 func (*DeleteRoleReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{32}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *DeleteRoleReq) GetRoleId() string {
@@ -1905,7 +2498,7 @@ type DeleteRoleResp struct {
 
 func (x *DeleteRoleResp) Reset() {
 	*x = DeleteRoleResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[33]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1917,7 +2510,7 @@ func (x *DeleteRoleResp) String() string {
 func (*DeleteRoleResp) ProtoMessage() {}
 
 func (x *DeleteRoleResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[33]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1930,7 +2523,7 @@ func (x *DeleteRoleResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRoleResp.ProtoReflect.Descriptor instead.
 func (*DeleteRoleResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{33}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *DeleteRoleResp) GetRoleId() string {
@@ -1957,7 +2550,7 @@ type UpdateRoleReq struct {
 
 func (x *UpdateRoleReq) Reset() {
 	*x = UpdateRoleReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[34]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1969,7 +2562,7 @@ func (x *UpdateRoleReq) String() string {
 func (*UpdateRoleReq) ProtoMessage() {}
 
 func (x *UpdateRoleReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[34]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1982,7 +2575,7 @@ func (x *UpdateRoleReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateRoleReq.ProtoReflect.Descriptor instead.
 func (*UpdateRoleReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{34}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *UpdateRoleReq) GetRoleId() string {
@@ -2015,7 +2608,7 @@ type UpdateRoleResp struct {
 
 func (x *UpdateRoleResp) Reset() {
 	*x = UpdateRoleResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[35]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2027,7 +2620,7 @@ func (x *UpdateRoleResp) String() string {
 func (*UpdateRoleResp) ProtoMessage() {}
 
 func (x *UpdateRoleResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[35]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2040,7 +2633,7 @@ func (x *UpdateRoleResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateRoleResp.ProtoReflect.Descriptor instead.
 func (*UpdateRoleResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{35}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *UpdateRoleResp) GetRoleId() string {
@@ -2060,7 +2653,7 @@ type AssignRoleToUserReq struct {
 
 func (x *AssignRoleToUserReq) Reset() {
 	*x = AssignRoleToUserReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[36]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2072,7 +2665,7 @@ func (x *AssignRoleToUserReq) String() string {
 func (*AssignRoleToUserReq) ProtoMessage() {}
 
 func (x *AssignRoleToUserReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[36]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2085,7 +2678,7 @@ func (x *AssignRoleToUserReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignRoleToUserReq.ProtoReflect.Descriptor instead.
 func (*AssignRoleToUserReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{36}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *AssignRoleToUserReq) GetUserId() string {
@@ -2111,7 +2704,7 @@ type AssignRoleToUserResp struct {
 
 func (x *AssignRoleToUserResp) Reset() {
 	*x = AssignRoleToUserResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[37]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2123,7 +2716,7 @@ func (x *AssignRoleToUserResp) String() string {
 func (*AssignRoleToUserResp) ProtoMessage() {}
 
 func (x *AssignRoleToUserResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[37]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2136,7 +2729,7 @@ func (x *AssignRoleToUserResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignRoleToUserResp.ProtoReflect.Descriptor instead.
 func (*AssignRoleToUserResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{37}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *AssignRoleToUserResp) GetUserRole() *UserRole {
@@ -2159,7 +2752,7 @@ type RevokeRoleFromUserReq struct {
 
 func (x *RevokeRoleFromUserReq) Reset() {
 	*x = RevokeRoleFromUserReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[38]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2171,7 +2764,7 @@ func (x *RevokeRoleFromUserReq) String() string {
 func (*RevokeRoleFromUserReq) ProtoMessage() {}
 
 func (x *RevokeRoleFromUserReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[38]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2184,7 +2777,7 @@ func (x *RevokeRoleFromUserReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeRoleFromUserReq.ProtoReflect.Descriptor instead.
 func (*RevokeRoleFromUserReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{38}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *RevokeRoleFromUserReq) GetUserId() string {
@@ -2218,7 +2811,7 @@ type RevokeRoleFromUserResp struct {
 
 func (x *RevokeRoleFromUserResp) Reset() {
 	*x = RevokeRoleFromUserResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[39]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2230,7 +2823,7 @@ func (x *RevokeRoleFromUserResp) String() string {
 func (*RevokeRoleFromUserResp) ProtoMessage() {}
 
 func (x *RevokeRoleFromUserResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[39]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2243,7 +2836,7 @@ func (x *RevokeRoleFromUserResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeRoleFromUserResp.ProtoReflect.Descriptor instead.
 func (*RevokeRoleFromUserResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{39}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *RevokeRoleFromUserResp) GetUserId() string {
@@ -2278,7 +2871,7 @@ type AddPermissionToRoleReq struct {
 
 func (x *AddPermissionToRoleReq) Reset() {
 	*x = AddPermissionToRoleReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[40]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2290,7 +2883,7 @@ func (x *AddPermissionToRoleReq) String() string {
 func (*AddPermissionToRoleReq) ProtoMessage() {}
 
 func (x *AddPermissionToRoleReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[40]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2303,7 +2896,7 @@ func (x *AddPermissionToRoleReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddPermissionToRoleReq.ProtoReflect.Descriptor instead.
 func (*AddPermissionToRoleReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{40}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *AddPermissionToRoleReq) GetRoleId() string {
@@ -2336,7 +2929,7 @@ type AddPermissionToRoleResp struct {
 
 func (x *AddPermissionToRoleResp) Reset() {
 	*x = AddPermissionToRoleResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[41]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2348,7 +2941,7 @@ func (x *AddPermissionToRoleResp) String() string {
 func (*AddPermissionToRoleResp) ProtoMessage() {}
 
 func (x *AddPermissionToRoleResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[41]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2361,7 +2954,7 @@ func (x *AddPermissionToRoleResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddPermissionToRoleResp.ProtoReflect.Descriptor instead.
 func (*AddPermissionToRoleResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{41}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *AddPermissionToRoleResp) GetRolePermission() *RolePermission {
@@ -2384,7 +2977,7 @@ type RemovePermissionFromRoleReq struct {
 
 func (x *RemovePermissionFromRoleReq) Reset() {
 	*x = RemovePermissionFromRoleReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[42]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2396,7 +2989,7 @@ func (x *RemovePermissionFromRoleReq) String() string {
 func (*RemovePermissionFromRoleReq) ProtoMessage() {}
 
 func (x *RemovePermissionFromRoleReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[42]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2409,7 +3002,7 @@ func (x *RemovePermissionFromRoleReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemovePermissionFromRoleReq.ProtoReflect.Descriptor instead.
 func (*RemovePermissionFromRoleReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{42}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *RemovePermissionFromRoleReq) GetRoleId() string {
@@ -2443,7 +3036,7 @@ type RemovePermissionFromRoleResp struct {
 
 func (x *RemovePermissionFromRoleResp) Reset() {
 	*x = RemovePermissionFromRoleResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[43]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2455,7 +3048,7 @@ func (x *RemovePermissionFromRoleResp) String() string {
 func (*RemovePermissionFromRoleResp) ProtoMessage() {}
 
 func (x *RemovePermissionFromRoleResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[43]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2468,7 +3061,7 @@ func (x *RemovePermissionFromRoleResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemovePermissionFromRoleResp.ProtoReflect.Descriptor instead.
 func (*RemovePermissionFromRoleResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{43}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *RemovePermissionFromRoleResp) GetRoleId() string {
@@ -2495,7 +3088,7 @@ type ClaimBootstrapAdminReq struct {
 
 func (x *ClaimBootstrapAdminReq) Reset() {
 	*x = ClaimBootstrapAdminReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[44]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2507,7 +3100,7 @@ func (x *ClaimBootstrapAdminReq) String() string {
 func (*ClaimBootstrapAdminReq) ProtoMessage() {}
 
 func (x *ClaimBootstrapAdminReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[44]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2520,7 +3113,7 @@ func (x *ClaimBootstrapAdminReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimBootstrapAdminReq.ProtoReflect.Descriptor instead.
 func (*ClaimBootstrapAdminReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{44}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *ClaimBootstrapAdminReq) GetSlot() string {
@@ -2548,7 +3141,7 @@ type ClaimBootstrapAdminResp struct {
 
 func (x *ClaimBootstrapAdminResp) Reset() {
 	*x = ClaimBootstrapAdminResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[45]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2560,7 +3153,7 @@ func (x *ClaimBootstrapAdminResp) String() string {
 func (*ClaimBootstrapAdminResp) ProtoMessage() {}
 
 func (x *ClaimBootstrapAdminResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[45]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2573,7 +3166,7 @@ func (x *ClaimBootstrapAdminResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClaimBootstrapAdminResp.ProtoReflect.Descriptor instead.
 func (*ClaimBootstrapAdminResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{45}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *ClaimBootstrapAdminResp) GetWritten() int32 {
@@ -2581,6 +3174,1806 @@ func (x *ClaimBootstrapAdminResp) GetWritten() int32 {
 		return *x.Written
 	}
 	return 0
+}
+
+type CreateOAuthClientReq struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ClientId     string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientIdHash string                 `protobuf:"bytes,2,opt,name=client_id_hash,json=clientIdHash,proto3" json:"client_id_hash,omitempty"`
+	Kind         OAuthClientKind        `protobuf:"varint,3,opt,name=kind,proto3,enum=w17.contrib.auth.OAuthClientKind" json:"kind,omitempty"`
+	ClientName   string                 `protobuf:"bytes,4,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	ClientUri    string                 `protobuf:"bytes,5,opt,name=client_uri,json=clientUri,proto3" json:"client_uri,omitempty"`
+	LogoUri      string                 `protobuf:"bytes,6,opt,name=logo_uri,json=logoUri,proto3" json:"logo_uri,omitempty"`
+	RedirectUris string                 `protobuf:"bytes,7,opt,name=redirect_uris,json=redirectUris,proto3" json:"redirect_uris,omitempty"`
+	SoftwareId   string                 `protobuf:"bytes,8,opt,name=software_id,json=softwareId,proto3" json:"software_id,omitempty"`
+	CreatedIp    string                 `protobuf:"bytes,9,opt,name=created_ip,json=createdIp,proto3" json:"created_ip,omitempty"`
+	// Set for a CIMD client (the document was just read); NULL for DCR.
+	MetadataFetchedAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=metadata_fetched_at,json=metadataFetchedAt,proto3" json:"metadata_fetched_at,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *CreateOAuthClientReq) Reset() {
+	*x = CreateOAuthClientReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateOAuthClientReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateOAuthClientReq) ProtoMessage() {}
+
+func (x *CreateOAuthClientReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateOAuthClientReq.ProtoReflect.Descriptor instead.
+func (*CreateOAuthClientReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *CreateOAuthClientReq) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *CreateOAuthClientReq) GetClientIdHash() string {
+	if x != nil {
+		return x.ClientIdHash
+	}
+	return ""
+}
+
+func (x *CreateOAuthClientReq) GetKind() OAuthClientKind {
+	if x != nil {
+		return x.Kind
+	}
+	return OAuthClientKind_OAUTH_CLIENT_KIND_UNSPECIFIED
+}
+
+func (x *CreateOAuthClientReq) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *CreateOAuthClientReq) GetClientUri() string {
+	if x != nil {
+		return x.ClientUri
+	}
+	return ""
+}
+
+func (x *CreateOAuthClientReq) GetLogoUri() string {
+	if x != nil {
+		return x.LogoUri
+	}
+	return ""
+}
+
+func (x *CreateOAuthClientReq) GetRedirectUris() string {
+	if x != nil {
+		return x.RedirectUris
+	}
+	return ""
+}
+
+func (x *CreateOAuthClientReq) GetSoftwareId() string {
+	if x != nil {
+		return x.SoftwareId
+	}
+	return ""
+}
+
+func (x *CreateOAuthClientReq) GetCreatedIp() string {
+	if x != nil {
+		return x.CreatedIp
+	}
+	return ""
+}
+
+func (x *CreateOAuthClientReq) GetMetadataFetchedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.MetadataFetchedAt
+	}
+	return nil
+}
+
+type CreateOAuthClientResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateOAuthClientResp) Reset() {
+	*x = CreateOAuthClientResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateOAuthClientResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateOAuthClientResp) ProtoMessage() {}
+
+func (x *CreateOAuthClientResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateOAuthClientResp.ProtoReflect.Descriptor instead.
+func (*CreateOAuthClientResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *CreateOAuthClientResp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CreateOAuthClientResp) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+type RefreshOAuthClientMetadataReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ClientName    string                 `protobuf:"bytes,2,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	ClientUri     string                 `protobuf:"bytes,3,opt,name=client_uri,json=clientUri,proto3" json:"client_uri,omitempty"`
+	LogoUri       string                 `protobuf:"bytes,4,opt,name=logo_uri,json=logoUri,proto3" json:"logo_uri,omitempty"`
+	RedirectUris  string                 `protobuf:"bytes,5,opt,name=redirect_uris,json=redirectUris,proto3" json:"redirect_uris,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshOAuthClientMetadataReq) Reset() {
+	*x = RefreshOAuthClientMetadataReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshOAuthClientMetadataReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshOAuthClientMetadataReq) ProtoMessage() {}
+
+func (x *RefreshOAuthClientMetadataReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshOAuthClientMetadataReq.ProtoReflect.Descriptor instead.
+func (*RefreshOAuthClientMetadataReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *RefreshOAuthClientMetadataReq) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *RefreshOAuthClientMetadataReq) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *RefreshOAuthClientMetadataReq) GetClientUri() string {
+	if x != nil {
+		return x.ClientUri
+	}
+	return ""
+}
+
+func (x *RefreshOAuthClientMetadataReq) GetLogoUri() string {
+	if x != nil {
+		return x.LogoUri
+	}
+	return ""
+}
+
+func (x *RefreshOAuthClientMetadataReq) GetRedirectUris() string {
+	if x != nil {
+		return x.RedirectUris
+	}
+	return ""
+}
+
+type RefreshOAuthClientMetadataResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshOAuthClientMetadataResp) Reset() {
+	*x = RefreshOAuthClientMetadataResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshOAuthClientMetadataResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshOAuthClientMetadataResp) ProtoMessage() {}
+
+func (x *RefreshOAuthClientMetadataResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshOAuthClientMetadataResp.ProtoReflect.Descriptor instead.
+func (*RefreshOAuthClientMetadataResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *RefreshOAuthClientMetadataResp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type CreateOAuthAuthorizationReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestHash   string                 `protobuf:"bytes,1,opt,name=request_hash,json=requestHash,proto3" json:"request_hash,omitempty"`
+	ClientRowId   string                 `protobuf:"bytes,2,opt,name=client_row_id,json=clientRowId,proto3" json:"client_row_id,omitempty"`
+	Kind          OAuthGrantKind         `protobuf:"varint,3,opt,name=kind,proto3,enum=w17.contrib.auth.OAuthGrantKind" json:"kind,omitempty"`
+	RedirectUri   string                 `protobuf:"bytes,4,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
+	State         string                 `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
+	CodeChallenge string                 `protobuf:"bytes,6,opt,name=code_challenge,json=codeChallenge,proto3" json:"code_challenge,omitempty"`
+	Scope         string                 `protobuf:"bytes,7,opt,name=scope,proto3" json:"scope,omitempty"`
+	Resource      string                 `protobuf:"bytes,8,opt,name=resource,proto3" json:"resource,omitempty"`
+	Issuer        string                 `protobuf:"bytes,9,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	CreatedIp     string                 `protobuf:"bytes,10,opt,name=created_ip,json=createdIp,proto3" json:"created_ip,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateOAuthAuthorizationReq) Reset() {
+	*x = CreateOAuthAuthorizationReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateOAuthAuthorizationReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateOAuthAuthorizationReq) ProtoMessage() {}
+
+func (x *CreateOAuthAuthorizationReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateOAuthAuthorizationReq.ProtoReflect.Descriptor instead.
+func (*CreateOAuthAuthorizationReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *CreateOAuthAuthorizationReq) GetRequestHash() string {
+	if x != nil {
+		return x.RequestHash
+	}
+	return ""
+}
+
+func (x *CreateOAuthAuthorizationReq) GetClientRowId() string {
+	if x != nil {
+		return x.ClientRowId
+	}
+	return ""
+}
+
+func (x *CreateOAuthAuthorizationReq) GetKind() OAuthGrantKind {
+	if x != nil {
+		return x.Kind
+	}
+	return OAuthGrantKind_OAUTH_GRANT_KIND_UNSPECIFIED
+}
+
+func (x *CreateOAuthAuthorizationReq) GetRedirectUri() string {
+	if x != nil {
+		return x.RedirectUri
+	}
+	return ""
+}
+
+func (x *CreateOAuthAuthorizationReq) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *CreateOAuthAuthorizationReq) GetCodeChallenge() string {
+	if x != nil {
+		return x.CodeChallenge
+	}
+	return ""
+}
+
+func (x *CreateOAuthAuthorizationReq) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *CreateOAuthAuthorizationReq) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *CreateOAuthAuthorizationReq) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *CreateOAuthAuthorizationReq) GetCreatedIp() string {
+	if x != nil {
+		return x.CreatedIp
+	}
+	return ""
+}
+
+func (x *CreateOAuthAuthorizationReq) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+type CreateOAuthAuthorizationResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateOAuthAuthorizationResp) Reset() {
+	*x = CreateOAuthAuthorizationResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateOAuthAuthorizationResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateOAuthAuthorizationResp) ProtoMessage() {}
+
+func (x *CreateOAuthAuthorizationResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateOAuthAuthorizationResp.ProtoReflect.Descriptor instead.
+func (*CreateOAuthAuthorizationResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *CreateOAuthAuthorizationResp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// DecideOAuthAuthorization — the consent page's decision, once: only a live,
+// undecided request matches, so two tabs cannot both decide it.
+type DecideOAuthAuthorizationReq struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	RequestHash        string                 `protobuf:"bytes,1,opt,name=request_hash,json=requestHash,proto3" json:"request_hash,omitempty"`
+	Decision           OAuthDecision          `protobuf:"varint,2,opt,name=decision,proto3,enum=w17.contrib.auth.OAuthDecision" json:"decision,omitempty"`
+	UserId             string                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	OrgId              string                 `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	ApprovedByDeviceId string                 `protobuf:"bytes,5,opt,name=approved_by_device_id,json=approvedByDeviceId,proto3" json:"approved_by_device_id,omitempty"`
+	SessionExpiresAt   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=session_expires_at,json=sessionExpiresAt,proto3" json:"session_expires_at,omitempty"`
+	// The code (approved only): its hash and expiry. NULL on a denial.
+	CodeHash      string                 `protobuf:"bytes,7,opt,name=code_hash,json=codeHash,proto3" json:"code_hash,omitempty"`
+	CodeExpiresAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=code_expires_at,json=codeExpiresAt,proto3" json:"code_expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecideOAuthAuthorizationReq) Reset() {
+	*x = DecideOAuthAuthorizationReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecideOAuthAuthorizationReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecideOAuthAuthorizationReq) ProtoMessage() {}
+
+func (x *DecideOAuthAuthorizationReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecideOAuthAuthorizationReq.ProtoReflect.Descriptor instead.
+func (*DecideOAuthAuthorizationReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *DecideOAuthAuthorizationReq) GetRequestHash() string {
+	if x != nil {
+		return x.RequestHash
+	}
+	return ""
+}
+
+func (x *DecideOAuthAuthorizationReq) GetDecision() OAuthDecision {
+	if x != nil {
+		return x.Decision
+	}
+	return OAuthDecision_OAUTH_DECISION_UNDECIDED
+}
+
+func (x *DecideOAuthAuthorizationReq) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *DecideOAuthAuthorizationReq) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *DecideOAuthAuthorizationReq) GetApprovedByDeviceId() string {
+	if x != nil {
+		return x.ApprovedByDeviceId
+	}
+	return ""
+}
+
+func (x *DecideOAuthAuthorizationReq) GetSessionExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SessionExpiresAt
+	}
+	return nil
+}
+
+func (x *DecideOAuthAuthorizationReq) GetCodeHash() string {
+	if x != nil {
+		return x.CodeHash
+	}
+	return ""
+}
+
+func (x *DecideOAuthAuthorizationReq) GetCodeExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CodeExpiresAt
+	}
+	return nil
+}
+
+type DecideOAuthAuthorizationResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	RedirectUri   string                 `protobuf:"bytes,2,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
+	State         string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	Issuer        string                 `protobuf:"bytes,4,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecideOAuthAuthorizationResp) Reset() {
+	*x = DecideOAuthAuthorizationResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecideOAuthAuthorizationResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecideOAuthAuthorizationResp) ProtoMessage() {}
+
+func (x *DecideOAuthAuthorizationResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecideOAuthAuthorizationResp.ProtoReflect.Descriptor instead.
+func (*DecideOAuthAuthorizationResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *DecideOAuthAuthorizationResp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *DecideOAuthAuthorizationResp) GetRedirectUri() string {
+	if x != nil {
+		return x.RedirectUri
+	}
+	return ""
+}
+
+func (x *DecideOAuthAuthorizationResp) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *DecideOAuthAuthorizationResp) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+// ConsumeOAuthCode — redeem an approved code once: not expired, not spent.
+type ConsumeOAuthCodeReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CodeHash      string                 `protobuf:"bytes,1,opt,name=code_hash,json=codeHash,proto3" json:"code_hash,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConsumeOAuthCodeReq) Reset() {
+	*x = ConsumeOAuthCodeReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsumeOAuthCodeReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsumeOAuthCodeReq) ProtoMessage() {}
+
+func (x *ConsumeOAuthCodeReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsumeOAuthCodeReq.ProtoReflect.Descriptor instead.
+func (*ConsumeOAuthCodeReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *ConsumeOAuthCodeReq) GetCodeHash() string {
+	if x != nil {
+		return x.CodeHash
+	}
+	return ""
+}
+
+type ConsumeOAuthCodeResp struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Id                 string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ClientRowId        string                 `protobuf:"bytes,2,opt,name=client_row_id,json=clientRowId,proto3" json:"client_row_id,omitempty"`
+	Kind               OAuthGrantKind         `protobuf:"varint,3,opt,name=kind,proto3,enum=w17.contrib.auth.OAuthGrantKind" json:"kind,omitempty"`
+	RedirectUri        string                 `protobuf:"bytes,4,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
+	CodeChallenge      string                 `protobuf:"bytes,5,opt,name=code_challenge,json=codeChallenge,proto3" json:"code_challenge,omitempty"`
+	Scope              string                 `protobuf:"bytes,6,opt,name=scope,proto3" json:"scope,omitempty"`
+	Resource           string                 `protobuf:"bytes,7,opt,name=resource,proto3" json:"resource,omitempty"`
+	UserId             string                 `protobuf:"bytes,8,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	OrgId              string                 `protobuf:"bytes,9,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	ApprovedByDeviceId string                 `protobuf:"bytes,10,opt,name=approved_by_device_id,json=approvedByDeviceId,proto3" json:"approved_by_device_id,omitempty"`
+	SessionExpiresAt   *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=session_expires_at,json=sessionExpiresAt,proto3" json:"session_expires_at,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *ConsumeOAuthCodeResp) Reset() {
+	*x = ConsumeOAuthCodeResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[65]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConsumeOAuthCodeResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConsumeOAuthCodeResp) ProtoMessage() {}
+
+func (x *ConsumeOAuthCodeResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[65]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConsumeOAuthCodeResp.ProtoReflect.Descriptor instead.
+func (*ConsumeOAuthCodeResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *ConsumeOAuthCodeResp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ConsumeOAuthCodeResp) GetClientRowId() string {
+	if x != nil {
+		return x.ClientRowId
+	}
+	return ""
+}
+
+func (x *ConsumeOAuthCodeResp) GetKind() OAuthGrantKind {
+	if x != nil {
+		return x.Kind
+	}
+	return OAuthGrantKind_OAUTH_GRANT_KIND_UNSPECIFIED
+}
+
+func (x *ConsumeOAuthCodeResp) GetRedirectUri() string {
+	if x != nil {
+		return x.RedirectUri
+	}
+	return ""
+}
+
+func (x *ConsumeOAuthCodeResp) GetCodeChallenge() string {
+	if x != nil {
+		return x.CodeChallenge
+	}
+	return ""
+}
+
+func (x *ConsumeOAuthCodeResp) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *ConsumeOAuthCodeResp) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *ConsumeOAuthCodeResp) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ConsumeOAuthCodeResp) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ConsumeOAuthCodeResp) GetApprovedByDeviceId() string {
+	if x != nil {
+		return x.ApprovedByDeviceId
+	}
+	return ""
+}
+
+func (x *ConsumeOAuthCodeResp) GetSessionExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SessionExpiresAt
+	}
+	return nil
+}
+
+type CreateOAuthGrantReq struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	UserId             string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	OrgId              string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	ClientRowId        string                 `protobuf:"bytes,3,opt,name=client_row_id,json=clientRowId,proto3" json:"client_row_id,omitempty"`
+	AuthorizationId    string                 `protobuf:"bytes,4,opt,name=authorization_id,json=authorizationId,proto3" json:"authorization_id,omitempty"`
+	Resource           string                 `protobuf:"bytes,5,opt,name=resource,proto3" json:"resource,omitempty"`
+	Scope              string                 `protobuf:"bytes,6,opt,name=scope,proto3" json:"scope,omitempty"`
+	ApprovedByDeviceId string                 `protobuf:"bytes,7,opt,name=approved_by_device_id,json=approvedByDeviceId,proto3" json:"approved_by_device_id,omitempty"`
+	ExpiresAt          *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// For the event only: the client the user approved.
+	ClientId      string `protobuf:"bytes,9,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateOAuthGrantReq) Reset() {
+	*x = CreateOAuthGrantReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateOAuthGrantReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateOAuthGrantReq) ProtoMessage() {}
+
+func (x *CreateOAuthGrantReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateOAuthGrantReq.ProtoReflect.Descriptor instead.
+func (*CreateOAuthGrantReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *CreateOAuthGrantReq) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *CreateOAuthGrantReq) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *CreateOAuthGrantReq) GetClientRowId() string {
+	if x != nil {
+		return x.ClientRowId
+	}
+	return ""
+}
+
+func (x *CreateOAuthGrantReq) GetAuthorizationId() string {
+	if x != nil {
+		return x.AuthorizationId
+	}
+	return ""
+}
+
+func (x *CreateOAuthGrantReq) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *CreateOAuthGrantReq) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *CreateOAuthGrantReq) GetApprovedByDeviceId() string {
+	if x != nil {
+		return x.ApprovedByDeviceId
+	}
+	return ""
+}
+
+func (x *CreateOAuthGrantReq) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *CreateOAuthGrantReq) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+type CreateOAuthGrantResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateOAuthGrantResp) Reset() {
+	*x = CreateOAuthGrantResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateOAuthGrantResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateOAuthGrantResp) ProtoMessage() {}
+
+func (x *CreateOAuthGrantResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateOAuthGrantResp.ProtoReflect.Descriptor instead.
+func (*CreateOAuthGrantResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *CreateOAuthGrantResp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CreateOAuthGrantResp) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *CreateOAuthGrantResp) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+type CreateOAuthRefreshTokenReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GrantId       string                 `protobuf:"bytes,1,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	TokenHash     string                 `protobuf:"bytes,2,opt,name=token_hash,json=tokenHash,proto3" json:"token_hash,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateOAuthRefreshTokenReq) Reset() {
+	*x = CreateOAuthRefreshTokenReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateOAuthRefreshTokenReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateOAuthRefreshTokenReq) ProtoMessage() {}
+
+func (x *CreateOAuthRefreshTokenReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateOAuthRefreshTokenReq.ProtoReflect.Descriptor instead.
+func (*CreateOAuthRefreshTokenReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{68}
+}
+
+func (x *CreateOAuthRefreshTokenReq) GetGrantId() string {
+	if x != nil {
+		return x.GrantId
+	}
+	return ""
+}
+
+func (x *CreateOAuthRefreshTokenReq) GetTokenHash() string {
+	if x != nil {
+		return x.TokenHash
+	}
+	return ""
+}
+
+func (x *CreateOAuthRefreshTokenReq) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+type CreateOAuthRefreshTokenResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateOAuthRefreshTokenResp) Reset() {
+	*x = CreateOAuthRefreshTokenResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[69]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateOAuthRefreshTokenResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateOAuthRefreshTokenResp) ProtoMessage() {}
+
+func (x *CreateOAuthRefreshTokenResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[69]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateOAuthRefreshTokenResp.ProtoReflect.Descriptor instead.
+func (*CreateOAuthRefreshTokenResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *CreateOAuthRefreshTokenResp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// UseOAuthRefreshToken — spend a live refresh token once.
+type UseOAuthRefreshTokenReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TokenHash     string                 `protobuf:"bytes,1,opt,name=token_hash,json=tokenHash,proto3" json:"token_hash,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UseOAuthRefreshTokenReq) Reset() {
+	*x = UseOAuthRefreshTokenReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UseOAuthRefreshTokenReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UseOAuthRefreshTokenReq) ProtoMessage() {}
+
+func (x *UseOAuthRefreshTokenReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UseOAuthRefreshTokenReq.ProtoReflect.Descriptor instead.
+func (*UseOAuthRefreshTokenReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *UseOAuthRefreshTokenReq) GetTokenHash() string {
+	if x != nil {
+		return x.TokenHash
+	}
+	return ""
+}
+
+type UseOAuthRefreshTokenResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	GrantId       string                 `protobuf:"bytes,2,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UseOAuthRefreshTokenResp) Reset() {
+	*x = UseOAuthRefreshTokenResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UseOAuthRefreshTokenResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UseOAuthRefreshTokenResp) ProtoMessage() {}
+
+func (x *UseOAuthRefreshTokenResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UseOAuthRefreshTokenResp.ProtoReflect.Descriptor instead.
+func (*UseOAuthRefreshTokenResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *UseOAuthRefreshTokenResp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UseOAuthRefreshTokenResp) GetGrantId() string {
+	if x != nil {
+		return x.GrantId
+	}
+	return ""
+}
+
+// LinkOAuthSession — the session a session-kind code minted, recorded on its
+// authorization in the exchange's transaction, so a replay of the code (which
+// waits on the authorization row until that transaction ends) finds it.
+type LinkOAuthSessionReq struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	SessionTokenHash string                 `protobuf:"bytes,2,opt,name=session_token_hash,json=sessionTokenHash,proto3" json:"session_token_hash,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *LinkOAuthSessionReq) Reset() {
+	*x = LinkOAuthSessionReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[72]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkOAuthSessionReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkOAuthSessionReq) ProtoMessage() {}
+
+func (x *LinkOAuthSessionReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[72]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkOAuthSessionReq.ProtoReflect.Descriptor instead.
+func (*LinkOAuthSessionReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{72}
+}
+
+func (x *LinkOAuthSessionReq) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *LinkOAuthSessionReq) GetSessionTokenHash() string {
+	if x != nil {
+		return x.SessionTokenHash
+	}
+	return ""
+}
+
+type LinkOAuthSessionResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkOAuthSessionResp) Reset() {
+	*x = LinkOAuthSessionResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[73]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkOAuthSessionResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkOAuthSessionResp) ProtoMessage() {}
+
+func (x *LinkOAuthSessionResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[73]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkOAuthSessionResp.ProtoReflect.Descriptor instead.
+func (*LinkOAuthSessionResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{73}
+}
+
+func (x *LinkOAuthSessionResp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// RevokeOAuthCodeSession — end the session a replayed code minted (reason
+// CODE_REPLAYED).
+type RevokeOAuthCodeSessionReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TokenHash     string                 `protobuf:"bytes,1,opt,name=token_hash,json=tokenHash,proto3" json:"token_hash,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeOAuthCodeSessionReq) Reset() {
+	*x = RevokeOAuthCodeSessionReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[74]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeOAuthCodeSessionReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeOAuthCodeSessionReq) ProtoMessage() {}
+
+func (x *RevokeOAuthCodeSessionReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[74]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeOAuthCodeSessionReq.ProtoReflect.Descriptor instead.
+func (*RevokeOAuthCodeSessionReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{74}
+}
+
+func (x *RevokeOAuthCodeSessionReq) GetTokenHash() string {
+	if x != nil {
+		return x.TokenHash
+	}
+	return ""
+}
+
+type RevokeOAuthCodeSessionResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TokenId       string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeOAuthCodeSessionResp) Reset() {
+	*x = RevokeOAuthCodeSessionResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[75]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeOAuthCodeSessionResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeOAuthCodeSessionResp) ProtoMessage() {}
+
+func (x *RevokeOAuthCodeSessionResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[75]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeOAuthCodeSessionResp.ProtoReflect.Descriptor instead.
+func (*RevokeOAuthCodeSessionResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{75}
+}
+
+func (x *RevokeOAuthCodeSessionResp) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
+	}
+	return ""
+}
+
+func (x *RevokeOAuthCodeSessionResp) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type TouchOAuthGrantReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TouchOAuthGrantReq) Reset() {
+	*x = TouchOAuthGrantReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[76]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TouchOAuthGrantReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TouchOAuthGrantReq) ProtoMessage() {}
+
+func (x *TouchOAuthGrantReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[76]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TouchOAuthGrantReq.ProtoReflect.Descriptor instead.
+func (*TouchOAuthGrantReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{76}
+}
+
+func (x *TouchOAuthGrantReq) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type TouchOAuthGrantResp struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Empty (NotFound) when the grant is revoked: the refresh holds the live
+	// row for its transaction, so a revocation waits for it or wins.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TouchOAuthGrantResp) Reset() {
+	*x = TouchOAuthGrantResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[77]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TouchOAuthGrantResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TouchOAuthGrantResp) ProtoMessage() {}
+
+func (x *TouchOAuthGrantResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[77]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TouchOAuthGrantResp.ProtoReflect.Descriptor instead.
+func (*TouchOAuthGrantResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{77}
+}
+
+func (x *TouchOAuthGrantResp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// RevokeOAuthGrant — end a grant and every access token of it (the tokens
+// with reason GRANT_REVOKED; the grant row with the reason that ended it).
+// Idempotent: a grant already revoked keeps its first revocation.
+type RevokeOAuthGrantReq struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Who revoked (the user, an operator); NULL when the system did (a reused
+	// refresh token, the client's revocation request).
+	RevokedBy     string       `protobuf:"bytes,2,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
+	Reason        RevokeReason `protobuf:"varint,3,opt,name=reason,proto3,enum=w17.contrib.auth.RevokeReason" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeOAuthGrantReq) Reset() {
+	*x = RevokeOAuthGrantReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[78]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeOAuthGrantReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeOAuthGrantReq) ProtoMessage() {}
+
+func (x *RevokeOAuthGrantReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[78]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeOAuthGrantReq.ProtoReflect.Descriptor instead.
+func (*RevokeOAuthGrantReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{78}
+}
+
+func (x *RevokeOAuthGrantReq) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *RevokeOAuthGrantReq) GetRevokedBy() string {
+	if x != nil {
+		return x.RevokedBy
+	}
+	return ""
+}
+
+func (x *RevokeOAuthGrantReq) GetReason() RevokeReason {
+	if x != nil {
+		return x.Reason
+	}
+	return RevokeReason_REVOKE_REASON_NONE
+}
+
+type RevokeOAuthGrantResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeOAuthGrantResp) Reset() {
+	*x = RevokeOAuthGrantResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[79]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeOAuthGrantResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeOAuthGrantResp) ProtoMessage() {}
+
+func (x *RevokeOAuthGrantResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[79]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeOAuthGrantResp.ProtoReflect.Descriptor instead.
+func (*RevokeOAuthGrantResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{79}
+}
+
+// RevokeUserOAuthGrants — every live grant of a user (the erasure; its
+// access tokens were revoked with every other token by BeginUserErasure).
+type RevokeUserOAuthGrantsReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	RevokedBy     string                 `protobuf:"bytes,2,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
+	Reason        RevokeReason           `protobuf:"varint,3,opt,name=reason,proto3,enum=w17.contrib.auth.RevokeReason" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeUserOAuthGrantsReq) Reset() {
+	*x = RevokeUserOAuthGrantsReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[80]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeUserOAuthGrantsReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeUserOAuthGrantsReq) ProtoMessage() {}
+
+func (x *RevokeUserOAuthGrantsReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[80]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeUserOAuthGrantsReq.ProtoReflect.Descriptor instead.
+func (*RevokeUserOAuthGrantsReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{80}
+}
+
+func (x *RevokeUserOAuthGrantsReq) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *RevokeUserOAuthGrantsReq) GetRevokedBy() string {
+	if x != nil {
+		return x.RevokedBy
+	}
+	return ""
+}
+
+func (x *RevokeUserOAuthGrantsReq) GetReason() RevokeReason {
+	if x != nil {
+		return x.Reason
+	}
+	return RevokeReason_REVOKE_REASON_NONE
+}
+
+type RevokeUserOAuthGrantsResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeUserOAuthGrantsResp) Reset() {
+	*x = RevokeUserOAuthGrantsResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[81]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeUserOAuthGrantsResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeUserOAuthGrantsResp) ProtoMessage() {}
+
+func (x *RevokeUserOAuthGrantsResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[81]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeUserOAuthGrantsResp.ProtoReflect.Descriptor instead.
+func (*RevokeUserOAuthGrantsResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{81}
+}
+
+// IssueOAuthAccessToken — an MCP grant's access token: mcp_only, of type MCP,
+// for one resource, bound to no device (MCP clients sign no proofs).
+type IssueOAuthAccessTokenReq struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	UserId             string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	TokenHash          string                 `protobuf:"bytes,2,opt,name=token_hash,json=tokenHash,proto3" json:"token_hash,omitempty"`
+	ExpiresAt          *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	GrantId            string                 `protobuf:"bytes,4,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	Resource           string                 `protobuf:"bytes,5,opt,name=resource,proto3" json:"resource,omitempty"`
+	OrgId              string                 `protobuf:"bytes,6,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	ApprovedByDeviceId string                 `protobuf:"bytes,7,opt,name=approved_by_device_id,json=approvedByDeviceId,proto3" json:"approved_by_device_id,omitempty"`
+	// The label the Sessions page shows: the client's name.
+	Name          string `protobuf:"bytes,8,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueOAuthAccessTokenReq) Reset() {
+	*x = IssueOAuthAccessTokenReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[82]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueOAuthAccessTokenReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueOAuthAccessTokenReq) ProtoMessage() {}
+
+func (x *IssueOAuthAccessTokenReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[82]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueOAuthAccessTokenReq.ProtoReflect.Descriptor instead.
+func (*IssueOAuthAccessTokenReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{82}
+}
+
+func (x *IssueOAuthAccessTokenReq) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *IssueOAuthAccessTokenReq) GetTokenHash() string {
+	if x != nil {
+		return x.TokenHash
+	}
+	return ""
+}
+
+func (x *IssueOAuthAccessTokenReq) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *IssueOAuthAccessTokenReq) GetGrantId() string {
+	if x != nil {
+		return x.GrantId
+	}
+	return ""
+}
+
+func (x *IssueOAuthAccessTokenReq) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *IssueOAuthAccessTokenReq) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *IssueOAuthAccessTokenReq) GetApprovedByDeviceId() string {
+	if x != nil {
+		return x.ApprovedByDeviceId
+	}
+	return ""
+}
+
+func (x *IssueOAuthAccessTokenReq) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type IssueOAuthAccessTokenResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueOAuthAccessTokenResp) Reset() {
+	*x = IssueOAuthAccessTokenResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[83]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueOAuthAccessTokenResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueOAuthAccessTokenResp) ProtoMessage() {}
+
+func (x *IssueOAuthAccessTokenResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[83]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueOAuthAccessTokenResp.ProtoReflect.Descriptor instead.
+func (*IssueOAuthAccessTokenResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{83}
+}
+
+func (x *IssueOAuthAccessTokenResp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
 }
 
 var File_mutations_auth_mutation_proto protoreflect.FileDescriptor
@@ -2616,7 +5009,12 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\flegacy_token\x18\x01 \x01(\tB\t\xca\xf3\x18\x050\x01\xa0\x02\x01R\vlegacyToken\x12'\n" +
 	"\n" +
 	"token_hash\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\ttokenHash\"\x16\n" +
-	"\x14UpgradeTokenHashResp\"E\n" +
+	"\x14UpgradeTokenHashResp\"\xc2\x01\n" +
+	"\x15TouchTokenLastUsedReq\x12!\n" +
+	"\btoken_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\atokenId\x12:\n" +
+	"\x06cutoff\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\x06cutoff\x12;\n" +
+	"\aused_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\x06usedAt:\r\xfa\xf4\x18\tapi_token\"'\n" +
+	"\x16TouchTokenLastUsedResp:\r\xfa\xf4\x18\tapi_token\"E\n" +
 	"\x0fRevokeTokenResp\x12\x19\n" +
 	"\btoken_id\x18\x01 \x01(\tR\atokenId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"\xd1\x01\n" +
@@ -2630,7 +5028,42 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"thumbprint:\x18\xfa\xf4\x18\x14authenticate_turnkey\"f\n" +
 	"\x16RevokeSessionTokenResp\x12\x19\n" +
 	"\btoken_id\x18\x01 \x01(\tR\atokenId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId:\x18\xfa\xf4\x18\x14authenticate_turnkey\"e\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId:\x18\xfa\xf4\x18\x14authenticate_turnkey\"\xd5\x03\n" +
+	"\x10IssueApiTokenReq\x12\x1f\n" +
+	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12\x1f\n" +
+	"\x04name\x18\x02 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x01R\x04name\x12:\n" +
+	"\n" +
+	"token_type\x18\x03 \x01(\x0e2\x1b.w17.contrib.auth.TokenTypeR\ttokenType\x12A\n" +
+	"\n" +
+	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\texpiresAt\x12'\n" +
+	"\n" +
+	"token_hash\x18\x05 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\ttokenHash\x12%\n" +
+	"\tdevice_id\x18\x06 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\bdeviceId\x12;\n" +
+	"\x15approved_by_device_id\x18\a \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId\x12\x1e\n" +
+	"\n" +
+	"thumbprint\x18\b \x01(\tR\n" +
+	"thumbprint\x12%\n" +
+	"\x0ekey_thumbprint\x18\t \x01(\tR\rkeyThumbprint\x12\x1d\n" +
+	"\n" +
+	"created_by\x18\n" +
+	" \x01(\tR\tcreatedBy:\r\xfa\xf4\x18\tapi_token\"U\n" +
+	"\x11IssueApiTokenResp\x121\n" +
+	"\x05token\x18\x01 \x01(\v2\x1b.w17.contrib.auth.UserTokenR\x05token:\r\xfa\xf4\x18\tapi_token\"n\n" +
+	"\x15AddTokenPermissionReq\x12!\n" +
+	"\btoken_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\atokenId\x12#\n" +
+	"\rpermission_id\x18\x02 \x01(\x05R\fpermissionId:\r\xfa\xf4\x18\tapi_token\"u\n" +
+	"\x16AddTokenPermissionResp\x12L\n" +
+	"\x10token_permission\x18\x01 \x01(\v2!.w17.contrib.auth.TokenPermissionR\x0ftokenPermission:\r\xfa\xf4\x18\tapi_token\"\xc7\x01\n" +
+	"\x16MarkApiTokenRevokedReq\x12!\n" +
+	"\btoken_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\atokenId\x12\x1f\n" +
+	"\auser_id\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12:\n" +
+	"\n" +
+	"token_type\x18\x03 \x01(\x0e2\x1b.w17.contrib.auth.TokenTypeR\ttokenType\x12\x1e\n" +
+	"\n" +
+	"thumbprint\x18\x04 \x01(\tR\n" +
+	"thumbprint:\r\xfa\xf4\x18\tapi_token\"C\n" +
+	"\x17MarkApiTokenRevokedResp\x12\x19\n" +
+	"\btoken_id\x18\x01 \x01(\tR\atokenId:\r\xfa\xf4\x18\tapi_token\"e\n" +
 	"\x15UpdateUserPasswordReq\x12\x1f\n" +
 	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12+\n" +
 	"\rpassword_hash\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\bBR\fpasswordHash\"1\n" +
@@ -2703,7 +5136,15 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\n" +
 	"revoked_by\x18\x03 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\trevokedBy\x12*\n" +
 	"\rkeep_token_id\x18\x04 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\vkeepTokenId\"\x18\n" +
-	"\x16RevokeDeviceTokensResp\"\\\n" +
+	"\x16RevokeDeviceTokensResp\"\xd4\x01\n" +
+	"\x1aRevokeApprovedApiTokensReq\x12\x1f\n" +
+	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12#\n" +
+	"\tdevice_id\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\bdeviceId\x12%\n" +
+	"\n" +
+	"revoked_by\x18\x03 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\trevokedBy\x12:\n" +
+	"\n" +
+	"token_type\x18\x04 \x01(\x0e2\x1b.w17.contrib.auth.TokenTypeR\ttokenType:\r\xfa\xf4\x18\tapi_token\",\n" +
+	"\x1bRevokeApprovedApiTokensResp:\r\xfa\xf4\x18\tapi_token\"\\\n" +
 	"\x14MarkDeviceRevokedReq\x12\x1f\n" +
 	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12#\n" +
 	"\tdevice_id\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\bdeviceId\"4\n" +
@@ -2757,7 +5198,158 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\x17ClaimBootstrapAdminResp\x12\x1d\n" +
 	"\awritten\x18\x01 \x01(\x05H\x00R\awritten\x88\x01\x01:\b\xfa\xf4\x18\x04rbacB\n" +
 	"\n" +
-	"\b_written2\xfaj\n" +
+	"\b_written\"\xa1\x04\n" +
+	"\x14CreateOAuthClientReq\x12&\n" +
+	"\tclient_id\x18\x01 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x10R\bclientId\x12.\n" +
+	"\x0eclient_id_hash\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\fclientIdHash\x12=\n" +
+	"\x04kind\x18\x03 \x01(\x0e2!.w17.contrib.auth.OAuthClientKindB\x06\xca\xf3\x18\x02\b2R\x04kind\x12,\n" +
+	"\vclient_name\x18\x04 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\xc8\x01R\n" +
+	"clientName\x12*\n" +
+	"\n" +
+	"client_uri\x18\x05 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x10R\tclientUri\x12&\n" +
+	"\blogo_uri\x18\x06 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x10R\alogoUri\x12/\n" +
+	"\rredirect_uris\x18\a \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x02@\xa0\x9c\x01R\fredirectUris\x12,\n" +
+	"\vsoftware_id\x18\b \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\xc8\x01R\n" +
+	"softwareId\x12)\n" +
+	"\n" +
+	"created_ip\x18\t \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x010\x01@@R\tcreatedIp\x12T\n" +
+	"\x13metadata_fetched_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x11metadataFetchedAt:\x10\xfa\xf4\x18\foauth_server\"|\n" +
+	"\x15CreateOAuthClientResp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12A\n" +
+	"\n" +
+	"created_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\tcreatedAt:\x10\xfa\xf4\x18\foauth_server\"\xfc\x01\n" +
+	"\x1dRefreshOAuthClientMetadataReq\x12\x16\n" +
+	"\x02id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x02id\x12,\n" +
+	"\vclient_name\x18\x02 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\xc8\x01R\n" +
+	"clientName\x12*\n" +
+	"\n" +
+	"client_uri\x18\x03 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x10R\tclientUri\x12&\n" +
+	"\blogo_uri\x18\x04 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x10R\alogoUri\x12/\n" +
+	"\rredirect_uris\x18\x05 \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x02@\xa0\x9c\x01R\fredirectUris:\x10\xfa\xf4\x18\foauth_server\"B\n" +
+	"\x1eRefreshOAuthClientMetadataResp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id:\x10\xfa\xf4\x18\foauth_server\"\xa6\x04\n" +
+	"\x1bCreateOAuthAuthorizationReq\x12+\n" +
+	"\frequest_hash\x18\x01 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\vrequestHash\x12*\n" +
+	"\rclient_row_id\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\vclientRowId\x12<\n" +
+	"\x04kind\x18\x03 \x01(\x0e2 .w17.contrib.auth.OAuthGrantKindB\x06\xca\xf3\x18\x02\b2R\x04kind\x12,\n" +
+	"\fredirect_uri\x18\x04 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x10R\vredirectUri\x12!\n" +
+	"\x05state\x18\x05 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\bR\x05state\x120\n" +
+	"\x0ecode_challenge\x18\x06 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x01R\rcodeChallenge\x12!\n" +
+	"\x05scope\x18\a \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\xc8\x01R\x05scope\x12'\n" +
+	"\bresource\x18\b \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x10R\bresource\x12!\n" +
+	"\x06issuer\x18\t \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x10R\x06issuer\x12)\n" +
+	"\n" +
+	"created_ip\x18\n" +
+	" \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x010\x01@@R\tcreatedIp\x12A\n" +
+	"\n" +
+	"expires_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\texpiresAt:\x10\xfa\xf4\x18\foauth_server\"@\n" +
+	"\x1cCreateOAuthAuthorizationResp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id:\x10\xfa\xf4\x18\foauth_server\"\xeb\x03\n" +
+	"\x1bDecideOAuthAuthorizationReq\x12+\n" +
+	"\frequest_hash\x18\x01 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\vrequestHash\x12C\n" +
+	"\bdecision\x18\x02 \x01(\x0e2\x1f.w17.contrib.auth.OAuthDecisionB\x06\xca\xf3\x18\x02\b2R\bdecision\x12\x1f\n" +
+	"\auser_id\x18\x03 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12\x1f\n" +
+	"\x06org_id\x18\x04 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05orgId\x12;\n" +
+	"\x15approved_by_device_id\x18\x05 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId\x12R\n" +
+	"\x12session_expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x10sessionExpiresAt\x12'\n" +
+	"\tcode_hash\x18\a \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x01(\x01@@R\bcodeHash\x12L\n" +
+	"\x0fcode_expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\rcodeExpiresAt:\x10\xfa\xf4\x18\foauth_server\"\x91\x01\n" +
+	"\x1cDecideOAuthAuthorizationResp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
+	"\fredirect_uri\x18\x02 \x01(\tR\vredirectUri\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\x12\x16\n" +
+	"\x06issuer\x18\x04 \x01(\tR\x06issuer:\x10\xfa\xf4\x18\foauth_server\"N\n" +
+	"\x13ConsumeOAuthCodeReq\x12%\n" +
+	"\tcode_hash\x18\x01 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\bcodeHash:\x10\xfa\xf4\x18\foauth_server\"\xe3\x03\n" +
+	"\x14ConsumeOAuthCodeResp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\"\n" +
+	"\rclient_row_id\x18\x02 \x01(\tR\vclientRowId\x124\n" +
+	"\x04kind\x18\x03 \x01(\x0e2 .w17.contrib.auth.OAuthGrantKindR\x04kind\x12!\n" +
+	"\fredirect_uri\x18\x04 \x01(\tR\vredirectUri\x12%\n" +
+	"\x0ecode_challenge\x18\x05 \x01(\tR\rcodeChallenge\x12\x14\n" +
+	"\x05scope\x18\x06 \x01(\tR\x05scope\x12\x1a\n" +
+	"\bresource\x18\a \x01(\tR\bresource\x12!\n" +
+	"\auser_id\x18\b \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x06userId\x12\x1f\n" +
+	"\x06org_id\x18\t \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05orgId\x12;\n" +
+	"\x15approved_by_device_id\x18\n" +
+	" \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId\x12R\n" +
+	"\x12session_expires_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x10sessionExpiresAt:\x10\xfa\xf4\x18\foauth_server\"\xba\x03\n" +
+	"\x13CreateOAuthGrantReq\x12\x1f\n" +
+	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12\x1f\n" +
+	"\x06org_id\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05orgId\x12*\n" +
+	"\rclient_row_id\x18\x03 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\vclientRowId\x121\n" +
+	"\x10authorization_id\x18\x04 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x0fauthorizationId\x12%\n" +
+	"\bresource\x18\x05 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x10R\bresource\x12!\n" +
+	"\x05scope\x18\x06 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\xc8\x01R\x05scope\x12;\n" +
+	"\x15approved_by_device_id\x18\a \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId\x12A\n" +
+	"\n" +
+	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\texpiresAt\x12&\n" +
+	"\tclient_id\x18\t \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x10R\bclientId:\x10\xfa\xf4\x18\foauth_server\"\x94\x01\n" +
+	"\x14CreateOAuthGrantResp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12A\n" +
+	"\n" +
+	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\tcreatedAt:\x10\xfa\xf4\x18\foauth_server\"\xbd\x01\n" +
+	"\x1aCreateOAuthRefreshTokenReq\x12!\n" +
+	"\bgrant_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\agrantId\x12'\n" +
+	"\n" +
+	"token_hash\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\ttokenHash\x12A\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\texpiresAt:\x10\xfa\xf4\x18\foauth_server\"?\n" +
+	"\x1bCreateOAuthRefreshTokenResp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id:\x10\xfa\xf4\x18\foauth_server\"T\n" +
+	"\x17UseOAuthRefreshTokenReq\x12'\n" +
+	"\n" +
+	"token_hash\x18\x01 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\ttokenHash:\x10\xfa\xf4\x18\foauth_server\"W\n" +
+	"\x18UseOAuthRefreshTokenResp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
+	"\bgrant_id\x18\x02 \x01(\tR\agrantId:\x10\xfa\xf4\x18\foauth_server\"w\n" +
+	"\x13LinkOAuthSessionReq\x12\x16\n" +
+	"\x02id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x02id\x126\n" +
+	"\x12session_token_hash\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\x10sessionTokenHash:\x10\xfa\xf4\x18\foauth_server\"8\n" +
+	"\x14LinkOAuthSessionResp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id:\x10\xfa\xf4\x18\foauth_server\"V\n" +
+	"\x19RevokeOAuthCodeSessionReq\x12'\n" +
+	"\n" +
+	"token_hash\x18\x01 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\ttokenHash:\x10\xfa\xf4\x18\foauth_server\"b\n" +
+	"\x1aRevokeOAuthCodeSessionResp\x12\x19\n" +
+	"\btoken_id\x18\x01 \x01(\tR\atokenId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId:\x10\xfa\xf4\x18\foauth_server\">\n" +
+	"\x12TouchOAuthGrantReq\x12\x16\n" +
+	"\x02id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x02id:\x10\xfa\xf4\x18\foauth_server\"7\n" +
+	"\x13TouchOAuthGrantResp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id:\x10\xfa\xf4\x18\foauth_server\"\xa8\x01\n" +
+	"\x13RevokeOAuthGrantReq\x12\x16\n" +
+	"\x02id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x02id\x12'\n" +
+	"\n" +
+	"revoked_by\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\trevokedBy\x12>\n" +
+	"\x06reason\x18\x03 \x01(\x0e2\x1e.w17.contrib.auth.RevokeReasonB\x06\xca\xf3\x18\x02\b2R\x06reason:\x10\xfa\xf4\x18\foauth_server\"(\n" +
+	"\x14RevokeOAuthGrantResp:\x10\xfa\xf4\x18\foauth_server\"\xb6\x01\n" +
+	"\x18RevokeUserOAuthGrantsReq\x12\x1f\n" +
+	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12'\n" +
+	"\n" +
+	"revoked_by\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\trevokedBy\x12>\n" +
+	"\x06reason\x18\x03 \x01(\x0e2\x1e.w17.contrib.auth.RevokeReasonB\x06\xca\xf3\x18\x02\b2R\x06reason:\x10\xfa\xf4\x18\foauth_server\"-\n" +
+	"\x19RevokeUserOAuthGrantsResp:\x10\xfa\xf4\x18\foauth_server\"\x82\x03\n" +
+	"\x18IssueOAuthAccessTokenReq\x12\x1f\n" +
+	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12'\n" +
+	"\n" +
+	"token_hash\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\ttokenHash\x12A\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\texpiresAt\x12!\n" +
+	"\bgrant_id\x18\x04 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\agrantId\x12%\n" +
+	"\bresource\x18\x05 \x01(\tB\t\xca\xf3\x18\x05\b\x05@\x80\x10R\bresource\x12\x1f\n" +
+	"\x06org_id\x18\x06 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05orgId\x12;\n" +
+	"\x15approved_by_device_id\x18\a \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId\x12\x1f\n" +
+	"\x04name\x18\b \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x01R\x04name:\x10\xfa\xf4\x18\foauth_server\"=\n" +
+	"\x19IssueOAuthAccessTokenResp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id:\x10\xfa\xf4\x18\foauth_server2\x90\xb1\x01\n" +
 	"\fAuthMutation\x12\x96\n" +
 	"\n" +
 	"\n" +
@@ -2786,7 +5378,9 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\vRevokeToken\x12 .w17.contrib.auth.RevokeTokenReq\x1a!.w17.contrib.auth.RevokeTokenResp\"\xc7\x01\xf2\xf3\x18\xc2\x01B\xbf\x01\n" +
 	"\x04main\x12\xb6\x01UPDATE @module.UserToken SET revoked_at = NOW(), revoke_reason = 10 WHERE (token_hash = :token_hash OR token = :legacy_token) AND revoked_at IS NULL RETURNING id AS token_id, user_id\x12\xe9\x01\n" +
 	"\x10UpgradeTokenHash\x12%.w17.contrib.auth.UpgradeTokenHashReq\x1a&.w17.contrib.auth.UpgradeTokenHashResp\"\x85\x01\xf2\xf3\x18\x80\x01B~\n" +
-	"\x04main\x12vUPDATE @module.UserToken SET token_hash = :token_hash, token = NULL WHERE token = :legacy_token AND token_hash IS NULL\x12\xc5\x03\n" +
+	"\x04main\x12vUPDATE @module.UserToken SET token_hash = :token_hash, token = NULL WHERE token = :legacy_token AND token_hash IS NULL\x12\x85\x02\n" +
+	"\x12TouchTokenLastUsed\x12'.w17.contrib.auth.TouchTokenLastUsedReq\x1a(.w17.contrib.auth.TouchTokenLastUsedResp\"\x9b\x01\xf2\xf3\x18\x89\x01B\x86\x01\n" +
+	"\x04main\x12~UPDATE @module.UserToken SET last_used_at = :used_at WHERE id = :token_id AND (last_used_at IS NULL OR last_used_at < :cutoff)\x8a\xf5\x18\tapi_token\x12\xc5\x03\n" +
 	"\x12RevokeSessionToken\x12'.w17.contrib.auth.RevokeSessionTokenReq\x1a(.w17.contrib.auth.RevokeSessionTokenResp\"\xdb\x02\x9a\xbd\x18p\n" +
 	"\fTokenRevoked\x12`\n" +
 	"\x1e\n" +
@@ -2795,7 +5389,39 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\auser_id\x12\x11$response.user_id\n" +
 	" \n" +
 	"\tdevice_id\x12\x13$request.thumbprint\xf2\xf3\x18\xca\x01B\xc7\x01\n" +
-	"\x04main\x12\xbe\x01UPDATE @module.UserToken SET revoked_at = NOW(), revoked_by = :user_id, revoke_reason = 1 WHERE id = :token_id AND user_id = :user_id AND revoked_at IS NULL RETURNING id AS token_id, user_id\x8a\xf5\x18\x14authenticate_turnkey\x12\xc5\x03\n" +
+	"\x04main\x12\xbe\x01UPDATE @module.UserToken SET revoked_at = NOW(), revoked_by = :user_id, revoke_reason = 1 WHERE id = :token_id AND user_id = :user_id AND revoked_at IS NULL RETURNING id AS token_id, user_id\x8a\xf5\x18\x14authenticate_turnkey\x12\xc2\x0f\n" +
+	"\rIssueApiToken\x12\".w17.contrib.auth.IssueApiTokenReq\x1a#.w17.contrib.auth.IssueApiTokenResp\"\xe7\x0e\x9a\xbd\x18\x90\x02\n" +
+	"\x0fApiTokenCreated\x12\xfc\x01\n" +
+	"\x1e\n" +
+	"\btoken_id\x12\x12$response.token.id\n" +
+	"\"\n" +
+	"\auser_id\x12\x17$response.token.user_id\n" +
+	"(\n" +
+	"\n" +
+	"created_at\x12\x1a$response.token.created_at\n" +
+	"\x1c\n" +
+	"\x04name\x12\x14$response.token.name\n" +
+	")\n" +
+	"\x0ekey_thumbprint\x12\x17$request.key_thumbprint\n" +
+	"!\n" +
+	"\n" +
+	"created_by\x12\x13$request.created_by\n" +
+	" \n" +
+	"\tdevice_id\x12\x13$request.thumbprint\xf2\xf3\x18\xc0\fB\xbd\f\n" +
+	"\x04main\x12\xb4\fINSERT INTO @module.UserToken SET user_id = :user_id, token_hash = :token_hash, token_type = :token_type, name = :name, expires_at = :expires_at, device_id = :device_id, approved_by_device_id = :approved_by_device_id, ?feature(service_account) bearer = :bearer RETURNING id AS token.id,           user_id AS token.user_id,           token_type AS token.token_type,           name AS token.name,           created_at AS token.created_at,           expires_at AS token.expires_at,           device_id AS token.device_id,           approved_by_device_id AS token.approved_by_device_id,           token AS token.token,           ?feature(api_token) last_used_at AS token.last_used_at,           mcp_only AS token.mcp_only,           token_hash AS token.token_hash,           revoked_at AS token.revoked_at,           revoked_by AS token.revoked_by,           revoke_reason AS token.revoke_reason,           public_computer AS token.public_computer,           ?feature(service_account) bearer AS token.bearer,           ?feature(step_up) stepped_up_at AS token.stepped_up_at,           ?feature(step_up) step_up_attempts AS token.step_up_attempts,           ?feature(step_up) step_up_locked_until AS token.step_up_locked_until,           ?feature(oauth_server) oauth_grant_id AS token.oauth_grant_id,           ?feature(oauth_server) resource AS token.resource,           ?feature(oauth_server) oauth_org_id AS token.oauth_org_id,           ?feature(step_up_code) step_up_code_hash AS token.step_up_code_hash,           ?feature(step_up_code) step_up_code_sent_at AS token.step_up_code_sent_at\x8a\xf5\x18\tapi_token\x12\xa9\x03\n" +
+	"\x12AddTokenPermission\x12'.w17.contrib.auth.AddTokenPermissionReq\x1a(.w17.contrib.auth.AddTokenPermissionResp\"\xbf\x02\xf2\xf3\x18\xad\x02B\xaa\x02\n" +
+	"\x04main\x12\xa1\x02INSERT INTO @module.TokenPermission SET token_id = :token_id, permission_id = :permission_id RETURNING id AS token_permission.id,           token_id AS token_permission.token_id,           permission_id AS token_permission.permission_id,           created_at AS token_permission.created_at\x8a\xf5\x18\tapi_token\x12\xd3\x03\n" +
+	"\x13MarkApiTokenRevoked\x12(.w17.contrib.auth.MarkApiTokenRevokedReq\x1a).w17.contrib.auth.MarkApiTokenRevokedResp\"\xe6\x02\x9a\xbd\x18r\n" +
+	"\x0fApiTokenRevoked\x12_\n" +
+	"\x1e\n" +
+	"\btoken_id\x12\x12$response.token_id\n" +
+	"\x1b\n" +
+	"\auser_id\x12\x10$request.user_id\n" +
+	" \n" +
+	"\tdevice_id\x12\x13$request.thumbprint\xf2\xf3\x18\xde\x01B\xdb\x01\n" +
+	"\x04main\x12\xd2\x01UPDATE @module.UserToken SET revoked_at = NOW(), revoked_by = :user_id, revoke_reason = 2 WHERE id = :token_id AND user_id = :user_id AND token_type = :token_type AND revoked_at IS NULL RETURNING id AS token_id\x8a\xf5\x18\tapi_token\x12\xe7\x02\n" +
+	"\x17RevokeApprovedApiTokens\x12,.w17.contrib.auth.RevokeApprovedApiTokensReq\x1a-.w17.contrib.auth.RevokeApprovedApiTokensResp\"\xee\x01\xf2\xf3\x18\xdc\x01B\xd9\x01\n" +
+	"\x04main\x12\xd0\x01UPDATE @module.UserToken SET revoked_at = NOW(), revoked_by = :revoked_by, revoke_reason = 5 WHERE user_id = :user_id AND approved_by_device_id = :device_id AND token_type = :token_type AND revoked_at IS NULL\x8a\xf5\x18\tapi_token\x12\xc5\x03\n" +
 	"\x12CountSignInAttempt\x12'.w17.contrib.auth.CountSignInAttemptReq\x1a(.w17.contrib.auth.CountSignInAttemptResp\"\xdb\x02\xf2\xf3\x18\xd6\x02B\xd3\x02\n" +
 	"\x04main\x12\xca\x02UPDATE @module.User SET sign_in_failures = CASE WHEN sign_in_window_at IS NULL OR sign_in_window_at < :cutoff THEN 1 ELSE sign_in_failures + 1 END, sign_in_window_at = CASE WHEN sign_in_window_at IS NULL OR sign_in_window_at < :cutoff THEN :now ELSE sign_in_window_at END WHERE id = :user_id RETURNING sign_in_failures AS attempts\x12\xa6\x04\n" +
 	"\x18CountDeviceSignInAttempt\x12-.w17.contrib.auth.CountDeviceSignInAttemptReq\x1a..w17.contrib.auth.CountDeviceSignInAttemptResp\"\xaa\x03\xf2\xf3\x18\xa5\x03B\xa2\x03\n" +
@@ -2885,7 +5511,48 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\x12RehashUserPassword\x12'.w17.contrib.auth.RehashUserPasswordReq\x1a(.w17.contrib.auth.RehashUserPasswordResp\"\x95\x01\xf2\xf3\x18\x90\x01B\x8d\x01\n" +
 	"\x04main\x12\x84\x01UPDATE @module.User SET password_hash = :password_hash WHERE id = :user_id AND password_hash = :current_hash RETURNING id AS user_id\x12\xe7\x01\n" +
 	"\x13ClaimBootstrapAdmin\x12(.w17.contrib.auth.ClaimBootstrapAdminReq\x1a).w17.contrib.auth.ClaimBootstrapAdminResp\"{\xf2\xf3\x18oBm\n" +
-	"\x04main\x12eUPSERT INTO @module.BootstrapClaim SET slot = :slot, user_id = :user_id ON CONFLICT (slot) DO NOTHING\x8a\xf5\x18\x04rbacB\xbe\x01\n" +
+	"\x04main\x12eUPSERT INTO @module.BootstrapClaim SET slot = :slot, user_id = :user_id ON CONFLICT (slot) DO NOTHING\x8a\xf5\x18\x04rbac\x12\xd9\x03\n" +
+	"\x11CreateOAuthClient\x12&.w17.contrib.auth.CreateOAuthClientReq\x1a'.w17.contrib.auth.CreateOAuthClientResp\"\xf2\x02\xf2\xf3\x18\xdd\x02B\xda\x02\n" +
+	"\x04main\x12\xd1\x02INSERT INTO @module.OAuthClient SET client_id = :client_id, client_id_hash = :client_id_hash, kind = :kind, client_name = :client_name, client_uri = :client_uri, logo_uri = :logo_uri, redirect_uris = :redirect_uris, software_id = :software_id, created_ip = :created_ip, metadata_fetched_at = :metadata_fetched_at RETURNING id, created_at\x8a\xf5\x18\foauth_server\x12\xe5\x02\n" +
+	"\x1aRefreshOAuthClientMetadata\x12/.w17.contrib.auth.RefreshOAuthClientMetadataReq\x1a0.w17.contrib.auth.RefreshOAuthClientMetadataResp\"\xe3\x01\xf2\xf3\x18\xce\x01B\xcb\x01\n" +
+	"\x04main\x12\xc2\x01UPDATE @module.OAuthClient SET client_name = :client_name, client_uri = :client_uri, logo_uri = :logo_uri, redirect_uris = :redirect_uris, metadata_fetched_at = NOW() WHERE id = :id RETURNING id\x8a\xf5\x18\foauth_server\x12\xdb\x03\n" +
+	"\x18CreateOAuthAuthorization\x12-.w17.contrib.auth.CreateOAuthAuthorizationReq\x1a..w17.contrib.auth.CreateOAuthAuthorizationResp\"\xdf\x02\xf2\xf3\x18\xca\x02B\xc7\x02\n" +
+	"\x04main\x12\xbe\x02INSERT INTO @module.OAuthAuthorization SET request_hash = :request_hash, client_row_id = :client_row_id, kind = :kind, redirect_uri = :redirect_uri, state = :state, code_challenge = :code_challenge, scope = :scope, resource = :resource, issuer = :issuer, created_ip = :created_ip, expires_at = :expires_at RETURNING id\x8a\xf5\x18\foauth_server\x12\xa2\x04\n" +
+	"\x18DecideOAuthAuthorization\x12-.w17.contrib.auth.DecideOAuthAuthorizationReq\x1a..w17.contrib.auth.DecideOAuthAuthorizationResp\"\xa6\x03\xf2\xf3\x18\x91\x03B\x8e\x03\n" +
+	"\x04main\x12\x85\x03UPDATE @module.OAuthAuthorization SET decided_at = NOW(), decision = :decision, user_id = :user_id, org_id = :org_id, approved_by_device_id = :approved_by_device_id, session_expires_at = :session_expires_at, code_hash = :code_hash, code_expires_at = :code_expires_at WHERE request_hash = :request_hash AND decided_at IS NULL AND expires_at > NOW() RETURNING id, redirect_uri, state, issuer\x8a\xf5\x18\foauth_server\x12\xb7\x03\n" +
+	"\x10ConsumeOAuthCode\x12%.w17.contrib.auth.ConsumeOAuthCodeReq\x1a&.w17.contrib.auth.ConsumeOAuthCodeResp\"\xd3\x02\xf2\xf3\x18\xbe\x02B\xbb\x02\n" +
+	"\x04main\x12\xb2\x02UPDATE @module.OAuthAuthorization SET code_consumed_at = NOW() WHERE code_hash = :code_hash AND code_consumed_at IS NULL AND code_expires_at > NOW() AND decision = 1 RETURNING id, client_row_id, kind, redirect_uri, code_challenge, scope, resource, user_id, org_id, approved_by_device_id, session_expires_at\x8a\xf5\x18\foauth_server\x12\xdc\x04\n" +
+	"\x10CreateOAuthGrant\x12%.w17.contrib.auth.CreateOAuthGrantReq\x1a&.w17.contrib.auth.CreateOAuthGrantResp\"\xf8\x03\x9a\xbd\x18\xb3\x01\n" +
+	"\x12OAuthGrantApproved\x12\x9c\x01\n" +
+	"\x18\n" +
+	"\bgrant_id\x12\f$response.id\n" +
+	"\x1c\n" +
+	"\auser_id\x12\x11$response.user_id\n" +
+	"\"\n" +
+	"\n" +
+	"created_at\x12\x14$response.created_at\n" +
+	"\x1f\n" +
+	"\tclient_id\x12\x12$request.client_id\n" +
+	"\x1d\n" +
+	"\bresource\x12\x11$request.resource\xf2\xf3\x18\xab\x02B\xa8\x02\n" +
+	"\x04main\x12\x9f\x02INSERT INTO @module.OAuthGrant SET user_id = :user_id, org_id = :org_id, client_row_id = :client_row_id, authorization_id = :authorization_id, resource = :resource, scope = :scope, approved_by_device_id = :approved_by_device_id, expires_at = :expires_at RETURNING id, user_id, created_at\x8a\xf5\x18\foauth_server\x12\x98\x02\n" +
+	"\x17CreateOAuthRefreshToken\x12,.w17.contrib.auth.CreateOAuthRefreshTokenReq\x1a-.w17.contrib.auth.CreateOAuthRefreshTokenResp\"\x9f\x01\xf2\xf3\x18\x8a\x01B\x87\x01\n" +
+	"\x04main\x12\x7fINSERT INTO @module.OAuthRefreshToken SET grant_id = :grant_id, token_hash = :token_hash, expires_at = :expires_at RETURNING id\x8a\xf5\x18\foauth_server\x12\xa6\x02\n" +
+	"\x14UseOAuthRefreshToken\x12).w17.contrib.auth.UseOAuthRefreshTokenReq\x1a*.w17.contrib.auth.UseOAuthRefreshTokenResp\"\xb6\x01\xf2\xf3\x18\xa1\x01B\x9e\x01\n" +
+	"\x04main\x12\x95\x01UPDATE @module.OAuthRefreshToken SET used_at = NOW() WHERE token_hash = :token_hash AND used_at IS NULL AND expires_at > NOW() RETURNING id, grant_id\x8a\xf5\x18\foauth_server\x12\x8e\x02\n" +
+	"\x10LinkOAuthSession\x12%.w17.contrib.auth.LinkOAuthSessionReq\x1a&.w17.contrib.auth.LinkOAuthSessionResp\"\xaa\x01\xf2\xf3\x18\x95\x01B\x92\x01\n" +
+	"\x04main\x12\x89\x01UPDATE @module.OAuthAuthorization SET session_token_hash = :session_token_hash WHERE id = :id AND session_token_hash IS NULL RETURNING id\x8a\xf5\x18\foauth_server\x12\xb2\x02\n" +
+	"\x16RevokeOAuthCodeSession\x12+.w17.contrib.auth.RevokeOAuthCodeSessionReq\x1a,.w17.contrib.auth.RevokeOAuthCodeSessionResp\"\xbc\x01\xf2\xf3\x18\xa7\x01B\xa4\x01\n" +
+	"\x04main\x12\x9b\x01UPDATE @module.UserToken SET revoked_at = NOW(), revoke_reason = 14 WHERE token_hash = :token_hash AND revoked_at IS NULL RETURNING id AS token_id, user_id\x8a\xf5\x18\foauth_server\x12\xe4\x01\n" +
+	"\x0fTouchOAuthGrant\x12$.w17.contrib.auth.TouchOAuthGrantReq\x1a%.w17.contrib.auth.TouchOAuthGrantResp\"\x83\x01\xf2\xf3\x18oBm\n" +
+	"\x04main\x12eUPDATE @module.OAuthGrant SET last_used_at = NOW() WHERE id = :id AND revoked_at IS NULL RETURNING id\x8a\xf5\x18\foauth_server\x12\xaa\x03\n" +
+	"\x10RevokeOAuthGrant\x12%.w17.contrib.auth.RevokeOAuthGrantReq\x1a&.w17.contrib.auth.RevokeOAuthGrantResp\"\xc6\x02\xf2\xf3\x18\xb1\x02B\x93\x01\n" +
+	"\x05grant\x12\x89\x01UPDATE @module.OAuthGrant SET revoked_at = NOW(), revoked_by = :revoked_by, revoke_reason = :reason WHERE id = :id AND revoked_at IS NULLB\x98\x01\n" +
+	"\x04main\x12\x8f\x01UPDATE @module.UserToken SET revoked_at = NOW(), revoked_by = :revoked_by, revoke_reason = 13 WHERE oauth_grant_id = :id AND revoked_at IS NULL\x8a\xf5\x18\foauth_server\x12\xa7\x02\n" +
+	"\x15RevokeUserOAuthGrants\x12*.w17.contrib.auth.RevokeUserOAuthGrantsReq\x1a+.w17.contrib.auth.RevokeUserOAuthGrantsResp\"\xb4\x01\xf2\xf3\x18\x9f\x01B\x9c\x01\n" +
+	"\x04main\x12\x93\x01UPDATE @module.OAuthGrant SET revoked_at = NOW(), revoked_by = :revoked_by, revoke_reason = :reason WHERE user_id = :user_id AND revoked_at IS NULL\x8a\xf5\x18\foauth_server\x12\xb2\x03\n" +
+	"\x15IssueOAuthAccessToken\x12*.w17.contrib.auth.IssueOAuthAccessTokenReq\x1a+.w17.contrib.auth.IssueOAuthAccessTokenResp\"\xbf\x02\xf2\xf3\x18\xaa\x02B\xa7\x02\n" +
+	"\x04main\x12\x9e\x02INSERT INTO @module.UserToken SET user_id = :user_id, token_hash = :token_hash, token_type = 3, mcp_only = TRUE, name = :name, expires_at = :expires_at, oauth_grant_id = :grant_id, resource = :resource, oauth_org_id = :org_id, approved_by_device_id = :approved_by_device_id RETURNING id\x8a\xf5\x18\foauth_serverB\xbe\x01\n" +
 	"\x14com.w17.contrib.authB\x11AuthMutationProtoP\x01Z1github.com/wandering-compiler/plugins/auth/gen/pb\xa2\x02\x03WCA\xaa\x02\x10W17.Contrib.Auth\xca\x02\x10W17\\Contrib\\Auth\xe2\x02\x1cW17\\Contrib\\Auth\\GPBMetadata\xea\x02\x12W17::Contrib::Authb\x06proto3"
 
 var (
@@ -2900,132 +5567,237 @@ func file_mutations_auth_mutation_proto_rawDescGZIP() []byte {
 	return file_mutations_auth_mutation_proto_rawDescData
 }
 
-var file_mutations_auth_mutation_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
+var file_mutations_auth_mutation_proto_msgTypes = make([]protoimpl.MessageInfo, 84)
 var file_mutations_auth_mutation_proto_goTypes = []any{
-	(*CreateUserReq)(nil),                // 0: w17.contrib.auth.CreateUserReq
-	(*CreateUserResp)(nil),               // 1: w17.contrib.auth.CreateUserResp
-	(*IssueTokenReq)(nil),                // 2: w17.contrib.auth.IssueTokenReq
-	(*IssueTokenResp)(nil),               // 3: w17.contrib.auth.IssueTokenResp
-	(*RevokeTokenReq)(nil),               // 4: w17.contrib.auth.RevokeTokenReq
-	(*UpgradeTokenHashReq)(nil),          // 5: w17.contrib.auth.UpgradeTokenHashReq
-	(*UpgradeTokenHashResp)(nil),         // 6: w17.contrib.auth.UpgradeTokenHashResp
-	(*RevokeTokenResp)(nil),              // 7: w17.contrib.auth.RevokeTokenResp
-	(*RevokeSessionTokenReq)(nil),        // 8: w17.contrib.auth.RevokeSessionTokenReq
-	(*RevokeSessionTokenResp)(nil),       // 9: w17.contrib.auth.RevokeSessionTokenResp
-	(*UpdateUserPasswordReq)(nil),        // 10: w17.contrib.auth.UpdateUserPasswordReq
-	(*UpdateUserPasswordResp)(nil),       // 11: w17.contrib.auth.UpdateUserPasswordResp
-	(*RehashUserPasswordReq)(nil),        // 12: w17.contrib.auth.RehashUserPasswordReq
-	(*RehashUserPasswordResp)(nil),       // 13: w17.contrib.auth.RehashUserPasswordResp
-	(*RegisterDeviceReq)(nil),            // 14: w17.contrib.auth.RegisterDeviceReq
-	(*RegisterDeviceResp)(nil),           // 15: w17.contrib.auth.RegisterDeviceResp
-	(*CountSignInAttemptReq)(nil),        // 16: w17.contrib.auth.CountSignInAttemptReq
-	(*CountSignInAttemptResp)(nil),       // 17: w17.contrib.auth.CountSignInAttemptResp
-	(*CountDeviceSignInAttemptReq)(nil),  // 18: w17.contrib.auth.CountDeviceSignInAttemptReq
-	(*CountDeviceSignInAttemptResp)(nil), // 19: w17.contrib.auth.CountDeviceSignInAttemptResp
-	(*ResetSignInAttemptsReq)(nil),       // 20: w17.contrib.auth.ResetSignInAttemptsReq
-	(*ResetSignInAttemptsResp)(nil),      // 21: w17.contrib.auth.ResetSignInAttemptsResp
-	(*RecordSignInEventReq)(nil),         // 22: w17.contrib.auth.RecordSignInEventReq
-	(*RecordSignInEventResp)(nil),        // 23: w17.contrib.auth.RecordSignInEventResp
-	(*TrustDeviceReq)(nil),               // 24: w17.contrib.auth.TrustDeviceReq
-	(*TrustDeviceResp)(nil),              // 25: w17.contrib.auth.TrustDeviceResp
-	(*RevokeDeviceTokensReq)(nil),        // 26: w17.contrib.auth.RevokeDeviceTokensReq
-	(*RevokeDeviceTokensResp)(nil),       // 27: w17.contrib.auth.RevokeDeviceTokensResp
-	(*MarkDeviceRevokedReq)(nil),         // 28: w17.contrib.auth.MarkDeviceRevokedReq
-	(*MarkDeviceRevokedResp)(nil),        // 29: w17.contrib.auth.MarkDeviceRevokedResp
-	(*CreateRoleReq)(nil),                // 30: w17.contrib.auth.CreateRoleReq
-	(*CreateRoleResp)(nil),               // 31: w17.contrib.auth.CreateRoleResp
-	(*DeleteRoleReq)(nil),                // 32: w17.contrib.auth.DeleteRoleReq
-	(*DeleteRoleResp)(nil),               // 33: w17.contrib.auth.DeleteRoleResp
-	(*UpdateRoleReq)(nil),                // 34: w17.contrib.auth.UpdateRoleReq
-	(*UpdateRoleResp)(nil),               // 35: w17.contrib.auth.UpdateRoleResp
-	(*AssignRoleToUserReq)(nil),          // 36: w17.contrib.auth.AssignRoleToUserReq
-	(*AssignRoleToUserResp)(nil),         // 37: w17.contrib.auth.AssignRoleToUserResp
-	(*RevokeRoleFromUserReq)(nil),        // 38: w17.contrib.auth.RevokeRoleFromUserReq
-	(*RevokeRoleFromUserResp)(nil),       // 39: w17.contrib.auth.RevokeRoleFromUserResp
-	(*AddPermissionToRoleReq)(nil),       // 40: w17.contrib.auth.AddPermissionToRoleReq
-	(*AddPermissionToRoleResp)(nil),      // 41: w17.contrib.auth.AddPermissionToRoleResp
-	(*RemovePermissionFromRoleReq)(nil),  // 42: w17.contrib.auth.RemovePermissionFromRoleReq
-	(*RemovePermissionFromRoleResp)(nil), // 43: w17.contrib.auth.RemovePermissionFromRoleResp
-	(*ClaimBootstrapAdminReq)(nil),       // 44: w17.contrib.auth.ClaimBootstrapAdminReq
-	(*ClaimBootstrapAdminResp)(nil),      // 45: w17.contrib.auth.ClaimBootstrapAdminResp
-	(*User)(nil),                         // 46: w17.contrib.auth.User
-	(*timestamppb.Timestamp)(nil),        // 47: google.protobuf.Timestamp
-	(*UserToken)(nil),                    // 48: w17.contrib.auth.UserToken
-	(TokenType)(0),                       // 49: w17.contrib.auth.TokenType
-	(*Device)(nil),                       // 50: w17.contrib.auth.Device
-	(SignInMethod)(0),                    // 51: w17.contrib.auth.SignInMethod
-	(SignInOutcome)(0),                   // 52: w17.contrib.auth.SignInOutcome
-	(*Role)(nil),                         // 53: w17.contrib.auth.Role
-	(*UserRole)(nil),                     // 54: w17.contrib.auth.UserRole
-	(*RolePermission)(nil),               // 55: w17.contrib.auth.RolePermission
+	(*CreateUserReq)(nil),                  // 0: w17.contrib.auth.CreateUserReq
+	(*CreateUserResp)(nil),                 // 1: w17.contrib.auth.CreateUserResp
+	(*IssueTokenReq)(nil),                  // 2: w17.contrib.auth.IssueTokenReq
+	(*IssueTokenResp)(nil),                 // 3: w17.contrib.auth.IssueTokenResp
+	(*RevokeTokenReq)(nil),                 // 4: w17.contrib.auth.RevokeTokenReq
+	(*UpgradeTokenHashReq)(nil),            // 5: w17.contrib.auth.UpgradeTokenHashReq
+	(*UpgradeTokenHashResp)(nil),           // 6: w17.contrib.auth.UpgradeTokenHashResp
+	(*TouchTokenLastUsedReq)(nil),          // 7: w17.contrib.auth.TouchTokenLastUsedReq
+	(*TouchTokenLastUsedResp)(nil),         // 8: w17.contrib.auth.TouchTokenLastUsedResp
+	(*RevokeTokenResp)(nil),                // 9: w17.contrib.auth.RevokeTokenResp
+	(*RevokeSessionTokenReq)(nil),          // 10: w17.contrib.auth.RevokeSessionTokenReq
+	(*RevokeSessionTokenResp)(nil),         // 11: w17.contrib.auth.RevokeSessionTokenResp
+	(*IssueApiTokenReq)(nil),               // 12: w17.contrib.auth.IssueApiTokenReq
+	(*IssueApiTokenResp)(nil),              // 13: w17.contrib.auth.IssueApiTokenResp
+	(*AddTokenPermissionReq)(nil),          // 14: w17.contrib.auth.AddTokenPermissionReq
+	(*AddTokenPermissionResp)(nil),         // 15: w17.contrib.auth.AddTokenPermissionResp
+	(*MarkApiTokenRevokedReq)(nil),         // 16: w17.contrib.auth.MarkApiTokenRevokedReq
+	(*MarkApiTokenRevokedResp)(nil),        // 17: w17.contrib.auth.MarkApiTokenRevokedResp
+	(*UpdateUserPasswordReq)(nil),          // 18: w17.contrib.auth.UpdateUserPasswordReq
+	(*UpdateUserPasswordResp)(nil),         // 19: w17.contrib.auth.UpdateUserPasswordResp
+	(*RehashUserPasswordReq)(nil),          // 20: w17.contrib.auth.RehashUserPasswordReq
+	(*RehashUserPasswordResp)(nil),         // 21: w17.contrib.auth.RehashUserPasswordResp
+	(*RegisterDeviceReq)(nil),              // 22: w17.contrib.auth.RegisterDeviceReq
+	(*RegisterDeviceResp)(nil),             // 23: w17.contrib.auth.RegisterDeviceResp
+	(*CountSignInAttemptReq)(nil),          // 24: w17.contrib.auth.CountSignInAttemptReq
+	(*CountSignInAttemptResp)(nil),         // 25: w17.contrib.auth.CountSignInAttemptResp
+	(*CountDeviceSignInAttemptReq)(nil),    // 26: w17.contrib.auth.CountDeviceSignInAttemptReq
+	(*CountDeviceSignInAttemptResp)(nil),   // 27: w17.contrib.auth.CountDeviceSignInAttemptResp
+	(*ResetSignInAttemptsReq)(nil),         // 28: w17.contrib.auth.ResetSignInAttemptsReq
+	(*ResetSignInAttemptsResp)(nil),        // 29: w17.contrib.auth.ResetSignInAttemptsResp
+	(*RecordSignInEventReq)(nil),           // 30: w17.contrib.auth.RecordSignInEventReq
+	(*RecordSignInEventResp)(nil),          // 31: w17.contrib.auth.RecordSignInEventResp
+	(*TrustDeviceReq)(nil),                 // 32: w17.contrib.auth.TrustDeviceReq
+	(*TrustDeviceResp)(nil),                // 33: w17.contrib.auth.TrustDeviceResp
+	(*RevokeDeviceTokensReq)(nil),          // 34: w17.contrib.auth.RevokeDeviceTokensReq
+	(*RevokeDeviceTokensResp)(nil),         // 35: w17.contrib.auth.RevokeDeviceTokensResp
+	(*RevokeApprovedApiTokensReq)(nil),     // 36: w17.contrib.auth.RevokeApprovedApiTokensReq
+	(*RevokeApprovedApiTokensResp)(nil),    // 37: w17.contrib.auth.RevokeApprovedApiTokensResp
+	(*MarkDeviceRevokedReq)(nil),           // 38: w17.contrib.auth.MarkDeviceRevokedReq
+	(*MarkDeviceRevokedResp)(nil),          // 39: w17.contrib.auth.MarkDeviceRevokedResp
+	(*CreateRoleReq)(nil),                  // 40: w17.contrib.auth.CreateRoleReq
+	(*CreateRoleResp)(nil),                 // 41: w17.contrib.auth.CreateRoleResp
+	(*DeleteRoleReq)(nil),                  // 42: w17.contrib.auth.DeleteRoleReq
+	(*DeleteRoleResp)(nil),                 // 43: w17.contrib.auth.DeleteRoleResp
+	(*UpdateRoleReq)(nil),                  // 44: w17.contrib.auth.UpdateRoleReq
+	(*UpdateRoleResp)(nil),                 // 45: w17.contrib.auth.UpdateRoleResp
+	(*AssignRoleToUserReq)(nil),            // 46: w17.contrib.auth.AssignRoleToUserReq
+	(*AssignRoleToUserResp)(nil),           // 47: w17.contrib.auth.AssignRoleToUserResp
+	(*RevokeRoleFromUserReq)(nil),          // 48: w17.contrib.auth.RevokeRoleFromUserReq
+	(*RevokeRoleFromUserResp)(nil),         // 49: w17.contrib.auth.RevokeRoleFromUserResp
+	(*AddPermissionToRoleReq)(nil),         // 50: w17.contrib.auth.AddPermissionToRoleReq
+	(*AddPermissionToRoleResp)(nil),        // 51: w17.contrib.auth.AddPermissionToRoleResp
+	(*RemovePermissionFromRoleReq)(nil),    // 52: w17.contrib.auth.RemovePermissionFromRoleReq
+	(*RemovePermissionFromRoleResp)(nil),   // 53: w17.contrib.auth.RemovePermissionFromRoleResp
+	(*ClaimBootstrapAdminReq)(nil),         // 54: w17.contrib.auth.ClaimBootstrapAdminReq
+	(*ClaimBootstrapAdminResp)(nil),        // 55: w17.contrib.auth.ClaimBootstrapAdminResp
+	(*CreateOAuthClientReq)(nil),           // 56: w17.contrib.auth.CreateOAuthClientReq
+	(*CreateOAuthClientResp)(nil),          // 57: w17.contrib.auth.CreateOAuthClientResp
+	(*RefreshOAuthClientMetadataReq)(nil),  // 58: w17.contrib.auth.RefreshOAuthClientMetadataReq
+	(*RefreshOAuthClientMetadataResp)(nil), // 59: w17.contrib.auth.RefreshOAuthClientMetadataResp
+	(*CreateOAuthAuthorizationReq)(nil),    // 60: w17.contrib.auth.CreateOAuthAuthorizationReq
+	(*CreateOAuthAuthorizationResp)(nil),   // 61: w17.contrib.auth.CreateOAuthAuthorizationResp
+	(*DecideOAuthAuthorizationReq)(nil),    // 62: w17.contrib.auth.DecideOAuthAuthorizationReq
+	(*DecideOAuthAuthorizationResp)(nil),   // 63: w17.contrib.auth.DecideOAuthAuthorizationResp
+	(*ConsumeOAuthCodeReq)(nil),            // 64: w17.contrib.auth.ConsumeOAuthCodeReq
+	(*ConsumeOAuthCodeResp)(nil),           // 65: w17.contrib.auth.ConsumeOAuthCodeResp
+	(*CreateOAuthGrantReq)(nil),            // 66: w17.contrib.auth.CreateOAuthGrantReq
+	(*CreateOAuthGrantResp)(nil),           // 67: w17.contrib.auth.CreateOAuthGrantResp
+	(*CreateOAuthRefreshTokenReq)(nil),     // 68: w17.contrib.auth.CreateOAuthRefreshTokenReq
+	(*CreateOAuthRefreshTokenResp)(nil),    // 69: w17.contrib.auth.CreateOAuthRefreshTokenResp
+	(*UseOAuthRefreshTokenReq)(nil),        // 70: w17.contrib.auth.UseOAuthRefreshTokenReq
+	(*UseOAuthRefreshTokenResp)(nil),       // 71: w17.contrib.auth.UseOAuthRefreshTokenResp
+	(*LinkOAuthSessionReq)(nil),            // 72: w17.contrib.auth.LinkOAuthSessionReq
+	(*LinkOAuthSessionResp)(nil),           // 73: w17.contrib.auth.LinkOAuthSessionResp
+	(*RevokeOAuthCodeSessionReq)(nil),      // 74: w17.contrib.auth.RevokeOAuthCodeSessionReq
+	(*RevokeOAuthCodeSessionResp)(nil),     // 75: w17.contrib.auth.RevokeOAuthCodeSessionResp
+	(*TouchOAuthGrantReq)(nil),             // 76: w17.contrib.auth.TouchOAuthGrantReq
+	(*TouchOAuthGrantResp)(nil),            // 77: w17.contrib.auth.TouchOAuthGrantResp
+	(*RevokeOAuthGrantReq)(nil),            // 78: w17.contrib.auth.RevokeOAuthGrantReq
+	(*RevokeOAuthGrantResp)(nil),           // 79: w17.contrib.auth.RevokeOAuthGrantResp
+	(*RevokeUserOAuthGrantsReq)(nil),       // 80: w17.contrib.auth.RevokeUserOAuthGrantsReq
+	(*RevokeUserOAuthGrantsResp)(nil),      // 81: w17.contrib.auth.RevokeUserOAuthGrantsResp
+	(*IssueOAuthAccessTokenReq)(nil),       // 82: w17.contrib.auth.IssueOAuthAccessTokenReq
+	(*IssueOAuthAccessTokenResp)(nil),      // 83: w17.contrib.auth.IssueOAuthAccessTokenResp
+	(*User)(nil),                           // 84: w17.contrib.auth.User
+	(*timestamppb.Timestamp)(nil),          // 85: google.protobuf.Timestamp
+	(*UserToken)(nil),                      // 86: w17.contrib.auth.UserToken
+	(TokenType)(0),                         // 87: w17.contrib.auth.TokenType
+	(*TokenPermission)(nil),                // 88: w17.contrib.auth.TokenPermission
+	(*Device)(nil),                         // 89: w17.contrib.auth.Device
+	(SignInMethod)(0),                      // 90: w17.contrib.auth.SignInMethod
+	(SignInOutcome)(0),                     // 91: w17.contrib.auth.SignInOutcome
+	(*Role)(nil),                           // 92: w17.contrib.auth.Role
+	(*UserRole)(nil),                       // 93: w17.contrib.auth.UserRole
+	(*RolePermission)(nil),                 // 94: w17.contrib.auth.RolePermission
+	(OAuthClientKind)(0),                   // 95: w17.contrib.auth.OAuthClientKind
+	(OAuthGrantKind)(0),                    // 96: w17.contrib.auth.OAuthGrantKind
+	(OAuthDecision)(0),                     // 97: w17.contrib.auth.OAuthDecision
+	(RevokeReason)(0),                      // 98: w17.contrib.auth.RevokeReason
 }
 var file_mutations_auth_mutation_proto_depIdxs = []int32{
-	46, // 0: w17.contrib.auth.CreateUserResp.user:type_name -> w17.contrib.auth.User
-	47, // 1: w17.contrib.auth.IssueTokenReq.expires_at:type_name -> google.protobuf.Timestamp
-	48, // 2: w17.contrib.auth.IssueTokenResp.token:type_name -> w17.contrib.auth.UserToken
-	49, // 3: w17.contrib.auth.RevokeSessionTokenReq.token_type:type_name -> w17.contrib.auth.TokenType
-	50, // 4: w17.contrib.auth.RegisterDeviceResp.device:type_name -> w17.contrib.auth.Device
-	47, // 5: w17.contrib.auth.CountSignInAttemptReq.now:type_name -> google.protobuf.Timestamp
-	47, // 6: w17.contrib.auth.CountSignInAttemptReq.cutoff:type_name -> google.protobuf.Timestamp
-	47, // 7: w17.contrib.auth.CountDeviceSignInAttemptReq.now:type_name -> google.protobuf.Timestamp
-	47, // 8: w17.contrib.auth.CountDeviceSignInAttemptReq.cutoff:type_name -> google.protobuf.Timestamp
-	51, // 9: w17.contrib.auth.RecordSignInEventReq.method:type_name -> w17.contrib.auth.SignInMethod
-	52, // 10: w17.contrib.auth.RecordSignInEventReq.outcome:type_name -> w17.contrib.auth.SignInOutcome
-	47, // 11: w17.contrib.auth.TrustDeviceReq.not_revoked_after:type_name -> google.protobuf.Timestamp
-	53, // 12: w17.contrib.auth.CreateRoleResp.role:type_name -> w17.contrib.auth.Role
-	54, // 13: w17.contrib.auth.AssignRoleToUserResp.user_role:type_name -> w17.contrib.auth.UserRole
-	55, // 14: w17.contrib.auth.AddPermissionToRoleResp.role_permission:type_name -> w17.contrib.auth.RolePermission
-	0,  // 15: w17.contrib.auth.AuthMutation.CreateUser:input_type -> w17.contrib.auth.CreateUserReq
-	2,  // 16: w17.contrib.auth.AuthMutation.IssueToken:input_type -> w17.contrib.auth.IssueTokenReq
-	4,  // 17: w17.contrib.auth.AuthMutation.RevokeToken:input_type -> w17.contrib.auth.RevokeTokenReq
-	5,  // 18: w17.contrib.auth.AuthMutation.UpgradeTokenHash:input_type -> w17.contrib.auth.UpgradeTokenHashReq
-	8,  // 19: w17.contrib.auth.AuthMutation.RevokeSessionToken:input_type -> w17.contrib.auth.RevokeSessionTokenReq
-	16, // 20: w17.contrib.auth.AuthMutation.CountSignInAttempt:input_type -> w17.contrib.auth.CountSignInAttemptReq
-	18, // 21: w17.contrib.auth.AuthMutation.CountDeviceSignInAttempt:input_type -> w17.contrib.auth.CountDeviceSignInAttemptReq
-	20, // 22: w17.contrib.auth.AuthMutation.ResetSignInAttempts:input_type -> w17.contrib.auth.ResetSignInAttemptsReq
-	14, // 23: w17.contrib.auth.AuthMutation.RegisterDevice:input_type -> w17.contrib.auth.RegisterDeviceReq
-	22, // 24: w17.contrib.auth.AuthMutation.RecordSignInEvent:input_type -> w17.contrib.auth.RecordSignInEventReq
-	24, // 25: w17.contrib.auth.AuthMutation.TrustDevice:input_type -> w17.contrib.auth.TrustDeviceReq
-	26, // 26: w17.contrib.auth.AuthMutation.RevokeDeviceTokens:input_type -> w17.contrib.auth.RevokeDeviceTokensReq
-	28, // 27: w17.contrib.auth.AuthMutation.MarkDeviceRevoked:input_type -> w17.contrib.auth.MarkDeviceRevokedReq
-	30, // 28: w17.contrib.auth.AuthMutation.CreateRole:input_type -> w17.contrib.auth.CreateRoleReq
-	34, // 29: w17.contrib.auth.AuthMutation.UpdateRole:input_type -> w17.contrib.auth.UpdateRoleReq
-	32, // 30: w17.contrib.auth.AuthMutation.DeleteRole:input_type -> w17.contrib.auth.DeleteRoleReq
-	36, // 31: w17.contrib.auth.AuthMutation.AssignRoleToUser:input_type -> w17.contrib.auth.AssignRoleToUserReq
-	38, // 32: w17.contrib.auth.AuthMutation.RevokeRoleFromUser:input_type -> w17.contrib.auth.RevokeRoleFromUserReq
-	40, // 33: w17.contrib.auth.AuthMutation.AddPermissionToRole:input_type -> w17.contrib.auth.AddPermissionToRoleReq
-	42, // 34: w17.contrib.auth.AuthMutation.RemovePermissionFromRole:input_type -> w17.contrib.auth.RemovePermissionFromRoleReq
-	10, // 35: w17.contrib.auth.AuthMutation.UpdateUserPassword:input_type -> w17.contrib.auth.UpdateUserPasswordReq
-	12, // 36: w17.contrib.auth.AuthMutation.RehashUserPassword:input_type -> w17.contrib.auth.RehashUserPasswordReq
-	44, // 37: w17.contrib.auth.AuthMutation.ClaimBootstrapAdmin:input_type -> w17.contrib.auth.ClaimBootstrapAdminReq
-	1,  // 38: w17.contrib.auth.AuthMutation.CreateUser:output_type -> w17.contrib.auth.CreateUserResp
-	3,  // 39: w17.contrib.auth.AuthMutation.IssueToken:output_type -> w17.contrib.auth.IssueTokenResp
-	7,  // 40: w17.contrib.auth.AuthMutation.RevokeToken:output_type -> w17.contrib.auth.RevokeTokenResp
-	6,  // 41: w17.contrib.auth.AuthMutation.UpgradeTokenHash:output_type -> w17.contrib.auth.UpgradeTokenHashResp
-	9,  // 42: w17.contrib.auth.AuthMutation.RevokeSessionToken:output_type -> w17.contrib.auth.RevokeSessionTokenResp
-	17, // 43: w17.contrib.auth.AuthMutation.CountSignInAttempt:output_type -> w17.contrib.auth.CountSignInAttemptResp
-	19, // 44: w17.contrib.auth.AuthMutation.CountDeviceSignInAttempt:output_type -> w17.contrib.auth.CountDeviceSignInAttemptResp
-	21, // 45: w17.contrib.auth.AuthMutation.ResetSignInAttempts:output_type -> w17.contrib.auth.ResetSignInAttemptsResp
-	15, // 46: w17.contrib.auth.AuthMutation.RegisterDevice:output_type -> w17.contrib.auth.RegisterDeviceResp
-	23, // 47: w17.contrib.auth.AuthMutation.RecordSignInEvent:output_type -> w17.contrib.auth.RecordSignInEventResp
-	25, // 48: w17.contrib.auth.AuthMutation.TrustDevice:output_type -> w17.contrib.auth.TrustDeviceResp
-	27, // 49: w17.contrib.auth.AuthMutation.RevokeDeviceTokens:output_type -> w17.contrib.auth.RevokeDeviceTokensResp
-	29, // 50: w17.contrib.auth.AuthMutation.MarkDeviceRevoked:output_type -> w17.contrib.auth.MarkDeviceRevokedResp
-	31, // 51: w17.contrib.auth.AuthMutation.CreateRole:output_type -> w17.contrib.auth.CreateRoleResp
-	35, // 52: w17.contrib.auth.AuthMutation.UpdateRole:output_type -> w17.contrib.auth.UpdateRoleResp
-	33, // 53: w17.contrib.auth.AuthMutation.DeleteRole:output_type -> w17.contrib.auth.DeleteRoleResp
-	37, // 54: w17.contrib.auth.AuthMutation.AssignRoleToUser:output_type -> w17.contrib.auth.AssignRoleToUserResp
-	39, // 55: w17.contrib.auth.AuthMutation.RevokeRoleFromUser:output_type -> w17.contrib.auth.RevokeRoleFromUserResp
-	41, // 56: w17.contrib.auth.AuthMutation.AddPermissionToRole:output_type -> w17.contrib.auth.AddPermissionToRoleResp
-	43, // 57: w17.contrib.auth.AuthMutation.RemovePermissionFromRole:output_type -> w17.contrib.auth.RemovePermissionFromRoleResp
-	11, // 58: w17.contrib.auth.AuthMutation.UpdateUserPassword:output_type -> w17.contrib.auth.UpdateUserPasswordResp
-	13, // 59: w17.contrib.auth.AuthMutation.RehashUserPassword:output_type -> w17.contrib.auth.RehashUserPasswordResp
-	45, // 60: w17.contrib.auth.AuthMutation.ClaimBootstrapAdmin:output_type -> w17.contrib.auth.ClaimBootstrapAdminResp
-	38, // [38:61] is the sub-list for method output_type
-	15, // [15:38] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	84, // 0: w17.contrib.auth.CreateUserResp.user:type_name -> w17.contrib.auth.User
+	85, // 1: w17.contrib.auth.IssueTokenReq.expires_at:type_name -> google.protobuf.Timestamp
+	86, // 2: w17.contrib.auth.IssueTokenResp.token:type_name -> w17.contrib.auth.UserToken
+	85, // 3: w17.contrib.auth.TouchTokenLastUsedReq.cutoff:type_name -> google.protobuf.Timestamp
+	85, // 4: w17.contrib.auth.TouchTokenLastUsedReq.used_at:type_name -> google.protobuf.Timestamp
+	87, // 5: w17.contrib.auth.RevokeSessionTokenReq.token_type:type_name -> w17.contrib.auth.TokenType
+	87, // 6: w17.contrib.auth.IssueApiTokenReq.token_type:type_name -> w17.contrib.auth.TokenType
+	85, // 7: w17.contrib.auth.IssueApiTokenReq.expires_at:type_name -> google.protobuf.Timestamp
+	86, // 8: w17.contrib.auth.IssueApiTokenResp.token:type_name -> w17.contrib.auth.UserToken
+	88, // 9: w17.contrib.auth.AddTokenPermissionResp.token_permission:type_name -> w17.contrib.auth.TokenPermission
+	87, // 10: w17.contrib.auth.MarkApiTokenRevokedReq.token_type:type_name -> w17.contrib.auth.TokenType
+	89, // 11: w17.contrib.auth.RegisterDeviceResp.device:type_name -> w17.contrib.auth.Device
+	85, // 12: w17.contrib.auth.CountSignInAttemptReq.now:type_name -> google.protobuf.Timestamp
+	85, // 13: w17.contrib.auth.CountSignInAttemptReq.cutoff:type_name -> google.protobuf.Timestamp
+	85, // 14: w17.contrib.auth.CountDeviceSignInAttemptReq.now:type_name -> google.protobuf.Timestamp
+	85, // 15: w17.contrib.auth.CountDeviceSignInAttemptReq.cutoff:type_name -> google.protobuf.Timestamp
+	90, // 16: w17.contrib.auth.RecordSignInEventReq.method:type_name -> w17.contrib.auth.SignInMethod
+	91, // 17: w17.contrib.auth.RecordSignInEventReq.outcome:type_name -> w17.contrib.auth.SignInOutcome
+	85, // 18: w17.contrib.auth.TrustDeviceReq.not_revoked_after:type_name -> google.protobuf.Timestamp
+	87, // 19: w17.contrib.auth.RevokeApprovedApiTokensReq.token_type:type_name -> w17.contrib.auth.TokenType
+	92, // 20: w17.contrib.auth.CreateRoleResp.role:type_name -> w17.contrib.auth.Role
+	93, // 21: w17.contrib.auth.AssignRoleToUserResp.user_role:type_name -> w17.contrib.auth.UserRole
+	94, // 22: w17.contrib.auth.AddPermissionToRoleResp.role_permission:type_name -> w17.contrib.auth.RolePermission
+	95, // 23: w17.contrib.auth.CreateOAuthClientReq.kind:type_name -> w17.contrib.auth.OAuthClientKind
+	85, // 24: w17.contrib.auth.CreateOAuthClientReq.metadata_fetched_at:type_name -> google.protobuf.Timestamp
+	85, // 25: w17.contrib.auth.CreateOAuthClientResp.created_at:type_name -> google.protobuf.Timestamp
+	96, // 26: w17.contrib.auth.CreateOAuthAuthorizationReq.kind:type_name -> w17.contrib.auth.OAuthGrantKind
+	85, // 27: w17.contrib.auth.CreateOAuthAuthorizationReq.expires_at:type_name -> google.protobuf.Timestamp
+	97, // 28: w17.contrib.auth.DecideOAuthAuthorizationReq.decision:type_name -> w17.contrib.auth.OAuthDecision
+	85, // 29: w17.contrib.auth.DecideOAuthAuthorizationReq.session_expires_at:type_name -> google.protobuf.Timestamp
+	85, // 30: w17.contrib.auth.DecideOAuthAuthorizationReq.code_expires_at:type_name -> google.protobuf.Timestamp
+	96, // 31: w17.contrib.auth.ConsumeOAuthCodeResp.kind:type_name -> w17.contrib.auth.OAuthGrantKind
+	85, // 32: w17.contrib.auth.ConsumeOAuthCodeResp.session_expires_at:type_name -> google.protobuf.Timestamp
+	85, // 33: w17.contrib.auth.CreateOAuthGrantReq.expires_at:type_name -> google.protobuf.Timestamp
+	85, // 34: w17.contrib.auth.CreateOAuthGrantResp.created_at:type_name -> google.protobuf.Timestamp
+	85, // 35: w17.contrib.auth.CreateOAuthRefreshTokenReq.expires_at:type_name -> google.protobuf.Timestamp
+	98, // 36: w17.contrib.auth.RevokeOAuthGrantReq.reason:type_name -> w17.contrib.auth.RevokeReason
+	98, // 37: w17.contrib.auth.RevokeUserOAuthGrantsReq.reason:type_name -> w17.contrib.auth.RevokeReason
+	85, // 38: w17.contrib.auth.IssueOAuthAccessTokenReq.expires_at:type_name -> google.protobuf.Timestamp
+	0,  // 39: w17.contrib.auth.AuthMutation.CreateUser:input_type -> w17.contrib.auth.CreateUserReq
+	2,  // 40: w17.contrib.auth.AuthMutation.IssueToken:input_type -> w17.contrib.auth.IssueTokenReq
+	4,  // 41: w17.contrib.auth.AuthMutation.RevokeToken:input_type -> w17.contrib.auth.RevokeTokenReq
+	5,  // 42: w17.contrib.auth.AuthMutation.UpgradeTokenHash:input_type -> w17.contrib.auth.UpgradeTokenHashReq
+	7,  // 43: w17.contrib.auth.AuthMutation.TouchTokenLastUsed:input_type -> w17.contrib.auth.TouchTokenLastUsedReq
+	10, // 44: w17.contrib.auth.AuthMutation.RevokeSessionToken:input_type -> w17.contrib.auth.RevokeSessionTokenReq
+	12, // 45: w17.contrib.auth.AuthMutation.IssueApiToken:input_type -> w17.contrib.auth.IssueApiTokenReq
+	14, // 46: w17.contrib.auth.AuthMutation.AddTokenPermission:input_type -> w17.contrib.auth.AddTokenPermissionReq
+	16, // 47: w17.contrib.auth.AuthMutation.MarkApiTokenRevoked:input_type -> w17.contrib.auth.MarkApiTokenRevokedReq
+	36, // 48: w17.contrib.auth.AuthMutation.RevokeApprovedApiTokens:input_type -> w17.contrib.auth.RevokeApprovedApiTokensReq
+	24, // 49: w17.contrib.auth.AuthMutation.CountSignInAttempt:input_type -> w17.contrib.auth.CountSignInAttemptReq
+	26, // 50: w17.contrib.auth.AuthMutation.CountDeviceSignInAttempt:input_type -> w17.contrib.auth.CountDeviceSignInAttemptReq
+	28, // 51: w17.contrib.auth.AuthMutation.ResetSignInAttempts:input_type -> w17.contrib.auth.ResetSignInAttemptsReq
+	22, // 52: w17.contrib.auth.AuthMutation.RegisterDevice:input_type -> w17.contrib.auth.RegisterDeviceReq
+	30, // 53: w17.contrib.auth.AuthMutation.RecordSignInEvent:input_type -> w17.contrib.auth.RecordSignInEventReq
+	32, // 54: w17.contrib.auth.AuthMutation.TrustDevice:input_type -> w17.contrib.auth.TrustDeviceReq
+	34, // 55: w17.contrib.auth.AuthMutation.RevokeDeviceTokens:input_type -> w17.contrib.auth.RevokeDeviceTokensReq
+	38, // 56: w17.contrib.auth.AuthMutation.MarkDeviceRevoked:input_type -> w17.contrib.auth.MarkDeviceRevokedReq
+	40, // 57: w17.contrib.auth.AuthMutation.CreateRole:input_type -> w17.contrib.auth.CreateRoleReq
+	44, // 58: w17.contrib.auth.AuthMutation.UpdateRole:input_type -> w17.contrib.auth.UpdateRoleReq
+	42, // 59: w17.contrib.auth.AuthMutation.DeleteRole:input_type -> w17.contrib.auth.DeleteRoleReq
+	46, // 60: w17.contrib.auth.AuthMutation.AssignRoleToUser:input_type -> w17.contrib.auth.AssignRoleToUserReq
+	48, // 61: w17.contrib.auth.AuthMutation.RevokeRoleFromUser:input_type -> w17.contrib.auth.RevokeRoleFromUserReq
+	50, // 62: w17.contrib.auth.AuthMutation.AddPermissionToRole:input_type -> w17.contrib.auth.AddPermissionToRoleReq
+	52, // 63: w17.contrib.auth.AuthMutation.RemovePermissionFromRole:input_type -> w17.contrib.auth.RemovePermissionFromRoleReq
+	18, // 64: w17.contrib.auth.AuthMutation.UpdateUserPassword:input_type -> w17.contrib.auth.UpdateUserPasswordReq
+	20, // 65: w17.contrib.auth.AuthMutation.RehashUserPassword:input_type -> w17.contrib.auth.RehashUserPasswordReq
+	54, // 66: w17.contrib.auth.AuthMutation.ClaimBootstrapAdmin:input_type -> w17.contrib.auth.ClaimBootstrapAdminReq
+	56, // 67: w17.contrib.auth.AuthMutation.CreateOAuthClient:input_type -> w17.contrib.auth.CreateOAuthClientReq
+	58, // 68: w17.contrib.auth.AuthMutation.RefreshOAuthClientMetadata:input_type -> w17.contrib.auth.RefreshOAuthClientMetadataReq
+	60, // 69: w17.contrib.auth.AuthMutation.CreateOAuthAuthorization:input_type -> w17.contrib.auth.CreateOAuthAuthorizationReq
+	62, // 70: w17.contrib.auth.AuthMutation.DecideOAuthAuthorization:input_type -> w17.contrib.auth.DecideOAuthAuthorizationReq
+	64, // 71: w17.contrib.auth.AuthMutation.ConsumeOAuthCode:input_type -> w17.contrib.auth.ConsumeOAuthCodeReq
+	66, // 72: w17.contrib.auth.AuthMutation.CreateOAuthGrant:input_type -> w17.contrib.auth.CreateOAuthGrantReq
+	68, // 73: w17.contrib.auth.AuthMutation.CreateOAuthRefreshToken:input_type -> w17.contrib.auth.CreateOAuthRefreshTokenReq
+	70, // 74: w17.contrib.auth.AuthMutation.UseOAuthRefreshToken:input_type -> w17.contrib.auth.UseOAuthRefreshTokenReq
+	72, // 75: w17.contrib.auth.AuthMutation.LinkOAuthSession:input_type -> w17.contrib.auth.LinkOAuthSessionReq
+	74, // 76: w17.contrib.auth.AuthMutation.RevokeOAuthCodeSession:input_type -> w17.contrib.auth.RevokeOAuthCodeSessionReq
+	76, // 77: w17.contrib.auth.AuthMutation.TouchOAuthGrant:input_type -> w17.contrib.auth.TouchOAuthGrantReq
+	78, // 78: w17.contrib.auth.AuthMutation.RevokeOAuthGrant:input_type -> w17.contrib.auth.RevokeOAuthGrantReq
+	80, // 79: w17.contrib.auth.AuthMutation.RevokeUserOAuthGrants:input_type -> w17.contrib.auth.RevokeUserOAuthGrantsReq
+	82, // 80: w17.contrib.auth.AuthMutation.IssueOAuthAccessToken:input_type -> w17.contrib.auth.IssueOAuthAccessTokenReq
+	1,  // 81: w17.contrib.auth.AuthMutation.CreateUser:output_type -> w17.contrib.auth.CreateUserResp
+	3,  // 82: w17.contrib.auth.AuthMutation.IssueToken:output_type -> w17.contrib.auth.IssueTokenResp
+	9,  // 83: w17.contrib.auth.AuthMutation.RevokeToken:output_type -> w17.contrib.auth.RevokeTokenResp
+	6,  // 84: w17.contrib.auth.AuthMutation.UpgradeTokenHash:output_type -> w17.contrib.auth.UpgradeTokenHashResp
+	8,  // 85: w17.contrib.auth.AuthMutation.TouchTokenLastUsed:output_type -> w17.contrib.auth.TouchTokenLastUsedResp
+	11, // 86: w17.contrib.auth.AuthMutation.RevokeSessionToken:output_type -> w17.contrib.auth.RevokeSessionTokenResp
+	13, // 87: w17.contrib.auth.AuthMutation.IssueApiToken:output_type -> w17.contrib.auth.IssueApiTokenResp
+	15, // 88: w17.contrib.auth.AuthMutation.AddTokenPermission:output_type -> w17.contrib.auth.AddTokenPermissionResp
+	17, // 89: w17.contrib.auth.AuthMutation.MarkApiTokenRevoked:output_type -> w17.contrib.auth.MarkApiTokenRevokedResp
+	37, // 90: w17.contrib.auth.AuthMutation.RevokeApprovedApiTokens:output_type -> w17.contrib.auth.RevokeApprovedApiTokensResp
+	25, // 91: w17.contrib.auth.AuthMutation.CountSignInAttempt:output_type -> w17.contrib.auth.CountSignInAttemptResp
+	27, // 92: w17.contrib.auth.AuthMutation.CountDeviceSignInAttempt:output_type -> w17.contrib.auth.CountDeviceSignInAttemptResp
+	29, // 93: w17.contrib.auth.AuthMutation.ResetSignInAttempts:output_type -> w17.contrib.auth.ResetSignInAttemptsResp
+	23, // 94: w17.contrib.auth.AuthMutation.RegisterDevice:output_type -> w17.contrib.auth.RegisterDeviceResp
+	31, // 95: w17.contrib.auth.AuthMutation.RecordSignInEvent:output_type -> w17.contrib.auth.RecordSignInEventResp
+	33, // 96: w17.contrib.auth.AuthMutation.TrustDevice:output_type -> w17.contrib.auth.TrustDeviceResp
+	35, // 97: w17.contrib.auth.AuthMutation.RevokeDeviceTokens:output_type -> w17.contrib.auth.RevokeDeviceTokensResp
+	39, // 98: w17.contrib.auth.AuthMutation.MarkDeviceRevoked:output_type -> w17.contrib.auth.MarkDeviceRevokedResp
+	41, // 99: w17.contrib.auth.AuthMutation.CreateRole:output_type -> w17.contrib.auth.CreateRoleResp
+	45, // 100: w17.contrib.auth.AuthMutation.UpdateRole:output_type -> w17.contrib.auth.UpdateRoleResp
+	43, // 101: w17.contrib.auth.AuthMutation.DeleteRole:output_type -> w17.contrib.auth.DeleteRoleResp
+	47, // 102: w17.contrib.auth.AuthMutation.AssignRoleToUser:output_type -> w17.contrib.auth.AssignRoleToUserResp
+	49, // 103: w17.contrib.auth.AuthMutation.RevokeRoleFromUser:output_type -> w17.contrib.auth.RevokeRoleFromUserResp
+	51, // 104: w17.contrib.auth.AuthMutation.AddPermissionToRole:output_type -> w17.contrib.auth.AddPermissionToRoleResp
+	53, // 105: w17.contrib.auth.AuthMutation.RemovePermissionFromRole:output_type -> w17.contrib.auth.RemovePermissionFromRoleResp
+	19, // 106: w17.contrib.auth.AuthMutation.UpdateUserPassword:output_type -> w17.contrib.auth.UpdateUserPasswordResp
+	21, // 107: w17.contrib.auth.AuthMutation.RehashUserPassword:output_type -> w17.contrib.auth.RehashUserPasswordResp
+	55, // 108: w17.contrib.auth.AuthMutation.ClaimBootstrapAdmin:output_type -> w17.contrib.auth.ClaimBootstrapAdminResp
+	57, // 109: w17.contrib.auth.AuthMutation.CreateOAuthClient:output_type -> w17.contrib.auth.CreateOAuthClientResp
+	59, // 110: w17.contrib.auth.AuthMutation.RefreshOAuthClientMetadata:output_type -> w17.contrib.auth.RefreshOAuthClientMetadataResp
+	61, // 111: w17.contrib.auth.AuthMutation.CreateOAuthAuthorization:output_type -> w17.contrib.auth.CreateOAuthAuthorizationResp
+	63, // 112: w17.contrib.auth.AuthMutation.DecideOAuthAuthorization:output_type -> w17.contrib.auth.DecideOAuthAuthorizationResp
+	65, // 113: w17.contrib.auth.AuthMutation.ConsumeOAuthCode:output_type -> w17.contrib.auth.ConsumeOAuthCodeResp
+	67, // 114: w17.contrib.auth.AuthMutation.CreateOAuthGrant:output_type -> w17.contrib.auth.CreateOAuthGrantResp
+	69, // 115: w17.contrib.auth.AuthMutation.CreateOAuthRefreshToken:output_type -> w17.contrib.auth.CreateOAuthRefreshTokenResp
+	71, // 116: w17.contrib.auth.AuthMutation.UseOAuthRefreshToken:output_type -> w17.contrib.auth.UseOAuthRefreshTokenResp
+	73, // 117: w17.contrib.auth.AuthMutation.LinkOAuthSession:output_type -> w17.contrib.auth.LinkOAuthSessionResp
+	75, // 118: w17.contrib.auth.AuthMutation.RevokeOAuthCodeSession:output_type -> w17.contrib.auth.RevokeOAuthCodeSessionResp
+	77, // 119: w17.contrib.auth.AuthMutation.TouchOAuthGrant:output_type -> w17.contrib.auth.TouchOAuthGrantResp
+	79, // 120: w17.contrib.auth.AuthMutation.RevokeOAuthGrant:output_type -> w17.contrib.auth.RevokeOAuthGrantResp
+	81, // 121: w17.contrib.auth.AuthMutation.RevokeUserOAuthGrants:output_type -> w17.contrib.auth.RevokeUserOAuthGrantsResp
+	83, // 122: w17.contrib.auth.AuthMutation.IssueOAuthAccessToken:output_type -> w17.contrib.auth.IssueOAuthAccessTokenResp
+	81, // [81:123] is the sub-list for method output_type
+	39, // [39:81] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_mutations_auth_mutation_proto_init() }
@@ -3035,14 +5807,14 @@ func file_mutations_auth_mutation_proto_init() {
 	}
 	file_types_models_proto_init()
 	file_events_auth_events_proto_init()
-	file_mutations_auth_mutation_proto_msgTypes[45].OneofWrappers = []any{}
+	file_mutations_auth_mutation_proto_msgTypes[55].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mutations_auth_mutation_proto_rawDesc), len(file_mutations_auth_mutation_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   46,
+			NumMessages:   84,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
@@ -3055,4 +5827,4 @@ func file_mutations_auth_mutation_proto_init() {
 	file_mutations_auth_mutation_proto_depIdxs = nil
 }
 
-// emit-sha256: dd98fab930b3371b5123b79036d5acdb1bc05e0078216e4ddb0fe46c1b500afc
+// emit-sha256: bbbdee8d9c717841197f5c9c1b29ef7f4b3e55a18abbdfc073e213bdab5215fa

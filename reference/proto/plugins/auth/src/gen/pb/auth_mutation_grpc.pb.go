@@ -28,29 +28,48 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthMutation_CreateUser_FullMethodName               = "/w17.contrib.auth.AuthMutation/CreateUser"
-	AuthMutation_IssueToken_FullMethodName               = "/w17.contrib.auth.AuthMutation/IssueToken"
-	AuthMutation_RevokeToken_FullMethodName              = "/w17.contrib.auth.AuthMutation/RevokeToken"
-	AuthMutation_UpgradeTokenHash_FullMethodName         = "/w17.contrib.auth.AuthMutation/UpgradeTokenHash"
-	AuthMutation_RevokeSessionToken_FullMethodName       = "/w17.contrib.auth.AuthMutation/RevokeSessionToken"
-	AuthMutation_CountSignInAttempt_FullMethodName       = "/w17.contrib.auth.AuthMutation/CountSignInAttempt"
-	AuthMutation_CountDeviceSignInAttempt_FullMethodName = "/w17.contrib.auth.AuthMutation/CountDeviceSignInAttempt"
-	AuthMutation_ResetSignInAttempts_FullMethodName      = "/w17.contrib.auth.AuthMutation/ResetSignInAttempts"
-	AuthMutation_RegisterDevice_FullMethodName           = "/w17.contrib.auth.AuthMutation/RegisterDevice"
-	AuthMutation_RecordSignInEvent_FullMethodName        = "/w17.contrib.auth.AuthMutation/RecordSignInEvent"
-	AuthMutation_TrustDevice_FullMethodName              = "/w17.contrib.auth.AuthMutation/TrustDevice"
-	AuthMutation_RevokeDeviceTokens_FullMethodName       = "/w17.contrib.auth.AuthMutation/RevokeDeviceTokens"
-	AuthMutation_MarkDeviceRevoked_FullMethodName        = "/w17.contrib.auth.AuthMutation/MarkDeviceRevoked"
-	AuthMutation_CreateRole_FullMethodName               = "/w17.contrib.auth.AuthMutation/CreateRole"
-	AuthMutation_UpdateRole_FullMethodName               = "/w17.contrib.auth.AuthMutation/UpdateRole"
-	AuthMutation_DeleteRole_FullMethodName               = "/w17.contrib.auth.AuthMutation/DeleteRole"
-	AuthMutation_AssignRoleToUser_FullMethodName         = "/w17.contrib.auth.AuthMutation/AssignRoleToUser"
-	AuthMutation_RevokeRoleFromUser_FullMethodName       = "/w17.contrib.auth.AuthMutation/RevokeRoleFromUser"
-	AuthMutation_AddPermissionToRole_FullMethodName      = "/w17.contrib.auth.AuthMutation/AddPermissionToRole"
-	AuthMutation_RemovePermissionFromRole_FullMethodName = "/w17.contrib.auth.AuthMutation/RemovePermissionFromRole"
-	AuthMutation_UpdateUserPassword_FullMethodName       = "/w17.contrib.auth.AuthMutation/UpdateUserPassword"
-	AuthMutation_RehashUserPassword_FullMethodName       = "/w17.contrib.auth.AuthMutation/RehashUserPassword"
-	AuthMutation_ClaimBootstrapAdmin_FullMethodName      = "/w17.contrib.auth.AuthMutation/ClaimBootstrapAdmin"
+	AuthMutation_CreateUser_FullMethodName                 = "/w17.contrib.auth.AuthMutation/CreateUser"
+	AuthMutation_IssueToken_FullMethodName                 = "/w17.contrib.auth.AuthMutation/IssueToken"
+	AuthMutation_RevokeToken_FullMethodName                = "/w17.contrib.auth.AuthMutation/RevokeToken"
+	AuthMutation_UpgradeTokenHash_FullMethodName           = "/w17.contrib.auth.AuthMutation/UpgradeTokenHash"
+	AuthMutation_TouchTokenLastUsed_FullMethodName         = "/w17.contrib.auth.AuthMutation/TouchTokenLastUsed"
+	AuthMutation_RevokeSessionToken_FullMethodName         = "/w17.contrib.auth.AuthMutation/RevokeSessionToken"
+	AuthMutation_IssueApiToken_FullMethodName              = "/w17.contrib.auth.AuthMutation/IssueApiToken"
+	AuthMutation_AddTokenPermission_FullMethodName         = "/w17.contrib.auth.AuthMutation/AddTokenPermission"
+	AuthMutation_MarkApiTokenRevoked_FullMethodName        = "/w17.contrib.auth.AuthMutation/MarkApiTokenRevoked"
+	AuthMutation_RevokeApprovedApiTokens_FullMethodName    = "/w17.contrib.auth.AuthMutation/RevokeApprovedApiTokens"
+	AuthMutation_CountSignInAttempt_FullMethodName         = "/w17.contrib.auth.AuthMutation/CountSignInAttempt"
+	AuthMutation_CountDeviceSignInAttempt_FullMethodName   = "/w17.contrib.auth.AuthMutation/CountDeviceSignInAttempt"
+	AuthMutation_ResetSignInAttempts_FullMethodName        = "/w17.contrib.auth.AuthMutation/ResetSignInAttempts"
+	AuthMutation_RegisterDevice_FullMethodName             = "/w17.contrib.auth.AuthMutation/RegisterDevice"
+	AuthMutation_RecordSignInEvent_FullMethodName          = "/w17.contrib.auth.AuthMutation/RecordSignInEvent"
+	AuthMutation_TrustDevice_FullMethodName                = "/w17.contrib.auth.AuthMutation/TrustDevice"
+	AuthMutation_RevokeDeviceTokens_FullMethodName         = "/w17.contrib.auth.AuthMutation/RevokeDeviceTokens"
+	AuthMutation_MarkDeviceRevoked_FullMethodName          = "/w17.contrib.auth.AuthMutation/MarkDeviceRevoked"
+	AuthMutation_CreateRole_FullMethodName                 = "/w17.contrib.auth.AuthMutation/CreateRole"
+	AuthMutation_UpdateRole_FullMethodName                 = "/w17.contrib.auth.AuthMutation/UpdateRole"
+	AuthMutation_DeleteRole_FullMethodName                 = "/w17.contrib.auth.AuthMutation/DeleteRole"
+	AuthMutation_AssignRoleToUser_FullMethodName           = "/w17.contrib.auth.AuthMutation/AssignRoleToUser"
+	AuthMutation_RevokeRoleFromUser_FullMethodName         = "/w17.contrib.auth.AuthMutation/RevokeRoleFromUser"
+	AuthMutation_AddPermissionToRole_FullMethodName        = "/w17.contrib.auth.AuthMutation/AddPermissionToRole"
+	AuthMutation_RemovePermissionFromRole_FullMethodName   = "/w17.contrib.auth.AuthMutation/RemovePermissionFromRole"
+	AuthMutation_UpdateUserPassword_FullMethodName         = "/w17.contrib.auth.AuthMutation/UpdateUserPassword"
+	AuthMutation_RehashUserPassword_FullMethodName         = "/w17.contrib.auth.AuthMutation/RehashUserPassword"
+	AuthMutation_ClaimBootstrapAdmin_FullMethodName        = "/w17.contrib.auth.AuthMutation/ClaimBootstrapAdmin"
+	AuthMutation_CreateOAuthClient_FullMethodName          = "/w17.contrib.auth.AuthMutation/CreateOAuthClient"
+	AuthMutation_RefreshOAuthClientMetadata_FullMethodName = "/w17.contrib.auth.AuthMutation/RefreshOAuthClientMetadata"
+	AuthMutation_CreateOAuthAuthorization_FullMethodName   = "/w17.contrib.auth.AuthMutation/CreateOAuthAuthorization"
+	AuthMutation_DecideOAuthAuthorization_FullMethodName   = "/w17.contrib.auth.AuthMutation/DecideOAuthAuthorization"
+	AuthMutation_ConsumeOAuthCode_FullMethodName           = "/w17.contrib.auth.AuthMutation/ConsumeOAuthCode"
+	AuthMutation_CreateOAuthGrant_FullMethodName           = "/w17.contrib.auth.AuthMutation/CreateOAuthGrant"
+	AuthMutation_CreateOAuthRefreshToken_FullMethodName    = "/w17.contrib.auth.AuthMutation/CreateOAuthRefreshToken"
+	AuthMutation_UseOAuthRefreshToken_FullMethodName       = "/w17.contrib.auth.AuthMutation/UseOAuthRefreshToken"
+	AuthMutation_LinkOAuthSession_FullMethodName           = "/w17.contrib.auth.AuthMutation/LinkOAuthSession"
+	AuthMutation_RevokeOAuthCodeSession_FullMethodName     = "/w17.contrib.auth.AuthMutation/RevokeOAuthCodeSession"
+	AuthMutation_TouchOAuthGrant_FullMethodName            = "/w17.contrib.auth.AuthMutation/TouchOAuthGrant"
+	AuthMutation_RevokeOAuthGrant_FullMethodName           = "/w17.contrib.auth.AuthMutation/RevokeOAuthGrant"
+	AuthMutation_RevokeUserOAuthGrants_FullMethodName      = "/w17.contrib.auth.AuthMutation/RevokeUserOAuthGrants"
+	AuthMutation_IssueOAuthAccessToken_FullMethodName      = "/w17.contrib.auth.AuthMutation/IssueOAuthAccessToken"
 )
 
 // AuthMutationClient is the client API for AuthMutation service.
@@ -94,6 +113,20 @@ type AuthMutationClient interface {
 	// NULL, so a second run, or a race with another request presenting the
 	// same token, changes nothing.
 	UpgradeTokenHash(ctx context.Context, in *UpgradeTokenHashReq, opts ...grpc.CallOption) (*UpgradeTokenHashResp, error)
+	// TouchTokenLastUsed — record that a token was just presented, at most
+	// once a minute per token. The window is enforced HERE, in the WHERE: a
+	// burst of concurrent requests on one token all pass the handler's
+	// pre-check (it reads last_used_at off the lookup), and only the first
+	// UPDATE to commit still matches — the rest match nothing and write
+	// nothing. The stamp (:used_at) and :cutoff (used_at minus the window)
+	// both come from the caller's clock: the DQL has no interval arithmetic,
+	// and comparing an app-clock cutoff against a database-NOW() stamp would
+	// let app/DB skew shrink the window to nothing (every request writing).
+	// One clock keeps the window a minute; instances that disagree shift it
+	// by their skew at most. No RETURNING: a throttled touch matches
+	// no row, and that is no failure. Gated api_token (last_used_at is its
+	// column).
+	TouchTokenLastUsed(ctx context.Context, in *TouchTokenLastUsedReq, opts ...grpc.CallOption) (*TouchTokenLastUsedResp, error)
 	// RevokeSessionToken — base-tier logout primitive (gated
 	// authenticate_turnkey). Revoke-by-id, OWNERSHIP guarded (id AND
 	// user_id) so a caller revokes only their own token; the holder is the
@@ -114,6 +147,36 @@ type AuthMutationClient interface {
 	// always a session token. The retained req.token_type field is unused by
 	// the DQL (kept for wire stability + the handler's explicit intent).
 	RevokeSessionToken(ctx context.Context, in *RevokeSessionTokenReq, opts ...grpc.CallOption) (*RevokeSessionTokenResp, error)
+	// IssueApiToken — INSERT an API UserToken (token_type stamped by
+	// the handler) with an optional label, bound to the Device of the key the
+	// request named (device_id) and recording the creator's device
+	// (approved_by_device_id). A machine account's bearer token
+	// (device/bot-bearer) is the one row with no device and bearer TRUE,
+	// written under service_account only. The handler mints the token and passes only its
+	// sha256. Gated api_token.
+	IssueApiToken(ctx context.Context, in *IssueApiTokenReq, opts ...grpc.CallOption) (*IssueApiTokenResp, error)
+	// AddTokenPermission — INSERT a TokenPermission subset row.
+	// Composite-unique (token_id, permission_id). Gated api_token.
+	AddTokenPermission(ctx context.Context, in *AddTokenPermissionReq, opts ...grpc.CallOption) (*AddTokenPermissionResp, error)
+	// MarkApiTokenRevoked — revoke the caller's own API token (ownership +
+	// realm guarded: id AND user_id AND token_type all match, so a
+	// bearer can't revoke another user's token or a session token via
+	// this path). The owner is the actor, the reason API_TOKEN_REVOKED;
+	// the row stays, and so do its TokenPermission subset rows — the token
+	// they narrow is refused anyway, and they record what it could do.
+	// Idempotent: an already revoked token matches no row. Gated api_token.
+	MarkApiTokenRevoked(ctx context.Context, in *MarkApiTokenRevokedReq, opts ...grpc.CallOption) (*MarkApiTokenRevokedResp, error)
+	// RevokeApprovedApiTokens — revoke (reason DEVICE_REVOKED, the caller as
+	// revoked_by) the owner's live API tokens the device CREATED
+	// (approved_by_device_id). A stolen browser session can create an API token
+	// bound to the thief's own key; revoking that device explicitly must end
+	// it, as it ends the CLI sessions the device approved. Called only when ONE
+	// device is revoked on purpose (RevokeDevice, the admin RevokeDevices) —
+	// never by RevokeOtherDevices / RevokeAllDevices, which spare API tokens
+	// (devices/revoke-all-spares-api-tokens). Owner-guarded like
+	// RevokeDeviceTokens, first revocation stands, no RETURNING. Gated
+	// api_token.
+	RevokeApprovedApiTokens(ctx context.Context, in *RevokeApprovedApiTokensReq, opts ...grpc.CallOption) (*RevokeApprovedApiTokensResp, error)
 	// RegisterDevice — find or create the (user, thumbprint) Device in ONE
 	// statement, and say what it is: a mint binds its token to the returned
 	// id, refuses a row with revoked_at set (DEVICE_REVOKED, for good), and
@@ -267,6 +330,23 @@ type AuthMutationClient interface {
 	// one sign-up that took it and 0 for every other: a concurrent sign-up
 	// waits on the key and then conflicts. See BootstrapClaim.
 	ClaimBootstrapAdmin(ctx context.Context, in *ClaimBootstrapAdminReq, opts ...grpc.CallOption) (*ClaimBootstrapAdminResp, error)
+	CreateOAuthClient(ctx context.Context, in *CreateOAuthClientReq, opts ...grpc.CallOption) (*CreateOAuthClientResp, error)
+	RefreshOAuthClientMetadata(ctx context.Context, in *RefreshOAuthClientMetadataReq, opts ...grpc.CallOption) (*RefreshOAuthClientMetadataResp, error)
+	CreateOAuthAuthorization(ctx context.Context, in *CreateOAuthAuthorizationReq, opts ...grpc.CallOption) (*CreateOAuthAuthorizationResp, error)
+	DecideOAuthAuthorization(ctx context.Context, in *DecideOAuthAuthorizationReq, opts ...grpc.CallOption) (*DecideOAuthAuthorizationResp, error)
+	ConsumeOAuthCode(ctx context.Context, in *ConsumeOAuthCodeReq, opts ...grpc.CallOption) (*ConsumeOAuthCodeResp, error)
+	CreateOAuthGrant(ctx context.Context, in *CreateOAuthGrantReq, opts ...grpc.CallOption) (*CreateOAuthGrantResp, error)
+	CreateOAuthRefreshToken(ctx context.Context, in *CreateOAuthRefreshTokenReq, opts ...grpc.CallOption) (*CreateOAuthRefreshTokenResp, error)
+	UseOAuthRefreshToken(ctx context.Context, in *UseOAuthRefreshTokenReq, opts ...grpc.CallOption) (*UseOAuthRefreshTokenResp, error)
+	LinkOAuthSession(ctx context.Context, in *LinkOAuthSessionReq, opts ...grpc.CallOption) (*LinkOAuthSessionResp, error)
+	RevokeOAuthCodeSession(ctx context.Context, in *RevokeOAuthCodeSessionReq, opts ...grpc.CallOption) (*RevokeOAuthCodeSessionResp, error)
+	TouchOAuthGrant(ctx context.Context, in *TouchOAuthGrantReq, opts ...grpc.CallOption) (*TouchOAuthGrantResp, error)
+	// The grant first: its row is what a refresh holds while it mints, so the
+	// tokens are ended only once a racing refresh has committed (or after it,
+	// when it sees the grant revoked and mints nothing).
+	RevokeOAuthGrant(ctx context.Context, in *RevokeOAuthGrantReq, opts ...grpc.CallOption) (*RevokeOAuthGrantResp, error)
+	RevokeUserOAuthGrants(ctx context.Context, in *RevokeUserOAuthGrantsReq, opts ...grpc.CallOption) (*RevokeUserOAuthGrantsResp, error)
+	IssueOAuthAccessToken(ctx context.Context, in *IssueOAuthAccessTokenReq, opts ...grpc.CallOption) (*IssueOAuthAccessTokenResp, error)
 }
 
 type authMutationClient struct {
@@ -317,10 +397,60 @@ func (c *authMutationClient) UpgradeTokenHash(ctx context.Context, in *UpgradeTo
 	return out, nil
 }
 
+func (c *authMutationClient) TouchTokenLastUsed(ctx context.Context, in *TouchTokenLastUsedReq, opts ...grpc.CallOption) (*TouchTokenLastUsedResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TouchTokenLastUsedResp)
+	err := c.cc.Invoke(ctx, AuthMutation_TouchTokenLastUsed_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authMutationClient) RevokeSessionToken(ctx context.Context, in *RevokeSessionTokenReq, opts ...grpc.CallOption) (*RevokeSessionTokenResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RevokeSessionTokenResp)
 	err := c.cc.Invoke(ctx, AuthMutation_RevokeSessionToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) IssueApiToken(ctx context.Context, in *IssueApiTokenReq, opts ...grpc.CallOption) (*IssueApiTokenResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IssueApiTokenResp)
+	err := c.cc.Invoke(ctx, AuthMutation_IssueApiToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) AddTokenPermission(ctx context.Context, in *AddTokenPermissionReq, opts ...grpc.CallOption) (*AddTokenPermissionResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddTokenPermissionResp)
+	err := c.cc.Invoke(ctx, AuthMutation_AddTokenPermission_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) MarkApiTokenRevoked(ctx context.Context, in *MarkApiTokenRevokedReq, opts ...grpc.CallOption) (*MarkApiTokenRevokedResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkApiTokenRevokedResp)
+	err := c.cc.Invoke(ctx, AuthMutation_MarkApiTokenRevoked_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) RevokeApprovedApiTokens(ctx context.Context, in *RevokeApprovedApiTokensReq, opts ...grpc.CallOption) (*RevokeApprovedApiTokensResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeApprovedApiTokensResp)
+	err := c.cc.Invoke(ctx, AuthMutation_RevokeApprovedApiTokens_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -507,6 +637,146 @@ func (c *authMutationClient) ClaimBootstrapAdmin(ctx context.Context, in *ClaimB
 	return out, nil
 }
 
+func (c *authMutationClient) CreateOAuthClient(ctx context.Context, in *CreateOAuthClientReq, opts ...grpc.CallOption) (*CreateOAuthClientResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateOAuthClientResp)
+	err := c.cc.Invoke(ctx, AuthMutation_CreateOAuthClient_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) RefreshOAuthClientMetadata(ctx context.Context, in *RefreshOAuthClientMetadataReq, opts ...grpc.CallOption) (*RefreshOAuthClientMetadataResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RefreshOAuthClientMetadataResp)
+	err := c.cc.Invoke(ctx, AuthMutation_RefreshOAuthClientMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) CreateOAuthAuthorization(ctx context.Context, in *CreateOAuthAuthorizationReq, opts ...grpc.CallOption) (*CreateOAuthAuthorizationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateOAuthAuthorizationResp)
+	err := c.cc.Invoke(ctx, AuthMutation_CreateOAuthAuthorization_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) DecideOAuthAuthorization(ctx context.Context, in *DecideOAuthAuthorizationReq, opts ...grpc.CallOption) (*DecideOAuthAuthorizationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DecideOAuthAuthorizationResp)
+	err := c.cc.Invoke(ctx, AuthMutation_DecideOAuthAuthorization_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) ConsumeOAuthCode(ctx context.Context, in *ConsumeOAuthCodeReq, opts ...grpc.CallOption) (*ConsumeOAuthCodeResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConsumeOAuthCodeResp)
+	err := c.cc.Invoke(ctx, AuthMutation_ConsumeOAuthCode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) CreateOAuthGrant(ctx context.Context, in *CreateOAuthGrantReq, opts ...grpc.CallOption) (*CreateOAuthGrantResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateOAuthGrantResp)
+	err := c.cc.Invoke(ctx, AuthMutation_CreateOAuthGrant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) CreateOAuthRefreshToken(ctx context.Context, in *CreateOAuthRefreshTokenReq, opts ...grpc.CallOption) (*CreateOAuthRefreshTokenResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateOAuthRefreshTokenResp)
+	err := c.cc.Invoke(ctx, AuthMutation_CreateOAuthRefreshToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) UseOAuthRefreshToken(ctx context.Context, in *UseOAuthRefreshTokenReq, opts ...grpc.CallOption) (*UseOAuthRefreshTokenResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UseOAuthRefreshTokenResp)
+	err := c.cc.Invoke(ctx, AuthMutation_UseOAuthRefreshToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) LinkOAuthSession(ctx context.Context, in *LinkOAuthSessionReq, opts ...grpc.CallOption) (*LinkOAuthSessionResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LinkOAuthSessionResp)
+	err := c.cc.Invoke(ctx, AuthMutation_LinkOAuthSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) RevokeOAuthCodeSession(ctx context.Context, in *RevokeOAuthCodeSessionReq, opts ...grpc.CallOption) (*RevokeOAuthCodeSessionResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeOAuthCodeSessionResp)
+	err := c.cc.Invoke(ctx, AuthMutation_RevokeOAuthCodeSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) TouchOAuthGrant(ctx context.Context, in *TouchOAuthGrantReq, opts ...grpc.CallOption) (*TouchOAuthGrantResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TouchOAuthGrantResp)
+	err := c.cc.Invoke(ctx, AuthMutation_TouchOAuthGrant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) RevokeOAuthGrant(ctx context.Context, in *RevokeOAuthGrantReq, opts ...grpc.CallOption) (*RevokeOAuthGrantResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeOAuthGrantResp)
+	err := c.cc.Invoke(ctx, AuthMutation_RevokeOAuthGrant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) RevokeUserOAuthGrants(ctx context.Context, in *RevokeUserOAuthGrantsReq, opts ...grpc.CallOption) (*RevokeUserOAuthGrantsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeUserOAuthGrantsResp)
+	err := c.cc.Invoke(ctx, AuthMutation_RevokeUserOAuthGrants_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) IssueOAuthAccessToken(ctx context.Context, in *IssueOAuthAccessTokenReq, opts ...grpc.CallOption) (*IssueOAuthAccessTokenResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IssueOAuthAccessTokenResp)
+	err := c.cc.Invoke(ctx, AuthMutation_IssueOAuthAccessToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthMutationServer is the server API for AuthMutation service.
 // All implementations should embed UnimplementedAuthMutationServer
 // for forward compatibility.
@@ -548,6 +818,20 @@ type AuthMutationServer interface {
 	// NULL, so a second run, or a race with another request presenting the
 	// same token, changes nothing.
 	UpgradeTokenHash(context.Context, *UpgradeTokenHashReq) (*UpgradeTokenHashResp, error)
+	// TouchTokenLastUsed — record that a token was just presented, at most
+	// once a minute per token. The window is enforced HERE, in the WHERE: a
+	// burst of concurrent requests on one token all pass the handler's
+	// pre-check (it reads last_used_at off the lookup), and only the first
+	// UPDATE to commit still matches — the rest match nothing and write
+	// nothing. The stamp (:used_at) and :cutoff (used_at minus the window)
+	// both come from the caller's clock: the DQL has no interval arithmetic,
+	// and comparing an app-clock cutoff against a database-NOW() stamp would
+	// let app/DB skew shrink the window to nothing (every request writing).
+	// One clock keeps the window a minute; instances that disagree shift it
+	// by their skew at most. No RETURNING: a throttled touch matches
+	// no row, and that is no failure. Gated api_token (last_used_at is its
+	// column).
+	TouchTokenLastUsed(context.Context, *TouchTokenLastUsedReq) (*TouchTokenLastUsedResp, error)
 	// RevokeSessionToken — base-tier logout primitive (gated
 	// authenticate_turnkey). Revoke-by-id, OWNERSHIP guarded (id AND
 	// user_id) so a caller revokes only their own token; the holder is the
@@ -568,6 +852,36 @@ type AuthMutationServer interface {
 	// always a session token. The retained req.token_type field is unused by
 	// the DQL (kept for wire stability + the handler's explicit intent).
 	RevokeSessionToken(context.Context, *RevokeSessionTokenReq) (*RevokeSessionTokenResp, error)
+	// IssueApiToken — INSERT an API UserToken (token_type stamped by
+	// the handler) with an optional label, bound to the Device of the key the
+	// request named (device_id) and recording the creator's device
+	// (approved_by_device_id). A machine account's bearer token
+	// (device/bot-bearer) is the one row with no device and bearer TRUE,
+	// written under service_account only. The handler mints the token and passes only its
+	// sha256. Gated api_token.
+	IssueApiToken(context.Context, *IssueApiTokenReq) (*IssueApiTokenResp, error)
+	// AddTokenPermission — INSERT a TokenPermission subset row.
+	// Composite-unique (token_id, permission_id). Gated api_token.
+	AddTokenPermission(context.Context, *AddTokenPermissionReq) (*AddTokenPermissionResp, error)
+	// MarkApiTokenRevoked — revoke the caller's own API token (ownership +
+	// realm guarded: id AND user_id AND token_type all match, so a
+	// bearer can't revoke another user's token or a session token via
+	// this path). The owner is the actor, the reason API_TOKEN_REVOKED;
+	// the row stays, and so do its TokenPermission subset rows — the token
+	// they narrow is refused anyway, and they record what it could do.
+	// Idempotent: an already revoked token matches no row. Gated api_token.
+	MarkApiTokenRevoked(context.Context, *MarkApiTokenRevokedReq) (*MarkApiTokenRevokedResp, error)
+	// RevokeApprovedApiTokens — revoke (reason DEVICE_REVOKED, the caller as
+	// revoked_by) the owner's live API tokens the device CREATED
+	// (approved_by_device_id). A stolen browser session can create an API token
+	// bound to the thief's own key; revoking that device explicitly must end
+	// it, as it ends the CLI sessions the device approved. Called only when ONE
+	// device is revoked on purpose (RevokeDevice, the admin RevokeDevices) —
+	// never by RevokeOtherDevices / RevokeAllDevices, which spare API tokens
+	// (devices/revoke-all-spares-api-tokens). Owner-guarded like
+	// RevokeDeviceTokens, first revocation stands, no RETURNING. Gated
+	// api_token.
+	RevokeApprovedApiTokens(context.Context, *RevokeApprovedApiTokensReq) (*RevokeApprovedApiTokensResp, error)
 	// RegisterDevice — find or create the (user, thumbprint) Device in ONE
 	// statement, and say what it is: a mint binds its token to the returned
 	// id, refuses a row with revoked_at set (DEVICE_REVOKED, for good), and
@@ -721,6 +1035,23 @@ type AuthMutationServer interface {
 	// one sign-up that took it and 0 for every other: a concurrent sign-up
 	// waits on the key and then conflicts. See BootstrapClaim.
 	ClaimBootstrapAdmin(context.Context, *ClaimBootstrapAdminReq) (*ClaimBootstrapAdminResp, error)
+	CreateOAuthClient(context.Context, *CreateOAuthClientReq) (*CreateOAuthClientResp, error)
+	RefreshOAuthClientMetadata(context.Context, *RefreshOAuthClientMetadataReq) (*RefreshOAuthClientMetadataResp, error)
+	CreateOAuthAuthorization(context.Context, *CreateOAuthAuthorizationReq) (*CreateOAuthAuthorizationResp, error)
+	DecideOAuthAuthorization(context.Context, *DecideOAuthAuthorizationReq) (*DecideOAuthAuthorizationResp, error)
+	ConsumeOAuthCode(context.Context, *ConsumeOAuthCodeReq) (*ConsumeOAuthCodeResp, error)
+	CreateOAuthGrant(context.Context, *CreateOAuthGrantReq) (*CreateOAuthGrantResp, error)
+	CreateOAuthRefreshToken(context.Context, *CreateOAuthRefreshTokenReq) (*CreateOAuthRefreshTokenResp, error)
+	UseOAuthRefreshToken(context.Context, *UseOAuthRefreshTokenReq) (*UseOAuthRefreshTokenResp, error)
+	LinkOAuthSession(context.Context, *LinkOAuthSessionReq) (*LinkOAuthSessionResp, error)
+	RevokeOAuthCodeSession(context.Context, *RevokeOAuthCodeSessionReq) (*RevokeOAuthCodeSessionResp, error)
+	TouchOAuthGrant(context.Context, *TouchOAuthGrantReq) (*TouchOAuthGrantResp, error)
+	// The grant first: its row is what a refresh holds while it mints, so the
+	// tokens are ended only once a racing refresh has committed (or after it,
+	// when it sees the grant revoked and mints nothing).
+	RevokeOAuthGrant(context.Context, *RevokeOAuthGrantReq) (*RevokeOAuthGrantResp, error)
+	RevokeUserOAuthGrants(context.Context, *RevokeUserOAuthGrantsReq) (*RevokeUserOAuthGrantsResp, error)
+	IssueOAuthAccessToken(context.Context, *IssueOAuthAccessTokenReq) (*IssueOAuthAccessTokenResp, error)
 }
 
 // UnimplementedAuthMutationServer should be embedded to have
@@ -742,8 +1073,23 @@ func (UnimplementedAuthMutationServer) RevokeToken(context.Context, *RevokeToken
 func (UnimplementedAuthMutationServer) UpgradeTokenHash(context.Context, *UpgradeTokenHashReq) (*UpgradeTokenHashResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpgradeTokenHash not implemented")
 }
+func (UnimplementedAuthMutationServer) TouchTokenLastUsed(context.Context, *TouchTokenLastUsedReq) (*TouchTokenLastUsedResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method TouchTokenLastUsed not implemented")
+}
 func (UnimplementedAuthMutationServer) RevokeSessionToken(context.Context, *RevokeSessionTokenReq) (*RevokeSessionTokenResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method RevokeSessionToken not implemented")
+}
+func (UnimplementedAuthMutationServer) IssueApiToken(context.Context, *IssueApiTokenReq) (*IssueApiTokenResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method IssueApiToken not implemented")
+}
+func (UnimplementedAuthMutationServer) AddTokenPermission(context.Context, *AddTokenPermissionReq) (*AddTokenPermissionResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddTokenPermission not implemented")
+}
+func (UnimplementedAuthMutationServer) MarkApiTokenRevoked(context.Context, *MarkApiTokenRevokedReq) (*MarkApiTokenRevokedResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method MarkApiTokenRevoked not implemented")
+}
+func (UnimplementedAuthMutationServer) RevokeApprovedApiTokens(context.Context, *RevokeApprovedApiTokensReq) (*RevokeApprovedApiTokensResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeApprovedApiTokens not implemented")
 }
 func (UnimplementedAuthMutationServer) CountSignInAttempt(context.Context, *CountSignInAttemptReq) (*CountSignInAttemptResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method CountSignInAttempt not implemented")
@@ -798,6 +1144,48 @@ func (UnimplementedAuthMutationServer) RehashUserPassword(context.Context, *Reha
 }
 func (UnimplementedAuthMutationServer) ClaimBootstrapAdmin(context.Context, *ClaimBootstrapAdminReq) (*ClaimBootstrapAdminResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method ClaimBootstrapAdmin not implemented")
+}
+func (UnimplementedAuthMutationServer) CreateOAuthClient(context.Context, *CreateOAuthClientReq) (*CreateOAuthClientResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateOAuthClient not implemented")
+}
+func (UnimplementedAuthMutationServer) RefreshOAuthClientMetadata(context.Context, *RefreshOAuthClientMetadataReq) (*RefreshOAuthClientMetadataResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RefreshOAuthClientMetadata not implemented")
+}
+func (UnimplementedAuthMutationServer) CreateOAuthAuthorization(context.Context, *CreateOAuthAuthorizationReq) (*CreateOAuthAuthorizationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateOAuthAuthorization not implemented")
+}
+func (UnimplementedAuthMutationServer) DecideOAuthAuthorization(context.Context, *DecideOAuthAuthorizationReq) (*DecideOAuthAuthorizationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method DecideOAuthAuthorization not implemented")
+}
+func (UnimplementedAuthMutationServer) ConsumeOAuthCode(context.Context, *ConsumeOAuthCodeReq) (*ConsumeOAuthCodeResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConsumeOAuthCode not implemented")
+}
+func (UnimplementedAuthMutationServer) CreateOAuthGrant(context.Context, *CreateOAuthGrantReq) (*CreateOAuthGrantResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateOAuthGrant not implemented")
+}
+func (UnimplementedAuthMutationServer) CreateOAuthRefreshToken(context.Context, *CreateOAuthRefreshTokenReq) (*CreateOAuthRefreshTokenResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateOAuthRefreshToken not implemented")
+}
+func (UnimplementedAuthMutationServer) UseOAuthRefreshToken(context.Context, *UseOAuthRefreshTokenReq) (*UseOAuthRefreshTokenResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method UseOAuthRefreshToken not implemented")
+}
+func (UnimplementedAuthMutationServer) LinkOAuthSession(context.Context, *LinkOAuthSessionReq) (*LinkOAuthSessionResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method LinkOAuthSession not implemented")
+}
+func (UnimplementedAuthMutationServer) RevokeOAuthCodeSession(context.Context, *RevokeOAuthCodeSessionReq) (*RevokeOAuthCodeSessionResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeOAuthCodeSession not implemented")
+}
+func (UnimplementedAuthMutationServer) TouchOAuthGrant(context.Context, *TouchOAuthGrantReq) (*TouchOAuthGrantResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method TouchOAuthGrant not implemented")
+}
+func (UnimplementedAuthMutationServer) RevokeOAuthGrant(context.Context, *RevokeOAuthGrantReq) (*RevokeOAuthGrantResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeOAuthGrant not implemented")
+}
+func (UnimplementedAuthMutationServer) RevokeUserOAuthGrants(context.Context, *RevokeUserOAuthGrantsReq) (*RevokeUserOAuthGrantsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeUserOAuthGrants not implemented")
+}
+func (UnimplementedAuthMutationServer) IssueOAuthAccessToken(context.Context, *IssueOAuthAccessTokenReq) (*IssueOAuthAccessTokenResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method IssueOAuthAccessToken not implemented")
 }
 func (UnimplementedAuthMutationServer) testEmbeddedByValue() {}
 
@@ -891,6 +1279,24 @@ func _AuthMutation_UpgradeTokenHash_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthMutation_TouchTokenLastUsed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TouchTokenLastUsedReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).TouchTokenLastUsed(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_TouchTokenLastUsed_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).TouchTokenLastUsed(ctx, req.(*TouchTokenLastUsedReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthMutation_RevokeSessionToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RevokeSessionTokenReq)
 	if err := dec(in); err != nil {
@@ -905,6 +1311,78 @@ func _AuthMutation_RevokeSessionToken_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthMutationServer).RevokeSessionToken(ctx, req.(*RevokeSessionTokenReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_IssueApiToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IssueApiTokenReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).IssueApiToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_IssueApiToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).IssueApiToken(ctx, req.(*IssueApiTokenReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_AddTokenPermission_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddTokenPermissionReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).AddTokenPermission(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_AddTokenPermission_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).AddTokenPermission(ctx, req.(*AddTokenPermissionReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_MarkApiTokenRevoked_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkApiTokenRevokedReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).MarkApiTokenRevoked(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_MarkApiTokenRevoked_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).MarkApiTokenRevoked(ctx, req.(*MarkApiTokenRevokedReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_RevokeApprovedApiTokens_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeApprovedApiTokensReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).RevokeApprovedApiTokens(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_RevokeApprovedApiTokens_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).RevokeApprovedApiTokens(ctx, req.(*RevokeApprovedApiTokensReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1233,6 +1711,258 @@ func _AuthMutation_ClaimBootstrapAdmin_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthMutation_CreateOAuthClient_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateOAuthClientReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).CreateOAuthClient(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_CreateOAuthClient_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).CreateOAuthClient(ctx, req.(*CreateOAuthClientReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_RefreshOAuthClientMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RefreshOAuthClientMetadataReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).RefreshOAuthClientMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_RefreshOAuthClientMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).RefreshOAuthClientMetadata(ctx, req.(*RefreshOAuthClientMetadataReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_CreateOAuthAuthorization_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateOAuthAuthorizationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).CreateOAuthAuthorization(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_CreateOAuthAuthorization_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).CreateOAuthAuthorization(ctx, req.(*CreateOAuthAuthorizationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_DecideOAuthAuthorization_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DecideOAuthAuthorizationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).DecideOAuthAuthorization(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_DecideOAuthAuthorization_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).DecideOAuthAuthorization(ctx, req.(*DecideOAuthAuthorizationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_ConsumeOAuthCode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConsumeOAuthCodeReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).ConsumeOAuthCode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_ConsumeOAuthCode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).ConsumeOAuthCode(ctx, req.(*ConsumeOAuthCodeReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_CreateOAuthGrant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateOAuthGrantReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).CreateOAuthGrant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_CreateOAuthGrant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).CreateOAuthGrant(ctx, req.(*CreateOAuthGrantReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_CreateOAuthRefreshToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateOAuthRefreshTokenReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).CreateOAuthRefreshToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_CreateOAuthRefreshToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).CreateOAuthRefreshToken(ctx, req.(*CreateOAuthRefreshTokenReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_UseOAuthRefreshToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UseOAuthRefreshTokenReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).UseOAuthRefreshToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_UseOAuthRefreshToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).UseOAuthRefreshToken(ctx, req.(*UseOAuthRefreshTokenReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_LinkOAuthSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LinkOAuthSessionReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).LinkOAuthSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_LinkOAuthSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).LinkOAuthSession(ctx, req.(*LinkOAuthSessionReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_RevokeOAuthCodeSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeOAuthCodeSessionReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).RevokeOAuthCodeSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_RevokeOAuthCodeSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).RevokeOAuthCodeSession(ctx, req.(*RevokeOAuthCodeSessionReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_TouchOAuthGrant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TouchOAuthGrantReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).TouchOAuthGrant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_TouchOAuthGrant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).TouchOAuthGrant(ctx, req.(*TouchOAuthGrantReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_RevokeOAuthGrant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeOAuthGrantReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).RevokeOAuthGrant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_RevokeOAuthGrant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).RevokeOAuthGrant(ctx, req.(*RevokeOAuthGrantReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_RevokeUserOAuthGrants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeUserOAuthGrantsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).RevokeUserOAuthGrants(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_RevokeUserOAuthGrants_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).RevokeUserOAuthGrants(ctx, req.(*RevokeUserOAuthGrantsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_IssueOAuthAccessToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IssueOAuthAccessTokenReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).IssueOAuthAccessToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_IssueOAuthAccessToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).IssueOAuthAccessToken(ctx, req.(*IssueOAuthAccessTokenReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthMutation_ServiceDesc is the grpc.ServiceDesc for AuthMutation service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1257,8 +1987,28 @@ var AuthMutation_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthMutation_UpgradeTokenHash_Handler,
 		},
 		{
+			MethodName: "TouchTokenLastUsed",
+			Handler:    _AuthMutation_TouchTokenLastUsed_Handler,
+		},
+		{
 			MethodName: "RevokeSessionToken",
 			Handler:    _AuthMutation_RevokeSessionToken_Handler,
+		},
+		{
+			MethodName: "IssueApiToken",
+			Handler:    _AuthMutation_IssueApiToken_Handler,
+		},
+		{
+			MethodName: "AddTokenPermission",
+			Handler:    _AuthMutation_AddTokenPermission_Handler,
+		},
+		{
+			MethodName: "MarkApiTokenRevoked",
+			Handler:    _AuthMutation_MarkApiTokenRevoked_Handler,
+		},
+		{
+			MethodName: "RevokeApprovedApiTokens",
+			Handler:    _AuthMutation_RevokeApprovedApiTokens_Handler,
 		},
 		{
 			MethodName: "CountSignInAttempt",
@@ -1332,9 +2082,65 @@ var AuthMutation_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ClaimBootstrapAdmin",
 			Handler:    _AuthMutation_ClaimBootstrapAdmin_Handler,
 		},
+		{
+			MethodName: "CreateOAuthClient",
+			Handler:    _AuthMutation_CreateOAuthClient_Handler,
+		},
+		{
+			MethodName: "RefreshOAuthClientMetadata",
+			Handler:    _AuthMutation_RefreshOAuthClientMetadata_Handler,
+		},
+		{
+			MethodName: "CreateOAuthAuthorization",
+			Handler:    _AuthMutation_CreateOAuthAuthorization_Handler,
+		},
+		{
+			MethodName: "DecideOAuthAuthorization",
+			Handler:    _AuthMutation_DecideOAuthAuthorization_Handler,
+		},
+		{
+			MethodName: "ConsumeOAuthCode",
+			Handler:    _AuthMutation_ConsumeOAuthCode_Handler,
+		},
+		{
+			MethodName: "CreateOAuthGrant",
+			Handler:    _AuthMutation_CreateOAuthGrant_Handler,
+		},
+		{
+			MethodName: "CreateOAuthRefreshToken",
+			Handler:    _AuthMutation_CreateOAuthRefreshToken_Handler,
+		},
+		{
+			MethodName: "UseOAuthRefreshToken",
+			Handler:    _AuthMutation_UseOAuthRefreshToken_Handler,
+		},
+		{
+			MethodName: "LinkOAuthSession",
+			Handler:    _AuthMutation_LinkOAuthSession_Handler,
+		},
+		{
+			MethodName: "RevokeOAuthCodeSession",
+			Handler:    _AuthMutation_RevokeOAuthCodeSession_Handler,
+		},
+		{
+			MethodName: "TouchOAuthGrant",
+			Handler:    _AuthMutation_TouchOAuthGrant_Handler,
+		},
+		{
+			MethodName: "RevokeOAuthGrant",
+			Handler:    _AuthMutation_RevokeOAuthGrant_Handler,
+		},
+		{
+			MethodName: "RevokeUserOAuthGrants",
+			Handler:    _AuthMutation_RevokeUserOAuthGrants_Handler,
+		},
+		{
+			MethodName: "IssueOAuthAccessToken",
+			Handler:    _AuthMutation_IssueOAuthAccessToken_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "mutations/auth_mutation.proto",
 }
 
-// emit-sha256: 2986ae82406f1eee5d025cb2fc0be752784f1822138a673152c6dc6e9ac6a560
+// emit-sha256: 1c9ce0d441ad6ff480518e353f5f0f69e99d808dffd1ce6e32e6cbeb7f59d384

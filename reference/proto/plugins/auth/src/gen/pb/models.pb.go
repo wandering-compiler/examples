@@ -1043,6 +1043,22 @@ type UserToken struct {
 	// enforce `expires_at IS NULL OR expires_at > NOW()`, so the NULL
 	// case keeps never-expiring tokens valid across every config.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// token_type — SESSION (browser bearer, the default) vs API (MCP /
+	// non-browser). DB default SESSION (=1) so existing rows + IssueToken-
+	// minted tokens are session tokens; CreateApiToken stamps API.
+	// Gated by api_token: a project using only session bearer tokens
+	// carries no token_type column (every token is implicitly a session),
+	// so enabling/​disabling the feature is the only thing that touches the
+	// token schema — no breaking column on projects that don't opt in.
+	TokenType TokenType `protobuf:"varint,5,opt,name=token_type,json=tokenType,proto3,enum=w17.contrib.auth.TokenType" json:"token_type,omitempty"`
+	// --- api_token feature: management metadata for API/MCP tokens ---
+	// Dropped together when the feature is off (a project using only
+	// session bearer tokens carries none of these columns). `name` is the
+	// human label shown in the token list; last_used_at backs audit.
+	// (expiry lives in the base-tier expires_at above — it applies to
+	// every token, not just API ones.)
+	Name       string                 `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
+	LastUsedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
 	// device_id — the Device this token is BOUND to (DPoP's `cnf.jkt`, kept
 	// as a reference to the Device row whose `thumbprint` is the binding).
 	// Every session mint path (SignIn, SignUp, ConfirmSignUp, VerifyMfa,
@@ -1120,8 +1136,21 @@ type UserToken struct {
 	// other token, and when the authorizing request was bound to no device. Base
 	// tier. No DB-level FK (the activation-rename caveat in the message header).
 	ApprovedByDeviceId string `protobuf:"bytes,16,opt,name=approved_by_device_id,json=approvedByDeviceId,proto3" json:"approved_by_device_id,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// --- oauth_server: an access token the authorization server issued ---
+	// oauth_grant_id — the OAuth grant (a "connected app") the token belongs
+	// to; revoking the grant revokes it. NULL on every other token.
+	OauthGrantId string `protobuf:"bytes,21,opt,name=oauth_grant_id,json=oauthGrantId,proto3" json:"oauth_grant_id,omitempty"`
+	// resource — the protected resource (RFC 8707) the token is for: an MCP
+	// surface's public URL. Authenticate refuses it on any other resource
+	// (the gateway names the one it serves, x-w17-mcp-resource). NULL on every
+	// other token.
+	Resource string `protobuf:"bytes,22,opt,name=resource,proto3" json:"resource,omitempty"`
+	// org_id — the organization the user chose on the consent page: an MCP
+	// client sends no W17-Org, so the token carries its organization, and a
+	// W17-Org naming another is refused. NULL without organizations.
+	OauthOrgId    string `protobuf:"bytes,23,opt,name=oauth_org_id,json=oauthOrgId,proto3" json:"oauth_org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UserToken) Reset() {
@@ -1189,6 +1218,27 @@ func (x *UserToken) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *UserToken) GetTokenType() TokenType {
+	if x != nil {
+		return x.TokenType
+	}
+	return TokenType_TOKEN_TYPE_UNSPECIFIED
+}
+
+func (x *UserToken) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UserToken) GetLastUsedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastUsedAt
+	}
+	return nil
+}
+
 func (x *UserToken) GetDeviceId() string {
 	if x != nil {
 		return x.DeviceId
@@ -1241,6 +1291,27 @@ func (x *UserToken) GetPublicComputer() bool {
 func (x *UserToken) GetApprovedByDeviceId() string {
 	if x != nil {
 		return x.ApprovedByDeviceId
+	}
+	return ""
+}
+
+func (x *UserToken) GetOauthGrantId() string {
+	if x != nil {
+		return x.OauthGrantId
+	}
+	return ""
+}
+
+func (x *UserToken) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *UserToken) GetOauthOrgId() string {
+	if x != nil {
+		return x.OauthOrgId
 	}
 	return ""
 }
@@ -1617,6 +1688,15 @@ type Role struct {
 	Name        string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	CreatedAt   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// token_type — the realm this role applies to. SESSION roles count
+	// toward bearer-session auth; API roles toward API/MCP tokens. A user
+	// may hold roles of both realms; Authenticate picks the matching set
+	// for the presented token. Default SESSION. The domain's
+	// (w17.acl_roles) declaration drives which roles are seeded with which
+	// realm (via the role's `realm` string). Gated by api_token: without
+	// the feature there is one realm, so no column — every role counts for
+	// the (only) bearer-session path, exactly as today.
+	TokenType TokenType `protobuf:"varint,5,opt,name=token_type,json=tokenType,proto3,enum=w17.contrib.auth.TokenType" json:"token_type,omitempty"`
 	// all_permissions — WILDCARD grant. A user holding a role with
 	// this flag set passes EVERY ACL permission check for the role's
 	// realm, regardless of the RolePermission rows present and
@@ -1760,6 +1840,13 @@ func (x *Role) GetCreatedAt() *timestamppb.Timestamp {
 		return x.CreatedAt
 	}
 	return nil
+}
+
+func (x *Role) GetTokenType() TokenType {
+	if x != nil {
+		return x.TokenType
+	}
+	return TokenType_TOKEN_TYPE_UNSPECIFIED
 }
 
 func (x *Role) GetAllPermissions() bool {
@@ -2151,6 +2238,81 @@ func (x *UserRole) GetEndedKey() string {
 	return ""
 }
 
+// TokenPermission — the per-API-token permission subset (least-privilege
+// narrowing). When an API token has rows here, Authenticate intersects
+// the user's API-realm role permissions with this set — a token can only
+// narrow, never escalate (no rows = no narrowing = the user's full API
+// perms). `permission_id` shares RolePermission's semantics (INT32 into
+// the activating domain's AclPermission enum + CHECK; no FK by design).
+// Gated by `api_token`: drops with the rest of the API-token surface.
+type TokenPermission struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	TokenId       string                 `protobuf:"bytes,2,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	PermissionId  int32                  `protobuf:"varint,3,opt,name=permission_id,json=permissionId,proto3" json:"permission_id,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TokenPermission) Reset() {
+	*x = TokenPermission{}
+	mi := &file_types_models_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TokenPermission) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TokenPermission) ProtoMessage() {}
+
+func (x *TokenPermission) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TokenPermission.ProtoReflect.Descriptor instead.
+func (*TokenPermission) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *TokenPermission) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *TokenPermission) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
+	}
+	return ""
+}
+
+func (x *TokenPermission) GetPermissionId() int32 {
+	if x != nil {
+		return x.PermissionId
+	}
+	return 0
+}
+
+func (x *TokenPermission) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
 // BootstrapClaim — the one row that says the bootstrap administrator has
 // been handed out (rbac).
 //
@@ -2174,7 +2336,7 @@ type BootstrapClaim struct {
 
 func (x *BootstrapClaim) Reset() {
 	*x = BootstrapClaim{}
-	mi := &file_types_models_proto_msgTypes[9]
+	mi := &file_types_models_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2186,7 +2348,7 @@ func (x *BootstrapClaim) String() string {
 func (*BootstrapClaim) ProtoMessage() {}
 
 func (x *BootstrapClaim) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[9]
+	mi := &file_types_models_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2199,7 +2361,7 @@ func (x *BootstrapClaim) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapClaim.ProtoReflect.Descriptor instead.
 func (*BootstrapClaim) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{9}
+	return file_types_models_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *BootstrapClaim) GetSlot() string {
@@ -2219,6 +2381,641 @@ func (x *BootstrapClaim) GetUserId() string {
 func (x *BootstrapClaim) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
+	}
+	return nil
+}
+
+// OAuthClient — a public OAuth client (no secret: token_endpoint_auth_method
+// none, PKCE is the binding). A confidential client is an AuthClient.
+type OAuthClient struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// client_id — what the client sends: an id this server minted (DCR) or
+	// the https URL of its metadata document (CIMD). Looked up by its hash, so
+	// the unique index stays small whatever the URL's length.
+	ClientId     string          `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientIdHash string          `protobuf:"bytes,3,opt,name=client_id_hash,json=clientIdHash,proto3" json:"client_id_hash,omitempty"`
+	Kind         OAuthClientKind `protobuf:"varint,4,opt,name=kind,proto3,enum=w17.contrib.auth.OAuthClientKind" json:"kind,omitempty"`
+	// The name and links the consent page shows, as the client stated them.
+	// Unverified: the page shows the redirect's host beside them, which is
+	// the one thing the client cannot choose freely.
+	ClientName string `protobuf:"bytes,5,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
+	ClientUri  string `protobuf:"bytes,6,opt,name=client_uri,json=clientUri,proto3" json:"client_uri,omitempty"`
+	LogoUri    string `protobuf:"bytes,7,opt,name=logo_uri,json=logoUri,proto3" json:"logo_uri,omitempty"`
+	// redirect_uris — every redirect the client may use, one per line; an
+	// authorization request's redirect must equal one of them (a loopback one
+	// with any port, RFC 8252 §7.3).
+	RedirectUris string `protobuf:"bytes,8,opt,name=redirect_uris,json=redirectUris,proto3" json:"redirect_uris,omitempty"`
+	SoftwareId   string `protobuf:"bytes,9,opt,name=software_id,json=softwareId,proto3" json:"software_id,omitempty"`
+	// created_ip — the address that registered it (DCR), for the operator.
+	CreatedIp string                 `protobuf:"bytes,10,opt,name=created_ip,json=createdIp,proto3" json:"created_ip,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// metadata_fetched_at — when a CIMD client's document was last read; it is
+	// read again once it is a day old.
+	MetadataFetchedAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=metadata_fetched_at,json=metadataFetchedAt,proto3" json:"metadata_fetched_at,omitempty"`
+	// disabled_at — an operator disabled the client: no new authorization,
+	// and its grants stop refreshing.
+	DisabledAt    *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=disabled_at,json=disabledAt,proto3" json:"disabled_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OAuthClient) Reset() {
+	*x = OAuthClient{}
+	mi := &file_types_models_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OAuthClient) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OAuthClient) ProtoMessage() {}
+
+func (x *OAuthClient) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OAuthClient.ProtoReflect.Descriptor instead.
+func (*OAuthClient) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *OAuthClient) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OAuthClient) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *OAuthClient) GetClientIdHash() string {
+	if x != nil {
+		return x.ClientIdHash
+	}
+	return ""
+}
+
+func (x *OAuthClient) GetKind() OAuthClientKind {
+	if x != nil {
+		return x.Kind
+	}
+	return OAuthClientKind_OAUTH_CLIENT_KIND_UNSPECIFIED
+}
+
+func (x *OAuthClient) GetClientName() string {
+	if x != nil {
+		return x.ClientName
+	}
+	return ""
+}
+
+func (x *OAuthClient) GetClientUri() string {
+	if x != nil {
+		return x.ClientUri
+	}
+	return ""
+}
+
+func (x *OAuthClient) GetLogoUri() string {
+	if x != nil {
+		return x.LogoUri
+	}
+	return ""
+}
+
+func (x *OAuthClient) GetRedirectUris() string {
+	if x != nil {
+		return x.RedirectUris
+	}
+	return ""
+}
+
+func (x *OAuthClient) GetSoftwareId() string {
+	if x != nil {
+		return x.SoftwareId
+	}
+	return ""
+}
+
+func (x *OAuthClient) GetCreatedIp() string {
+	if x != nil {
+		return x.CreatedIp
+	}
+	return ""
+}
+
+func (x *OAuthClient) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *OAuthClient) GetMetadataFetchedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.MetadataFetchedAt
+	}
+	return nil
+}
+
+func (x *OAuthClient) GetDisabledAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DisabledAt
+	}
+	return nil
+}
+
+// OAuthAuthorization — one authorization request, from the authorization
+// endpoint to the consent page's decision and the code's redemption. The
+// opaque request id the consent page carries and the code are stored as
+// hashes only.
+type OAuthAuthorization struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	RequestHash   string                 `protobuf:"bytes,2,opt,name=request_hash,json=requestHash,proto3" json:"request_hash,omitempty"`
+	ClientRowId   string                 `protobuf:"bytes,3,opt,name=client_row_id,json=clientRowId,proto3" json:"client_row_id,omitempty"`
+	Kind          OAuthGrantKind         `protobuf:"varint,4,opt,name=kind,proto3,enum=w17.contrib.auth.OAuthGrantKind" json:"kind,omitempty"`
+	RedirectUri   string                 `protobuf:"bytes,5,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
+	State         string                 `protobuf:"bytes,6,opt,name=state,proto3" json:"state,omitempty"`
+	CodeChallenge string                 `protobuf:"bytes,7,opt,name=code_challenge,json=codeChallenge,proto3" json:"code_challenge,omitempty"`
+	Scope         string                 `protobuf:"bytes,8,opt,name=scope,proto3" json:"scope,omitempty"`
+	// resource — the protected resource the token will be for (an MCP grant);
+	// blank for a session grant.
+	Resource string `protobuf:"bytes,9,opt,name=resource,proto3" json:"resource,omitempty"`
+	// issuer — the server's issuer, sent back with the code (RFC 9207 iss).
+	Issuer    string                 `protobuf:"bytes,10,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	CreatedIp string                 `protobuf:"bytes,11,opt,name=created_ip,json=createdIp,proto3" json:"created_ip,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// expires_at — the request must be decided before this (10 minutes).
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	DecidedAt *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=decided_at,json=decidedAt,proto3" json:"decided_at,omitempty"`
+	Decision  OAuthDecision          `protobuf:"varint,15,opt,name=decision,proto3,enum=w17.contrib.auth.OAuthDecision" json:"decision,omitempty"`
+	// Who decided, in which organization, from which device and session.
+	UserId             string `protobuf:"bytes,16,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	OrgId              string `protobuf:"bytes,17,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	ApprovedByDeviceId string `protobuf:"bytes,18,opt,name=approved_by_device_id,json=approvedByDeviceId,proto3" json:"approved_by_device_id,omitempty"`
+	// session_expires_at — when the approving session expires: a session
+	// grant mints no later than this (as a CLI login does), so a session
+	// cannot renew itself through this server. NULL = that session never
+	// expires.
+	SessionExpiresAt *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=session_expires_at,json=sessionExpiresAt,proto3" json:"session_expires_at,omitempty"`
+	// The code, once approved: its hash, its expiry (60 s) and its
+	// redemption. Burned before PKCE is checked.
+	CodeHash       string                 `protobuf:"bytes,20,opt,name=code_hash,json=codeHash,proto3" json:"code_hash,omitempty"`
+	CodeExpiresAt  *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=code_expires_at,json=codeExpiresAt,proto3" json:"code_expires_at,omitempty"`
+	CodeConsumedAt *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=code_consumed_at,json=codeConsumedAt,proto3" json:"code_consumed_at,omitempty"`
+	// The session a session-kind code minted (its token hash), so a replay of
+	// the code ends it (OAuth 2.1 §4.1.3). An MCP code's grant is found by
+	// OAuthGrant.authorization_id instead.
+	SessionTokenHash string `protobuf:"bytes,23,opt,name=session_token_hash,json=sessionTokenHash,proto3" json:"session_token_hash,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *OAuthAuthorization) Reset() {
+	*x = OAuthAuthorization{}
+	mi := &file_types_models_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OAuthAuthorization) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OAuthAuthorization) ProtoMessage() {}
+
+func (x *OAuthAuthorization) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OAuthAuthorization.ProtoReflect.Descriptor instead.
+func (*OAuthAuthorization) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *OAuthAuthorization) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetRequestHash() string {
+	if x != nil {
+		return x.RequestHash
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetClientRowId() string {
+	if x != nil {
+		return x.ClientRowId
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetKind() OAuthGrantKind {
+	if x != nil {
+		return x.Kind
+	}
+	return OAuthGrantKind_OAUTH_GRANT_KIND_UNSPECIFIED
+}
+
+func (x *OAuthAuthorization) GetRedirectUri() string {
+	if x != nil {
+		return x.RedirectUri
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetCodeChallenge() string {
+	if x != nil {
+		return x.CodeChallenge
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetCreatedIp() string {
+	if x != nil {
+		return x.CreatedIp
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *OAuthAuthorization) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *OAuthAuthorization) GetDecidedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DecidedAt
+	}
+	return nil
+}
+
+func (x *OAuthAuthorization) GetDecision() OAuthDecision {
+	if x != nil {
+		return x.Decision
+	}
+	return OAuthDecision_OAUTH_DECISION_UNDECIDED
+}
+
+func (x *OAuthAuthorization) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetApprovedByDeviceId() string {
+	if x != nil {
+		return x.ApprovedByDeviceId
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetSessionExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SessionExpiresAt
+	}
+	return nil
+}
+
+func (x *OAuthAuthorization) GetCodeHash() string {
+	if x != nil {
+		return x.CodeHash
+	}
+	return ""
+}
+
+func (x *OAuthAuthorization) GetCodeExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CodeExpiresAt
+	}
+	return nil
+}
+
+func (x *OAuthAuthorization) GetCodeConsumedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CodeConsumedAt
+	}
+	return nil
+}
+
+func (x *OAuthAuthorization) GetSessionTokenHash() string {
+	if x != nil {
+		return x.SessionTokenHash
+	}
+	return ""
+}
+
+// OAuthGrant — what the user approved for an MCP client: a "connected app".
+// Its access tokens are UserToken rows (mcp_only, oauth_grant_id); its
+// refresh tokens OAuthRefreshToken rows. Revoking it ends both.
+type OAuthGrant struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Id              string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId          string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	OrgId           string                 `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	ClientRowId     string                 `protobuf:"bytes,4,opt,name=client_row_id,json=clientRowId,proto3" json:"client_row_id,omitempty"`
+	AuthorizationId string                 `protobuf:"bytes,5,opt,name=authorization_id,json=authorizationId,proto3" json:"authorization_id,omitempty"`
+	Resource        string                 `protobuf:"bytes,6,opt,name=resource,proto3" json:"resource,omitempty"`
+	Scope           string                 `protobuf:"bytes,7,opt,name=scope,proto3" json:"scope,omitempty"`
+	// The device of the approving session: revoking it revokes the grant.
+	ApprovedByDeviceId string                 `protobuf:"bytes,8,opt,name=approved_by_device_id,json=approvedByDeviceId,proto3" json:"approved_by_device_id,omitempty"`
+	CreatedAt          *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// expires_at — the grant's own end (oauth_grant_max_days); no refresh
+	// outlives it.
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	LastUsedAt    *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
+	RevokedAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
+	RevokedBy     string                 `protobuf:"bytes,13,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
+	RevokeReason  RevokeReason           `protobuf:"varint,14,opt,name=revoke_reason,json=revokeReason,proto3,enum=w17.contrib.auth.RevokeReason" json:"revoke_reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OAuthGrant) Reset() {
+	*x = OAuthGrant{}
+	mi := &file_types_models_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OAuthGrant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OAuthGrant) ProtoMessage() {}
+
+func (x *OAuthGrant) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OAuthGrant.ProtoReflect.Descriptor instead.
+func (*OAuthGrant) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *OAuthGrant) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OAuthGrant) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *OAuthGrant) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *OAuthGrant) GetClientRowId() string {
+	if x != nil {
+		return x.ClientRowId
+	}
+	return ""
+}
+
+func (x *OAuthGrant) GetAuthorizationId() string {
+	if x != nil {
+		return x.AuthorizationId
+	}
+	return ""
+}
+
+func (x *OAuthGrant) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *OAuthGrant) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *OAuthGrant) GetApprovedByDeviceId() string {
+	if x != nil {
+		return x.ApprovedByDeviceId
+	}
+	return ""
+}
+
+func (x *OAuthGrant) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *OAuthGrant) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *OAuthGrant) GetLastUsedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastUsedAt
+	}
+	return nil
+}
+
+func (x *OAuthGrant) GetRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RevokedAt
+	}
+	return nil
+}
+
+func (x *OAuthGrant) GetRevokedBy() string {
+	if x != nil {
+		return x.RevokedBy
+	}
+	return ""
+}
+
+func (x *OAuthGrant) GetRevokeReason() RevokeReason {
+	if x != nil {
+		return x.RevokeReason
+	}
+	return RevokeReason_REVOKE_REASON_NONE
+}
+
+// OAuthRefreshToken — one refresh token of a grant, stored as its hash.
+// Each use spends it and issues the next (rotation); a spent one presented
+// again ends the grant.
+type OAuthRefreshToken struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	GrantId       string                 `protobuf:"bytes,2,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	TokenHash     string                 `protobuf:"bytes,3,opt,name=token_hash,json=tokenHash,proto3" json:"token_hash,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	UsedAt        *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=used_at,json=usedAt,proto3" json:"used_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OAuthRefreshToken) Reset() {
+	*x = OAuthRefreshToken{}
+	mi := &file_types_models_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OAuthRefreshToken) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OAuthRefreshToken) ProtoMessage() {}
+
+func (x *OAuthRefreshToken) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OAuthRefreshToken.ProtoReflect.Descriptor instead.
+func (*OAuthRefreshToken) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *OAuthRefreshToken) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OAuthRefreshToken) GetGrantId() string {
+	if x != nil {
+		return x.GrantId
+	}
+	return ""
+}
+
+func (x *OAuthRefreshToken) GetTokenHash() string {
+	if x != nil {
+		return x.TokenHash
+	}
+	return ""
+}
+
+func (x *OAuthRefreshToken) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *OAuthRefreshToken) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *OAuthRefreshToken) GetUsedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UsedAt
 	}
 	return nil
 }
@@ -2245,7 +3042,7 @@ const file_types_models_proto_rawDesc = "" +
 	"\xca\xf3\x18\x06\b\x068\x01@dR\x04name\x12+\n" +
 	"\x06domain\x18\x04 \x01(\tB\x13\xca\xf3\x18\t\b\x01(\x018\x01@\xfd\x01\xd2\xf3\x18\x02\b\x01R\x06domain\x12F\n" +
 	"\n" +
-	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\ftenant_scope\"\xb4\x05\n" +
+	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\ftenant_scope\"\xc6\b\n" +
 	"\tUserToken\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\"\n" +
 	"\x05token\x18\x02 \x01(\tB\f\xca\xf3\x18\b\bC(\x018\x01@@R\x05token\x12%\n" +
@@ -2253,7 +3050,12 @@ const file_types_models_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12C\n" +
 	"\n" +
-	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\texpiresAt\x12+\n" +
+	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\texpiresAt\x12R\n" +
+	"\n" +
+	"token_type\x18\x05 \x01(\x0e2\x1b.w17.contrib.auth.TokenTypeB\x16\xca\xf3\x18\x05\b2\xa8\x01\x01\x92\xf5\x18\tapi_tokenR\ttokenType\x12,\n" +
+	"\x04name\x18\x06 \x01(\tB\x18\xca\xf3\x18\a\b\x010\x01@\x80\x01\x92\xf5\x18\tapi_tokenR\x04name\x12S\n" +
+	"\flast_used_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x15\xca\xf3\x18\x04\b\x16(\x01\x92\xf5\x18\tapi_tokenR\n" +
+	"lastUsedAt\x12+\n" +
 	"\tdevice_id\x18\t \x01(\tB\x0e\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x02\b\x01R\bdeviceId\x12\"\n" +
 	"\bmcp_only\x18\v \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\amcpOnly\x12+\n" +
 	"\n" +
@@ -2265,7 +3067,11 @@ const file_types_models_proto_rawDesc = "" +
 	"revoked_by\x18\r \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\trevokedBy\x12Q\n" +
 	"\rrevoke_reason\x18\x0e \x01(\x0e2\x1e.w17.contrib.auth.RevokeReasonB\f\xca\xf3\x18\b\b2\x90\x02\x01\xa8\x01\x00R\frevokeReason\x120\n" +
 	"\x0fpublic_computer\x18\x0f \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\x0epublicComputer\x12;\n" +
-	"\x15approved_by_device_id\x18\x10 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId:\x04\xc2\xf3\x18\x00\"\xc7\x05\n" +
+	"\x15approved_by_device_id\x18\x10 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId\x12D\n" +
+	"\x0eoauth_grant_id\x18\x15 \x01(\tB\x1e\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x02\b\x01\x92\xf5\x18\foauth_serverR\foauthGrantId\x127\n" +
+	"\bresource\x18\x16 \x01(\tB\x1b\xca\xf3\x18\a\b\x05(\x01@\x80\x10\x92\xf5\x18\foauth_serverR\bresource\x12:\n" +
+	"\foauth_org_id\x18\x17 \x01(\tB\x18\xca\xf3\x18\x04\b\x03(\x01\x92\xf5\x18\foauth_serverR\n" +
+	"oauthOrgId:\x04\xc2\xf3\x18\x00\"\xc7\x05\n" +
 	"\x06Device\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12%\n" +
 	"\auser_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06userId\x12*\n" +
@@ -2323,13 +3129,15 @@ const file_types_models_proto_rawDesc = "" +
 	"\aaddress\n" +
 	"\f\n" +
 	"\n" +
-	"created_at\"\xc3\x04\n" +
+	"created_at\"\x97\x05\n" +
 	"\x04Role\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\x1c\n" +
 	"\x04name\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x06@dR\x04name\x12-\n" +
 	"\vdescription\x18\x03 \x01(\tB\v\xca\xf3\x18\a\b\x020\x01@\xf4\x03R\vdescription\x12F\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x120\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12R\n" +
+	"\n" +
+	"token_type\x18\x05 \x01(\x0e2\x1b.w17.contrib.auth.TokenTypeB\x16\xca\xf3\x18\x05\b2\xa8\x01\x01\x92\xf5\x18\tapi_tokenR\ttokenType\x120\n" +
 	"\x0fall_permissions\x18\x06 \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\x0eallPermissions\x123\n" +
 	"\x11assign_first_user\x18\a \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\x0fassignFirstUser\x12.\n" +
 	"\x0eassign_default\x18\b \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\rassignDefault\x12+\n" +
@@ -2386,13 +3194,121 @@ const file_types_models_proto_rawDesc = "" +
 	"\t\n" +
 	"\arole_id\n" +
 	"\v\n" +
-	"\tended_key\x10\x01R\x0eorg_membership\xfa\xf4\x18\x04rbac\"\xa7\x01\n" +
+	"\tended_key\x10\x01R\x0eorg_membership\xfa\xf4\x18\x04rbac\"\x89\x02\n" +
+	"\x0fTokenPermission\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12'\n" +
+	"\btoken_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\atokenId\x124\n" +
+	"\rpermission_id\x18\x03 \x01(\x05B\x0f\xca\xf3\x18\x05\b\n" +
+	"\xf8\x01\x02\xd2\xf3\x18\x02\b\x01R\fpermissionId\x12F\n" +
+	"\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:2\xc2\xf3\x18!\x12\x1f\n" +
+	"\n" +
+	"\n" +
+	"\btoken_id\n" +
+	"\x0f\n" +
+	"\rpermission_id\x10\x01\xfa\xf4\x18\tapi_token\"\xa7\x01\n" +
 	"\x0eBootstrapClaim\x12\x1e\n" +
 	"\x04slot\x18\x01 \x01(\tB\n" +
 	"\xca\xf3\x18\x06\b\x06\x10\x01@ R\x04slot\x12\x1f\n" +
 	"\auser_id\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12F\n" +
 	"\n" +
-	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\f\xc2\xf3\x18\x00\xfa\xf4\x18\x04rbac*g\n" +
+	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\f\xc2\xf3\x18\x00\xfa\xf4\x18\x04rbac\"\xd9\x05\n" +
+	"\vOAuthClient\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12&\n" +
+	"\tclient_id\x18\x02 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x10R\bclientId\x120\n" +
+	"\x0eclient_id_hash\x18\x03 \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x018\x01@@R\fclientIdHash\x12=\n" +
+	"\x04kind\x18\x04 \x01(\x0e2!.w17.contrib.auth.OAuthClientKindB\x06\xca\xf3\x18\x02\b2R\x04kind\x12/\n" +
+	"\vclient_name\x18\x05 \x01(\tB\x0e\xca\xf3\x18\n" +
+	"\b\x010\x01@\xc8\x01\xa2\x01\x00R\n" +
+	"clientName\x12-\n" +
+	"\n" +
+	"client_uri\x18\x06 \x01(\tB\x0e\xca\xf3\x18\n" +
+	"\b\x010\x01@\x80\x10\xa2\x01\x00R\tclientUri\x12)\n" +
+	"\blogo_uri\x18\a \x01(\tB\x0e\xca\xf3\x18\n" +
+	"\b\x010\x01@\x80\x10\xa2\x01\x00R\alogoUri\x12/\n" +
+	"\rredirect_uris\x18\b \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x02@\xa0\x9c\x01R\fredirectUris\x12/\n" +
+	"\vsoftware_id\x18\t \x01(\tB\x0e\xca\xf3\x18\n" +
+	"\b\x010\x01@\xc8\x01\xa2\x01\x00R\n" +
+	"softwareId\x12,\n" +
+	"\n" +
+	"created_ip\x18\n" +
+	" \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@@\xa2\x01\x00R\tcreatedIp\x12F\n" +
+	"\n" +
+	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12T\n" +
+	"\x13metadata_fetched_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x11metadataFetchedAt\x12E\n" +
+	"\vdisabled_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\n" +
+	"disabledAt:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\foauth_server\"\x88\n" +
+	"\n" +
+	"\x12OAuthAuthorization\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12-\n" +
+	"\frequest_hash\x18\x02 \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x018\x01@@R\vrequestHash\x120\n" +
+	"\rclient_row_id\x18\x03 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\vclientRowId\x12<\n" +
+	"\x04kind\x18\x04 \x01(\x0e2 .w17.contrib.auth.OAuthGrantKindB\x06\xca\xf3\x18\x02\b2R\x04kind\x12,\n" +
+	"\fredirect_uri\x18\x05 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x10R\vredirectUri\x12$\n" +
+	"\x05state\x18\x06 \x01(\tB\x0e\xca\xf3\x18\n" +
+	"\b\x010\x01@\x80\b\xa2\x01\x00R\x05state\x120\n" +
+	"\x0ecode_challenge\x18\a \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x01R\rcodeChallenge\x12$\n" +
+	"\x05scope\x18\b \x01(\tB\x0e\xca\xf3\x18\n" +
+	"\b\x010\x01@\xc8\x01\xa2\x01\x00R\x05scope\x12*\n" +
+	"\bresource\x18\t \x01(\tB\x0e\xca\xf3\x18\n" +
+	"\b\x010\x01@\x80\x10\xa2\x01\x00R\bresource\x12!\n" +
+	"\x06issuer\x18\n" +
+	" \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x10R\x06issuer\x12,\n" +
+	"\n" +
+	"created_ip\x18\v \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@@\xa2\x01\x00R\tcreatedIp\x12F\n" +
+	"\n" +
+	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12A\n" +
+	"\n" +
+	"expires_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\texpiresAt\x12C\n" +
+	"\n" +
+	"decided_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\tdecidedAt\x12I\n" +
+	"\bdecision\x18\x0f \x01(\x0e2\x1f.w17.contrib.auth.OAuthDecisionB\f\xca\xf3\x18\b\b2\x90\x02\x01\xa8\x01\x00R\bdecision\x12'\n" +
+	"\auser_id\x18\x10 \x01(\tB\x0e\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x02\b\x01R\x06userId\x12\x1f\n" +
+	"\x06org_id\x18\x11 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05orgId\x12;\n" +
+	"\x15approved_by_device_id\x18\x12 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId\x12R\n" +
+	"\x12session_expires_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x10sessionExpiresAt\x12)\n" +
+	"\tcode_hash\x18\x14 \x01(\tB\f\xca\xf3\x18\b\b\x01(\x018\x01@@R\bcodeHash\x12L\n" +
+	"\x0fcode_expires_at\x18\x15 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\rcodeExpiresAt\x12N\n" +
+	"\x10code_consumed_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x0ecodeConsumedAt\x128\n" +
+	"\x12session_token_hash\x18\x17 \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x01(\x01@@R\x10sessionTokenHash:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\foauth_server\"\x8a\x06\n" +
+	"\n" +
+	"OAuthGrant\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12%\n" +
+	"\auser_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06userId\x12\x1f\n" +
+	"\x06org_id\x18\x03 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05orgId\x120\n" +
+	"\rclient_row_id\x18\x04 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\vclientRowId\x121\n" +
+	"\x10authorization_id\x18\x05 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x0fauthorizationId\x12%\n" +
+	"\bresource\x18\x06 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x10R\bresource\x12$\n" +
+	"\x05scope\x18\a \x01(\tB\x0e\xca\xf3\x18\n" +
+	"\b\x010\x01@\xc8\x01\xa2\x01\x00R\x05scope\x12;\n" +
+	"\x15approved_by_device_id\x18\b \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId\x12F\n" +
+	"\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12A\n" +
+	"\n" +
+	"expires_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\texpiresAt\x12F\n" +
+	"\flast_used_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\n" +
+	"lastUsedAt\x12C\n" +
+	"\n" +
+	"revoked_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\trevokedAt\x12'\n" +
+	"\n" +
+	"revoked_by\x18\r \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\trevokedBy\x12Q\n" +
+	"\rrevoke_reason\x18\x0e \x01(\x0e2\x1e.w17.contrib.auth.RevokeReasonB\f\xca\xf3\x18\b\b2\x90\x02\x01\xa8\x01\x00R\frevokeReason:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\foauth_server\"\xe4\x02\n" +
+	"\x11OAuthRefreshToken\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12'\n" +
+	"\bgrant_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\agrantId\x12)\n" +
+	"\n" +
+	"token_hash\x18\x03 \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x018\x01@@R\ttokenHash\x12F\n" +
+	"\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12A\n" +
+	"\n" +
+	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\texpiresAt\x12=\n" +
+	"\aused_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x06usedAt:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\foauth_server*g\n" +
 	"\tTokenType\x12\x1a\n" +
 	"\x16TOKEN_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12TOKEN_TYPE_SESSION\x10\x01\x12\x12\n" +
@@ -2488,7 +3404,7 @@ func file_types_models_proto_rawDescGZIP() []byte {
 }
 
 var file_types_models_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_types_models_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_types_models_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_types_models_proto_goTypes = []any{
 	(TokenType)(0),                // 0: w17.contrib.auth.TokenType
 	(RevokeReason)(0),             // 1: w17.contrib.auth.RevokeReason
@@ -2509,40 +3425,69 @@ var file_types_models_proto_goTypes = []any{
 	(*RolePermission)(nil),        // 16: w17.contrib.auth.RolePermission
 	(*RolePermissionChange)(nil),  // 17: w17.contrib.auth.RolePermissionChange
 	(*UserRole)(nil),              // 18: w17.contrib.auth.UserRole
-	(*BootstrapClaim)(nil),        // 19: w17.contrib.auth.BootstrapClaim
-	(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
+	(*TokenPermission)(nil),       // 19: w17.contrib.auth.TokenPermission
+	(*BootstrapClaim)(nil),        // 20: w17.contrib.auth.BootstrapClaim
+	(*OAuthClient)(nil),           // 21: w17.contrib.auth.OAuthClient
+	(*OAuthAuthorization)(nil),    // 22: w17.contrib.auth.OAuthAuthorization
+	(*OAuthGrant)(nil),            // 23: w17.contrib.auth.OAuthGrant
+	(*OAuthRefreshToken)(nil),     // 24: w17.contrib.auth.OAuthRefreshToken
+	(*timestamppb.Timestamp)(nil), // 25: google.protobuf.Timestamp
 }
 var file_types_models_proto_depIdxs = []int32{
-	20, // 0: w17.contrib.auth.User.created_at:type_name -> google.protobuf.Timestamp
-	20, // 1: w17.contrib.auth.User.device_trust_revoked_at:type_name -> google.protobuf.Timestamp
-	20, // 2: w17.contrib.auth.User.sign_in_window_at:type_name -> google.protobuf.Timestamp
-	20, // 3: w17.contrib.auth.Tenant.created_at:type_name -> google.protobuf.Timestamp
-	20, // 4: w17.contrib.auth.UserToken.created_at:type_name -> google.protobuf.Timestamp
-	20, // 5: w17.contrib.auth.UserToken.expires_at:type_name -> google.protobuf.Timestamp
-	20, // 6: w17.contrib.auth.UserToken.revoked_at:type_name -> google.protobuf.Timestamp
-	1,  // 7: w17.contrib.auth.UserToken.revoke_reason:type_name -> w17.contrib.auth.RevokeReason
-	20, // 8: w17.contrib.auth.Device.trusted_at:type_name -> google.protobuf.Timestamp
-	20, // 9: w17.contrib.auth.Device.last_seen_at:type_name -> google.protobuf.Timestamp
-	20, // 10: w17.contrib.auth.Device.created_at:type_name -> google.protobuf.Timestamp
-	20, // 11: w17.contrib.auth.Device.revoked_at:type_name -> google.protobuf.Timestamp
-	20, // 12: w17.contrib.auth.Device.sign_in_window_at:type_name -> google.protobuf.Timestamp
-	20, // 13: w17.contrib.auth.SignInEvent.created_at:type_name -> google.protobuf.Timestamp
-	4,  // 14: w17.contrib.auth.SignInEvent.method:type_name -> w17.contrib.auth.SignInMethod
-	5,  // 15: w17.contrib.auth.SignInEvent.outcome:type_name -> w17.contrib.auth.SignInOutcome
-	20, // 16: w17.contrib.auth.Role.created_at:type_name -> google.protobuf.Timestamp
-	20, // 17: w17.contrib.auth.Role.deleted_at:type_name -> google.protobuf.Timestamp
-	20, // 18: w17.contrib.auth.RolePermission.created_at:type_name -> google.protobuf.Timestamp
-	20, // 19: w17.contrib.auth.RolePermission.removed_at:type_name -> google.protobuf.Timestamp
-	6,  // 20: w17.contrib.auth.RolePermissionChange.kind:type_name -> w17.contrib.auth.RolePermissionChangeKind
-	20, // 21: w17.contrib.auth.RolePermissionChange.created_at:type_name -> google.protobuf.Timestamp
-	20, // 22: w17.contrib.auth.UserRole.created_at:type_name -> google.protobuf.Timestamp
-	20, // 23: w17.contrib.auth.UserRole.revoked_at:type_name -> google.protobuf.Timestamp
-	20, // 24: w17.contrib.auth.BootstrapClaim.created_at:type_name -> google.protobuf.Timestamp
-	25, // [25:25] is the sub-list for method output_type
-	25, // [25:25] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	25, // 0: w17.contrib.auth.User.created_at:type_name -> google.protobuf.Timestamp
+	25, // 1: w17.contrib.auth.User.device_trust_revoked_at:type_name -> google.protobuf.Timestamp
+	25, // 2: w17.contrib.auth.User.sign_in_window_at:type_name -> google.protobuf.Timestamp
+	25, // 3: w17.contrib.auth.Tenant.created_at:type_name -> google.protobuf.Timestamp
+	25, // 4: w17.contrib.auth.UserToken.created_at:type_name -> google.protobuf.Timestamp
+	25, // 5: w17.contrib.auth.UserToken.expires_at:type_name -> google.protobuf.Timestamp
+	0,  // 6: w17.contrib.auth.UserToken.token_type:type_name -> w17.contrib.auth.TokenType
+	25, // 7: w17.contrib.auth.UserToken.last_used_at:type_name -> google.protobuf.Timestamp
+	25, // 8: w17.contrib.auth.UserToken.revoked_at:type_name -> google.protobuf.Timestamp
+	1,  // 9: w17.contrib.auth.UserToken.revoke_reason:type_name -> w17.contrib.auth.RevokeReason
+	25, // 10: w17.contrib.auth.Device.trusted_at:type_name -> google.protobuf.Timestamp
+	25, // 11: w17.contrib.auth.Device.last_seen_at:type_name -> google.protobuf.Timestamp
+	25, // 12: w17.contrib.auth.Device.created_at:type_name -> google.protobuf.Timestamp
+	25, // 13: w17.contrib.auth.Device.revoked_at:type_name -> google.protobuf.Timestamp
+	25, // 14: w17.contrib.auth.Device.sign_in_window_at:type_name -> google.protobuf.Timestamp
+	25, // 15: w17.contrib.auth.SignInEvent.created_at:type_name -> google.protobuf.Timestamp
+	4,  // 16: w17.contrib.auth.SignInEvent.method:type_name -> w17.contrib.auth.SignInMethod
+	5,  // 17: w17.contrib.auth.SignInEvent.outcome:type_name -> w17.contrib.auth.SignInOutcome
+	25, // 18: w17.contrib.auth.Role.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 19: w17.contrib.auth.Role.token_type:type_name -> w17.contrib.auth.TokenType
+	25, // 20: w17.contrib.auth.Role.deleted_at:type_name -> google.protobuf.Timestamp
+	25, // 21: w17.contrib.auth.RolePermission.created_at:type_name -> google.protobuf.Timestamp
+	25, // 22: w17.contrib.auth.RolePermission.removed_at:type_name -> google.protobuf.Timestamp
+	6,  // 23: w17.contrib.auth.RolePermissionChange.kind:type_name -> w17.contrib.auth.RolePermissionChangeKind
+	25, // 24: w17.contrib.auth.RolePermissionChange.created_at:type_name -> google.protobuf.Timestamp
+	25, // 25: w17.contrib.auth.UserRole.created_at:type_name -> google.protobuf.Timestamp
+	25, // 26: w17.contrib.auth.UserRole.revoked_at:type_name -> google.protobuf.Timestamp
+	25, // 27: w17.contrib.auth.TokenPermission.created_at:type_name -> google.protobuf.Timestamp
+	25, // 28: w17.contrib.auth.BootstrapClaim.created_at:type_name -> google.protobuf.Timestamp
+	7,  // 29: w17.contrib.auth.OAuthClient.kind:type_name -> w17.contrib.auth.OAuthClientKind
+	25, // 30: w17.contrib.auth.OAuthClient.created_at:type_name -> google.protobuf.Timestamp
+	25, // 31: w17.contrib.auth.OAuthClient.metadata_fetched_at:type_name -> google.protobuf.Timestamp
+	25, // 32: w17.contrib.auth.OAuthClient.disabled_at:type_name -> google.protobuf.Timestamp
+	8,  // 33: w17.contrib.auth.OAuthAuthorization.kind:type_name -> w17.contrib.auth.OAuthGrantKind
+	25, // 34: w17.contrib.auth.OAuthAuthorization.created_at:type_name -> google.protobuf.Timestamp
+	25, // 35: w17.contrib.auth.OAuthAuthorization.expires_at:type_name -> google.protobuf.Timestamp
+	25, // 36: w17.contrib.auth.OAuthAuthorization.decided_at:type_name -> google.protobuf.Timestamp
+	9,  // 37: w17.contrib.auth.OAuthAuthorization.decision:type_name -> w17.contrib.auth.OAuthDecision
+	25, // 38: w17.contrib.auth.OAuthAuthorization.session_expires_at:type_name -> google.protobuf.Timestamp
+	25, // 39: w17.contrib.auth.OAuthAuthorization.code_expires_at:type_name -> google.protobuf.Timestamp
+	25, // 40: w17.contrib.auth.OAuthAuthorization.code_consumed_at:type_name -> google.protobuf.Timestamp
+	25, // 41: w17.contrib.auth.OAuthGrant.created_at:type_name -> google.protobuf.Timestamp
+	25, // 42: w17.contrib.auth.OAuthGrant.expires_at:type_name -> google.protobuf.Timestamp
+	25, // 43: w17.contrib.auth.OAuthGrant.last_used_at:type_name -> google.protobuf.Timestamp
+	25, // 44: w17.contrib.auth.OAuthGrant.revoked_at:type_name -> google.protobuf.Timestamp
+	1,  // 45: w17.contrib.auth.OAuthGrant.revoke_reason:type_name -> w17.contrib.auth.RevokeReason
+	25, // 46: w17.contrib.auth.OAuthRefreshToken.created_at:type_name -> google.protobuf.Timestamp
+	25, // 47: w17.contrib.auth.OAuthRefreshToken.expires_at:type_name -> google.protobuf.Timestamp
+	25, // 48: w17.contrib.auth.OAuthRefreshToken.used_at:type_name -> google.protobuf.Timestamp
+	49, // [49:49] is the sub-list for method output_type
+	49, // [49:49] is the sub-list for method input_type
+	49, // [49:49] is the sub-list for extension type_name
+	49, // [49:49] is the sub-list for extension extendee
+	0,  // [0:49] is the sub-list for field type_name
 }
 
 func init() { file_types_models_proto_init() }
@@ -2556,7 +3501,7 @@ func file_types_models_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_types_models_proto_rawDesc), len(file_types_models_proto_rawDesc)),
 			NumEnums:      10,
-			NumMessages:   10,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
@@ -2570,4 +3515,4 @@ func file_types_models_proto_init() {
 	file_types_models_proto_depIdxs = nil
 }
 
-// emit-sha256: d6ecde86d6bc29983a3100da16c2a15e6aa93768b921cfedf4561906e4809e05
+// emit-sha256: 2e58edec2a5be3b96c3007a5138b81f5a8facb5b00282c3d8d114de8709515bc

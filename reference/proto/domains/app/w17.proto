@@ -42,7 +42,7 @@ option (w17.domain) = {
       registered_as: "auth"
       channels:   [ { key: "events", value: "tasks" } ]
       auth_input: { header_name: "Authorization", scheme: "Bearer" }
-      features:   { names: [ "rbac", "authenticate_turnkey", "sign_up_turnkey", "sign_in_turnkey", "tenant_scope" ] }
+      features:   { names: [ "rbac", "authenticate_turnkey", "sign_up_turnkey", "sign_in_turnkey", "tenant_scope", "api_token", "oauth_server" ] }
       // This project curates its own /auth routes in rest.proto —
       // SignUp is mounted at `/{tenant_slug}/register` for URL-based
       // tenancy, which the generic preset can't express. Plugin REST

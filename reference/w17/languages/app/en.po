@@ -139,6 +139,21 @@ msgstr "Auth · Auth Query · Get Role"
 msgid "Auth · Auth Query · List Roles"
 msgstr "Auth · Auth Query · List Roles"
 
+msgid "Auth · Auth Service · Approve Oauth Authorization"
+msgstr "Auth · Auth Service · Approve Oauth Authorization"
+
+msgid "Auth · Auth Service · Deny Oauth Authorization"
+msgstr "Auth · Auth Service · Deny Oauth Authorization"
+
+msgid "Auth · Auth Service · Get Oauth Authorization"
+msgstr "Auth · Auth Service · Get Oauth Authorization"
+
+msgid "Auth · Auth Service · List My Oauth Grants"
+msgstr "Auth · Auth Service · List My Oauth Grants"
+
+msgid "Auth · Auth Service · Revoke My Oauth Grant"
+msgstr "Auth · Auth Service · Revoke My Oauth Grant"
+
 msgid "Auth · Auth Service · Who Am I"
 msgstr "Auth · Auth Service · Who Am I"
 
