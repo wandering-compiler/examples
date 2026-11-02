@@ -94,6 +94,10 @@ services:
   # Tool-owned: override env in the sibling compose.yaml, not here.
   brevostub:
     image: ${W17_WORKSPACE:-w17}-w17-brevostub:dev
+    # A local build no registry publishes: built from the source the
+    # plugin release ships (stack build, stack up --build, or the first up).
+    build:
+      context: proto/plugins/marketing/sandboxes/brevostub
     restart: unless-stopped
     labels:
       w17.sandbox: "true"

@@ -12,8 +12,8 @@ package w17lock.app.acl;
 import "w17/lock.proto";
 import "w17/field.proto";
 
-option (w17.lock_checksum) = "sha256:8c15a02cd5b2656b47745c2e7adf98e83c6e0a3317164d2b9b74879081c3423e";
-option (w17.lock_signature) = "ed25519/v1:c542bccc1c32c20efa2a1b3c6fa3d26b0320017cacc6241c92edc0432aa0333de81ae98969c45f6c2af8c86b5fd7fc89f901d8b6ea32595f2ce9ad7db98d990c";
+option (w17.lock_checksum) = "sha256:77dc700f3ac898419eb53b66d89125b5b0d5f2343d6ecd4999abd862191efa06";
+option (w17.lock_signature) = "ed25519/v1:52e7fa9b23e5047dbdd4c67d91ffe3c277b0f84677255c6d522ac328f9c630ed11444264d859c1613e339dae06be1dc6df794c2240e07db54ab5e37f040dce0e";
 option (w17.lock_derivation) = 1;
 
 // AclPermission — every permission allocated by the cascade for
@@ -40,13 +40,9 @@ option (w17.lock_derivation) = 1;
 enum AclPermission {
   ACL_PERMISSION_UNSPECIFIED = 0;
 
-  ADMIN_AUTH_AUTH_MUTATION_DELETE_ORGANIZATION = 1 [(w17.value_display) = { label: "Admin Auth · Auth Mutation · Delete Organization" }];
-  ADMIN_AUTH_AUTH_MUTATION_DELETE_USER = 2 [(w17.value_display) = { label: "Admin Auth · Auth Mutation · Delete User" }];
-  ADMIN_AUTH_AUTH_MUTATION_DISABLE_USERS = 3 [(w17.value_display) = { label: "Admin Auth · Auth Mutation · Disable Users" }];
-  ADMIN_AUTH_AUTH_MUTATION_ENABLE_USERS = 4 [(w17.value_display) = { label: "Admin Auth · Auth Mutation · Enable Users" }];
-  ADMIN_AUTH_AUTH_MUTATION_REVOKE_USER_TOKEN = 5 [(w17.value_display) = { label: "Admin Auth · Auth Mutation · Revoke User Token" }];
+  reserved 1, 2, 3, 4, 5, 7;
+
   ADMIN_AUTH_AUTH_MUTATION_UPDATE_ORGANIZATION = 6 [(w17.value_display) = { label: "Admin Auth · Auth Mutation · Update Organization" }];
-  ADMIN_AUTH_AUTH_MUTATION_UPDATE_USER = 7 [(w17.value_display) = { label: "Admin Auth · Auth Mutation · Update User" }];
   ADMIN_AUTH_AUTH_QUERY_GET_ORGANIZATION = 8 [(w17.value_display) = { label: "Admin Auth · Auth Query · Get Organization" }];
   ADMIN_AUTH_AUTH_QUERY_GET_ORG_MEMBERSHIP = 9 [(w17.value_display) = { label: "Admin Auth · Auth Query · Get Org Membership" }];
   ADMIN_AUTH_AUTH_QUERY_GET_USER = 10 [(w17.value_display) = { label: "Admin Auth · Auth Query · Get User" }];
@@ -55,7 +51,13 @@ enum AclPermission {
   ADMIN_AUTH_AUTH_QUERY_LIST_ORG_MEMBERSHIPS = 13 [(w17.value_display) = { label: "Admin Auth · Auth Query · List Org Memberships" }];
   ADMIN_AUTH_AUTH_QUERY_LIST_USERS = 14 [(w17.value_display) = { label: "Admin Auth · Auth Query · List Users" }];
   ADMIN_AUTH_AUTH_QUERY_LIST_USER_TOKENS = 15 [(w17.value_display) = { label: "Admin Auth · Auth Query · List User Tokens" }];
+  ADMIN_AUTH_AUTH_SERVICE_DISABLE_ACCOUNTS = 169 [(w17.value_display) = { label: "Admin Auth · Auth Service · Disable Accounts" }];
+  ADMIN_AUTH_AUTH_SERVICE_ENABLE_ACCOUNTS = 170 [(w17.value_display) = { label: "Admin Auth · Auth Service · Enable Accounts" }];
+  ADMIN_AUTH_AUTH_SERVICE_ERASE_ACCOUNT = 171 [(w17.value_display) = { label: "Admin Auth · Auth Service · Erase Account" }];
+  ADMIN_AUTH_AUTH_SERVICE_REMOVE_ORGANIZATION = 172 [(w17.value_display) = { label: "Admin Auth · Auth Service · Remove Organization" }];
   ADMIN_AUTH_AUTH_SERVICE_REMOVE_ORG_MEMBERSHIP = 16 [(w17.value_display) = { label: "Admin Auth · Auth Service · Remove Org Membership" }];
+  ADMIN_AUTH_AUTH_SERVICE_REVOKE_SESSION = 173 [(w17.value_display) = { label: "Admin Auth · Auth Service · Revoke Session" }];
+  ADMIN_AUTH_AUTH_SERVICE_UPDATE_ACCOUNT = 174 [(w17.value_display) = { label: "Admin Auth · Auth Service · Update Account" }];
   ADMIN_AUTH_AUTH_SERVICE_UPDATE_ORG_MEMBERSHIP_ROLE = 17 [(w17.value_display) = { label: "Admin Auth · Auth Service · Update Org Membership Role" }];
   ADMIN_AUTH_ORGANIZATION_CHANGE = 18 [(w17.value_display) = { label: "Admin Auth · Organization · Change" }];
   ADMIN_AUTH_ORGANIZATION_DELETE = 19 [(w17.value_display) = { label: "Admin Auth · Organization · Delete" }];
@@ -74,6 +76,11 @@ enum AclPermission {
   AUTH_AUTH_MUTATION_UPDATE_ROLE = 32 [(w17.value_display) = { label: "Auth · Auth Mutation · Update Role" }];
   AUTH_AUTH_QUERY_GET_ROLE = 33 [(w17.value_display) = { label: "Auth · Auth Query · Get Role" }];
   AUTH_AUTH_QUERY_LIST_ROLES = 34 [(w17.value_display) = { label: "Auth · Auth Query · List Roles" }];
+  AUTH_AUTH_SERVICE_APPROVE_OAUTH_AUTHORIZATION = 175 [(w17.value_display) = { label: "Auth · Auth Service · Approve Oauth Authorization" }];
+  AUTH_AUTH_SERVICE_DENY_OAUTH_AUTHORIZATION = 176 [(w17.value_display) = { label: "Auth · Auth Service · Deny Oauth Authorization" }];
+  AUTH_AUTH_SERVICE_GET_OAUTH_AUTHORIZATION = 177 [(w17.value_display) = { label: "Auth · Auth Service · Get Oauth Authorization" }];
+  AUTH_AUTH_SERVICE_LIST_MY_OAUTH_GRANTS = 178 [(w17.value_display) = { label: "Auth · Auth Service · List My Oauth Grants" }];
+  AUTH_AUTH_SERVICE_REVOKE_MY_OAUTH_GRANT = 179 [(w17.value_display) = { label: "Auth · Auth Service · Revoke My Oauth Grant" }];
   AUTH_AUTH_SERVICE_WHO_AM_I = 35 [(w17.value_display) = { label: "Auth · Auth Service · Who Am I" }];
   AUTH_ROLE_CHANGE = 36 [(w17.value_display) = { label: "Auth · Role · Change" }];
   AUTH_ROLE_DELETE = 37 [(w17.value_display) = { label: "Auth · Role · Delete" }];

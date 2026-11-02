@@ -71,7 +71,7 @@ func (h *AuthServiceHandler) acceptRecoveryCode(ctx context.Context, userID, cod
 	if len(norm) != recoveryCodeLen {
 		return false
 	}
-	spent, err := h.Mutation.ConsumeRecoveryCode(ctx, &pb.ConsumeRecoveryCodeReq{UserId: userID, CodeHash: recoveryCodeHash(norm)})
+	spent, err := h.Mutation.ConsumeRecoveryCode(ctx, &pb.ConsumeRecoveryCodeReq{UserId: userID, CodeHash: recoveryCodeHash(norm), Thumbprint: requestThumbprint(ctx)})
 	return err == nil && spent.GetId() != ""
 }
 
@@ -91,7 +91,12 @@ func (h *AuthServiceHandler) acceptRecoveryCode(ctx context.Context, userID, cod
 func (h *AuthServiceHandler) stepUp(ctx context.Context, userID string, row *pb.UserTotpSecret, code string) error {
 	att, err := h.Mutation.RecordStepUpAttempt(ctx, &pb.RecordStepUpAttemptReq{Id: row.GetId()})
 	if err != nil && notFoundOK(err) != nil {
-		return Unauthenticated(errMfaChallengeInvalid) // an unaccounted guess is not granted
+		// An unaccounted guess is not granted. An outage is said as one
+		// (AUTH_UNAVAILABLE), so the person retries instead of retyping.
+		if operationalCode(err) != codes.OK {
+			return Unauthenticated(err)
+		}
+		return UnauthenticatedMfaCode(errMfaChallengeInvalid)
 	}
 	if att.GetAttempts() == 0 {
 		return stepUpLocked(ctx)
@@ -113,7 +118,7 @@ func (h *AuthServiceHandler) stepUp(ctx context.Context, userID string, row *pb.
 		}
 	}
 	if !ok {
-		return Unauthenticated(errMfaChallengeInvalid)
+		return UnauthenticatedMfaCode(errMfaChallengeInvalid)
 	}
 	_, _ = h.Mutation.ResetStepUp(ctx, &pb.ResetStepUpReq{Id: row.GetId()})
 	return nil
@@ -125,6 +130,10 @@ func (h *AuthServiceHandler) GenerateRecoveryCodes(ctx context.Context, req *pb.
 	userID, err := callerUserID(ctx)
 	if err != nil {
 		return nil, Unauthenticated(err)
+	}
+	// Recovery codes stand in for the second factor — see EnrollTotp.
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
 	}
 	enrolled, row, err := h.totpEnrolled(ctx, userID)
 	if err != nil {
@@ -138,7 +147,7 @@ func (h *AuthServiceHandler) GenerateRecoveryCodes(ctx context.Context, req *pb.
 		return nil, err
 	}
 	var out []string
-	if err := h.inMfaTx(ctx, func(txCtx context.Context) error {
+	if err := h.inTx(ctx, func(txCtx context.Context) error {
 		var err error
 		out, err = h.replaceRecoveryCodes(txCtx, userID)
 		return err
@@ -148,11 +157,11 @@ func (h *AuthServiceHandler) GenerateRecoveryCodes(ctx context.Context, req *pb.
 	return &pb.GenerateRecoveryCodesResp{RecoveryCodes: out}, nil
 }
 
-// replaceRecoveryCodes deletes the user's set and stores a fresh one,
+// replaceRecoveryCodes revokes the user's unused codes and stores a fresh set,
 // returning the plaintext (formatted xxxxx-xxxxx). Run it inside a
 // transaction: half a set is a set the person believes they have.
 func (h *AuthServiceHandler) replaceRecoveryCodes(txCtx context.Context, userID string) ([]string, error) {
-	if _, err := h.Mutation.DeleteRecoveryCodes(txCtx, &pb.DeleteRecoveryCodesReq{UserId: userID}); notFoundOK(err) != nil {
+	if _, err := h.Mutation.RevokeRecoveryCodes(txCtx, &pb.RevokeRecoveryCodesReq{UserId: userID}); notFoundOK(err) != nil {
 		return nil, err
 	}
 	out := make([]string, 0, recoveryCodeCount)

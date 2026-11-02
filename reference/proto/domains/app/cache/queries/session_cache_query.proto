@@ -37,7 +37,7 @@ message GetSessionWithUserReq {
 // the outer grpcerr wrapper.
 message GetSessionWithUserResp {
   e2e.app.cache.CachedSession  session = 1;
-  e2e.app.users.User           user    = 2;
+  e2e.app.users.UserProfile    user    = 2;
 }
 
 // GetApiTokenReq — read-back for the `kv_atomic` rotation fixture. A

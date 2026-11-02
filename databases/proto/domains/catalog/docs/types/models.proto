@@ -160,3 +160,18 @@ message Document {
     dimensions: 3
   }, (w17.db.column) = { db_type: VECTOR }];
 }
+
+// DocumentSummary — what the plain document reads and writes answer with:
+// the document's identity and its custom-typed text columns, not the
+// geometry / vector / default-valued columns, which have reads of their own
+// (DocumentsCovering, DocumentsNearest, …). A generated query fills every
+// field of its response, so a method that returns a subset of a model
+// declares the subset as its own message instead of answering with the
+// model and leaving the rest at zero.
+message DocumentSummary {
+  int64  id     = 1;
+  string title  = 2;
+  string labels = 3;
+  string path   = 4;
+  google.protobuf.Timestamp created_at = 5;
+}

@@ -1,0 +1,9 @@
+# Denying a request that does not exist is not found either: the deny
+# answers the client's redirect only for a request it actually held.
+method: auth.AuthService.DenyOAuthAuthorization
+pre:
+    - auth/auth.yaml
+input:
+    request_id: e2e-no-such-request
+expect_error:
+    code: NOT_FOUND

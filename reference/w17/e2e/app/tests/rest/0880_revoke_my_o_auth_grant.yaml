@@ -1,0 +1,10 @@
+# Revoking a grant the user does not hold is not found: the connected-apps
+# list is the user's own, and a grant id outside it (here one that never
+# existed) is refused rather than silently "revoked".
+method: auth.AuthService.RevokeMyOAuthGrant
+pre:
+    - auth/auth.yaml
+input:
+    grant_id: ${random:uuid}
+expect_error:
+    code: NOT_FOUND

@@ -11,9 +11,15 @@ import (
 // may write: the fields left out of a record (sensitive by label or type).
 func init() {
 	redact.Register(map[string]redact.Plan{
-		"w17.contrib.marketing.ListSentEventsReq":  {},
-		"w17.contrib.marketing.ListSentEventsResp": {},
+		"w17.contrib.marketing.ListSentEventsReq":      {},
+		"w17.contrib.marketing.ListSentEventsResp":     {},
+		"w17.contrib.marketing.ContactRow":             {},
+		"w17.contrib.marketing.ListContactsReq":        {},
+		"w17.contrib.marketing.ListContactsResp":       {},
+		"w17.contrib.marketing.ListContactsByEmailReq": {},
+		"w17.contrib.marketing.GetReconciliationReq":   {},
+		"w17.contrib.marketing.GetReconciliationResp":  {},
 	})
 }
 
-// emit-sha256: 3959635d0b7d80cac2554b695a9bd736e184cf9533db3cf59a74369129c7d90e
+// emit-sha256: 95e4c4b572497b81003ab6c6866de8489c10693f2bffd771178b855defbc91b9

@@ -156,15 +156,22 @@ service SubscriptionMutation {
           "  status               = 'ACTIVE', "
           "  current_period_start = :current_period_start, "
           "  current_period_end   = :current_period_end "
-          "RETURNING "
-          "  id                   AS subscription.id, "
-          "  account_id           AS subscription.account_id, "
-          "  plan_id              AS subscription.plan_id, "
-          "  status               AS subscription.status, "
-          "  current_period_start AS subscription.current_period_start, "
-          "  current_period_end   AS subscription.current_period_end, "
-          "  created_at           AS subscription.created_at, "
-          "  account_id           AS account.id"
+          "RETURNING id"
+      },
+      // The read-back: both rows, whole, in one single-row JOIN. A generated
+      // query fills every field of its response, and the subscription's
+      // RETURNING can only say the account's id — the account's email and
+      // creation time are that row's. Same transaction, so it sees both
+      // inserts.
+      ops: {
+        name: "main",
+        dql:
+          "SELECT a.id AS a_id, a.user_id AS a_user_id, a.email AS a_email, a.created_at AS a_created_at, "
+          "       s.id AS s_id, s.account_id AS s_account_id, s.plan_id AS s_plan_id, s.status AS s_status, "
+          "       s.current_period_start AS s_current_period_start, s.current_period_end AS s_current_period_end, "
+          "       s.created_at AS s_created_at "
+          "FROM core.Account a JOIN core.Subscription s ON s.account_id = a.id "
+          "WHERE s.id = :sub.id"
       }
     };
   }

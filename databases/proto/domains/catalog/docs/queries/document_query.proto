@@ -12,7 +12,7 @@ message ListDocumentsReq {
   int32 limit = 1 [(w17.field) = { type: NUMBER, gte: 1, lte: 100 }];
 }
 
-message ListDocumentsResp { repeated Document documents = 1; }
+message ListDocumentsResp { repeated DocumentSummary documents = 1; }
 
 // GetDocumentShapeReq / DocumentShape read the two custom-typed
 // columns THROUGH registered custom functions rather than selecting
@@ -281,7 +281,7 @@ service DocumentQuery {
   // A plain round trip: the two custom-typed columns are ordinary
   // strings on the wire in both directions. The custom type changes the
   // storage, not the contract.
-  rpc GetDocument(GetDocumentReq) returns (Document) {
+  rpc GetDocument(GetDocumentReq) returns (DocumentSummary) {
     option (w17.db.method) = {
       ops: { name: "main", dql: "SELECT d.id, d.title, d.labels, d.path, d.created_at FROM docs.Document d WHERE d.id = :document_id" }
     };

@@ -12,6 +12,9 @@ import (
 func init() {
 	redact.Register(map[string]redact.Plan{
 		"w17.contrib.auth.UserCreated":           {},
+		"w17.contrib.auth.ApiTokenRevoked":       {},
+		"w17.contrib.auth.ApiTokenCreated":       {},
+		"w17.contrib.auth.OAuthGrantApproved":    {},
 		"w17.contrib.auth.TokenIssued":           {},
 		"w17.contrib.auth.TokenRevoked":          {},
 		"w17.contrib.auth.RoleCreated":           {},
@@ -24,4 +27,4 @@ func init() {
 	})
 }
 
-// emit-sha256: b8e4369b8a8b78dfdabd4d09a2f35fb6d54c71b569146ab335b1da2fac1a01d3
+// emit-sha256: a244200b5fd6b008c0a42af6db61282653dc74630451eda562b77b3db9670c8b

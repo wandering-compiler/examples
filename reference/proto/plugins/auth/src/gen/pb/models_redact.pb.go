@@ -12,13 +12,22 @@ import (
 // may write: the fields left out of a record (sensitive by label or type).
 func init() {
 	redact.Register(map[string]redact.Plan{
-		"w17.contrib.auth.User":           {Skip: []protowire.Number{3 /* password_hash */}},
-		"w17.contrib.auth.Tenant":         {},
-		"w17.contrib.auth.UserToken":      {Skip: []protowire.Number{2 /* token */}},
-		"w17.contrib.auth.Role":           {},
-		"w17.contrib.auth.RolePermission": {},
-		"w17.contrib.auth.UserRole":       {},
+		"w17.contrib.auth.User":                 {Skip: []protowire.Number{3 /* password_hash */}},
+		"w17.contrib.auth.Tenant":               {},
+		"w17.contrib.auth.UserToken":            {Skip: []protowire.Number{2 /* token */, 10 /* token_hash */}},
+		"w17.contrib.auth.Device":               {},
+		"w17.contrib.auth.SignInEvent":          {},
+		"w17.contrib.auth.Role":                 {},
+		"w17.contrib.auth.RolePermission":       {},
+		"w17.contrib.auth.RolePermissionChange": {},
+		"w17.contrib.auth.UserRole":             {},
+		"w17.contrib.auth.TokenPermission":      {},
+		"w17.contrib.auth.BootstrapClaim":       {},
+		"w17.contrib.auth.OAuthClient":          {},
+		"w17.contrib.auth.OAuthAuthorization":   {},
+		"w17.contrib.auth.OAuthGrant":           {},
+		"w17.contrib.auth.OAuthRefreshToken":    {},
 	})
 }
 
-// emit-sha256: c94586b71380d3f2bd33127380c827eebddab2207193f6aa86e0eed4448cd1cb
+// emit-sha256: 8fad21ac75d3784d3b5455af0a33ed26b9fc8109fba006e8b1159f6bffcc687d

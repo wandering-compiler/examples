@@ -42,7 +42,7 @@ option (w17.domain) = {
       registered_as: "auth"
       channels:   [ { key: "events", value: "tasks" } ]
       auth_input: { header_name: "Authorization", scheme: "Bearer" }
-      features:   { names: [ "rbac", "authenticate_turnkey", "sign_up_turnkey", "sign_in_turnkey", "tenant_scope" ] }
+      features:   { names: [ "rbac", "authenticate_turnkey", "sign_up_turnkey", "sign_in_turnkey", "tenant_scope", "api_token", "oauth_server" ] }
       // This project curates its own /auth routes in rest.proto —
       // SignUp is mounted at `/{tenant_slug}/register` for URL-based
       // tenancy, which the generic preset can't express. Plugin REST
@@ -208,6 +208,23 @@ option (w17.acl_roles) = {
   all_permissions: true
   first_user:      true
   default:         true
+  // Every permission to every sign-up (a test project): said out loud.
+  all_permissions_at_signup: true
+};
+
+// e2e-mcp — the same "everything" for the MCP realm. An MCP access token
+// (oauth_server) holds the user's mcp-realm roles alone, never their
+// session roles, so without one the MCP scenario's token passes no gate.
+option (w17.acl_roles) = {
+  key:             "e2e-mcp"
+  name:            "e2e-mcp"
+  activation:      "auth"
+  realm:           "mcp"
+  scope:           ACL_ROLE_SCOPE_REALM
+  all_permissions: true
+  first_user:      true
+  default:         true
+  all_permissions_at_signup: true
 };
 
 option (w17.acl_roles) = {
@@ -217,6 +234,8 @@ option (w17.acl_roles) = {
   scope:           ACL_ROLE_SCOPE_REALM
   all_permissions: true
   first_user:      true
+  // Every permission to whoever registers first (the bootstrap admin): said out loud.
+  all_permissions_at_signup: true
 };
 option (w17.acl_roles) = {
   key:        "org-auditor"

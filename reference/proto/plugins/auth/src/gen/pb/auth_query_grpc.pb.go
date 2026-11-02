@@ -33,18 +33,41 @@ const (
 	AuthQuery_GetUserByEmail_FullMethodName                = "/w17.contrib.auth.AuthQuery/GetUserByEmail"
 	AuthQuery_GetUserByToken_FullMethodName                = "/w17.contrib.auth.AuthQuery/GetUserByToken"
 	AuthQuery_GetUserPermissions_FullMethodName            = "/w17.contrib.auth.AuthQuery/GetUserPermissions"
+	AuthQuery_GetExpiredToken_FullMethodName               = "/w17.contrib.auth.AuthQuery/GetExpiredToken"
 	AuthQuery_GetUserByTokenWithPermissions_FullMethodName = "/w17.contrib.auth.AuthQuery/GetUserByTokenWithPermissions"
 	AuthQuery_GetUserRoleGrants_FullMethodName             = "/w17.contrib.auth.AuthQuery/GetUserRoleGrants"
 	AuthQuery_ListRoleGrants_FullMethodName                = "/w17.contrib.auth.AuthQuery/ListRoleGrants"
 	AuthQuery_CountUsers_FullMethodName                    = "/w17.contrib.auth.AuthQuery/CountUsers"
 	AuthQuery_GetFirstUserRoles_FullMethodName             = "/w17.contrib.auth.AuthQuery/GetFirstUserRoles"
 	AuthQuery_GetDefaultRoles_FullMethodName               = "/w17.contrib.auth.AuthQuery/GetDefaultRoles"
+	AuthQuery_ListRealmSuperadmins_FullMethodName          = "/w17.contrib.auth.AuthQuery/ListRealmSuperadmins"
 	AuthQuery_ListRoles_FullMethodName                     = "/w17.contrib.auth.AuthQuery/ListRoles"
 	AuthQuery_GetRole_FullMethodName                       = "/w17.contrib.auth.AuthQuery/GetRole"
+	AuthQuery_GetTokenWithType_FullMethodName              = "/w17.contrib.auth.AuthQuery/GetTokenWithType"
+	AuthQuery_GetExpiredTokenWithType_FullMethodName       = "/w17.contrib.auth.AuthQuery/GetExpiredTokenWithType"
+	AuthQuery_GetUserRolePermissionsByRealm_FullMethodName = "/w17.contrib.auth.AuthQuery/GetUserRolePermissionsByRealm"
+	AuthQuery_GetTokenPermissionSubset_FullMethodName      = "/w17.contrib.auth.AuthQuery/GetTokenPermissionSubset"
+	AuthQuery_ListApiTokensByUser_FullMethodName           = "/w17.contrib.auth.AuthQuery/ListApiTokensByUser"
+	AuthQuery_GetUserDeviceByThumbprint_FullMethodName     = "/w17.contrib.auth.AuthQuery/GetUserDeviceByThumbprint"
+	AuthQuery_GetSessionApprover_FullMethodName            = "/w17.contrib.auth.AuthQuery/GetSessionApprover"
 	AuthQuery_GetUserTenant_FullMethodName                 = "/w17.contrib.auth.AuthQuery/GetUserTenant"
 	AuthQuery_GetTenantBySlug_FullMethodName               = "/w17.contrib.auth.AuthQuery/GetTenantBySlug"
 	AuthQuery_GetTenantByDomain_FullMethodName             = "/w17.contrib.auth.AuthQuery/GetTenantByDomain"
 	AuthQuery_GetUserById_FullMethodName                   = "/w17.contrib.auth.AuthQuery/GetUserById"
+	AuthQuery_GetDeviceTrustRevokedAt_FullMethodName       = "/w17.contrib.auth.AuthQuery/GetDeviceTrustRevokedAt"
+	AuthQuery_ListUserSignInEvents_FullMethodName          = "/w17.contrib.auth.AuthQuery/ListUserSignInEvents"
+	AuthQuery_GetOAuthClientByHash_FullMethodName          = "/w17.contrib.auth.AuthQuery/GetOAuthClientByHash"
+	AuthQuery_GetOAuthClientByRowID_FullMethodName         = "/w17.contrib.auth.AuthQuery/GetOAuthClientByRowID"
+	AuthQuery_GetPendingOAuthAuthorization_FullMethodName  = "/w17.contrib.auth.AuthQuery/GetPendingOAuthAuthorization"
+	AuthQuery_GetOAuthApprovingSession_FullMethodName      = "/w17.contrib.auth.AuthQuery/GetOAuthApprovingSession"
+	AuthQuery_GetOAuthDeviceRevocation_FullMethodName      = "/w17.contrib.auth.AuthQuery/GetOAuthDeviceRevocation"
+	AuthQuery_GetOAuthRefreshToken_FullMethodName          = "/w17.contrib.auth.AuthQuery/GetOAuthRefreshToken"
+	AuthQuery_GetOAuthGrant_FullMethodName                 = "/w17.contrib.auth.AuthQuery/GetOAuthGrant"
+	AuthQuery_GetOAuthGrantLastToken_FullMethodName        = "/w17.contrib.auth.AuthQuery/GetOAuthGrantLastToken"
+	AuthQuery_GetOAuthAccessTokenGrant_FullMethodName      = "/w17.contrib.auth.AuthQuery/GetOAuthAccessTokenGrant"
+	AuthQuery_ListUserOAuthGrants_FullMethodName           = "/w17.contrib.auth.AuthQuery/ListUserOAuthGrants"
+	AuthQuery_GetOAuthCodeUse_FullMethodName               = "/w17.contrib.auth.AuthQuery/GetOAuthCodeUse"
+	AuthQuery_GetOAuthGrantByAuthorization_FullMethodName  = "/w17.contrib.auth.AuthQuery/GetOAuthGrantByAuthorization"
 )
 
 // AuthQueryClient is the client API for AuthQuery service.
@@ -66,38 +89,18 @@ type AuthQueryClient interface {
 	// `array_agg(DISTINCT …)` isn't expressible — the DQL has no
 	// aggregate-DISTINCT — and matches GetUserByTokenWithPermissions).
 	GetUserPermissions(ctx context.Context, in *GetUserPermissionsReq, opts ...grpc.CallOption) (*GetUserPermissionsResp, error)
-	// GetUserByTokenWithPermissions — the canonical auth-backend
-	// lookup. ONE round-trip resolves the bearer token into the
-	// User row + the deduped permission IDs the user holds.
-	// Hand-written Authenticate composes:
-	//
-	//	resp, _ := authQuery.GetUserByTokenWithPermissions(...)
-	//	return &AuthResp{PermissionIds: resp.GetPermissionIds()}
-	//
-	// Notes on the DQL:
-	//   - LEFT JOIN through UserRole / RolePermission means a
-	//     user with no roles still yields one row (rather than
-	//     NotFound); the ROWS_TO_ARRAY then carries an empty
-	//     list. The token JOIN stays inner — no token, no row,
-	//     and the consumer's gateway middleware returns 401.
-	//   - GROUP BY pins the row to the User's primary identity
-	//     so the aggregate folds the join cross-product into one
-	//     row per user.
-	//   - ROWS_TO_ARRAY (Phase E1) maps per-dialect to PG
-	//     `array_agg + FILTER + COALESCE`, MySQL `JSON_ARRAYAGG`,
-	//     SQLite `json_group_array` — always returns a list,
-	//     never NULL. The repeated-scalar scan path (Phase E2)
-	//     decodes the column into `[]int32` regardless of which
-	//     wire shape the dialect chose.
-	//   - DISTINCT-equivalent dedup: the M2M topology guarantees
-	//     unique (user_id, permission_id) pairs via the composite-
-	//     unique indexes on UserRole + RolePermission, so the
-	//     aggregate doesn't observe duplicates even across
-	//     multiple roles overlapping on a permission.
-	//
-	// Permission table is gone (the activating domain's
-	// AclPermission proto enum IS the catalog). RolePermission.
-	// permission_id carries the int32 enum value directly.
+	// GetExpiredToken — see the request. Matches the same two keys as the live
+	// lookup (hash, or the legacy clear token) and only rows that have ENDED:
+	// expired (`expires_at <= NOW()` never matches a NULL, never-expiring row)
+	// or revoked — exactly the rows the live lookup's two predicates refuse.
+	// Read only — an ended row is never moved to the hash or otherwise touched.
+	GetExpiredToken(ctx context.Context, in *GetExpiredTokenReq, opts ...grpc.CallOption) (*GetExpiredTokenResp, error)
+	// GetUserByTokenWithPermissions — Authenticate's bearer lookup: the live
+	// token (by its hash, or the legacy plaintext column), its user, and the
+	// device it is bound to. Despite the name it returns no permissions: those
+	// are a second read, GetUserRoleGrants, which the resolver narrows (realm,
+	// organization, token subset). The token JOIN is inner — no live token, no
+	// row (NotFound), and the gateway answers 401.
 	GetUserByTokenWithPermissions(ctx context.Context, in *GetUserByTokenWithPermissionsReq, opts ...grpc.CallOption) (*GetUserByTokenWithPermissionsResp, error)
 	// GetUserRoleGrants — every role this user holds, role-attributed.
 	//
@@ -120,6 +123,8 @@ type AuthQueryClient interface {
 	// `(w17.acl_roles) { default: true }`). Granted to every signup after
 	// the first.
 	GetDefaultRoles(ctx context.Context, in *GetDefaultRolesReq, opts ...grpc.CallOption) (*GetDefaultRolesResp, error)
+	// ListRealmSuperadmins — see its request message.
+	ListRealmSuperadmins(ctx context.Context, in *ListRealmSuperadminsReq, opts ...grpc.CallOption) (*ListRealmSuperadminsResp, error)
 	ListRoles(ctx context.Context, in *ListRolesReq, opts ...grpc.CallOption) (*ListRolesResp, error)
 	// GetRole — one role for the admin detail view.
 	// GetRole — one role for the admin detail view. Returns the Role
@@ -127,6 +132,37 @@ type AuthQueryClient interface {
 	// "returns a single <model> instance", and its readonly_fields resolve
 	// against the response's top-level fields.
 	GetRole(ctx context.Context, in *GetRoleReq, opts ...grpc.CallOption) (*Role, error)
+	// GetTokenWithType — resolve a token string into its owner + id +
+	// kind (SESSION/API). The api_token Authenticate path calls this
+	// first to branch on the credential class. Gated api_token.
+	GetTokenWithType(ctx context.Context, in *GetTokenWithTypeReq, opts ...grpc.CallOption) (*GetTokenWithTypeResp, error)
+	// GetExpiredTokenWithType — see the request. The realm-aware twin of
+	// GetExpiredToken: same keys, ended (expired or revoked) rows only, plus the kind so the
+	// refusal can say "sign in again" to a session and "create a new token" to
+	// an API token. Read only.
+	GetExpiredTokenWithType(ctx context.Context, in *GetExpiredTokenWithTypeReq, opts ...grpc.CallOption) (*GetExpiredTokenWithTypeResp, error)
+	// GetUserRolePermissionsByRealm — distinct permission IDs the user
+	// holds through roles of the given realm (token_type). The realm
+	// filter (Role.token_type = :token_type) is why a session token and
+	// an API token for the same user resolve different permission sets.
+	// Gated api_token (reads Role.token_type, an api_token column).
+	GetUserRolePermissionsByRealm(ctx context.Context, in *GetUserRolePermissionsByRealmReq, opts ...grpc.CallOption) (*GetUserRolePermissionsByRealmResp, error)
+	// GetTokenPermissionSubset — the per-token permission subset rows.
+	// Empty = no narrowing. Authenticate intersects these with the realm
+	// permissions for API tokens (narrow-only). Gated api_token.
+	GetTokenPermissionSubset(ctx context.Context, in *GetTokenPermissionSubsetReq, opts ...grpc.CallOption) (*GetTokenPermissionSubsetResp, error)
+	// ListApiTokensByUser — the caller's API tokens (management view, no
+	// secret token string). Filtered to token_type = :token_type (handler
+	// stamps API). Revoked tokens are listed, with revoked_at and
+	// revoke_reason, so the owner sees them revoked. Newest first. Gated
+	// api_token.
+	ListApiTokensByUser(ctx context.Context, in *ListApiTokensByUserReq, opts ...grpc.CallOption) (*ListApiTokensByUserResp, error)
+	// GetUserDeviceByThumbprint — the live (user, thumbprint) Device row; see
+	// the request. Gated api_token.
+	GetUserDeviceByThumbprint(ctx context.Context, in *GetUserDeviceByThumbprintReq, opts ...grpc.CallOption) (*GetUserDeviceByThumbprintResp, error)
+	// GetSessionApprover — the caller's session's approver; see the request.
+	// Gated api_token.
+	GetSessionApprover(ctx context.Context, in *GetSessionApproverReq, opts ...grpc.CallOption) (*GetSessionApproverResp, error)
 	// GetUserTenant — resolves the principal's tenant_id (the
 	// tenant data scope) by user id. The gated tenant.go handler
 	// calls this from Authenticate's scope decorator to stamp
@@ -141,12 +177,34 @@ type AuthQueryClient interface {
 	// GetTenantByDomain — resolve a tenant id from its host domain.
 	// Used by SignUp for host-based tenancy (the forwarded Host header).
 	GetTenantByDomain(ctx context.Context, in *GetTenantByDomainReq, opts ...grpc.CallOption) (*GetTenantByDomainResp, error)
-	// GetUserById — resolve a user by id, password_hash included. Two
-	// callers today: the EnrollTotp otpauth label (which wants the email)
-	// and ChangePassword (which must verify the CURRENT password of the
+	// GetUserById — resolve a user by id, password_hash included. Callers
+	// include ResolveUser (the account a principal is answered for), the
+	// EnrollTotp otpauth label (which wants the email) and ChangePassword (which must verify the CURRENT password of the
 	// authenticated principal, and must not look that principal up by an
 	// address the request supplied). Ungated — see the messages above.
 	GetUserById(ctx context.Context, in *GetUserByIdReq, opts ...grpc.CallOption) (*GetUserByIdResp, error)
+	// GetDeviceTrustRevokedAt — when the account's device trust was last
+	// revoked (a password change or a disable stamps it). The sign-in resolver
+	// and ListDevices count a device as trusted only when its trusted_at is
+	// later. Base tier, like the Device table.
+	GetDeviceTrustRevokedAt(ctx context.Context, in *GetDeviceTrustRevokedAtReq, opts ...grpc.CallOption) (*GetDeviceTrustRevokedAtResp, error)
+	// ListUserSignInEvents — one account's own sign-in history, newest first,
+	// the latest 100 (AuthService.ListMySignInEvents, which passes the
+	// caller's id). Served by the (user_id, created_at) index. Gated
+	// authenticate_turnkey, the feature that knows the caller.
+	ListUserSignInEvents(ctx context.Context, in *ListUserSignInEventsReq, opts ...grpc.CallOption) (*ListUserSignInEventsResp, error)
+	GetOAuthClientByHash(ctx context.Context, in *GetOAuthClientByHashReq, opts ...grpc.CallOption) (*GetOAuthClientByHashResp, error)
+	GetOAuthClientByRowID(ctx context.Context, in *GetOAuthClientByRowIDReq, opts ...grpc.CallOption) (*GetOAuthClientByRowIDResp, error)
+	GetPendingOAuthAuthorization(ctx context.Context, in *GetPendingOAuthAuthorizationReq, opts ...grpc.CallOption) (*GetPendingOAuthAuthorizationResp, error)
+	GetOAuthApprovingSession(ctx context.Context, in *GetOAuthApprovingSessionReq, opts ...grpc.CallOption) (*GetOAuthApprovingSessionResp, error)
+	GetOAuthDeviceRevocation(ctx context.Context, in *GetOAuthDeviceRevocationReq, opts ...grpc.CallOption) (*GetOAuthDeviceRevocationResp, error)
+	GetOAuthRefreshToken(ctx context.Context, in *GetOAuthRefreshTokenReq, opts ...grpc.CallOption) (*GetOAuthRefreshTokenResp, error)
+	GetOAuthGrant(ctx context.Context, in *GetOAuthGrantReq, opts ...grpc.CallOption) (*GetOAuthGrantResp, error)
+	GetOAuthGrantLastToken(ctx context.Context, in *GetOAuthGrantLastTokenReq, opts ...grpc.CallOption) (*GetOAuthGrantLastTokenResp, error)
+	GetOAuthAccessTokenGrant(ctx context.Context, in *GetOAuthAccessTokenGrantReq, opts ...grpc.CallOption) (*GetOAuthAccessTokenGrantResp, error)
+	ListUserOAuthGrants(ctx context.Context, in *ListUserOAuthGrantsReq, opts ...grpc.CallOption) (*ListUserOAuthGrantsResp, error)
+	GetOAuthCodeUse(ctx context.Context, in *GetOAuthCodeUseReq, opts ...grpc.CallOption) (*GetOAuthCodeUseResp, error)
+	GetOAuthGrantByAuthorization(ctx context.Context, in *GetOAuthGrantByAuthorizationReq, opts ...grpc.CallOption) (*GetOAuthGrantByAuthorizationResp, error)
 }
 
 type authQueryClient struct {
@@ -181,6 +239,16 @@ func (c *authQueryClient) GetUserPermissions(ctx context.Context, in *GetUserPer
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetUserPermissionsResp)
 	err := c.cc.Invoke(ctx, AuthQuery_GetUserPermissions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetExpiredToken(ctx context.Context, in *GetExpiredTokenReq, opts ...grpc.CallOption) (*GetExpiredTokenResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetExpiredTokenResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetExpiredToken_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -247,6 +315,16 @@ func (c *authQueryClient) GetDefaultRoles(ctx context.Context, in *GetDefaultRol
 	return out, nil
 }
 
+func (c *authQueryClient) ListRealmSuperadmins(ctx context.Context, in *ListRealmSuperadminsReq, opts ...grpc.CallOption) (*ListRealmSuperadminsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListRealmSuperadminsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListRealmSuperadmins_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authQueryClient) ListRoles(ctx context.Context, in *ListRolesReq, opts ...grpc.CallOption) (*ListRolesResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListRolesResp)
@@ -261,6 +339,76 @@ func (c *authQueryClient) GetRole(ctx context.Context, in *GetRoleReq, opts ...g
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Role)
 	err := c.cc.Invoke(ctx, AuthQuery_GetRole_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetTokenWithType(ctx context.Context, in *GetTokenWithTypeReq, opts ...grpc.CallOption) (*GetTokenWithTypeResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTokenWithTypeResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetTokenWithType_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetExpiredTokenWithType(ctx context.Context, in *GetExpiredTokenWithTypeReq, opts ...grpc.CallOption) (*GetExpiredTokenWithTypeResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetExpiredTokenWithTypeResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetExpiredTokenWithType_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetUserRolePermissionsByRealm(ctx context.Context, in *GetUserRolePermissionsByRealmReq, opts ...grpc.CallOption) (*GetUserRolePermissionsByRealmResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserRolePermissionsByRealmResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetUserRolePermissionsByRealm_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetTokenPermissionSubset(ctx context.Context, in *GetTokenPermissionSubsetReq, opts ...grpc.CallOption) (*GetTokenPermissionSubsetResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTokenPermissionSubsetResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetTokenPermissionSubset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) ListApiTokensByUser(ctx context.Context, in *ListApiTokensByUserReq, opts ...grpc.CallOption) (*ListApiTokensByUserResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListApiTokensByUserResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListApiTokensByUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetUserDeviceByThumbprint(ctx context.Context, in *GetUserDeviceByThumbprintReq, opts ...grpc.CallOption) (*GetUserDeviceByThumbprintResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserDeviceByThumbprintResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetUserDeviceByThumbprint_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetSessionApprover(ctx context.Context, in *GetSessionApproverReq, opts ...grpc.CallOption) (*GetSessionApproverResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSessionApproverResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetSessionApprover_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -307,6 +455,146 @@ func (c *authQueryClient) GetUserById(ctx context.Context, in *GetUserByIdReq, o
 	return out, nil
 }
 
+func (c *authQueryClient) GetDeviceTrustRevokedAt(ctx context.Context, in *GetDeviceTrustRevokedAtReq, opts ...grpc.CallOption) (*GetDeviceTrustRevokedAtResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDeviceTrustRevokedAtResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetDeviceTrustRevokedAt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) ListUserSignInEvents(ctx context.Context, in *ListUserSignInEventsReq, opts ...grpc.CallOption) (*ListUserSignInEventsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListUserSignInEventsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListUserSignInEvents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOAuthClientByHash(ctx context.Context, in *GetOAuthClientByHashReq, opts ...grpc.CallOption) (*GetOAuthClientByHashResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOAuthClientByHashResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOAuthClientByHash_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOAuthClientByRowID(ctx context.Context, in *GetOAuthClientByRowIDReq, opts ...grpc.CallOption) (*GetOAuthClientByRowIDResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOAuthClientByRowIDResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOAuthClientByRowID_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetPendingOAuthAuthorization(ctx context.Context, in *GetPendingOAuthAuthorizationReq, opts ...grpc.CallOption) (*GetPendingOAuthAuthorizationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPendingOAuthAuthorizationResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetPendingOAuthAuthorization_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOAuthApprovingSession(ctx context.Context, in *GetOAuthApprovingSessionReq, opts ...grpc.CallOption) (*GetOAuthApprovingSessionResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOAuthApprovingSessionResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOAuthApprovingSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOAuthDeviceRevocation(ctx context.Context, in *GetOAuthDeviceRevocationReq, opts ...grpc.CallOption) (*GetOAuthDeviceRevocationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOAuthDeviceRevocationResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOAuthDeviceRevocation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOAuthRefreshToken(ctx context.Context, in *GetOAuthRefreshTokenReq, opts ...grpc.CallOption) (*GetOAuthRefreshTokenResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOAuthRefreshTokenResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOAuthRefreshToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOAuthGrant(ctx context.Context, in *GetOAuthGrantReq, opts ...grpc.CallOption) (*GetOAuthGrantResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOAuthGrantResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOAuthGrant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOAuthGrantLastToken(ctx context.Context, in *GetOAuthGrantLastTokenReq, opts ...grpc.CallOption) (*GetOAuthGrantLastTokenResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOAuthGrantLastTokenResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOAuthGrantLastToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOAuthAccessTokenGrant(ctx context.Context, in *GetOAuthAccessTokenGrantReq, opts ...grpc.CallOption) (*GetOAuthAccessTokenGrantResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOAuthAccessTokenGrantResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOAuthAccessTokenGrant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) ListUserOAuthGrants(ctx context.Context, in *ListUserOAuthGrantsReq, opts ...grpc.CallOption) (*ListUserOAuthGrantsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListUserOAuthGrantsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListUserOAuthGrants_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOAuthCodeUse(ctx context.Context, in *GetOAuthCodeUseReq, opts ...grpc.CallOption) (*GetOAuthCodeUseResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOAuthCodeUseResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOAuthCodeUse_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOAuthGrantByAuthorization(ctx context.Context, in *GetOAuthGrantByAuthorizationReq, opts ...grpc.CallOption) (*GetOAuthGrantByAuthorizationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOAuthGrantByAuthorizationResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOAuthGrantByAuthorization_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthQueryServer is the server API for AuthQuery service.
 // All implementations should embed UnimplementedAuthQueryServer
 // for forward compatibility.
@@ -326,38 +614,18 @@ type AuthQueryServer interface {
 	// `array_agg(DISTINCT …)` isn't expressible — the DQL has no
 	// aggregate-DISTINCT — and matches GetUserByTokenWithPermissions).
 	GetUserPermissions(context.Context, *GetUserPermissionsReq) (*GetUserPermissionsResp, error)
-	// GetUserByTokenWithPermissions — the canonical auth-backend
-	// lookup. ONE round-trip resolves the bearer token into the
-	// User row + the deduped permission IDs the user holds.
-	// Hand-written Authenticate composes:
-	//
-	//	resp, _ := authQuery.GetUserByTokenWithPermissions(...)
-	//	return &AuthResp{PermissionIds: resp.GetPermissionIds()}
-	//
-	// Notes on the DQL:
-	//   - LEFT JOIN through UserRole / RolePermission means a
-	//     user with no roles still yields one row (rather than
-	//     NotFound); the ROWS_TO_ARRAY then carries an empty
-	//     list. The token JOIN stays inner — no token, no row,
-	//     and the consumer's gateway middleware returns 401.
-	//   - GROUP BY pins the row to the User's primary identity
-	//     so the aggregate folds the join cross-product into one
-	//     row per user.
-	//   - ROWS_TO_ARRAY (Phase E1) maps per-dialect to PG
-	//     `array_agg + FILTER + COALESCE`, MySQL `JSON_ARRAYAGG`,
-	//     SQLite `json_group_array` — always returns a list,
-	//     never NULL. The repeated-scalar scan path (Phase E2)
-	//     decodes the column into `[]int32` regardless of which
-	//     wire shape the dialect chose.
-	//   - DISTINCT-equivalent dedup: the M2M topology guarantees
-	//     unique (user_id, permission_id) pairs via the composite-
-	//     unique indexes on UserRole + RolePermission, so the
-	//     aggregate doesn't observe duplicates even across
-	//     multiple roles overlapping on a permission.
-	//
-	// Permission table is gone (the activating domain's
-	// AclPermission proto enum IS the catalog). RolePermission.
-	// permission_id carries the int32 enum value directly.
+	// GetExpiredToken — see the request. Matches the same two keys as the live
+	// lookup (hash, or the legacy clear token) and only rows that have ENDED:
+	// expired (`expires_at <= NOW()` never matches a NULL, never-expiring row)
+	// or revoked — exactly the rows the live lookup's two predicates refuse.
+	// Read only — an ended row is never moved to the hash or otherwise touched.
+	GetExpiredToken(context.Context, *GetExpiredTokenReq) (*GetExpiredTokenResp, error)
+	// GetUserByTokenWithPermissions — Authenticate's bearer lookup: the live
+	// token (by its hash, or the legacy plaintext column), its user, and the
+	// device it is bound to. Despite the name it returns no permissions: those
+	// are a second read, GetUserRoleGrants, which the resolver narrows (realm,
+	// organization, token subset). The token JOIN is inner — no live token, no
+	// row (NotFound), and the gateway answers 401.
 	GetUserByTokenWithPermissions(context.Context, *GetUserByTokenWithPermissionsReq) (*GetUserByTokenWithPermissionsResp, error)
 	// GetUserRoleGrants — every role this user holds, role-attributed.
 	//
@@ -380,6 +648,8 @@ type AuthQueryServer interface {
 	// `(w17.acl_roles) { default: true }`). Granted to every signup after
 	// the first.
 	GetDefaultRoles(context.Context, *GetDefaultRolesReq) (*GetDefaultRolesResp, error)
+	// ListRealmSuperadmins — see its request message.
+	ListRealmSuperadmins(context.Context, *ListRealmSuperadminsReq) (*ListRealmSuperadminsResp, error)
 	ListRoles(context.Context, *ListRolesReq) (*ListRolesResp, error)
 	// GetRole — one role for the admin detail view.
 	// GetRole — one role for the admin detail view. Returns the Role
@@ -387,6 +657,37 @@ type AuthQueryServer interface {
 	// "returns a single <model> instance", and its readonly_fields resolve
 	// against the response's top-level fields.
 	GetRole(context.Context, *GetRoleReq) (*Role, error)
+	// GetTokenWithType — resolve a token string into its owner + id +
+	// kind (SESSION/API). The api_token Authenticate path calls this
+	// first to branch on the credential class. Gated api_token.
+	GetTokenWithType(context.Context, *GetTokenWithTypeReq) (*GetTokenWithTypeResp, error)
+	// GetExpiredTokenWithType — see the request. The realm-aware twin of
+	// GetExpiredToken: same keys, ended (expired or revoked) rows only, plus the kind so the
+	// refusal can say "sign in again" to a session and "create a new token" to
+	// an API token. Read only.
+	GetExpiredTokenWithType(context.Context, *GetExpiredTokenWithTypeReq) (*GetExpiredTokenWithTypeResp, error)
+	// GetUserRolePermissionsByRealm — distinct permission IDs the user
+	// holds through roles of the given realm (token_type). The realm
+	// filter (Role.token_type = :token_type) is why a session token and
+	// an API token for the same user resolve different permission sets.
+	// Gated api_token (reads Role.token_type, an api_token column).
+	GetUserRolePermissionsByRealm(context.Context, *GetUserRolePermissionsByRealmReq) (*GetUserRolePermissionsByRealmResp, error)
+	// GetTokenPermissionSubset — the per-token permission subset rows.
+	// Empty = no narrowing. Authenticate intersects these with the realm
+	// permissions for API tokens (narrow-only). Gated api_token.
+	GetTokenPermissionSubset(context.Context, *GetTokenPermissionSubsetReq) (*GetTokenPermissionSubsetResp, error)
+	// ListApiTokensByUser — the caller's API tokens (management view, no
+	// secret token string). Filtered to token_type = :token_type (handler
+	// stamps API). Revoked tokens are listed, with revoked_at and
+	// revoke_reason, so the owner sees them revoked. Newest first. Gated
+	// api_token.
+	ListApiTokensByUser(context.Context, *ListApiTokensByUserReq) (*ListApiTokensByUserResp, error)
+	// GetUserDeviceByThumbprint — the live (user, thumbprint) Device row; see
+	// the request. Gated api_token.
+	GetUserDeviceByThumbprint(context.Context, *GetUserDeviceByThumbprintReq) (*GetUserDeviceByThumbprintResp, error)
+	// GetSessionApprover — the caller's session's approver; see the request.
+	// Gated api_token.
+	GetSessionApprover(context.Context, *GetSessionApproverReq) (*GetSessionApproverResp, error)
 	// GetUserTenant — resolves the principal's tenant_id (the
 	// tenant data scope) by user id. The gated tenant.go handler
 	// calls this from Authenticate's scope decorator to stamp
@@ -401,12 +702,34 @@ type AuthQueryServer interface {
 	// GetTenantByDomain — resolve a tenant id from its host domain.
 	// Used by SignUp for host-based tenancy (the forwarded Host header).
 	GetTenantByDomain(context.Context, *GetTenantByDomainReq) (*GetTenantByDomainResp, error)
-	// GetUserById — resolve a user by id, password_hash included. Two
-	// callers today: the EnrollTotp otpauth label (which wants the email)
-	// and ChangePassword (which must verify the CURRENT password of the
+	// GetUserById — resolve a user by id, password_hash included. Callers
+	// include ResolveUser (the account a principal is answered for), the
+	// EnrollTotp otpauth label (which wants the email) and ChangePassword (which must verify the CURRENT password of the
 	// authenticated principal, and must not look that principal up by an
 	// address the request supplied). Ungated — see the messages above.
 	GetUserById(context.Context, *GetUserByIdReq) (*GetUserByIdResp, error)
+	// GetDeviceTrustRevokedAt — when the account's device trust was last
+	// revoked (a password change or a disable stamps it). The sign-in resolver
+	// and ListDevices count a device as trusted only when its trusted_at is
+	// later. Base tier, like the Device table.
+	GetDeviceTrustRevokedAt(context.Context, *GetDeviceTrustRevokedAtReq) (*GetDeviceTrustRevokedAtResp, error)
+	// ListUserSignInEvents — one account's own sign-in history, newest first,
+	// the latest 100 (AuthService.ListMySignInEvents, which passes the
+	// caller's id). Served by the (user_id, created_at) index. Gated
+	// authenticate_turnkey, the feature that knows the caller.
+	ListUserSignInEvents(context.Context, *ListUserSignInEventsReq) (*ListUserSignInEventsResp, error)
+	GetOAuthClientByHash(context.Context, *GetOAuthClientByHashReq) (*GetOAuthClientByHashResp, error)
+	GetOAuthClientByRowID(context.Context, *GetOAuthClientByRowIDReq) (*GetOAuthClientByRowIDResp, error)
+	GetPendingOAuthAuthorization(context.Context, *GetPendingOAuthAuthorizationReq) (*GetPendingOAuthAuthorizationResp, error)
+	GetOAuthApprovingSession(context.Context, *GetOAuthApprovingSessionReq) (*GetOAuthApprovingSessionResp, error)
+	GetOAuthDeviceRevocation(context.Context, *GetOAuthDeviceRevocationReq) (*GetOAuthDeviceRevocationResp, error)
+	GetOAuthRefreshToken(context.Context, *GetOAuthRefreshTokenReq) (*GetOAuthRefreshTokenResp, error)
+	GetOAuthGrant(context.Context, *GetOAuthGrantReq) (*GetOAuthGrantResp, error)
+	GetOAuthGrantLastToken(context.Context, *GetOAuthGrantLastTokenReq) (*GetOAuthGrantLastTokenResp, error)
+	GetOAuthAccessTokenGrant(context.Context, *GetOAuthAccessTokenGrantReq) (*GetOAuthAccessTokenGrantResp, error)
+	ListUserOAuthGrants(context.Context, *ListUserOAuthGrantsReq) (*ListUserOAuthGrantsResp, error)
+	GetOAuthCodeUse(context.Context, *GetOAuthCodeUseReq) (*GetOAuthCodeUseResp, error)
+	GetOAuthGrantByAuthorization(context.Context, *GetOAuthGrantByAuthorizationReq) (*GetOAuthGrantByAuthorizationResp, error)
 }
 
 // UnimplementedAuthQueryServer should be embedded to have
@@ -424,6 +747,9 @@ func (UnimplementedAuthQueryServer) GetUserByToken(context.Context, *GetUserByTo
 }
 func (UnimplementedAuthQueryServer) GetUserPermissions(context.Context, *GetUserPermissionsReq) (*GetUserPermissionsResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserPermissions not implemented")
+}
+func (UnimplementedAuthQueryServer) GetExpiredToken(context.Context, *GetExpiredTokenReq) (*GetExpiredTokenResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetExpiredToken not implemented")
 }
 func (UnimplementedAuthQueryServer) GetUserByTokenWithPermissions(context.Context, *GetUserByTokenWithPermissionsReq) (*GetUserByTokenWithPermissionsResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserByTokenWithPermissions not implemented")
@@ -443,11 +769,35 @@ func (UnimplementedAuthQueryServer) GetFirstUserRoles(context.Context, *GetFirst
 func (UnimplementedAuthQueryServer) GetDefaultRoles(context.Context, *GetDefaultRolesReq) (*GetDefaultRolesResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDefaultRoles not implemented")
 }
+func (UnimplementedAuthQueryServer) ListRealmSuperadmins(context.Context, *ListRealmSuperadminsReq) (*ListRealmSuperadminsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListRealmSuperadmins not implemented")
+}
 func (UnimplementedAuthQueryServer) ListRoles(context.Context, *ListRolesReq) (*ListRolesResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListRoles not implemented")
 }
 func (UnimplementedAuthQueryServer) GetRole(context.Context, *GetRoleReq) (*Role, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetRole not implemented")
+}
+func (UnimplementedAuthQueryServer) GetTokenWithType(context.Context, *GetTokenWithTypeReq) (*GetTokenWithTypeResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTokenWithType not implemented")
+}
+func (UnimplementedAuthQueryServer) GetExpiredTokenWithType(context.Context, *GetExpiredTokenWithTypeReq) (*GetExpiredTokenWithTypeResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetExpiredTokenWithType not implemented")
+}
+func (UnimplementedAuthQueryServer) GetUserRolePermissionsByRealm(context.Context, *GetUserRolePermissionsByRealmReq) (*GetUserRolePermissionsByRealmResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUserRolePermissionsByRealm not implemented")
+}
+func (UnimplementedAuthQueryServer) GetTokenPermissionSubset(context.Context, *GetTokenPermissionSubsetReq) (*GetTokenPermissionSubsetResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTokenPermissionSubset not implemented")
+}
+func (UnimplementedAuthQueryServer) ListApiTokensByUser(context.Context, *ListApiTokensByUserReq) (*ListApiTokensByUserResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListApiTokensByUser not implemented")
+}
+func (UnimplementedAuthQueryServer) GetUserDeviceByThumbprint(context.Context, *GetUserDeviceByThumbprintReq) (*GetUserDeviceByThumbprintResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUserDeviceByThumbprint not implemented")
+}
+func (UnimplementedAuthQueryServer) GetSessionApprover(context.Context, *GetSessionApproverReq) (*GetSessionApproverResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSessionApprover not implemented")
 }
 func (UnimplementedAuthQueryServer) GetUserTenant(context.Context, *GetUserTenantReq) (*GetUserTenantResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserTenant not implemented")
@@ -460,6 +810,48 @@ func (UnimplementedAuthQueryServer) GetTenantByDomain(context.Context, *GetTenan
 }
 func (UnimplementedAuthQueryServer) GetUserById(context.Context, *GetUserByIdReq) (*GetUserByIdResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserById not implemented")
+}
+func (UnimplementedAuthQueryServer) GetDeviceTrustRevokedAt(context.Context, *GetDeviceTrustRevokedAtReq) (*GetDeviceTrustRevokedAtResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDeviceTrustRevokedAt not implemented")
+}
+func (UnimplementedAuthQueryServer) ListUserSignInEvents(context.Context, *ListUserSignInEventsReq) (*ListUserSignInEventsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListUserSignInEvents not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOAuthClientByHash(context.Context, *GetOAuthClientByHashReq) (*GetOAuthClientByHashResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOAuthClientByHash not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOAuthClientByRowID(context.Context, *GetOAuthClientByRowIDReq) (*GetOAuthClientByRowIDResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOAuthClientByRowID not implemented")
+}
+func (UnimplementedAuthQueryServer) GetPendingOAuthAuthorization(context.Context, *GetPendingOAuthAuthorizationReq) (*GetPendingOAuthAuthorizationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPendingOAuthAuthorization not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOAuthApprovingSession(context.Context, *GetOAuthApprovingSessionReq) (*GetOAuthApprovingSessionResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOAuthApprovingSession not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOAuthDeviceRevocation(context.Context, *GetOAuthDeviceRevocationReq) (*GetOAuthDeviceRevocationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOAuthDeviceRevocation not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOAuthRefreshToken(context.Context, *GetOAuthRefreshTokenReq) (*GetOAuthRefreshTokenResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOAuthRefreshToken not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOAuthGrant(context.Context, *GetOAuthGrantReq) (*GetOAuthGrantResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOAuthGrant not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOAuthGrantLastToken(context.Context, *GetOAuthGrantLastTokenReq) (*GetOAuthGrantLastTokenResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOAuthGrantLastToken not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOAuthAccessTokenGrant(context.Context, *GetOAuthAccessTokenGrantReq) (*GetOAuthAccessTokenGrantResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOAuthAccessTokenGrant not implemented")
+}
+func (UnimplementedAuthQueryServer) ListUserOAuthGrants(context.Context, *ListUserOAuthGrantsReq) (*ListUserOAuthGrantsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListUserOAuthGrants not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOAuthCodeUse(context.Context, *GetOAuthCodeUseReq) (*GetOAuthCodeUseResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOAuthCodeUse not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOAuthGrantByAuthorization(context.Context, *GetOAuthGrantByAuthorizationReq) (*GetOAuthGrantByAuthorizationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOAuthGrantByAuthorization not implemented")
 }
 func (UnimplementedAuthQueryServer) testEmbeddedByValue() {}
 
@@ -531,6 +923,24 @@ func _AuthQuery_GetUserPermissions_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthQueryServer).GetUserPermissions(ctx, req.(*GetUserPermissionsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetExpiredToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetExpiredTokenReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetExpiredToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetExpiredToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetExpiredToken(ctx, req.(*GetExpiredTokenReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -643,6 +1053,24 @@ func _AuthQuery_GetDefaultRoles_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthQuery_ListRealmSuperadmins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRealmSuperadminsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListRealmSuperadmins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListRealmSuperadmins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListRealmSuperadmins(ctx, req.(*ListRealmSuperadminsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthQuery_ListRoles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListRolesReq)
 	if err := dec(in); err != nil {
@@ -675,6 +1103,132 @@ func _AuthQuery_GetRole_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthQueryServer).GetRole(ctx, req.(*GetRoleReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetTokenWithType_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTokenWithTypeReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetTokenWithType(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetTokenWithType_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetTokenWithType(ctx, req.(*GetTokenWithTypeReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetExpiredTokenWithType_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetExpiredTokenWithTypeReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetExpiredTokenWithType(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetExpiredTokenWithType_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetExpiredTokenWithType(ctx, req.(*GetExpiredTokenWithTypeReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetUserRolePermissionsByRealm_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserRolePermissionsByRealmReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetUserRolePermissionsByRealm(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetUserRolePermissionsByRealm_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetUserRolePermissionsByRealm(ctx, req.(*GetUserRolePermissionsByRealmReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetTokenPermissionSubset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTokenPermissionSubsetReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetTokenPermissionSubset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetTokenPermissionSubset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetTokenPermissionSubset(ctx, req.(*GetTokenPermissionSubsetReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_ListApiTokensByUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListApiTokensByUserReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListApiTokensByUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListApiTokensByUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListApiTokensByUser(ctx, req.(*ListApiTokensByUserReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetUserDeviceByThumbprint_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserDeviceByThumbprintReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetUserDeviceByThumbprint(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetUserDeviceByThumbprint_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetUserDeviceByThumbprint(ctx, req.(*GetUserDeviceByThumbprintReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetSessionApprover_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSessionApproverReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetSessionApprover(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetSessionApprover_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetSessionApprover(ctx, req.(*GetSessionApproverReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -751,6 +1305,258 @@ func _AuthQuery_GetUserById_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthQuery_GetDeviceTrustRevokedAt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDeviceTrustRevokedAtReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetDeviceTrustRevokedAt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetDeviceTrustRevokedAt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetDeviceTrustRevokedAt(ctx, req.(*GetDeviceTrustRevokedAtReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_ListUserSignInEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListUserSignInEventsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListUserSignInEvents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListUserSignInEvents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListUserSignInEvents(ctx, req.(*ListUserSignInEventsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOAuthClientByHash_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOAuthClientByHashReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOAuthClientByHash(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOAuthClientByHash_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOAuthClientByHash(ctx, req.(*GetOAuthClientByHashReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOAuthClientByRowID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOAuthClientByRowIDReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOAuthClientByRowID(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOAuthClientByRowID_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOAuthClientByRowID(ctx, req.(*GetOAuthClientByRowIDReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetPendingOAuthAuthorization_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPendingOAuthAuthorizationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetPendingOAuthAuthorization(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetPendingOAuthAuthorization_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetPendingOAuthAuthorization(ctx, req.(*GetPendingOAuthAuthorizationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOAuthApprovingSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOAuthApprovingSessionReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOAuthApprovingSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOAuthApprovingSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOAuthApprovingSession(ctx, req.(*GetOAuthApprovingSessionReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOAuthDeviceRevocation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOAuthDeviceRevocationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOAuthDeviceRevocation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOAuthDeviceRevocation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOAuthDeviceRevocation(ctx, req.(*GetOAuthDeviceRevocationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOAuthRefreshToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOAuthRefreshTokenReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOAuthRefreshToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOAuthRefreshToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOAuthRefreshToken(ctx, req.(*GetOAuthRefreshTokenReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOAuthGrant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOAuthGrantReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOAuthGrant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOAuthGrant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOAuthGrant(ctx, req.(*GetOAuthGrantReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOAuthGrantLastToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOAuthGrantLastTokenReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOAuthGrantLastToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOAuthGrantLastToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOAuthGrantLastToken(ctx, req.(*GetOAuthGrantLastTokenReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOAuthAccessTokenGrant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOAuthAccessTokenGrantReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOAuthAccessTokenGrant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOAuthAccessTokenGrant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOAuthAccessTokenGrant(ctx, req.(*GetOAuthAccessTokenGrantReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_ListUserOAuthGrants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListUserOAuthGrantsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListUserOAuthGrants(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListUserOAuthGrants_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListUserOAuthGrants(ctx, req.(*ListUserOAuthGrantsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOAuthCodeUse_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOAuthCodeUseReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOAuthCodeUse(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOAuthCodeUse_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOAuthCodeUse(ctx, req.(*GetOAuthCodeUseReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOAuthGrantByAuthorization_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOAuthGrantByAuthorizationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOAuthGrantByAuthorization(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOAuthGrantByAuthorization_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOAuthGrantByAuthorization(ctx, req.(*GetOAuthGrantByAuthorizationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthQuery_ServiceDesc is the grpc.ServiceDesc for AuthQuery service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -769,6 +1575,10 @@ var AuthQuery_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetUserPermissions",
 			Handler:    _AuthQuery_GetUserPermissions_Handler,
+		},
+		{
+			MethodName: "GetExpiredToken",
+			Handler:    _AuthQuery_GetExpiredToken_Handler,
 		},
 		{
 			MethodName: "GetUserByTokenWithPermissions",
@@ -795,12 +1605,44 @@ var AuthQuery_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthQuery_GetDefaultRoles_Handler,
 		},
 		{
+			MethodName: "ListRealmSuperadmins",
+			Handler:    _AuthQuery_ListRealmSuperadmins_Handler,
+		},
+		{
 			MethodName: "ListRoles",
 			Handler:    _AuthQuery_ListRoles_Handler,
 		},
 		{
 			MethodName: "GetRole",
 			Handler:    _AuthQuery_GetRole_Handler,
+		},
+		{
+			MethodName: "GetTokenWithType",
+			Handler:    _AuthQuery_GetTokenWithType_Handler,
+		},
+		{
+			MethodName: "GetExpiredTokenWithType",
+			Handler:    _AuthQuery_GetExpiredTokenWithType_Handler,
+		},
+		{
+			MethodName: "GetUserRolePermissionsByRealm",
+			Handler:    _AuthQuery_GetUserRolePermissionsByRealm_Handler,
+		},
+		{
+			MethodName: "GetTokenPermissionSubset",
+			Handler:    _AuthQuery_GetTokenPermissionSubset_Handler,
+		},
+		{
+			MethodName: "ListApiTokensByUser",
+			Handler:    _AuthQuery_ListApiTokensByUser_Handler,
+		},
+		{
+			MethodName: "GetUserDeviceByThumbprint",
+			Handler:    _AuthQuery_GetUserDeviceByThumbprint_Handler,
+		},
+		{
+			MethodName: "GetSessionApprover",
+			Handler:    _AuthQuery_GetSessionApprover_Handler,
 		},
 		{
 			MethodName: "GetUserTenant",
@@ -818,9 +1660,65 @@ var AuthQuery_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetUserById",
 			Handler:    _AuthQuery_GetUserById_Handler,
 		},
+		{
+			MethodName: "GetDeviceTrustRevokedAt",
+			Handler:    _AuthQuery_GetDeviceTrustRevokedAt_Handler,
+		},
+		{
+			MethodName: "ListUserSignInEvents",
+			Handler:    _AuthQuery_ListUserSignInEvents_Handler,
+		},
+		{
+			MethodName: "GetOAuthClientByHash",
+			Handler:    _AuthQuery_GetOAuthClientByHash_Handler,
+		},
+		{
+			MethodName: "GetOAuthClientByRowID",
+			Handler:    _AuthQuery_GetOAuthClientByRowID_Handler,
+		},
+		{
+			MethodName: "GetPendingOAuthAuthorization",
+			Handler:    _AuthQuery_GetPendingOAuthAuthorization_Handler,
+		},
+		{
+			MethodName: "GetOAuthApprovingSession",
+			Handler:    _AuthQuery_GetOAuthApprovingSession_Handler,
+		},
+		{
+			MethodName: "GetOAuthDeviceRevocation",
+			Handler:    _AuthQuery_GetOAuthDeviceRevocation_Handler,
+		},
+		{
+			MethodName: "GetOAuthRefreshToken",
+			Handler:    _AuthQuery_GetOAuthRefreshToken_Handler,
+		},
+		{
+			MethodName: "GetOAuthGrant",
+			Handler:    _AuthQuery_GetOAuthGrant_Handler,
+		},
+		{
+			MethodName: "GetOAuthGrantLastToken",
+			Handler:    _AuthQuery_GetOAuthGrantLastToken_Handler,
+		},
+		{
+			MethodName: "GetOAuthAccessTokenGrant",
+			Handler:    _AuthQuery_GetOAuthAccessTokenGrant_Handler,
+		},
+		{
+			MethodName: "ListUserOAuthGrants",
+			Handler:    _AuthQuery_ListUserOAuthGrants_Handler,
+		},
+		{
+			MethodName: "GetOAuthCodeUse",
+			Handler:    _AuthQuery_GetOAuthCodeUse_Handler,
+		},
+		{
+			MethodName: "GetOAuthGrantByAuthorization",
+			Handler:    _AuthQuery_GetOAuthGrantByAuthorization_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "queries/auth_query.proto",
 }
 
-// emit-sha256: 79714f45aaddcfdaabb8d15b4ac8195a3ce196af490d2a28302e4e787ad78a95
+// emit-sha256: f59b1a40bb3b4426d8cb06497534e633a1e83453735711086b7d5caf90662190

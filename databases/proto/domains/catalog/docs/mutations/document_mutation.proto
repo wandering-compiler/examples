@@ -33,7 +33,7 @@ message RetitleDocumentRow { int64 id = 1; string title = 2; }
 message RetitleDocumentResp { repeated RetitleDocumentRow rows = 1; }
 
 service DocumentMutation {
-  rpc CreateDocument(CreateDocumentReq) returns (Document) {
+  rpc CreateDocument(CreateDocumentReq) returns (DocumentSummary) {
     option (w17.db.method) = {
       ops: {
         name: "main",
@@ -50,7 +50,7 @@ service DocumentMutation {
   // different title (0081). A plain INSERT would raise a unique violation
   // on the second call, so the second step passing shows the conflict arm
   // ran.
-  rpc UpsertDocument(UpsertDocumentReq) returns (Document) {
+  rpc UpsertDocument(UpsertDocumentReq) returns (DocumentSummary) {
     option (w17.db.method) = {
       ops: {
         name: "main",

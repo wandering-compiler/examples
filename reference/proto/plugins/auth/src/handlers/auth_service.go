@@ -18,12 +18,14 @@ package handlers
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +33,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/wandering-compiler/plugins/auth/lib/passwordhash"
@@ -42,7 +45,7 @@ import (
 )
 
 // randomURLToken returns a fresh 256-bit URL-safe random token — the
-// plaintext password-reset / email-verification token (E1) handed to the
+// plaintext password-reset / email-verification token handed to the
 // user once (via the emitted event). Lives here (always-compiled) so both
 // feature-gated handler files can share it without a cross-file dependency.
 func randomURLToken() (string, error) {
@@ -53,8 +56,61 @@ func randomURLToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// sha256Hex is the one-way function applied to an E1 token for storage +
-// lookup — only the hash is persisted, so a DB read can't redeem a token.
+// isLoopbackRedirect reports whether a redirect_uri is a safe loopback
+// callback (RFC 8252 §7.3): http scheme, host 127.0.0.1 / ::1 / localhost,
+// any port + path. A non-loopback target would let a stolen authorize link
+// redirect the code to an attacker-controlled origin. Lives here (always
+// compiled): cli_login and oauth_server both send codes to a loopback
+// redirect, and stage independently.
+func isLoopbackRedirect(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "http" {
+		return false
+	}
+	switch u.Hostname() {
+	case "127.0.0.1", "::1", "localhost":
+		return true
+	default:
+		return false
+	}
+}
+
+// pkceMinVerifierLen is RFC 7636 §4.1's minimum code_verifier length (the
+// floor of the 43–128 unreserved-charset range). A too-short verifier
+// weakens the challenge; we enforce the floor (not the exact charset — the
+// hash comparison already rejects a tampered verifier).
+const pkceMinVerifierLen = 43
+
+// s256Challenge is BASE64URL(SHA256(verifier)), the PKCE S256 challenge.
+func s256Challenge(verifier string) string {
+	sum := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+// isPKCEChallenge accepts exactly an S256 challenge: a SHA-256 digest in
+// unpadded base64url, 43 characters. Any other value can match no verifier,
+// so a code issued for it could never be redeemed. Here, not in oauth.go,
+// because the CLI login and the OAuth server check it too.
+func isPKCEChallenge(c string) bool {
+	if len(c) != 43 {
+		return false
+	}
+	b, err := base64.RawURLEncoding.Strict().DecodeString(c)
+	return err == nil && len(b) == sha256.Size
+}
+
+// verifyPKCES256 reports whether s256Challenge(verifier) equals the stored
+// challenge, compared in constant time.
+func verifyPKCES256(verifier, challenge string) bool {
+	return hmac.Equal([]byte(s256Challenge(verifier)), []byte(challenge))
+}
+
+// sha256Hex is the one-way function applied to a reset / verification token for
+// storage + lookup — only the hash is persisted, so a DB read can't redeem a
+// token.
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
@@ -63,6 +119,11 @@ func sha256Hex(s string) string {
 // defaultSessionTokenTTLSeconds is the fallback session bearer lifetime
 // (30 days) when session_token_ttl_seconds is unset / <= 0.
 const defaultSessionTokenTTLSeconds = 30 * 24 * 60 * 60
+
+// defaultPublicSessionTTLSeconds is the fallback lifetime of a public-computer
+// session (8 hours) when public_session_ttl_seconds is unset / <= 0: a working
+// day at a shared computer, after which a forgotten sign-out stops mattering.
+const defaultPublicSessionTTLSeconds = 8 * 60 * 60
 
 // scopeUserIDKey / userMetadataKey are the gRPC metadata keys the
 // gateway threads the authenticated principal under: the
@@ -81,8 +142,8 @@ const (
 
 // Authn-flow gate sentinels — cause values handler passes to
 // Unauthenticated when failure is shape-level (not an
-// underlying error). They never reach the wire; the auditor
-// (G3-G) walks errors.Unwrap to verify all failure paths
+// underlying error). They never reach the wire; the SDK auditor
+// walks errors.Unwrap to verify all failure paths
 // converge on Unauthenticated.
 var (
 	errAuthnHeaderMissing    = errors.New("auth header missing")
@@ -133,9 +194,10 @@ type AuthServiceHandler struct {
 
 	// Lock is the bundle's compile-time ACL permission-lock snapshot
 	// (query.AclLock(), wired by RegisterPlugin). Non-nil in a wired
-	// bundle; nil only in a hand-built test handler that never
-	// exercises the wildcard path. Read solely to expand an
-	// `all_permissions` wildcard role via acllock.GrantAll.
+	// bundle (empty in a project without the ACL). Read to expand an
+	// `all_permissions` wildcard role via acllock.GrantAll and, under
+	// org_packages, to bound an organization's permissions and gate the
+	// backoffice's package methods — which refuse without it.
 	Lock *acllock.Lock
 
 	PasswordHash passwordhash.Settings
@@ -147,10 +209,14 @@ type AuthServiceHandler struct {
 	// feature is off — only handlers/mfa.go reads them). Plain types so
 	// this always-compiled file stays free of the totp / secretbox
 	// imports; mfa.go builds the secretbox cipher from TwoFactorSecretKey.
-	TwoFactorTOTP     bool   // built-in TOTP verify path enabled (two_factor_totp)
-	TwoFactorScope    string // all_logins | new_devices (two_factor_scope)
+	TwoFactorTOTP  bool   // built-in TOTP verify path enabled (two_factor_totp)
+	TwoFactorScope string // all_logins | new_devices (two_factor_scope)
+	// DeliveryRecipient is the age recipient (age1…) credentials on events
+	// are sealed to (delivery_recipient; sealed_delivery.go).
+	DeliveryRecipient string
+	TwoFactorPolicy   string // required | optional | disabled (two_factor_policy)
 	MfaCodeTTLSeconds int    // event-flow challenge code lifetime (mfa_code_ttl_seconds)
-	// Issuance cap (a consumer): at most MaxMfaChallengesPerWindow challenges
+	// Issuance cap: at most MaxMfaChallengesPerWindow challenges
 	// per user per MfaChallengeWindowSeconds. The per-challenge attempt
 	// budget bounds guesses against one challenge; this bounds how many
 	// challenges — and so how many budgets — a caller can buy. <= 0 → the
@@ -158,24 +224,44 @@ type AuthServiceHandler struct {
 	MaxMfaChallengesPerWindow int // mfa_max_challenges_per_window
 	MfaChallengeWindowSeconds int // mfa_challenge_window_seconds
 
+	// SignIn's guess budget (signin_budget.go): password attempts per
+	// account per window, then per known device while the account's is
+	// spent. <= 0 → the defaults there.
+	SignInFailureBudget        int // sign_in_failure_budget
+	SignInDeviceFailureBudget  int // sign_in_device_failure_budget
+	SignInFailureWindowSeconds int // sign_in_failure_window_seconds
+
 	// SessionTokenTTLSeconds is the absolute lifetime stamped into a
 	// freshly minted session bearer token's expires_at (from
 	// session_token_ttl_seconds). <= 0 → defaultSessionTokenTTLSeconds.
 	SessionTokenTTLSeconds int
-	TotpIssuer             string // otpauth:// issuer label (totp_issuer); empty → project/domain name
-	TwoFactorSecretKey     string // base64 32-byte key encrypting TOTP seeds at rest (two_factor_secret_key)
+	// PublicSessionTTLSeconds is the lifetime of a session signed in with
+	// public_computer (public_session_ttl_seconds). <= 0 (the manifest
+	// default 0) → defaultPublicSessionTTLSeconds, capped at the session
+	// lifetime; an explicit value longer than the session lifetime is refused
+	// by ValidateConfig.
+	PublicSessionTTLSeconds int
+	TotpIssuer              string // otpauth:// issuer label (totp_issuer); empty → project/domain name
+	TwoFactorSecretKey      string // base64 32-byte key encrypting TOTP seeds at rest (two_factor_secret_key)
 
 	// oauth knob (set from env in RegisterPlugin; read only by
 	// handlers/oauth.go). Public base URL the callback is reachable at;
 	// empty → derived from the request Host.
 	OAuthRedirectBase string // oauth_redirect_base
 
-	// E1 token lifetimes (set from env in RegisterPlugin; read only by
-	// handlers/reset.go / emailverify.go). <= 0 → the file's default.
+	// Reset / verification token lifetimes (set from env in RegisterPlugin;
+	// read only by handlers/reset.go / emailverify.go). <= 0 → the file's
+	// default.
 	PasswordResetTTLSeconds     int // password_reset_ttl_seconds
 	EmailVerificationTTLSeconds int // email_verification_ttl_seconds
 
 	InviteOnly bool // require a pending org invitation to sign up (invite_only)
+	// NoOrgFromSoleMembership turns off acting in the caller's only
+	// organization when a request names none (org_from_sole_membership
+	// false): an organization then comes only from the request — the
+	// selector, the path, the host. Inverted so the zero value is the
+	// setting's default.
+	NoOrgFromSoleMembership bool
 	// EmailProofRequired is the FLOOR an address must reach before
 	// AcceptOrgInvite will admit it: "none", "derived" or "full"
 	// (email_proof_required).
@@ -200,6 +286,17 @@ type AuthServiceHandler struct {
 	// an explicit expires_at (api_token_default_ttl_hours). 0 = never expires;
 	// negative falls back to the 90-day default. See apiTokenExpiry.
 	APITokenDefaultTTLHours int
+	// APITokenMaxTTLHours caps a person's API token (api_token_max_ttl_hours;
+	// 0 = no cap). See personTokenExpiry.
+	APITokenMaxTTLHours int
+	// APITokenStepUpSeconds asks CreateApiToken for a step-up that recent
+	// (api_token_step_up_seconds; 0 = not asked). Needs step_up.
+	APITokenStepUpSeconds int
+	// NoPasswordStepUp turns ConfirmPassword off as a step-up
+	// (step_up_password=false). Read only with step_up_code staged: the
+	// second factor is then the only proof. Inverted so a handler built
+	// without the setting keeps the password, as before it existed.
+	NoPasswordStepUp bool
 
 	// SignUpAllowlist is who may register at all (sign_up_allowlist): addresses
 	// and @domains, comma- or space-separated; empty = everyone. Read through
@@ -210,7 +307,109 @@ type AuthServiceHandler struct {
 	// sign_up_confirmation_ttl_seconds (read only by handlers/signup_confirm.go).
 	// <= 0 → the file's default.
 	SignUpConfirmationTTLSeconds int
+
+	// oauth_server knobs (read only by handlers/oauth_server*.go). <= 0 →
+	// the file's defaults; the two lists are checked at boot
+	// (checkOAuthServerConfig).
+	OAuthAccessTTLSeconds    int    // oauth_access_ttl_seconds
+	OAuthRefreshTTLDays      int    // oauth_refresh_ttl_days
+	OAuthGrantMaxDays        int    // oauth_grant_max_days
+	OAuthDynamicRegistration bool   // oauth_dynamic_registration
+	OAuthRedirectHosts       string // oauth_redirect_hosts
+	OAuthResources           string // oauth_resources
+	OAuthCodeRedirect        string // oauth_code_redirect
+	Audiences                string // w17_audiences (generated)
+	// audiences is Audiences parsed at boot (membership_kinds; nil without
+	// it); audiencesRead says ValidateConfig did it.
+	audiences     []audienceEntry
+	audiencesRead bool
+	PackagesTable string // w17_packages (generated; org_packages)
+	// packages is PackagesTable parsed at boot (org_packages; nil without it).
+	packages     *orgPackageTable
+	packagesRead bool
+	// ProductRolesTable is w17_product_roles (generated; product_roles): the
+	// catalogue of the products' roles. productRoles is it parsed at boot.
+	ProductRolesTable string
+	productRoles      *productRoleCatalogue
+	productRolesRead  bool
 }
+
+// audienceEntry is one audience of the domain's generated table
+// (w17_audiences): the kinds it admits, its MCP surface's public URL (from
+// the variable the table names), and the kinds a caller it admits may invite.
+type audienceEntry struct {
+	name, url      string
+	kinds, invites []string
+}
+
+// apiTokenStepUpChecks run before CreateApiToken (api_token) mints: step_up.go
+// appends the one that asks for a recent step-up (api_token_step_up_seconds).
+// Empty without step_up staged, and then the setting is refused at boot.
+// Declared here, in the always-compiled file, because the two features are
+// staged independently.
+var apiTokenStepUpChecks []func(ctx context.Context, h *AuthServiceHandler, userID, sessionTokenID string) error
+
+// MsgNeedsStepUp is what a person reads when CreateApiToken asks for a
+// step-up first.
+//
+//w17:msgid
+const MsgNeedsStepUp = "Confirm it is you before creating a token."
+
+// CodeCreateNeedsStepUp — CreateApiToken: the session has not stepped up
+// recently enough (api_token_step_up_seconds); the client asks for the
+// step-up and tries again.
+const CodeCreateNeedsStepUp = "API_TOKEN_NEEDS_STEP_UP"
+
+// productRoleCatalogue is w17_product_roles, parsed (product_roles): the
+// products' roles. Declared here because the handler holds one in every build.
+type productRoleCatalogue struct {
+	Roles []productRoleEntry `json:"roles"`
+	// Products are every product's permission codes: what the identity's
+	// own roles are composed from.
+	Products map[string][]string `json:"products"`
+	// byProduct maps product → role key → its entry.
+	byProduct map[string]map[string]productRoleEntry
+}
+
+type productRoleEntry struct {
+	Product   string `json:"product"`
+	Key       string `json:"key"`
+	Name      string `json:"name"`
+	OrgScoped bool   `json:"org_scoped"`
+	// Covers are the product's roles whose every permission this one carries
+	// too (itself included), computed at codegen from the product's own
+	// roles. Kept as the catalogue carries it; the ceiling is computed from
+	// Permissions.
+	Covers []string `json:"covers"`
+	// Permissions are the product's permission codes the preset grants.
+	Permissions []string `json:"permissions"`
+}
+
+// orgPackageTable is the generated w17_packages table.
+type orgPackageTable struct {
+	Packages []orgPackage `json:"packages"`
+	// Governed are the methods a package bounds (the project's), named as
+	// the ACL lock keys them.
+	Governed []string `json:"governed"`
+
+	byName map[string]orgPackage
+	// gatedAudiences are the audiences some package names: closed to an
+	// organization none of whose packages names them. Any other is open.
+	gatedAudiences map[string]bool
+}
+
+type orgPackage struct {
+	Name      string   `json:"name"`
+	Methods   []string `json:"methods"`
+	Audiences []string `json:"audiences"`
+	// Default: every organization holds it without being given it.
+	Default bool `json:"default"`
+}
+
+// configChecks are the boot checks of feature-owned settings: a feature file
+// appends its own from init(), so ValidateConfig checks exactly what the
+// activation compiles.
+var configChecks []func(h *AuthServiceHandler) error
 
 // scopeDecorator augments the AuthResp scope + label maps for an
 // authenticated principal. Feature-gated handler files register
@@ -241,6 +440,61 @@ type scopeDecorator func(ctx context.Context, h *AuthServiceHandler, userID stri
 
 var scopeDecorators []scopeDecorator
 
+// notAdmittedError is a decorator's refusal of an AUTHENTICATED caller the
+// surface does not admit (membership_kinds: no membership of a kind the
+// audience accepts). It reaches the gateway as the PermissionDenied (403) it
+// carries instead of being folded into the opaque Unauthenticated: the
+// credential is fine, and "sign in again" would be the wrong advice. It
+// tells the caller nothing about anyone else — only that this door is not
+// theirs.
+type notAdmittedError struct{ err error }
+
+func (e *notAdmittedError) Error() string { return e.err.Error() }
+func (e *notAdmittedError) Unwrap() error { return e.err }
+
+// GRPCStatus is the status the wrapped refusal carries.
+func (e *notAdmittedError) GRPCStatus() *status.Status {
+	st, _ := status.FromError(e.err)
+	return st
+}
+
+// membershipKindsHeader is where an audience gateway names the membership
+// kinds it admits — principal.MembershipKindsKey of the SDK that ships audience
+// surfaces, spelled here so the plugin builds against the SDK it pins. It is
+// gateway-owned (`x-w17-*`): a client's copy never reaches Authenticate.
+const membershipKindsHeader = "x-w17-membership-kinds"
+
+// requestMemoKey carries one Authenticate's memo (requestMemoOf).
+type requestMemoKey struct{}
+
+// requestMemoOf is the request's memo, nil outside Authenticate.
+func requestMemoOf(ctx context.Context) map[string]any {
+	m, _ := ctx.Value(requestMemoKey{}).(map[string]any)
+	return m
+}
+
+// audienceHeader is where an audience gateway names its audience
+// (principal.AudienceKey of the SDK that ships audience surfaces).
+const audienceHeader = "x-w17-audience"
+
+// authHeadersKey carries the AuthReq headers on the context, for a narrower.
+type authHeadersKey struct{}
+
+// kindsFromHeaders reads the admitted membership kinds off AuthReq headers.
+func kindsFromHeaders(headers map[string]string) []string {
+	raw := headers[membershipKindsHeader]
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, k := range strings.Split(raw, ",") {
+		if k = strings.TrimSpace(k); k != "" {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
 // grantNarrower rewrites the principal's permission set AFTER the scope
 // decorators have run, so a feature that resolves a request-scoped
 // context can restrict the grants to it. `org_membership` registers one:
@@ -258,7 +512,9 @@ var scopeDecorators []scopeDecorator
 // Contract: a narrower may only REMOVE permissions or expand a wildcard
 // it has itself re-checked in the narrower context. Returning a larger
 // ordinary set would let a feature escalate the principal past the realm
-// resolution that ran before it.
+// resolution that ran before it. The one bounded exception lives in the
+// organization narrower and is documented there: the session-only grants of
+// the active organization (orgGrantSources).
 type grantNarrower func(ctx context.Context, h *AuthServiceHandler, p *authPrincipal, scopes map[string]string) error
 
 var grantNarrowers []grantNarrower
@@ -272,14 +528,93 @@ var grantNarrowers []grantNarrower
 // which role contributed what, and an intersection then keeps permissions that
 // no one role grants under both axes.
 //
-// Realm rides along because one narrowing needs it: organization OWNERSHIP
-// widens, and it may only widen a SESSION principal (see narrowGrantsToActiveOrg).
+// Realm rides along because one narrowing needs it: the active organization's
+// own grants (a team's roles) add to a SESSION principal only (see
+// narrowGrantsToActiveOrg).
 type authPrincipal struct {
 	userID  string
 	tokenID string
 	realm   pb.TokenType
 	grants  []*pb.RoleGrant
+
+	// realmWide are the role ids among grants held realm-wide (with no
+	// organization), set by the organization narrower when the request acts
+	// in one: what an organization's packages bound is its own roles, not
+	// the backoffice's (org_packages).
+	realmWide map[string]bool
+
+	// permissionSubset: the API token carries a permission subset
+	// (api_token) — it was minted narrow, which the products' axis honours
+	// too (product_roles with api_token).
+	permissionSubset bool
+
+	// usedTokenID / lastUsedAt are the row the bearer resolved to, whatever
+	// its kind (tokenID is a session's only), and when it was last recorded
+	// as used — read by recordTokenUse once authentication succeeded.
+	usedTokenID string
+	lastUsedAt  *timestamppb.Timestamp
+
+	// deviceThumbprint / deviceRevokedAt are the device the token is bound
+	// to (empty: bound to none) and when it was revoked (nil: live), read by
+	// the token lookup itself so the binding check costs no round trip.
+	deviceThumbprint string
+	deviceRevokedAt  *timestamppb.Timestamp
+
+	// mcpOnly is UserToken.mcp_only: a token of the MCP OAuth flow, accepted
+	// without a proof on the MCP surface and nowhere else.
+	mcpOnly bool
+
+	// oauthResource / oauthOrgID are an OAuth access token's resource and
+	// organization (oauth_server): the token works on that resource's MCP
+	// surface only, and acts in that organization.
+	oauthResource string
+	oauthOrgID    string
+
+	// bearer is UserToken.bearer and botAccount whether the owner is of kind
+	// BOT: together they are a machine account's bearer token, accepted
+	// without a proof outside the MCP surface (device/bot-bearer).
+	bearer     bool
+	botAccount bool
+
+	// user is the account the token belongs to, as the token lookup read it:
+	// the columns a feature answers in AuthResp ride it (authRespEnrichers).
+	user *pb.User
+
+	// legacyToken is the presented token when it resolved to a LEGACY row
+	// (stored in the clear, no hash yet), "" otherwise. The resolvers only
+	// note it; Authenticate moves the row to the hash once the request has
+	// passed every check, so a refused request writes nothing.
+	legacyToken string
 }
+
+// legacyPlaintext is the token to move to the hash: the presented one when the
+// row it resolved to has no stored hash (a legacy row), "" otherwise.
+func legacyPlaintext(token, storedHash string) string {
+	if storedHash != "" {
+		return ""
+	}
+	return token
+}
+
+// recordTokenUse stamps the accepted token's last_used_at. Base no-op: the
+// column exists only under `api_token`, whose file (handlers/apitoken.go)
+// installs the real one via init(). Called once authentication has
+// succeeded, so a refused request records nothing. Must never fail the
+// request it rides on.
+var recordTokenUse = func(ctx context.Context, h *AuthServiceHandler, p *authPrincipal) {}
+
+// botBearerGuard is the address check of a machine account's bearer token,
+// after checkBotBearer accepted it. Base: no check — the allowlist exists only
+// under `bot_token_guard`, whose file (handlers/bot_token_guard.go) installs
+// the real one via init(). A refusal is the opaque one, like every other.
+var botBearerGuard = func(ctx context.Context, h *AuthServiceHandler, p *authPrincipal, headers map[string]string) error {
+	return nil
+}
+
+// recordBotUse adds an accepted bearer request to the bot's use summary.
+// Base no-op, installed by bot_token_guard like botBearerGuard. Must never
+// fail the request it rides on.
+var recordBotUse = func(ctx context.Context, h *AuthServiceHandler, p *authPrincipal, headers map[string]string) {}
 
 // effectivePermissions flattens the surviving grants into the permission set
 // Authenticate answers with. A wildcard grant that survived every axis expands
@@ -317,24 +652,68 @@ func (p *authPrincipal) effectivePermissions(lock *acllock.Lock) []int32 {
 // realm's roles, and intersect an API token with its permission subset.
 // Declared here (always-present) so Authenticate compiles with no
 // feature file staged; the override only ships when api_token is on.
-var resolvePrincipal = func(ctx context.Context, h *AuthServiceHandler, token string) (*authPrincipal, error) {
-	resp, err := h.Query.GetUserByTokenWithPermissions(ctx, &pb.GetUserByTokenWithPermissionsReq{Token: token})
+var resolvePrincipal = resolvePrincipalSession
+
+// callerRealmGrants are the roles userID holds in the realm their credential
+// counts — what resolvePrincipal reads, read again under an organization's
+// lock (heldUnderOrgLock). The default is accountRoleGrants; the api_token
+// feature file overrides it with the realm-aware read (realmGrantsOfCaller),
+// as it does resolvePrincipal.
+var callerRealmGrants = accountRoleGrants
+
+// accountRoleGrants is the default callerRealmGrants: with api_token off every
+// caller is a session and every role of the account counts, as
+// resolvePrincipalSession reads them. Named so a test reaches it even in a
+// build where api_token's init() replaced the variable.
+func accountRoleGrants(ctx context.Context, h *AuthServiceHandler, userID string, _ bool) ([]*pb.RoleGrant, error) {
+	resp, err := h.Query.GetUserRoleGrants(ctx, &pb.GetUserRoleGrantsReq{UserId: userID})
 	if err != nil {
+		return nil, err
+	}
+	return resp.GetGrants(), nil
+}
+
+// resolvePrincipalSession is the default resolvePrincipal, named so a test
+// reaches it even in a build where api_token's init() replaced the variable.
+func resolvePrincipalSession(ctx context.Context, h *AuthServiceHandler, token string) (*authPrincipal, error) {
+	hash := sha256Hex(token)
+	resp, err := h.Query.GetUserByTokenWithPermissions(ctx, &pb.GetUserByTokenWithPermissionsReq{LegacyToken: token, TokenHash: hash})
+	if err != nil {
+		// With api_token off every token is a session.
+		return nil, expiredTokenRefusal(err, func() (endedToken, error) {
+			exp, err := h.Query.GetExpiredToken(ctx, &pb.GetExpiredTokenReq{LegacyToken: token, TokenHash: hash})
+			return endedToken{
+				expiresAt:       exp.GetExpiresAt(),
+				revokedAt:       exp.GetRevokedAt(),
+				kind:            pb.TokenType_TOKEN_TYPE_SESSION,
+				thumbprint:      exp.GetDeviceThumbprint(),
+				deviceRevokedAt: exp.GetDeviceRevokedAt(),
+			}, err
+		})
+	}
+	// A disabled account's tokens are revoked when it is disabled, but one
+	// minted after that (a sign-in racing the disable) must not work either.
+	if err := signInDisabledGate(resp.GetUser()); err != nil {
 		return nil, err
 	}
 	// SESSION: with api_token off there is only one credential class, and
 	// this is it. Stamping it rather than leaving the zero value keeps the
-	// ownership rule (session-only) reading the same in both builds.
+	// session-only rules (a team's grants) reading the same in both builds.
 	userID := resp.GetUser().GetId()
 	grants, err := h.Query.GetUserRoleGrants(ctx, &pb.GetUserRoleGrantsReq{UserId: userID})
 	if err != nil {
 		return nil, err
 	}
 	return &authPrincipal{
-		userID:  userID,
-		tokenID: resp.GetTokenId(),
-		realm:   pb.TokenType_TOKEN_TYPE_SESSION,
-		grants:  grants.GetGrants(),
+		userID:           userID,
+		tokenID:          resp.GetTokenId(),
+		realm:            pb.TokenType_TOKEN_TYPE_SESSION,
+		grants:           grants.GetGrants(),
+		deviceThumbprint: resp.GetDeviceThumbprint(),
+		deviceRevokedAt:  resp.GetDeviceRevokedAt(),
+		mcpOnly:          resp.GetMcpOnly(),
+		user:             resp.GetUser(),
+		legacyToken:      legacyPlaintext(token, resp.GetStoredTokenHash()),
 	}, nil
 }
 
@@ -348,28 +727,58 @@ var resolvePrincipal = func(ctx context.Context, h *AuthServiceHandler, token st
 // the `rbac` feature file (handlers/signup_roles.go) overrides them via init().
 // Declared here (always-compiled) so SignUp compiles whether or not rbac is
 // staged; the overrides only ship when rbac is on.
-var signupResolveRoleIDs = func(ctx context.Context, h *AuthServiceHandler) ([]string, error) {
-	return nil, nil
+var signupResolveRoleIDs = func(ctx context.Context, h *AuthServiceHandler) (signupRoles, error) {
+	return signupRoles{}, nil
 }
-var signupAssignRoleIDs = func(ctx context.Context, h *AuthServiceHandler, userID string, roleIDs []string) error {
+var signupAssignRoleIDs = func(ctx context.Context, h *AuthServiceHandler, userID string, roles signupRoles) error {
 	return nil
 }
 
+// signupRoles is what the resolve half hands the assign half. `bootstrap`
+// marks the first_user set: the assign half must then win the bootstrap
+// claim inside the transaction, and assigns `fallback` (the default roles)
+// if another sign-up holds it.
+type signupRoles struct {
+	ids       []string
+	bootstrap bool
+	fallback  []string
+}
+
+// spendResetLinks marks every live password-reset link of an account used.
+// A reset and a password change both call it inside their transaction: after
+// the password changed, an older link is a way to change it again. Base
+// no-op — the PasswordResetToken table exists only under `password_reset`,
+// whose file (handlers/reset.go) installs the real one via init(), so
+// `password_change` without `password_reset` stages nothing it cannot build.
+var spendResetLinks = func(ctx context.Context, h *AuthServiceHandler, userID string) error { return nil }
+
+// spendVerifyLinks marks every live email-verification link of an account
+// used. An admin address change calls it: a link mailed to the old address
+// would otherwise verify the new one. Base no-op — the table exists only under
+// `email_verification`, whose file installs the real one via init().
+var spendVerifyLinks = func(ctx context.Context, h *AuthServiceHandler, userID string) error { return nil }
+
+// eraser erases one feature's share of an account's personal data, inside the
+// erasure's transaction (AuthService.EraseUsers, `user_admin`): email is the
+// address being erased (as stored), placeholder the one replacing it. Nothing
+// it runs deletes a row.
+type eraser func(ctx context.Context, h *AuthServiceHandler, userID, email, placeholder string) error
+
+// erasers are the feature-owned halves of an erasure. Each feature whose
+// tables hold personal data (oauth, two_factor, email_verification,
+// org_invite, sign_up_confirmation) appends its own from its file's init(), so the list holds
+// exactly the tables this activation has; password_reset's share is
+// spendResetLinks above. Declared here, always compiled, because the features
+// that append and the one that runs them (user_admin) stage independently.
+var erasers []eraser
+
 // SignIn seams — always-present default behaviours opt-in feature
 // files override via init(), mirroring resolvePrincipal /
-// signupCreateUser / scopeDecorators. They let `devices` and
-// `two_factor` layer into the password sign-in without the base
-// handler knowing about either. With no feature file staged the
-// defaults make SignIn the plain GetUserByEmail → verify →
-// IssueToken flow.
-
-// devicesActive reports whether the `devices` feature is staged into this
-// bundle — handlers/devices.go's init() sets it true. The base value
-// (false) holds when the feature is off. Read by ValidateConfig to reject
-// two_factor_scope=new_devices without devices (the env value isn't
-// visible at codegen, so this fail-loud guard runs at plugin bootstrap —
-// the earliest point both the feature set and the env value are known).
-var devicesActive bool
+// signupCreateUser / scopeDecorators. They let `two_factor` (and the
+// account gates) layer into the password sign-in without the base
+// handler knowing about them. With no feature file staged the
+// defaults make SignIn the plain GetUserByEmail → verify → register the
+// device → IssueToken flow.
 
 // defaultAPITokenTTLHours is the lifetime of an API token whose caller asked
 // for none, when the deployment did not choose one: 90 days.
@@ -386,14 +795,11 @@ const defaultAPITokenTTLHours = 90 * 24
 const maxAPITokenTTLHours = 100 * 365 * 24
 
 // ValidateConfig fails plugin bootstrap loud on a contradictory
-// activation, rather than silently degrading. Today: two_factor_scope=
-// new_devices requires the `devices` feature (without it the trusted-
-// device signal is always "trusted", so new-device 2FA would never fire —
-// a silent no-op). Called from RegisterPlugin after the handler is built.
+// activation, rather than silently degrading. Called from RegisterPlugin
+// after the handler is built. (two_factor_scope=new_devices no longer needs
+// the `devices` feature: device identity is base tier, so every activation
+// knows which device signs in.)
 func ValidateConfig(h *AuthServiceHandler) error {
-	if h.TwoFactorScope == "new_devices" && !devicesActive {
-		return errors.New("auth plugin: two_factor_scope=new_devices requires the `devices` feature (enable it in the activation's features[])")
-	}
 	// Refused at boot rather than at the first mint: past this many hours
 	// time.Duration overflows, and a "practically never" setting would mint
 	// tokens already expired — accepted by the mint, refused by every read.
@@ -404,6 +810,20 @@ func ValidateConfig(h *AuthServiceHandler) error {
 	// no address keeps out exactly the people it was written for.
 	if _, err := parseSignUpAllowlist(h.SignUpAllowlist); err != nil {
 		return err
+	}
+	// A public-computer session exists to be SHORTER than a normal one; an
+	// explicit longer setting would invert the option, so it is refused
+	// rather than silently capped. 0 — the manifest default, which the bundle
+	// fills in when the variable is unset — means "8 hours, capped at the
+	// session lifetime" (sessionExpiry), so a deployment with sessions
+	// shorter than 8 hours boots without setting it.
+	for _, check := range configChecks {
+		if err := check(h); err != nil {
+			return err
+		}
+	}
+	if h.PublicSessionTTLSeconds > h.sessionTTLSeconds() {
+		return fmt.Errorf("auth plugin: public_session_ttl_seconds=%d is longer than the session lifetime (session_token_ttl_seconds=%d) — a public-computer session must not outlive a normal one; lower public_session_ttl_seconds", h.PublicSessionTTLSeconds, h.sessionTTLSeconds())
 	}
 	return nil
 }
@@ -428,8 +848,8 @@ func parseSignUpAllowlist(raw string) ([]string, error) {
 // errSignUpClosed is the refusal for an address outside sign_up_allowlist.
 // The same answer whatever else is true of the address — an account, an
 // invitation — so the form cannot be used to read the list.
-var errSignUpClosed = status.Error(codes.PermissionDenied,
-	"registration is not open for this address")
+var errSignUpClosed = withUserDetail(status.New(codes.PermissionDenied,
+	"registration is not open for this address"), CodeSignUpClosed, MsgSignUpClosed).Err()
 
 // signUpAllowlistGate refuses an address sign_up_allowlist does not name. It
 // is called by every door that creates an account for whoever is knocking —
@@ -463,15 +883,6 @@ var markEmailConfirmed = func(_ context.Context, _ *AuthServiceHandler, _ string
 	return nil
 }
 
-// resolveSignInDevice resolves the device this sign-in belongs to.
-// Default (no `devices`): no device tracking — empty id, and
-// "trusted" reported true so any 2FA new-device check (which itself
-// requires `devices`) is a non-issue. handlers/devices.go overrides
-// via init() with header/fingerprint resolution + upsert.
-var resolveSignInDevice = func(ctx context.Context, h *AuthServiceHandler, userID string) (deviceID string, trusted bool, err error) {
-	return "", true, nil
-}
-
 // inviteVerifiedEmailGate refuses an acceptance from an account whose address
 // was never proved to belong to it.
 //
@@ -492,8 +903,7 @@ var resolveSignInDevice = func(ctx context.Context, h *AuthServiceHandler, userI
 // so declaring it in the gated `org_invite.go` meant an activation with
 // verification and no invitations staged the assignment without the
 // declaration and failed the bundle build on an undefined identifier —
-// breaking a combination that has nothing to do with invitations (caught in
-// review on w17 platform PR #11).
+// breaking a combination that has nothing to do with invitations.
 //
 // The fix is not to make `email_verification` require `org_invite`: that would
 // force invitations on every project that only wants to confirm addresses.
@@ -507,9 +917,7 @@ var resolveSignInDevice = func(ctx context.Context, h *AuthServiceHandler, userI
 // OrgInvite model and the invite_only knob said that window "closes when
 // email_verification is enabled". It did not: the feature adds a column and
 // two RPCs and blocks nothing, so a project could enable it, verify nobody,
-// and still be told by its own documentation that it was covered. A consumer
-// measured 19 accounts out of 19 with the column NULL and asked which of us
-// was supposed to enforce it (a consumer).
+// and still be told by its own documentation that it was covered.
 //
 // The answer is: this, and only if asked. See `email_proof_required` in
 // plugin.yaml for why it is opt-in rather than automatic.
@@ -519,6 +927,25 @@ var resolveSignInDevice = func(ctx context.Context, h *AuthServiceHandler, userI
 // invitation at that moment and the gate must run before the row is spent: a
 // bound invitation derives the address by being accepted, an open one derives
 // nothing, and the difference is what the middle floor is for.
+// The three floors, weakest first. Strings rather than an enum because the knob
+// is an env var an operator types, and a typo has to be readable in the refusal
+// rather than silently becoming zero.
+const (
+	emailProofNone    = "none"
+	emailProofDerived = "derived"
+	emailProofFull    = "full"
+)
+
+// normalizedFloor is email_proof_required as the gates read it.
+func normalizedFloor(h *AuthServiceHandler) string {
+	return strings.TrimSpace(strings.ToLower(h.EmailProofRequired))
+}
+
+// emailProofEnforced is set when the gate above is the real one
+// (email_verification staged). Without it the floor cannot be read — the
+// column it reads does not exist — so a floor above `none` refuses to boot.
+var emailProofEnforced bool
+
 var inviteVerifiedEmailGate = func(_ context.Context, _ *AuthServiceHandler, _ string, _ bool) error {
 	return nil
 }
@@ -547,8 +974,16 @@ var markEmailDerived = func(_ context.Context, _ *AuthServiceHandler, _ string) 
 // saying "internal error" — the caller would see a server fault instead of
 // the sentence that tells them what to do. Measured, not assumed: the
 // first version of this was a bare error and answered HTTP 500.
-var errSignUpNotInvited = status.Error(codes.PermissionDenied,
-	"registration is by invitation only — ask an administrator of the organization you are joining to invite this address")
+var errSignUpNotInvited = withUserDetail(status.New(codes.PermissionDenied,
+	"registration is by invitation only — ask an administrator of the organization you are joining to invite this address"),
+	CodeSignUpNotInvited, MsgSignUpNotInvited).Err()
+
+// errInviteOtherAddress refuses a registration whose invitation link is bound
+// to another address, when nothing else invites this one. It does not say
+// which address the invitation names.
+var errInviteOtherAddress = withUserDetail(status.New(codes.PermissionDenied,
+	"the invitation link is bound to a different address than the one registering"),
+	CodeInviteOtherAddress, MsgInviteOtherAddress).Err()
 
 // signupInviteGate decides whether an address may create an account at all.
 //
@@ -564,7 +999,7 @@ var errSignUpNotInvited = status.Error(codes.PermissionDenied,
 //     sign_up_turnkey the seam would vanish from an activation that has
 //     invitations and no turnkey registration, and the installing init()
 //     would not compile.
-//   - SignUp is not the only door. OAuth's resolveOrCreateUserByEmail
+//   - SignUp is not the only door. OAuth's createOAuthAccount
 //     creates an account for any address the provider asserts, so a gate
 //     reachable only from SignUp leaves invite-only registration open to
 //     anyone with an account at the identity provider.
@@ -573,16 +1008,74 @@ var errSignUpNotInvited = status.Error(codes.PermissionDenied,
 // deciding at install time: staging the feature must not close a surface
 // the operator left open.
 //
-// ⚠️ This seam shipped for a fortnight with no init() installing it, while
-// its own comment claimed one existed and the console activation's comment
-// claimed registration was closed. `invite_only` defaulted to true and was
-// read by nobody. What made it invisible is that nothing FAILED — the
-// permissive default is a valid state, so every test, every build and
-// every deployment was green. The only artefact was an unused variable:
-// staticcheck's U1000 named errSignUpNotInvited, in a directory `make
-// audit-go` did not scan. It scans it now (T3-7 pass #13).
+// ⚠️ Without an init() installing the enforcing implementation, nothing
+// FAILS: the permissive default is a valid state, so every test, every
+// build and every deployment stays green while `invite_only` — true by
+// default — is read by nobody. The only artefact is an unused variable
+// (staticcheck's U1000 on errSignUpNotInvited), which is why the lint has
+// to cover this directory.
 var signupInviteGate = func(ctx context.Context, h *AuthServiceHandler, email, inviteToken string) error {
 	return nil
+}
+
+// orgJoin is an organization a registration joins without an invitation
+// (org_signup): its id, the membership kind and the role.
+type orgJoin struct {
+	orgID, kind, role string
+}
+
+// signupOrgDecide decides, for a registration WITHOUT an invitation, whether
+// the organization of the host it comes from takes it (org_signup.go): a
+// join when an open policy covers it, a refusal when a closed one does, and
+// nil, nil when no policy speaks — invite_only decides then, as without the
+// feature. bodyHost is the host the request names (signupHostOf), "" when
+// none; a gateway host bound to an organization wins, one bound to none
+// leaves bodyHost to decide. nil without org_signup.
+var signupOrgDecide func(ctx context.Context, h *AuthServiceHandler, bodyHost string) (*orgJoin, error)
+
+// signupHostOf reads the host a registration request names (`signup_host`,
+// a field org_signup adds to SignUpReq and OAuthExchangeReq). nil without
+// org_signup, where no request carries one.
+var signupHostOf func(req proto.Message) string
+
+// signupHost is signupHostOf, or "" without org_signup.
+func signupHost(req proto.Message) string {
+	if signupHostOf == nil || req == nil {
+		return ""
+	}
+	return signupHostOf(req)
+}
+
+// signupOrgJoin writes the membership and its grant, in the registration's
+// own transaction. Set with signupOrgDecide.
+var signupOrgJoin func(txCtx context.Context, h *AuthServiceHandler, userID string, j *orgJoin) error
+
+// signupGates is the invitation side of every registration path (SignUp,
+// ConfirmSignUp, an OAuth sign-in that creates the account). An invitation
+// decides its own organization and goes through invite_only as before;
+// without one, the host's organization may take the registration openly,
+// refuse it, or say nothing — and only when it says nothing does
+// invite_only decide. The join it returns is written by the caller inside
+// the account's transaction (joinSignedUpOrg).
+func signupGates(ctx context.Context, h *AuthServiceHandler, email, inviteToken, bodyHost string) (*orgJoin, error) {
+	if inviteToken == "" && signupOrgDecide != nil {
+		join, err := signupOrgDecide(ctx, h, bodyHost)
+		if err != nil {
+			return nil, err
+		}
+		if join != nil {
+			return join, nil
+		}
+	}
+	return nil, signupInviteGate(ctx, h, email, inviteToken)
+}
+
+// joinSignedUpOrg writes signupGates' join, if any, for the new account.
+func joinSignedUpOrg(txCtx context.Context, h *AuthServiceHandler, userID string, j *orgJoin) error {
+	if j == nil || signupOrgJoin == nil {
+		return nil
+	}
+	return signupOrgJoin(txCtx, h, userID, j)
 }
 
 // signupClaimInvite spends an OPEN invitation's link on the registration
@@ -594,44 +1087,64 @@ var signupClaimInvite = func(ctx context.Context, h *AuthServiceHandler, email, 
 	return nil
 }
 
+// signupAcceptInvite accepts, in the registration's own transaction, the
+// invitation whose link the registration came through
+// (invite_accept_at_signup): the person arrives a member. proven says the
+// registration itself proved the address (a confirmation code, a provider's
+// verified email). Default: nothing — the link is accepted afterwards
+// (AcceptOrgInvite).
+var signupAcceptInvite = func(ctx context.Context, h *AuthServiceHandler, userID, email, inviteToken string, proven bool) error {
+	return nil
+}
+
 // signInMfaGate decides whether a second factor challenges this
-// sign-in. Default (no `two_factor`): never — returns (nil, false,
+// sign-in. thumbprint is the device key that signed it: a challenge records
+// it, and only that key may complete the sign-in (VerifyMfa). Default (no `two_factor`): never — returns (nil, false,
 // nil) so SignIn proceeds straight to token issuance.
 // handlers/mfa.go overrides via init(): on a challenge it creates the
 // MfaChallenge (emitting MfaChallengeRequested) and returns the
 // mfa_required SignInResp + challenged=true so SignIn returns it
 // WITHOUT issuing a token.
-var signInMfaGate = func(ctx context.Context, h *AuthServiceHandler, user *pb.User, deviceID string, deviceTrusted bool) (resp *pb.SignInResp, challenged bool, err error) {
+var signInMfaGate = func(ctx context.Context, h *AuthServiceHandler, user *pb.User, thumbprint string, deviceTrusted, public bool) (resp *pb.SignInResp, challenged bool, err error) {
 	return nil, false, nil
-}
-
-// issueSession mints the bearer token for an authenticated principal and
-// returns the opaque session token plus (C2, devices only) a server-issued
-// device-trust token the client replays as X-Device-Trust. Default (no
-// `devices`): IssueToken (no device column), empty trust token.
-// handlers/devices.go overrides via init() to stamp device_id + mint
-// + store the device-trust token. Shared by SignIn, OAuth, and (under
-// two_factor) VerifyMfa so they all honour device binding.
-var issueSession = func(ctx context.Context, h *AuthServiceHandler, userID, deviceID string) (token, trustToken string, err error) {
-	resp, err := h.Mutation.IssueToken(ctx, &pb.IssueTokenReq{UserId: userID, ExpiresAt: h.sessionTokenExpiry()})
-	if err != nil {
-		return "", "", err
-	}
-	return resp.GetToken().GetToken(), "", nil
 }
 
 // sessionTokenExpiry returns the absolute expiry stamped into a freshly
 // minted session bearer token: NOW + session_token_ttl_seconds (default
 // 30d when unset/<=0). The token-validation queries reject a token past
 // this instant, so a leaked session token stops working after the TTL
-// even without an explicit logout. Shared by issueSession and the
-// `devices` override (issueSessionWithDevice).
+// even without an explicit logout. Read by issueSession, SignUp and
+// ConfirmSignUp; a CLI session takes the earlier of it and its approver's.
 func (h *AuthServiceHandler) sessionTokenExpiry() *timestamppb.Timestamp {
-	ttl := h.SessionTokenTTLSeconds
-	if ttl <= 0 {
-		ttl = defaultSessionTokenTTLSeconds
+	return h.sessionExpiry(false)
+}
+
+// sessionExpiry is the expiry of a session minted now: the public-computer
+// lifetime for a public one, the session lifetime otherwise. The public
+// lifetime is capped at the session lifetime, so a handler built without
+// ValidateConfig still never gives a public session the longer one.
+func (h *AuthServiceHandler) sessionExpiry(public bool) *timestamppb.Timestamp {
+	ttl := h.sessionTTLSeconds()
+	if public {
+		ttl = min(h.publicSessionTTLSeconds(), ttl)
 	}
 	return timestamppb.New(time.Now().Add(time.Duration(ttl) * time.Second))
+}
+
+// sessionTTLSeconds is session_token_ttl_seconds, or its default.
+func (h *AuthServiceHandler) sessionTTLSeconds() int {
+	if h.SessionTokenTTLSeconds <= 0 {
+		return defaultSessionTokenTTLSeconds
+	}
+	return h.SessionTokenTTLSeconds
+}
+
+// publicSessionTTLSeconds is public_session_ttl_seconds, or its default.
+func (h *AuthServiceHandler) publicSessionTTLSeconds() int {
+	if h.PublicSessionTTLSeconds <= 0 {
+		return defaultPublicSessionTTLSeconds
+	}
+	return h.PublicSessionTTLSeconds
 }
 
 // Shutdown runs once on bundle teardown with the bundle's drain
@@ -665,20 +1178,83 @@ func (h *AuthServiceHandler) Shutdown(ctx context.Context) error {
 //
 // Every failure mode returns the same Unauthenticated status.
 func (h *AuthServiceHandler) Authenticate(ctx context.Context, req *pb.AuthReq) (*pb.AuthResp, error) {
+	return h.authenticate(ctx, req)
+}
+
+// AuthenticateAdmin is Authenticate for the admin plane, which the admin
+// preset wires as its user_lookup.
+//
+// The admin is one console across every organization, so only a REALM-wide
+// role may count there. Authenticate selects an organization (from
+// the request, or the caller's only one) and lets that organization's roles
+// grant permissions — right for an app endpoint that works inside the
+// organization, and wrong for the admin: a role scoped to one organization,
+// a wildcard one above all, would pass every admin page for every
+// organization. Here no organization is selected, so the grants that survive
+// are the realm-wide ones.
+//
+// Two consequences a project sees:
+//
+//   - no org_id scope reaches the admin's storage calls, so an admin page over
+//     a model scoped by name: "org_id" is refused ("missing required scope:
+//     org_id") for every caller. Before, it served the one organization the
+//     sole-org inference happened to pick, which was never the whole console.
+//   - the other decorators still run. Under tenant_scope the caller's tenant_id
+//     is still stamped, so the admin stays inside the caller's tenant.
+//
+// The mark is a context value of an unexported type, set only here: nothing a
+// caller sends can put a request on the admin plane, and the mark only ever
+// removes an organization, never adds one.
+func (h *AuthServiceHandler) AuthenticateAdmin(ctx context.Context, req *pb.AuthReq) (*pb.AuthResp, error) {
+	return h.authenticate(context.WithValue(ctx, adminPlaneKey{}, true), req)
+}
+
+// adminPlaneKey marks a request authenticated for the admin plane; see
+// AuthenticateAdmin.
+type adminPlaneKey struct{}
+
+// oauthTokenOrgKey carries the organization of the OAuth access token being
+// authenticated (oauth_server) to the organization decorator. Set only by
+// Authenticate, from the token's own row.
+type oauthTokenOrgKey struct{}
+
+func oauthTokenOrg(ctx context.Context) string {
+	v, _ := ctx.Value(oauthTokenOrgKey{}).(string)
+	return v
+}
+
+func onAdminPlane(ctx context.Context) bool {
+	v, _ := ctx.Value(adminPlaneKey{}).(bool)
+	return v
+}
+
+func (h *AuthServiceHandler) authenticate(ctx context.Context, req *pb.AuthReq) (*pb.AuthResp, error) {
 	raw, ok := req.GetHeaders()[strings.ToLower(h.HeaderName)]
 	if !ok || raw == "" {
 		return nil, Unauthenticated(errAuthnHeaderMissing)
 	}
-	token := raw
-	if h.Scheme != "" {
-		prefix := h.Scheme + " "
-		if !strings.HasPrefix(raw, prefix) {
-			return nil, Unauthenticated(errAuthnSchemeMismatch)
-		}
-		token = strings.TrimPrefix(raw, prefix)
+	token, viaDPoP, err := h.presentedToken(raw)
+	if err != nil {
+		return nil, Unauthenticated(err)
 	}
-	if token == "" {
-		return nil, Unauthenticated(errAuthnTokenEmpty)
+	// Decided BEFORE the token is looked up, so it says nothing about the
+	// token: a request that proves no key is refused here, unless the gateway
+	// marked it as the MCP surface (whose clients cannot sign yet), where only
+	// an MCP-flow token passes — checked after the lookup, with every other
+	// outcome the opaque refusal.
+	//
+	// The other exception is a machine account's bearer token
+	// (device/bot-bearer), told apart by its prefix alone, so every other
+	// token is still refused here unseen; whether it IS one is the row's flag,
+	// checked after the lookup (checkBotBearer). Only where machine accounts
+	// exist, and never on the admin plane: a credential that works without a
+	// key does not open the admin console.
+	jkt := req.GetHeaders()[dpopJKTKey]
+	proofed := viaDPoP && validThumbprint(jkt)
+	mcpSurface := req.GetHeaders()[surfaceKey] == surfaceMCP
+	botBearer := serviceAccountStaged && !viaDPoP && !mcpSurface && !onAdminPlane(ctx) && isBotBearerToken(token)
+	if !proofed && !mcpSurface && !botBearer {
+		return nil, Unauthenticated(deviceProofRequired(ctx, false))
 	}
 
 	// Resolve identity + permission IDs. Default = single-realm
@@ -686,11 +1262,66 @@ func (h *AuthServiceHandler) Authenticate(ctx context.Context, req *pb.AuthReq) 
 	// narrowed resolver (see resolvePrincipal).
 	prin, err := resolvePrincipal(ctx, h, token)
 	if err != nil {
+		// An expired token says so only to the holder of its key; to anyone
+		// else, as an unknown one, it is the opaque refusal.
+		// A bearer token's holder is whoever presents it, so an ended one says
+		// so without a proof (expiredBearer).
+		if proofed {
+			if expired := expiredFor(ctx, err, jkt); expired != nil {
+				return nil, Unauthenticated(expired)
+			}
+		} else if botBearer {
+			if expired := expiredBearer(ctx, err); expired != nil {
+				return nil, Unauthenticated(expired)
+			}
+		}
 		return nil, Unauthenticated(err)
 	}
+	// The binding, before anything else, so nothing is decorated, narrowed or
+	// recorded as used for a request that fails it.
+	switch {
+	case proofed:
+		err = checkTokenBinding(ctx, prin, jkt)
+	case botBearer:
+		if err = checkBotBearer(prin); err == nil {
+			err = botBearerGuard(ctx, h, prin, req.GetHeaders())
+		}
+	default:
+		err = checkMCPToken(prin, req.GetHeaders()[mcpResourceKey])
+	}
+	if err != nil {
+		return nil, Unauthenticated(err)
+	}
+	if prin.oauthOrgID != "" {
+		ctx = context.WithValue(ctx, oauthTokenOrgKey{}, prin.oauthOrgID)
+	}
+	resp, err := h.principalResp(ctx, prin, req.GetHeaders())
+	if err != nil {
+		return nil, err
+	}
+
+	// Written only now that the request passed every check — the binding
+	// included — so a refused request (a stolen token with the wrong key, a
+	// narrower's refusal) changes nothing.
+	if prin.legacyToken != "" {
+		h.upgradeLegacyToken(ctx, prin.legacyToken, sha256Hex(prin.legacyToken), "")
+	}
+	recordTokenUse(ctx, h, prin)
+	if botBearer {
+		recordBotUse(ctx, h, prin, req.GetHeaders())
+	}
+	return resp, nil
+}
+
+// principalResp is the half of Authenticate after the credential: what a
+// principal holds in the request its headers describe. Authenticate reaches it
+// from a token, ResolveUser from a user id; both answer through this one
+// function, so there is one resolver of permissions and scopes, not two that
+// have to agree.
+func (h *AuthServiceHandler) principalResp(ctx context.Context, prin *authPrincipal, headers map[string]string) (*pb.AuthResp, error) {
 	userID := prin.userID
 
-	// REV-147 — publish the authenticated principal as the
+	// Publish the authenticated principal as the
 	// canonical `user_id` data scope. The gateway threads this into
 	// `x-w17-scope-user_id` metadata; a consuming project that
 	// scopes its owned rows by `name: "user_id"` then gets owner
@@ -701,7 +1332,14 @@ func (h *AuthServiceHandler) Authenticate(ctx context.Context, req *pb.AuthReq) 
 	// Feature-gated scope decorators (e.g. tenant_scope) append
 	// their own scopes here. Empty when no feature file is staged.
 	labels := map[string]string{}
-	if err := runScopeDecorators(ctx, h, userID, req.GetHeaders(), scopes, labels); err != nil {
+	// The request's headers ride the context too, for the narrowers below:
+	// an audience gateway's admitted membership kinds decide which roles
+	// count (membership_kinds), and a narrower is handed no headers.
+	ctx = context.WithValue(ctx, authHeadersKey{}, headers)
+	// A memo the decorators and narrowers of this one request share, so what
+	// two of them read (an organization's packages) is read once.
+	ctx = context.WithValue(ctx, requestMemoKey{}, map[string]any{})
+	if err := runScopeDecorators(ctx, h, userID, headers, scopes, labels); err != nil {
 		return nil, err
 	}
 
@@ -722,13 +1360,49 @@ func (h *AuthServiceHandler) Authenticate(ctx context.Context, req *pb.AuthReq) 
 	// wildcard expands only if the role carrying it survived all of them —
 	// which is what stops a superadmin of one organization passing checks in
 	// the next.
-	return &pb.AuthResp{
+	resp := &pb.AuthResp{
 		PermissionIds:  prin.effectivePermissions(h.Lock),
 		UserId:         userID,
 		Scopes:         scopes,
 		Labels:         labels,
 		SessionTokenId: prin.tokenID,
-	}, nil
+		DeviceId:       prin.deviceThumbprint,
+	}
+	for _, enrich := range authRespEnrichers {
+		if err := enrich(ctx, h, prin, resp); err != nil {
+			return nil, err
+		}
+	}
+	return resp, nil
+}
+
+// authRespEnrichers fill the AuthResp fields a feature adds
+// (marketing_consent, membership_kind), each feature appending its own from
+// its file's init. Base tier: none, because those fields exist only in a
+// build with the feature. They run last, on the resolved scopes.
+var authRespEnrichers []func(ctx context.Context, h *AuthServiceHandler, prin *authPrincipal, resp *pb.AuthResp) error
+
+// presentedToken strips the scheme off the auth header. A token may come
+// under DPoP (RFC 9449, a bound token with a proof — viaDPoP) or under the
+// configured scheme (Bearer); checkTokenBinding refuses the latter once the
+// token resolves, with a code that tells the client to sign its requests. A
+// configured scheme of "" takes the header as the bare token.
+func (h *AuthServiceHandler) presentedToken(raw string) (token string, viaDPoP bool, err error) {
+	switch {
+	// The scheme is case-insensitive (RFC 9110 §11.1).
+	case len(raw) > len(dpopScheme) && strings.EqualFold(raw[:len(dpopScheme)], dpopScheme) && raw[len(dpopScheme)] == ' ':
+		token, viaDPoP = raw[len(dpopScheme)+1:], true
+	case h.Scheme == "":
+		token = raw
+	case len(raw) > len(h.Scheme) && strings.EqualFold(raw[:len(h.Scheme)], h.Scheme) && raw[len(h.Scheme)] == ' ':
+		token = raw[len(h.Scheme)+1:]
+	default:
+		return "", false, errAuthnSchemeMismatch
+	}
+	if token == "" {
+		return "", false, errAuthnTokenEmpty
+	}
+	return token, viaDPoP, nil
 }
 
 // SignIn is the canonical email+password→bearer-token flow.
@@ -737,19 +1411,36 @@ func (h *AuthServiceHandler) Authenticate(ctx context.Context, req *pb.AuthReq) 
 //  1. GetUserByEmail resolves the principal (and returns the
 //     stored password hash).
 //  2. PasswordHash.VerifyAndRotate compares against the plain
-//     password. Rotation update-fn is nil for v1 — the plugin
-//     doesn't expose an UpdateUserPasswordHash mutation in its
-//     client surface yet; rehash-on-login is parked.
+//     password, and when the stored hash is weaker than the current
+//     settings (an older algorithm or cost) stores the same password
+//     rehashed (rehashOnSignIn). Without it a project that raised its
+//     hashing cost kept every existing account on the old one forever.
 //  3. IssueToken mints the bearer token.
 //
 // Anti-enumeration: every failure path emits the same status.
-// VerifyAndRotate's `err` return is non-fatal when ok=true (a
-// failed rehash doesn't invalidate the auth) — discarded here
-// since the plugin doesn't yet have an UpdateUserPasswordHash
-// mutation to apply the new hash anyway.
-func (h *AuthServiceHandler) SignIn(ctx context.Context, req *pb.SignInReq) (*pb.SignInResp, error) {
+// A failed rehash never fails the sign-in: the password was verified, and
+// the next sign-in tries again.
+//
+// Every attempt appends one SignInEvent (method PASSWORD), the refusals too
+// (signin_history.go); the row changes nothing the caller gets.
+func (h *AuthServiceHandler) SignIn(ctx context.Context, req *pb.SignInReq) (_ *pb.SignInResp, err error) {
+	attempt := beginSignIn(ctx, pb.SignInMethod_SIGN_IN_METHOD_PASSWORD)
+	attempt.named(req.GetEmail())
+	attempt.publicComputer = req.GetPublicComputer()
+	defer func() { h.endSignIn(ctx, attempt, err) }()
+
+	// The device key first: without a proof there is no token to issue, and
+	// refusing before the lookup costs nothing and says nothing about the
+	// address.
+	thumbprint, err := mintThumbprint(ctx)
+	if err != nil {
+		return nil, err
+	}
 	userResp, err := h.Query.GetUserByEmail(ctx, &pb.GetUserByEmailReq{Email: normalizeEmail(req.GetEmail())})
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			attempt.outcome = pb.SignInOutcome_SIGN_IN_OUTCOME_UNKNOWN_ACCOUNT
+		}
 		// Anti-enumeration: a missing account must cost the same as a wrong
 		// password. Without this, GetUserByEmail returns fast (no argon2) for a
 		// non-existent user but the found path pays the ~argon2 derivation — a
@@ -760,11 +1451,20 @@ func (h *AuthServiceHandler) SignIn(ctx context.Context, req *pb.SignInReq) (*pb
 		return nil, UnauthenticatedSignIn(err)
 	}
 	user := userResp.GetUser()
+	attempt.userID, attempt.account = user.GetId(), user
 
-	ok, _, _ := h.PasswordHash.VerifyAndRotate(user.GetPasswordHash(), req.GetPassword(), nil)
+	// The guess budget, before the password: an attempt it refuses is never
+	// checked, the right password included. Refused like a wrong password,
+	// and as slowly, so the refusal tells nobody the account exists.
+	if err := spendSignInBudget(ctx, h, user.GetId(), thumbprint); err != nil {
+		signInDummyVerify(h, req.GetPassword())
+		return nil, UnauthenticatedSignIn(err)
+	}
+	ok, _, _ := h.PasswordHash.VerifyAndRotate(user.GetPasswordHash(), req.GetPassword(), h.rehashOnSignIn(ctx, user))
 	if !ok {
 		return nil, UnauthenticatedSignIn(errAuthnPasswordMismatch)
 	}
+	resetSignInBudget(ctx, h, user.GetId(), thumbprint)
 
 	// Disabled-account gate (user_admin feature; no-op otherwise).
 	// Checked AFTER the password verify so a disabled account is
@@ -781,54 +1481,52 @@ func (h *AuthServiceHandler) SignIn(ctx context.Context, req *pb.SignInReq) (*pb
 		return nil, UnauthenticatedSignIn(err)
 	}
 
-	// Resolve the device (devices feature; no-op otherwise) so the 2FA
-	// gate can make its new-device decision and the token can be bound.
-	deviceID, trusted, err := resolveSignInDevice(ctx, h, user.GetId())
+	// Register the device the token will be bound to, so the 2FA gate can
+	// make its new-device decision (and bind the challenge to this key). A revoked device is refused here, after
+	// the password: only someone who knows it learns the device's state.
+	dev, err := mintDevice(ctx, h, user.GetId(), thumbprint)
+	attempt.deviceID = dev.id
 	if err != nil {
 		return nil, Unauthenticated(err)
 	}
+
+	// A public-computer sign-in does not lean on trust the device earned
+	// before: whoever sits at a shared computer next may hold the password,
+	// so the second factor is asked as for a new device, and the trust is
+	// neither used nor renewed.
+	trusted := dev.trusted && !attempt.publicComputer
 
 	// Second-factor gate (two_factor feature; no-op otherwise). When it
 	// raises a challenge it returns the mfa_required response and we
 	// stop here WITHOUT issuing a token — VerifyMfa completes the login.
-	if resp, challenged, gErr := signInMfaGate(ctx, h, user, deviceID, trusted); gErr != nil {
+	// The challenge carries the public-computer choice to VerifyMfa.
+	if resp, challenged, gErr := signInMfaGate(ctx, h, user, thumbprint, trusted, attempt.publicComputer); gErr != nil {
 		return nil, Unauthenticated(gErr)
 	} else if challenged {
+		attempt.outcome = pb.SignInOutcome_SIGN_IN_OUTCOME_MFA_REQUIRED
 		return resp, nil
 	}
 
-	token, trustToken, err := issueSession(ctx, h, user.GetId(), deviceID)
+	// Trust is renewed for a device that already has it, never granted here:
+	// reaching this line means no second factor was asked for — either the
+	// device is trusted, or `two_factor` is off and there is no factor to
+	// pass. Granting trust on the password alone would let every device that
+	// ever signed in skip the factor once `two_factor_scope=new_devices` is
+	// switched on. A device earns trust by passing VerifyMfa.
+	var trustCutoff *timestamppb.Timestamp
+	if trusted {
+		trustCutoff = dev.trustCutoff
+	}
+	token, err := issueSession(ctx, h, attempt, user.GetId(), dev, trustCutoff)
 	if err != nil {
 		return nil, Unauthenticated(err)
 	}
-	resp := &pb.SignInResp{
-		UserId: user.GetId(),
-		Token:  token,
-	}
-	stampSignInDeviceTrust(resp, trustToken)
-	return resp, nil
+	return &pb.SignInResp{
+		UserId:         user.GetId(),
+		Token:          token,
+		PublicComputer: attempt.publicComputer,
+	}, nil
 }
-
-// stampSignInDeviceTrust sets the device-trust token on a SignInResp.
-// No-op by default: `device_trust_token` is gated behind the `devices`
-// feature, so it is ABSENT from the consumer's generated SignInResp when
-// devices isn't active — the always-compiled base handler must not name the
-// field. handlers/devices.go (staged only when `devices` is active) overrides
-// this via init() to set resp.DeviceTrustToken, mirroring the issueSession
-// seam. Without this seam the base SignIn handler fails to compile on any
-// project that activates auth WITHOUT devices (e.g. console-app).
-var stampSignInDeviceTrust = func(resp *pb.SignInResp, trustToken string) {}
-
-// stampDeviceTrust is the device-trust seam for the responses whose MESSAGE is
-// itself feature-gated — OAuthCallbackResp (`oauth`) and VerifyMfaResp
-// (`two_factor`). Unlike SignInResp (always present), the base handler can't
-// name those Go types' `device_trust_token` field, so this seam sets it by
-// proto field NAME via reflection: the always-compiled base stays free of the
-// gated field and is a no-op unless handlers/devices.go (staged only under
-// `devices`) overrides it. Also a no-op for any message lacking the field
-// (devices off → the field is absent from the generated message). This is what
-// lets a project activate `oauth` / `two_factor` WITHOUT `devices`.
-var stampDeviceTrust = func(msg proto.Message, trustToken string) {}
 
 // signInDisabledGate rejects a soft-disabled account on SignIn. Base
 // no-op: `User.disabled_at` is gated behind the `user_admin` feature, so
@@ -840,6 +1538,13 @@ var stampDeviceTrust = func(msg proto.Message, trustToken string) {}
 // Unauthenticated (anti-enumeration) — the caller never learns the
 // account exists but is disabled.
 var signInDisabledGate = func(user *pb.User) error { return nil }
+
+// errAuthnUserDisabled is the internal cause behind the opaque
+// Unauthenticated a disabled account gets on SignIn. Never surfaced to
+// the caller (SignIn maps every failure to the same opaque code) — it
+// exists for logs / tests.
+// Declared here, with every feature, because oauthRefusal names it.
+var errAuthnUserDisabled = errors.New("account disabled")
 
 // signInBotGate refuses a password sign-in for a MACHINE account.
 //
@@ -861,26 +1566,39 @@ var signInDisabledGate = func(user *pb.User) error { return nil }
 // must not learn that an address belongs to a bot.
 var signInBotGate = func(user *pb.User) error { return nil }
 
-// refuseUnsignableAccount runs SignIn's account gates — disabled, machine —
-// for a path that issues a session to an EXISTING account without passing
-// through SignIn's lookup: the second sign-in step, the OAuth callback, the CLI
+// isBotAccount reports whether user is a MACHINE account — what a bearer
+// token's owner must be (device/bot-bearer). A seam for the same reason as
+// signInBotGate: User.kind exists only under service_account, and the code
+// reading it here (apitoken.go) is staged by api_token alone, so naming the
+// field directly would not compile in a build without machine accounts.
+// service_account.go installs the real check; without it nobody is a bot.
+var isBotAccount = func(*pb.User) bool { return false }
+
+// refuseUnsignableAccount runs SignIn's account gates — disabled, machine — for
+// a path that issues a session to an EXISTING account without passing through
+// SignIn's lookup: the second sign-in step, the OAuth callback, the CLI
 // exchange. Each of those is reached with a user id decided earlier (a
 // challenge, a linked identity, a code minted from a session), and the account
 // may have changed since: SignIn refused a disabled account, but a challenge
-// opened before the disable still issued a session (found live by
-// examples/auth-proof). Refused with the opaque Unauthenticated, as SignIn is.
-func refuseUnsignableAccount(ctx context.Context, h *AuthServiceHandler, userID string) error {
+// opened before the disable would still issue a session. Refused with the
+// opaque Unauthenticated, as SignIn is.
+//
+// It returns the account it read (nil when the read failed), refused or not:
+// the sign-in history uses it to tell an erased account without reading it
+// again.
+func refuseUnsignableAccount(ctx context.Context, h *AuthServiceHandler, userID string) (*pb.User, error) {
 	got, err := h.Query.GetUserById(ctx, &pb.GetUserByIdReq{UserId: userID})
 	if err != nil {
-		return Unauthenticated(err)
+		return nil, Unauthenticated(err)
 	}
-	if err := signInDisabledGate(got.GetUser()); err != nil {
-		return Unauthenticated(err)
+	user := got.GetUser()
+	if err := signInDisabledGate(user); err != nil {
+		return user, Unauthenticated(err)
 	}
-	if err := signInBotGate(got.GetUser()); err != nil {
-		return Unauthenticated(err)
+	if err := signInBotGate(user); err != nil {
+		return user, Unauthenticated(err)
 	}
-	return nil
+	return user, nil
 }
 
 // normalizeEmail canonicalises an email for both storage and lookup: trim +
@@ -962,21 +1680,20 @@ var whoAmIEnrich = func(ctx context.Context, h *AuthServiceHandler, userID strin
 // Logout revokes the caller's CURRENT session token — the base-tier
 // counterpart to SignIn, available without the `devices` feature. It
 // reads the authenticated principal (user_id) plus the session_token_id
-// the gateway threaded in the auth envelope and deletes exactly that one
-// SESSION token via DeleteSessionToken (ownership guarded in the mutation:
-// id AND user_id). The raw bearer never reaches here — only the resolved
-// session token id does, so it's always a session token (the DQL drops the
-// token_type filter — that column is api_token-gated; Q64-auth-1).
+// the gateway threaded in the auth envelope and revokes exactly that one
+// SESSION token via RevokeSessionToken (ownership guarded in the mutation:
+// id AND user_id; reason LOGOUT, the caller as revoked_by). The row stays.
+// The raw bearer never reaches here — only the resolved session token id
+// does, so it's always a session token (the DQL drops the token_type
+// filter — that column is api_token-gated).
 //
 // Idempotent about the SESSION, not about the caller: a token that was already
 // revoked still gets a clean success, because "this session is already gone" is
 // nothing left to do.
 //
 // ⛔ A caller with NO resolvable session token — an API-token bearer, or a
-// direct gRPC call — is REFUSED (FailedPrecondition), not waved through. That
-// changed in auth v0.1.0-rc.4 and this comment promised the old behaviour for a
-// day afterwards (reported by a consumer): whoever read the contract was told a false
-// success was the contract. The reasoning for the refusal is at the branch
+// direct gRPC call — is REFUSED (FailedPrecondition), not waved through (since
+// auth v0.1.0-rc.4). The reasoning for the refusal is at the branch
 // itself; the short version is that "I was not told which session" is not
 // idempotence.
 //
@@ -989,22 +1706,22 @@ func (h *AuthServiceHandler) Logout(ctx context.Context, _ *pb.LogoutReq) (*pb.L
 	}
 	tokenID := callerSessionTokenID(ctx)
 	if tokenID == "" {
-		// ⛔ REFUSED, and it used to succeed (a consumer).
+		// ⛔ REFUSED.
 		//
 		// An empty id means Logout does not know WHICH session to end. That is
 		// not idempotence — idempotence is "this session is already gone, so
 		// there is nothing to do", and the handler below says so by treating a
-		// zero-row delete as success. This is "I was not told which one", and
+		// zero-row revoke as success. This is "I was not told which one", and
 		// answering OK to that is a claim that is not true.
 		//
-		// What it cost: a consumer wrapped Logout in their own facade whose
-		// VerifyRes carried fields 1-3 (the trio our docs name as the shared
-		// contract) and not field 4. Every sign-out returned 200, the UI said
-		// "signed out", the app dropped the cookie — and the token kept working
-		// until it expired. They caught it only because their check took the
-		// token BEFORE signing out and tried it after; a check on the status
-		// code passes. On a shared or stolen machine that is the difference
-		// between logged out and logged in without it showing.
+		// What an OK would cost: a facade wrapping Logout whose VerifyRes
+		// carries fields 1-3 (the trio documented as the shared contract) and
+		// not field 4 answers every sign-out 200, the UI says "signed out", the
+		// app drops the cookie — and the token keeps working until it expires.
+		// Only a check that takes the token BEFORE signing out and tries it
+		// after sees that; a check on the status code passes. On a shared or
+		// stolen machine that is the difference between logged out and logged
+		// in without it showing.
 		//
 		// The envelope cannot tell the two blank cases apart — AuthResp carries
 		// no token type — so the refusal names both. An API-token bearer has no
@@ -1016,12 +1733,13 @@ func (h *AuthServiceHandler) Logout(ctx context.Context, _ *pb.LogoutReq) (*pb.L
 				"or the auth envelope reaching this handler is missing AuthResp.session_token_id (field 4), "+
 				"which a hand-written facade VerifyRes must carry for logout to revoke anything")
 	}
-	if _, err := h.Mutation.DeleteSessionToken(ctx, &pb.DeleteSessionTokenReq{
-		TokenId:   tokenID,
-		UserId:    userID,
-		TokenType: pb.TokenType_TOKEN_TYPE_SESSION,
+	if _, err := h.Mutation.RevokeSessionToken(ctx, &pb.RevokeSessionTokenReq{
+		TokenId:    tokenID,
+		UserId:     userID,
+		TokenType:  pb.TokenType_TOKEN_TYPE_SESSION,
+		Thumbprint: requestThumbprint(ctx),
 	}); err != nil {
-		// Already-gone token (zero rows → NotFound) is an idempotent
+		// Already-revoked token (zero rows → NotFound) is an idempotent
 		// logout success; anything else propagates.
 		if e := notFoundOK(err); e != nil {
 			return nil, e
@@ -1030,11 +1748,11 @@ func (h *AuthServiceHandler) Logout(ctx context.Context, _ *pb.LogoutReq) (*pb.L
 	return &pb.LogoutResp{}, nil
 }
 
-// notFoundOK turns a storage NotFound into success. The DELETE primitives
+// notFoundOK turns a storage NotFound into success. The write primitives
 // RETURNING a row map zero matched rows to NotFound (single-row scan →
-// sql.ErrNoRows), but deleting something already gone — revoking a stale
-// device, clearing a TOTP secret that was never enrolled — is a no-op, not
-// an error. Lives here (always-compiled) so both handlers/devices.go and
+// sql.ErrNoRows), but revoking something already revoked — a stale device,
+// a token signed out twice — or clearing a TOTP secret that was never
+// enrolled is a no-op, not an error. Lives here (always-compiled) so both handlers/devices.go and
 // handlers/mfa.go use it without a cross-feature dependency.
 func notFoundOK(err error) error {
 	if status.Code(err) == codes.NotFound {
@@ -1070,11 +1788,9 @@ func callerUserID(ctx context.Context) (string, error) {
 // bearer resolved to, from the gateway's x-w17-user envelope (Authenticate
 // stamps AuthResp.session_token_id). Returns "" on any miss.
 //
-// ⚠️ Logout used to NO-OP on that empty string, "rather than erroring for a
-// caller with no resolvable session". The intent was to spare an API-token
-// bearer an error; the cost was that a real session's logout could answer OK
-// having revoked nothing, and nothing anywhere said so (a consumer). Logout
-// refuses now — see the note at its call site.
+// ⚠️ Logout refuses on that empty string rather than NO-OP: a no-op would
+// spare an API-token bearer an error, at the cost of a real session's logout
+// answering OK having revoked nothing — see the note at its call site.
 // Reads the envelope, never the raw bearer (which never reaches handlers).
 func callerSessionTokenID(ctx context.Context) string {
 	var ar pb.AuthResp
@@ -1082,6 +1798,33 @@ func callerSessionTokenID(ctx context.Context) string {
 		return ""
 	}
 	return ar.GetSessionTokenId()
+}
+
+// errCallerNotASession refuses an API token where only a signed-in session may
+// act: creating another credential. The operator's copy; the person reads
+// MsgSessionRequired.
+var errCallerNotASession = errors.New("this operation needs a signed-in session; an API token cannot create credentials")
+
+// requireSessionCaller refuses a caller that did not authenticate with a
+// session token.
+//
+// An operation that creates a credential (an API token, a CLI session, an
+// authenticator or its recovery codes, a trusted CLI callback) must not be
+// reachable from an API token: the new credential is minted from the holder's
+// account, not from the caller's narrowed permissions, so a token limited to
+// one permission would come out of it with all of them, a CLI exchange would
+// turn it into a session, and an enrolled authenticator would hand the
+// account's second factor to whoever holds the token. Authenticate sets
+// session_token_id only for a session-realm token and leaves it empty for any
+// other, which is what tells the two apart here. An envelope without it (an
+// authenticator other than this plugin's) is refused too: it cannot show that
+// the caller is a session.
+func requireSessionCaller(ctx context.Context) error {
+	if callerSessionTokenID(ctx) == "" {
+		return refusal(ctx, codes.PermissionDenied, errCallerNotASession.Error(),
+			CodeSessionRequired, "", MsgSessionRequired, nil)
+	}
+	return nil
 }
 
 // intersectInt32 returns the elements of `a` that also appear in `b`,
@@ -1114,7 +1857,7 @@ func intersectInt32(a, b []int32) []int32 {
 
 // runScopeDecorators runs the feature-staged scope decorators in order and
 // turns the first failure into an authentication refusal. A decorator that
-// already said what kind of refusal it is (UnauthenticatedOrgNotMember) keeps
+// already said what kind of refusal it is (DeniedOrgNotMember) keeps
 // its words; wrapping it again would drop them back to the generic answer.
 func runScopeDecorators(ctx context.Context, h *AuthServiceHandler, userID string, headers, scopes, labels map[string]string) error {
 	for _, dec := range scopeDecorators {
@@ -1123,8 +1866,41 @@ func runScopeDecorators(ctx context.Context, h *AuthServiceHandler, userID strin
 			if errors.As(err, &classified) {
 				return classified
 			}
+			var refused *notAdmittedError
+			if errors.As(err, &refused) {
+				return refused
+			}
 			return Unauthenticated(err)
 		}
 	}
 	return nil
+}
+
+// rehashOnSignIn is VerifyAndRotate's update for a sign-in: it stores the
+// password rehashed under the current settings, compare-and-swap on the hash
+// that was just verified (AuthMutation.RehashUserPassword). A hash changed
+// since the read — a password change or reset racing the sign-in — matches no
+// row and is left as it is: the newer password wins, not the old one's
+// rehash. Its error never reaches the caller; VerifyAndRotate reports it and
+// the sign-in goes on.
+func (h *AuthServiceHandler) rehashOnSignIn(ctx context.Context, user *pb.User) func(string) error {
+	return func(newHash string) error {
+		_, err := h.Mutation.RehashUserPassword(ctx, &pb.RehashUserPasswordReq{
+			UserId:       user.GetId(),
+			PasswordHash: newHash,
+			CurrentHash:  user.GetPasswordHash(),
+		})
+		return notFoundOK(err)
+	}
+}
+
+// isAPIRealmRow reports whether a role row read off the catalogue belongs to
+// the API realm. By reflection, because its token_type field exists only with
+// api_token: without it there is one realm and no row is an API one.
+func isAPIRealmRow(m proto.Message) bool {
+	fd := m.ProtoReflect().Descriptor().Fields().ByName(protoreflect.Name("token_type"))
+	if fd == nil {
+		return false
+	}
+	return m.ProtoReflect().Get(fd).Enum() == protoreflect.EnumNumber(pb.TokenType_TOKEN_TYPE_API)
 }

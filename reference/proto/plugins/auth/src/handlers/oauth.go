@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
 	distxpb "github.com/wandering-compiler/sdk/go/pb/common/distx"
@@ -30,6 +32,27 @@ import (
 // Okta, etc. The outbound HTTP token-exchange + userinfo fetch is why this
 // is authored Go rather than DQL. Every failure maps to opaque
 // Unauthenticated (anti-enumeration, like SignIn).
+
+// init adds this feature's share of an erasure, and the outcomes of its
+// refusals in the sign-in history.
+func init() {
+	erasers = append(erasers, eraseOAuthData)
+	signInOutcomeRules = append(signInOutcomeRules,
+		outcomeRule{errOAuthCodeInvalid, pb.SignInOutcome_SIGN_IN_OUTCOME_WRONG_CODE},
+		outcomeRule{errOAuthVerifierInvalid, pb.SignInOutcome_SIGN_IN_OUTCOME_WRONG_CODE},
+		outcomeRule{errOAuthLocalUnverified, pb.SignInOutcome_SIGN_IN_OUTCOME_UNVERIFIED_EMAIL},
+		outcomeRule{errOAuthEmailUnverified, pb.SignInOutcome_SIGN_IN_OUTCOME_UNVERIFIED_EMAIL},
+	)
+}
+
+// eraseOAuthData is oauth's eraser: the account's identities lose their
+// asserted email and their provider subject (replaced by the row's own id, so
+// nothing a provider sends resolves to the erased account any more), and its
+// login codes are spent and blanked (EraseOAuthData). The rows stay.
+func eraseOAuthData(ctx context.Context, h *AuthServiceHandler, userID, _, _ string) error {
+	_, err := h.Mutation.EraseOAuthData(ctx, &pb.EraseOAuthDataReq{UserId: userID})
+	return err
+}
 
 // oauthHTTPClient performs the outbound token-exchange + userinfo calls.
 // A package var (not a handler field) so tests can point it at a fake IdP
@@ -46,7 +69,7 @@ var (
 	errOAuthState            = errors.New("oauth state invalid")
 	errOAuthNoSubject        = errors.New("oauth userinfo missing subject")
 	errOAuthNoEmail          = errors.New("oauth userinfo missing email")
-	// Q36-auth-1 — the IdP did not assert email_verified, so we refuse to
+	// The IdP did not assert email_verified, so we refuse to
 	// auto-link this external identity to a pre-existing local account
 	// (an attacker could otherwise set their IdP profile email to a
 	// victim's and inherit the victim's account — CWE-287).
@@ -57,18 +80,35 @@ var (
 	// first" — and collapsing them would tell the wrong half of the story
 	// to whichever caller hit the other one.
 	errOAuthLocalUnverified = errors.New("the existing account for this address has not verified it; verify the address before linking an identity provider to it")
-	// Q36-auth-2 — the state CSRF token is HMAC'd with the provider's
+	// The state CSRF token is HMAC'd with the provider's
 	// client_secret; an empty secret = an empty (public) HMAC key, so an
 	// attacker can forge any state. A confidential server-side client
 	// always has a secret (the token exchange needs it too), so reject
 	// the misconfiguration rather than sign with a forgeable key.
 	errOAuthProviderMisconfigured = errors.New("oauth provider misconfigured: client_secret is required")
-	// Q45-auth-1 — redirect_after is caller-supplied and echoed back to the
+	// redirect_after is caller-supplied and echoed back to the
 	// client after a successful login. An absolute / protocol-relative URL
 	// is an open redirect (CWE-601): an attacker mints an authorize URL with
 	// redirect_after=https://evil and phishes a victim, who lands on evil
 	// post-login. Restrict it to a site-relative path.
 	errOAuthUnsafeRedirect = errors.New("oauth redirect_after must be a site-relative path (no scheme/host)")
+	// The browser that starts a sign-in must send a PKCE challenge: it is the
+	// only thing that ties the login code the callback hands out to that
+	// browser rather than to whoever opens the callback URL.
+	errOAuthChallengeMissing = errors.New("oauth code_challenge is required (PKCE S256)")
+	errOAuthStateExpired     = errors.New("oauth state expired; start the sign-in again")
+	errOAuthCodeInvalid      = errors.New("oauth login code invalid, expired or already used")
+	errOAuthVerifierInvalid  = errors.New("oauth code_verifier does not match the sign-in's code_challenge")
+	errOAuthIDTokenClaims    = errors.New("oauth id_token audience, expiry or nonce does not match")
+)
+
+const (
+	// oauthStateTTL bounds how long a started sign-in may take at the
+	// provider. A state is not stored, so this is what retires an old one.
+	oauthStateTTL = 10 * time.Minute
+	// oauthLoginCodeTTL is how long the callback's code may wait for the
+	// page to redeem it — a redirect and one request.
+	oauthLoginCodeTTL = 2 * time.Minute
 )
 
 // OAuthAuthorizeURL builds the IdP authorize URL the client redirects to.
@@ -78,14 +118,20 @@ var (
 func (h *AuthServiceHandler) OAuthAuthorizeURL(ctx context.Context, req *pb.OAuthAuthorizeURLReq) (*pb.OAuthAuthorizeURLResp, error) {
 	p, err := h.loadEnabledProvider(ctx, req.GetProvider())
 	if err != nil {
-		return nil, Unauthenticated(err)
+		return nil, oauthRefusal(err)
 	}
 	if !isSafeRelativeRedirect(req.GetRedirectAfter()) {
-		return nil, Unauthenticated(errOAuthUnsafeRedirect)
+		return nil, oauthRefusal(errOAuthUnsafeRedirect)
 	}
-	state, err := signOAuthState(p.GetSecret(), p.GetName(), req.GetRedirectAfter())
+	if !isPKCEChallenge(req.GetCodeChallenge()) {
+		return nil, oauthRefusal(errOAuthChallengeMissing)
+	}
+	if err := checkResponseMode(p); err != nil {
+		return nil, oauthRefusal(err)
+	}
+	state, nonce, err := signOAuthState(p.GetSecret(), p.GetName(), req.GetRedirectAfter(), challengeDigest(req.GetCodeChallenge()), time.Now())
 	if err != nil {
-		return nil, Unauthenticated(err)
+		return nil, oauthRefusal(err)
 	}
 	q := url.Values{}
 	q.Set("client_id", p.GetClientId())
@@ -95,6 +141,17 @@ func (h *AuthServiceHandler) OAuthAuthorizeURL(ctx context.Context, req *pb.OAut
 		q.Set("scope", s)
 	}
 	q.Set("state", state)
+	if m := p.GetResponseMode(); m != "" {
+		q.Set("response_mode", m)
+	}
+	// Towards the provider: PKCE, so an intercepted provider code is useless
+	// without our verifier, and an OIDC nonce, so an id_token minted for
+	// another sign-in is refused. Both derive from the state's nonce under the
+	// client secret, which is how the callback recovers them with nothing
+	// stored. A provider that supports neither ignores them (RFC 6749 §3.1).
+	q.Set("code_challenge", s256Challenge(providerVerifier(p.GetSecret(), nonce)))
+	q.Set("code_challenge_method", "S256")
+	q.Set("nonce", oidcNonce(p.GetSecret(), nonce))
 
 	sep := "?"
 	if strings.Contains(p.GetAuthorizeUrl(), "?") {
@@ -103,58 +160,209 @@ func (h *AuthServiceHandler) OAuthAuthorizeURL(ctx context.Context, req *pb.OAut
 	return &pb.OAuthAuthorizeURLResp{AuthorizeUrl: p.GetAuthorizeUrl() + sep + q.Encode()}, nil
 }
 
-// OAuthCallback completes the authorization-code flow: validate state,
-// exchange the code for tokens, read the subject + email, find-or-create
-// the user, link the identity, and issue a session. OAuth bypasses plugin
-// 2FA by default (the IdP is the second factor) — it calls issueSession
-// directly, never the SignIn 2FA gate.
+// OAuthCallback completes the provider side of the flow: validate state,
+// exchange the provider's code, read the subject + email, resolve the account
+// (linking an existing one when both sides verified the address) — and hand
+// the browser a single-use login code, not a session. It creates no account:
+// an identity with none is kept on the code, and OAuthExchange creates it
+// with the invitation the page passes there. The callback is a URL; whatever it carries can be put in
+// front of anyone. The session is issued by OAuthExchange, to the browser
+// holding the verifier of the challenge it sent to OAuthAuthorizeURL.
+//
+// OAuth bypasses plugin 2FA by default (the IdP is the second factor).
 func (h *AuthServiceHandler) OAuthCallback(ctx context.Context, req *pb.OAuthCallbackReq) (*pb.OAuthCallbackResp, error) {
 	p, err := h.loadEnabledProvider(ctx, req.GetProvider())
 	if err != nil {
-		return nil, Unauthenticated(err)
+		return nil, oauthRefusal(err)
 	}
-	redirectAfter, err := verifyOAuthState(p.GetSecret(), p.GetName(), req.GetState())
+	return h.oauthCallback(ctx, p, req)
+}
+
+// oauthCallback is the callback for a loaded provider, by either route: the
+// GET (OAuthCallback) or a form POST (OAuthCallbackForm, oauth_apple.go).
+func (h *AuthServiceHandler) oauthCallback(ctx context.Context, p *pb.OAuthProvider, req *pb.OAuthCallbackReq) (*pb.OAuthCallbackResp, error) {
+	st, err := verifyOAuthState(p.GetSecret(), p.GetName(), req.GetState(), time.Now())
 	if err != nil {
-		return nil, Unauthenticated(err)
+		return nil, oauthRefusal(err)
 	}
-	// Q45-auth-1 defense-in-depth: even though the authorize side rejects an
-	// unsafe redirect_after before signing, a state signed by an older build
-	// (or a future code path) must not be trusted — drop an unsafe value so
-	// it never reaches the client as an open-redirect target.
+	// Defense in depth: the authorize side rejects an unsafe redirect_after
+	// before signing, but a state from an older build must not be trusted.
+	redirectAfter := st.RedirectAfter
 	if !isSafeRelativeRedirect(redirectAfter) {
 		redirectAfter = ""
 	}
 
-	tok, err := h.exchangeCode(ctx, p, req.GetCode())
+	tok, err := h.exchangeCode(ctx, p, req.GetCode(), providerVerifier(p.GetSecret(), st.Nonce))
 	if err != nil {
-		return nil, Unauthenticated(err)
+		return nil, oauthRefusal(err)
 	}
-	subject, email, emailVerified, err := h.fetchIdentity(ctx, p, tok)
+	subject, email, emailVerified, err := h.fetchIdentity(ctx, p, tok, oidcNonce(p.GetSecret(), st.Nonce))
 	if err != nil {
-		return nil, Unauthenticated(err)
-	}
-
-	userID, err := h.findOrCreateOAuthUser(ctx, p.GetId(), subject, email, emailVerified)
-	if err != nil {
-		return nil, Unauthenticated(err)
+		return nil, oauthRefusal(err)
 	}
 
-	// Issue the session through the shared seam (binds + trusts the device
-	// under `devices`; no 2FA gate — OAuth bypasses it).
-	deviceID, _, err := resolveSignInDevice(ctx, h, userID)
+	userID, err := h.findOAuthAccount(ctx, p.GetId(), subject, email, emailVerified)
 	if err != nil {
-		return nil, Unauthenticated(err)
+		return nil, oauthRefusal(err)
 	}
-	if err := refuseUnsignableAccount(ctx, h, userID); err != nil {
+	if userID != "" {
+		if _, err := refuseUnsignableAccount(ctx, h, userID); err != nil {
+			return nil, oauthRefusal(err)
+		}
+	}
+
+	code, err := randomURLToken()
+	if err != nil {
+		return nil, oauthRefusal(err)
+	}
+	// A known account is named by id. An identity with no account yet is
+	// kept as verified by the provider, and OAuthExchange creates the account
+	// with the invitation the page passes there.
+	codeReq := &pb.CreateOAuthLoginCodeReq{
+		CodeHash:      sha256Hex(code),
+		CodeChallenge: st.Challenge, // the digest, never the challenge itself
+		ExpiresAt:     timestamppb.New(time.Now().Add(oauthLoginCodeTTL)),
+	}
+	if userID != "" {
+		codeReq.UserId = proto.String(userID)
+	} else {
+		codeReq.ProviderId = proto.String(p.GetId())
+		codeReq.ExternalId = subject
+		codeReq.Email = normalizeEmail(email)
+		codeReq.EmailVerified = emailVerified
+	}
+	if _, err := h.Mutation.CreateOAuthLoginCode(ctx, codeReq); err != nil {
+		return nil, oauthRefusal(err)
+	}
+	return &pb.OAuthCallbackResp{Code: code, RedirectAfter: redirectAfter}, nil
+}
+
+// OAuthExchange redeems the callback's login code with the PKCE verifier and
+// issues the session. The consume is a conditional UPDATE, so a code works
+// once; it is spent before the verifier is compared, so a wrong verifier
+// burns it rather than leaving it open to guesses.
+func (h *AuthServiceHandler) OAuthExchange(ctx context.Context, req *pb.OAuthExchangeReq) (_ *pb.OAuthExchangeResp, err error) {
+	// Every exchange appends one SignInEvent (method OAUTH), the refusals
+	// too; the success row is written with the session.
+	attempt := beginSignIn(ctx, pb.SignInMethod_SIGN_IN_METHOD_OAUTH)
+	attempt.publicComputer = req.GetPublicComputer()
+	defer func() { h.endSignIn(ctx, attempt, err) }()
+
+	// The device key before the code is spent: a client that cannot sign
+	// must not burn a single-use code on a session it could never be given.
+	thumbprint, err := mintThumbprint(ctx)
+	if err != nil {
 		return nil, err
 	}
-	token, trustToken, err := issueSession(ctx, h, userID, deviceID)
-	if err != nil {
-		return nil, Unauthenticated(err)
+	if len(req.GetCodeVerifier()) < pkceMinVerifierLen || req.GetCode() == "" {
+		return nil, oauthRefusal(errOAuthVerifierInvalid)
 	}
-	resp := &pb.OAuthCallbackResp{UserId: userID, Token: token, RedirectAfter: redirectAfter}
-	stampDeviceTrust(resp, trustToken) // devices-gated field; seam is a no-op without `devices`
-	return resp, nil
+	consumed, err := h.Mutation.ConsumeOAuthLoginCode(ctx, &pb.ConsumeOAuthLoginCodeReq{CodeHash: sha256Hex(req.GetCode())})
+	if err != nil {
+		return nil, oauthRefusal(err)
+	}
+	// Every live code carries its challenge digest; none back means no
+	// unconsumed, unexpired code matched.
+	if consumed.GetCodeChallenge() == "" {
+		return nil, oauthRefusal(errOAuthCodeInvalid)
+	}
+	// The code names the account (or the identity) it was issued for: a
+	// refusal from here on is an attempt at that sign-in.
+	attempt.named(consumed.GetEmail())
+	attempt.userID = consumed.GetUserId()
+	if !verifyChallengeDigest(req.GetCodeVerifier(), consumed.GetCodeChallenge()) {
+		return nil, oauthRefusal(errOAuthVerifierInvalid)
+	}
+	userID := consumed.GetUserId()
+	if userID == "" {
+		// The identity had no account at the callback. A code always names
+		// one or the other; a row with neither is refused, never turned into
+		// an account for an empty subject.
+		providerID, subject, email := consumed.GetProviderId(), consumed.GetExternalId(), consumed.GetEmail()
+		if providerID == "" || subject == "" || email == "" {
+			return nil, oauthRefusal(errOAuthCodeInvalid)
+		}
+		// Resolved AGAIN: up to two minutes passed since the callback, and the
+		// identity may have gained an account meanwhile (a second tab's code
+		// for the same subject redeemed first, or a registration by another
+		// path). The callback's rules decide it as they would now: a linked
+		// identity wins, and an existing account is linked only when both
+		// sides verified the address.
+		userID, err = h.findOAuthAccount(ctx, providerID, subject, email, consumed.GetEmailVerified())
+		if err != nil {
+			return nil, oauthRefusal(err)
+		}
+		attempt.userID = userID
+		if userID == "" {
+			// This is the sign-up, and the invitation (if any) comes with
+			// this request.
+			userID, err = h.createOAuthAccount(ctx, providerID, subject, email, consumed.GetEmailVerified(), req.GetInviteToken(), signupHost(req))
+			if isEmailTaken(err) {
+				// The unique address, lost to a registration racing this one
+				// after the lookup above: answered as SignUp answers it.
+				return nil, emailTaken(ctx)
+			}
+			if err != nil {
+				// As SignUp answers it: the invitation and allowlist gates
+				// refuse with a code and a sentence the page can show. Any
+				// other failure (the user insert, the transaction) is
+				// classified like the rest, never sent raw.
+				return nil, oauthRefusal(err)
+			}
+			attempt.userID = userID
+		}
+	}
+	// The account may have changed since the callback; and the device is the
+	// one making THIS request — the page, not the provider's redirect.
+	account, err := refuseUnsignableAccount(ctx, h, userID)
+	attempt.account = account
+	if err != nil {
+		return nil, oauthRefusal(err)
+	}
+	dev, err := mintDevice(ctx, h, userID, thumbprint)
+	attempt.deviceID = dev.id
+	if err != nil {
+		return nil, oauthRefusal(err)
+	}
+	// Bound to the device, never trusting it: this sign-in skipped the
+	// plugin's second factor, and a trusted device skips it later for a
+	// password sign-in too.
+	token, err := issueSession(ctx, h, attempt, userID, dev, nil)
+	if err != nil {
+		return nil, oauthRefusal(err)
+	}
+	return &pb.OAuthExchangeResp{UserId: userID, Token: token, PublicComputer: attempt.publicComputer}, nil
+}
+
+// providerOf reassembles the provider from GetProviderByName: the row's
+// columns and the secret, which is decrypted beside the row rather than inside
+// it (a CRYPTED_SECRET is read as a top-level column). nil when there is no
+// row.
+func providerOf(resp *pb.GetProviderByNameResp) *pb.OAuthProvider {
+	r := resp.GetProvider()
+	if r == nil {
+		return nil
+	}
+	p := &pb.OAuthProvider{
+		Id:           r.GetId(),
+		Name:         r.GetName(),
+		DisplayName:  r.GetDisplayName(),
+		ClientId:     r.GetClientId(),
+		ClientSecret: r.GetClientSecret(),
+		AuthorizeUrl: r.GetAuthorizeUrl(),
+		TokenUrl:     r.GetTokenUrl(),
+		UserinfoUrl:  r.GetUserinfoUrl(),
+		Scopes:       r.GetScopes(),
+		SubjectPath:  r.GetSubjectPath(),
+		EmailPath:    r.GetEmailPath(),
+		Enabled:      r.GetEnabled(),
+		CreatedAt:    r.GetCreatedAt(),
+		Secret:       resp.GetSecret(),
+		ResponseMode: r.GetResponseMode(),
+		TeamId:       r.GetTeamId(),
+		KeyId:        r.GetKeyId(),
+	}
+	return p
 }
 
 // loadEnabledProvider resolves a provider by slug and enforces `enabled`.
@@ -163,11 +371,10 @@ func (h *AuthServiceHandler) loadEnabledProvider(ctx context.Context, name strin
 	if err != nil {
 		return nil, err
 	}
-	p := resp.GetProvider()
+	p := providerOf(resp)
 	if p == nil || !p.GetEnabled() {
 		return nil, errOAuthProviderDisabled
 	}
-	p.Secret = resp.GetSecret() // decrypted beside the row, not inside it
 	// The legacy plaintext column (rc.19 and earlier, or a fixture) is read
 	// only while the encrypted `secret` is empty, and moved there; once
 	// `secret` is set it wins — it is where the admin writes — and a
@@ -182,7 +389,7 @@ func (h *AuthServiceHandler) loadEnabledProvider(ctx context.Context, name strin
 			_, _ = h.Mutation.ClearOAuthProviderLegacySecret(ctx, &pb.ClearOAuthProviderLegacySecretReq{Id: p.GetId()})
 		}
 	}
-	// Q36-auth-2 — refuse a provider with no client secret: it would sign
+	// Refuse a provider with no client secret: it would sign
 	// the state CSRF token with an empty HMAC key (forgeable), and the
 	// token exchange (which also needs the secret) would fail anyway.
 	if p.GetSecret() == "" {
@@ -220,13 +427,18 @@ func hostFromMeta(ctx context.Context) string {
 
 // exchangeCode POSTs the authorization code to the provider's token
 // endpoint and returns the decoded token response.
-func (h *AuthServiceHandler) exchangeCode(ctx context.Context, p *pb.OAuthProvider, code string) (*oauthTokenResp, error) {
+func (h *AuthServiceHandler) exchangeCode(ctx context.Context, p *pb.OAuthProvider, code, verifier string) (*oauthTokenResp, error) {
+	secret, err := clientSecret(p, time.Now())
+	if err != nil {
+		return nil, err
+	}
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
 	form.Set("code", code)
+	form.Set("code_verifier", verifier)
 	form.Set("redirect_uri", h.oauthRedirectURI(ctx, p.GetName()))
 	form.Set("client_id", p.GetClientId())
-	form.Set("client_secret", p.GetSecret())
+	form.Set("client_secret", secret)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.GetTokenUrl(), strings.NewReader(form.Encode()))
 	if err != nil {
@@ -267,19 +479,22 @@ type oauthTokenResp struct {
 // it GETs that endpoint (Bearer access_token); without one (pure OIDC) it
 // decodes the id_token claims. Field names come from the provider's
 // subject_path / email_path (defaulting to OIDC sub / email).
-func (h *AuthServiceHandler) fetchIdentity(ctx context.Context, p *pb.OAuthProvider, tok *oauthTokenResp) (subject, email string, emailVerified bool, err error) {
+func (h *AuthServiceHandler) fetchIdentity(ctx context.Context, p *pb.OAuthProvider, tok *oauthTokenResp, nonce string) (subject, email string, emailVerified bool, err error) {
 	var claims map[string]any
 	if p.GetUserinfoUrl() != "" {
 		claims, err = h.fetchUserinfo(ctx, p.GetUserinfoUrl(), tok.AccessToken)
 	} else {
 		claims, err = decodeIDTokenClaims(tok.IDToken)
+		if err == nil {
+			err = checkIDTokenClaims(claims, p.GetClientId(), nonce, time.Now())
+		}
 	}
 	if err != nil {
 		return "", "", false, err
 	}
 	subject = claimString(claims, orDefault(p.GetSubjectPath(), defaultSubjectPath))
 	email = claimString(claims, orDefault(p.GetEmailPath(), defaultEmailPath))
-	// Q36-auth-1 — the OIDC-standard `email_verified` claim. Absent /
+	// The OIDC-standard `email_verified` claim. Absent /
 	// false means the IdP does NOT vouch that this principal owns the
 	// email, so it must not auto-link to a pre-existing local account.
 	emailVerified = claimBool(claims, "email_verified")
@@ -339,6 +554,41 @@ func decodeIDTokenClaims(idToken string) (map[string]any, error) {
 	return claims, nil
 }
 
+// checkIDTokenClaims refuses an id_token that was not minted for this
+// client and this sign-in: `aud` must name the client (a string or an array
+// containing it), an `azp` if present must be the client, `exp` must be in
+// the future, and `nonce` must be the one
+// the authorize step sent. The token arrives straight from the provider's
+// token endpoint over TLS, so its signature is not what these checks are
+// for; they stop a token issued to another client, or for another sign-in,
+// from being accepted.
+func checkIDTokenClaims(claims map[string]any, clientID, nonce string, now time.Time) error {
+	audOK := false
+	switch aud := claims["aud"].(type) {
+	case string:
+		audOK = aud == clientID
+	case []any:
+		for _, a := range aud {
+			if s, _ := a.(string); s == clientID {
+				audOK = true
+			}
+		}
+	}
+	// OIDC Core 3.1.3.7: an authorized party, when named, must be this client.
+	if azp, present := claims["azp"]; present {
+		if s, _ := azp.(string); s != clientID {
+			audOK = false
+		}
+	}
+	// Compared as a float: converting an out-of-range float to int64 is
+	// implementation-defined in Go, and saturates on some platforms.
+	exp, _ := claims["exp"].(float64)
+	if !audOK || exp <= float64(now.Unix()) || claimString(claims, "nonce") != nonce {
+		return errOAuthIDTokenClaims
+	}
+	return nil
+}
+
 // claimString reads a top-level string claim (numbers coerced to string,
 // for providers like GitHub that send a numeric id). Nested JSON paths are
 // a parked extension; v1 covers the flat OIDC/userinfo shape.
@@ -374,100 +624,70 @@ func orDefault(s, def string) string {
 	return s
 }
 
-// findOrCreateOAuthUser maps the external (provider, subject) to a local
-// user: an existing identity reuses its user; otherwise an existing local
-// account with the same email is linked (auto-link policy), else a fresh
-// user is created with a random unusable password. The identity row is
-// then created.
-func (h *AuthServiceHandler) findOrCreateOAuthUser(ctx context.Context, providerID, subject, email string, emailVerified bool) (string, error) {
+// findOAuthAccount resolves the account an identity signs in to: the one
+// already linked to (provider, subject), or an existing account for the
+// address, which it links when both sides verified the address. "" with no
+// error means no account exists: OAuthExchange creates one, with the
+// invitation the page passes there.
+func (h *AuthServiceHandler) findOAuthAccount(ctx context.Context, providerID, subject, email string, emailVerified bool) (string, error) {
 	if ident, err := h.Query.GetOAuthIdentity(ctx, &pb.GetOAuthIdentityReq{ProviderId: providerID, ExternalId: subject}); err == nil && ident.GetIdentity() != nil {
 		return ident.GetIdentity().GetUserId(), nil
 	}
-
-	userID, err := h.resolveOrCreateUserByEmail(ctx, email, emailVerified)
-	if err != nil {
-		return "", err
+	// Canonicalise so the IdP-asserted email matches a password-signup
+	// account (and a later password signin) regardless of case.
+	email = normalizeEmail(email)
+	u, err := h.Query.GetUserByEmail(ctx, &pb.GetUserByEmailReq{Email: email})
+	if err != nil || u.GetUser() == nil || u.GetUser().GetId() == "" {
+		return "", nil
 	}
+	// Auto-link to a PRE-EXISTING account only when the IdP asserts the
+	// email is verified. Without that, a caller who set their IdP profile
+	// email to a victim's would get a session for the victim's account.
+	if !emailVerified {
+		return "", errOAuthEmailUnverified
+	}
+	// BOTH SIDES. The local account may itself have been created from a
+	// claim nobody verified (an earlier unverified OAuth sign-up, or a
+	// password sign-up). Binding a verified assertion to it would hand the
+	// victim a session inside an account someone else squatted. The field is
+	// gated on `email_verification`, which is why `oauth` requires it.
+	if !u.GetUser().GetEmailVerifiedAt().IsValid() {
+		return "", errOAuthLocalUnverified
+	}
+	userID := u.GetUser().GetId()
 	if _, err := h.Mutation.CreateOAuthIdentity(ctx, &pb.CreateOAuthIdentityReq{
 		UserId:     userID,
 		ProviderId: providerID,
 		ExternalId: subject,
 		Email:      email,
+		Thumbprint: requestThumbprint(ctx),
 	}); err != nil {
 		return "", err
 	}
 	return userID, nil
 }
 
-// resolveOrCreateUserByEmail returns the id of the existing account with
-// this email, or creates one (random unusable password — OAuth users sign
-// in through the IdP).
-func (h *AuthServiceHandler) resolveOrCreateUserByEmail(ctx context.Context, email string, emailVerified bool) (string, error) {
-	// Canonicalise so the IdP-asserted email matches a password-signup account
-	// (and a later password signin) regardless of case (covers both the lookup
-	// and the CreateUser below).
+// createOAuthAccount creates the account for a provider-verified identity
+// that has none, as OAuthExchange's half of a sign-up. Creation is what
+// `invite_only` and the allowlist govern, through the same gates as SignUp;
+// the invitation token comes from the exchange request, so an OPEN
+// invitation (which names no address) works too, and its link is spent by
+// this registration. The user, its roles, the verified address, the spent
+// invitation and the identity link commit together.
+func (h *AuthServiceHandler) createOAuthAccount(ctx context.Context, providerID, subject, email string, emailVerified bool, inviteToken, bodyHost string) (string, error) {
 	email = normalizeEmail(email)
-	if u, err := h.Query.GetUserByEmail(ctx, &pb.GetUserByEmailReq{Email: email}); err == nil && u.GetUser() != nil && u.GetUser().GetId() != "" {
-		// Q36-auth-1 — auto-link to a PRE-EXISTING account only when the
-		// IdP asserts the email is verified. Without that, a caller who
-		// set their IdP profile email to a victim's would get a session
-		// for the victim's account (account takeover / CWE-287). Refuse
-		// fail-closed; the operator/user must link explicitly instead.
-		if !emailVerified {
-			return "", errOAuthEmailUnverified
-		}
-		// BOTH SIDES, and the second one took a verifier to see. The check
-		// above interrogates the IdP; the LOCAL account may itself have been
-		// created from a claim nobody verified — by this file's own create
-		// branch, or by password sign-up. Binding a verified assertion to an
-		// unverified claim is the takeover with the roles reversed:
-		//
-		//  1. the attacker signs in through a provider that does NOT assert
-		//     verification, with the victim's address in its profile. No
-		//     account exists, so the branch below makes one — for the
-		//     victim's address, owned by the attacker.
-		//  2. the victim signs in later through a provider that DOES verify.
-		//     The lookup finds that account, this check passes, and the
-		//     victim is handed a session inside the attacker's account.
-		//
-		// Requiring verification in the CREATE branch would not have closed
-		// it: password sign-up is a second door to the same squat, and
-		// gating one leaves the other. The property that has to hold is
-		// about the account being linked INTO (T3-7 pass #14, B14-2).
-		//
-		// `email_verification` is what makes this expressible — the field is
-		// gated on it — which is why `oauth` now requires that feature.
-		if !u.GetUser().GetEmailVerifiedAt().IsValid() {
-			return "", errOAuthLocalUnverified
-		}
-		return u.GetUser().GetId(), nil
+	// A provider may assert any address, the erased-account domain included.
+	if err := refuseReservedEmail(ctx, email); err != nil {
+		return "", err
 	}
-	// The SECOND door. Everything above this line resolves an account that
-	// already exists; below it we CREATE one, and creation is what
-	// `invite_only` governs. A gate wired only into SignUp would leave
-	// invite-only registration open to anyone holding an account at the
-	// identity provider — the same hole by a different route.
-	//
-	// After the auto-link branch on purpose: an invited person who has
-	// already registered must keep being able to sign in through the IdP
-	// once their invitation has been accepted and is no longer pending.
-	// ⚠️ NO invitation token here, and that is a real limitation rather than an
-	// omission: this path has nowhere to carry one. An OPEN invitation names no
-	// address, so under `invite_only` (default ON) a person holding an open link
-	// CANNOT register through the identity provider — only through the password
-	// signup, which takes `invite_token`.
-	//
-	// A BOUND invitation still works here, because the address lookup finds it.
-	// Carrying the token through an IdP round trip means putting it in the OAuth
-	// `state`, which is a bigger change than this one and is not smuggled in;
-	// it stays a known gap.
 	if err := signUpAllowlistGate(h, email); err != nil {
 		return "", err
 	}
-	if err := signupInviteGate(ctx, h, email, ""); err != nil {
+	// The invitation, or the organization of the host it arrived on (org_signup).
+	join, err := signupGates(ctx, h, email, inviteToken, bodyHost)
+	if err != nil {
 		return "", err
 	}
-
 	randomPw, err := randomToken(32)
 	if err != nil {
 		return "", err
@@ -476,26 +696,7 @@ func (h *AuthServiceHandler) resolveOrCreateUserByEmail(ctx context.Context, ema
 	if err != nil {
 		return "", err
 	}
-	// The BASELINE create, and the reason `oauth` and `tenant_scope` are
-	// declared incompatible in plugin.yaml. `tenant_scope` adds a NOT NULL
-	// User.tenant_id that this INSERT does not write and gates CreateUser
-	// out for exactly that reason; OAuth has no request-borne tenant to
-	// resolve (no slug, no signup Host — the caller arrives from the
-	// provider's redirect), so it cannot simply switch to
-	// a resolved tenant the way SignUp does. With both features on this
-	// file no longer compiles, which is the honest outcome: before the
-	// gate it compiled and every OAuth-created user failed the NOT NULL
-	// constraint at runtime. Making OAuth tenant-aware needs a tenant
-	// source of its own (per-provider binding, or the callback URL) and is
-	// its own change.
-	// The account an OAuth sign-up creates is a full account: the same turnkey
-	// roles SignUp links (`default` / `first_user`), and the address marked
-	// confirmed when the provider asserted email_verified — in ONE transaction,
-	// so it never exists without them. It used to be a bare CreateUser: the
-	// account held no role, so every endpoint answered 403 MISSING_PERMISSION,
-	// and the provider's verification was thrown away, so the address-proof
-	// floor on invitations refused it (found live by examples/auth-proof).
-	roleIDs, err := signupResolveRoleIDs(ctx, h)
+	roles, err := signupResolveRoleIDs(ctx, h)
 	if err != nil {
 		return "", err
 	}
@@ -506,7 +707,25 @@ func (h *AuthServiceHandler) resolveOrCreateUserByEmail(ctx context.Context, ema
 			return "", err
 		}
 	}
-	userID, err := h.createOAuthUserTx(txCtx, email, hash, roleIDs, emailVerified)
+	userID, err := h.createOAuthUserTx(txCtx, email, hash, roles, emailVerified)
+	if err == nil {
+		err = signupClaimInvite(txCtx, h, email, inviteToken)
+	}
+	if err == nil {
+		err = joinSignedUpOrg(txCtx, h, userID, join)
+	}
+	if err == nil && join == nil {
+		err = signupAcceptInvite(txCtx, h, userID, email, inviteToken, emailVerified)
+	}
+	if err == nil {
+		_, err = h.Mutation.CreateOAuthIdentity(txCtx, &pb.CreateOAuthIdentityReq{
+			UserId:     userID,
+			ProviderId: providerID,
+			ExternalId: subject,
+			Email:      email,
+			Thumbprint: requestThumbprint(ctx),
+		})
+	}
 	if err != nil {
 		if tx != nil {
 			_ = tx.Rollback(ctx)
@@ -521,13 +740,13 @@ func (h *AuthServiceHandler) resolveOrCreateUserByEmail(ctx context.Context, ema
 	return userID, nil
 }
 
-func (h *AuthServiceHandler) createOAuthUserTx(txCtx context.Context, email, hash string, roleIDs []string, emailVerified bool) (string, error) {
+func (h *AuthServiceHandler) createOAuthUserTx(txCtx context.Context, email, hash string, roles signupRoles, emailVerified bool) (string, error) {
 	created, err := h.Mutation.CreateUser(txCtx, &pb.CreateUserReq{Email: email, PasswordHash: hash})
 	if err != nil {
 		return "", err
 	}
 	userID := created.GetUser().GetId()
-	if err := signupAssignRoleIDs(txCtx, h, userID, roleIDs); err != nil {
+	if err := signupAssignRoleIDs(txCtx, h, userID, roles); err != nil {
 		return "", err
 	}
 	// The provider vouched for the address the way a returned code does.
@@ -540,7 +759,7 @@ func (h *AuthServiceHandler) createOAuthUserTx(txCtx context.Context, email, has
 }
 
 // isSafeRelativeRedirect reports whether a caller-supplied redirect_after
-// is a safe post-login destination (Q45-auth-1). Empty = no redirect
+// is a safe post-login destination. Empty = no redirect
 // requested (allowed). Otherwise it must be a site-relative path: a single
 // leading slash, no scheme, no host — so it can never send the user to an
 // attacker-controlled origin. Rejects absolute URLs ("https://evil"),
@@ -565,49 +784,113 @@ func isSafeRelativeRedirect(s string) bool {
 
 // --- OAuth state: HMAC-signed, keyed by the provider's client_secret ---
 // state = base64url(payload) "." base64url(HMAC-SHA256(payload)). Payload
-// is base64url(JSON{nonce, provider, redirect_after}). Self-contained
-// (no server session store) + provider-scoped (no extra key config).
+// is JSON{nonce, provider, redirect_after, code_challenge, expiry}.
+// Self-contained (no server session store) + provider-scoped (no extra key
+// config). It does not by itself bind the flow to a browser — anyone may
+// start a sign-in and get a valid state — which is why the browser's PKCE
+// challenge travels in it and the callback hands out only a code that
+// challenge's verifier redeems.
 
 type oauthStatePayload struct {
 	Nonce         string `json:"n"`
 	Provider      string `json:"p"`
 	RedirectAfter string `json:"r"`
+	Challenge     string `json:"c"` // challengeDigest of the browser's code_challenge
+	Expires       int64  `json:"e"`
 }
 
-func signOAuthState(secret, provider, redirectAfter string) (string, error) {
-	nonce, err := randomToken(16)
+func signOAuthState(secret, provider, redirectAfter, challenge string, now time.Time) (state, nonce string, err error) {
+	nonce, err = randomToken(16)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	raw, err := json.Marshal(oauthStatePayload{Nonce: nonce, Provider: provider, RedirectAfter: redirectAfter})
+	raw, err := json.Marshal(oauthStatePayload{
+		Nonce: nonce, Provider: provider, RedirectAfter: redirectAfter,
+		Challenge: challenge, Expires: now.Add(oauthStateTTL).Unix(),
+	})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	payload := base64.RawURLEncoding.EncodeToString(raw)
-	sig := oauthStateSig(secret, payload)
-	return payload + "." + sig, nil
+	return payload + "." + oauthStateSig(secret, payload), nonce, nil
 }
 
-func verifyOAuthState(secret, provider, state string) (redirectAfter string, err error) {
+func verifyOAuthState(secret, provider, state string, now time.Time) (*oauthStatePayload, error) {
 	payload, sig, ok := strings.Cut(state, ".")
 	if !ok {
-		return "", errOAuthState
+		return nil, errOAuthState
 	}
 	if !hmac.Equal([]byte(sig), []byte(oauthStateSig(secret, payload))) {
-		return "", errOAuthState
+		return nil, errOAuthState
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(payload)
 	if err != nil {
-		return "", errOAuthState
+		return nil, errOAuthState
 	}
 	var p oauthStatePayload
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return "", errOAuthState
+		return nil, errOAuthState
 	}
-	if p.Provider != provider {
-		return "", errOAuthState
+	if p.Provider != provider || p.Nonce == "" {
+		return nil, errOAuthState
 	}
-	return p.RedirectAfter, nil
+	// A state signed before code_challenge was required has none, and one
+	// carrying a raw challenge comes from a build that did not digest it;
+	// either could only produce a code nobody can redeem — refuse it up front.
+	if !isChallengeDigest(p.Challenge) {
+		return nil, errOAuthState
+	}
+	if now.Unix() >= p.Expires {
+		return nil, errOAuthStateExpired
+	}
+	return &p, nil
+}
+
+// providerVerifier is the PKCE verifier sent to the provider's token
+// endpoint, derived from the state's nonce under the client secret so the
+// callback can recompute it. 43 base64url characters (RFC 7636 §4.1).
+func providerVerifier(secret, nonce string) string {
+	return oauthStateSig(secret, "pkce:"+nonce)
+}
+
+// oidcNonce is the OIDC nonce for one sign-in, derived like the verifier.
+func oidcNonce(secret, nonce string) string {
+	return oauthStateSig(secret, "nonce:"+nonce)
+}
+
+// challengeDigest is what the state and the login code carry in place of the
+// browser's PKCE challenge: its sha256, hex.
+//
+// The state is readable — it is base64 JSON in the provider URL and in the
+// callback URL — so a raw challenge in it could be lifted. Someone holding a
+// victim's challenge could start a sign-in of their own with it and hand the
+// victim the callback link; a victim page still holding that challenge's
+// verifier (from an abandoned attempt) would then redeem the code into the
+// other person's account. A sha256 of a 256-bit challenge gives nothing to
+// start a sign-in with, and the exchange recomputes it from the verifier.
+func challengeDigest(challenge string) string {
+	return sha256Hex(challenge)
+}
+
+// verifyChallengeDigest reports whether the verifier's S256 challenge digests
+// to the stored digest, compared in constant time. Nothing compares a
+// verifier against a raw challenge on this flow.
+func verifyChallengeDigest(verifier, digest string) bool {
+	return hmac.Equal([]byte(challengeDigest(s256Challenge(verifier))), []byte(digest))
+}
+
+// isChallengeDigest accepts exactly what challengeDigest returns: 64 lowercase
+// hex characters.
+func isChallengeDigest(d string) bool {
+	if len(d) != sha256.Size*2 {
+		return false
+	}
+	for i := 0; i < len(d); i++ {
+		if c := d[i]; (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func oauthStateSig(secret, payload string) string {
@@ -623,4 +906,32 @@ func randomToken(n int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// oauthRefusal is how every OAuth handler refuses. The sign-up gates' own
+// coded refusals pass through, and so does a refusal this package already
+// classified; the causes a person can act on get their code; the rest are
+// OAUTH_FAILED. All keep the opaque status message.
+//
+// The pass-through is by IDENTITY, never "any status that carries details":
+// the storage tier attaches an ErrorDetail to its not-found, timeout, abort
+// and internal answers too, and passing those on would put another
+// service's words on the wire and skip the outage classification below.
+func oauthRefusal(cause error) error {
+	if errors.Is(cause, errSignUpNotInvited) || errors.Is(cause, errInviteOtherAddress) || errors.Is(cause, errSignUpClosed) {
+		return cause
+	}
+	var classified *authnError
+	if errors.As(cause, &classified) && classified.userCode != "" {
+		return classified
+	}
+	switch {
+	case errors.Is(cause, errOAuthLocalUnverified):
+		return &authnError{cause: cause, userCode: CodeOAuthAccountUnverified, userMsg: MsgOAuthAccountUnverified}
+	case errors.Is(cause, errOAuthEmailUnverified):
+		return &authnError{cause: cause, userCode: CodeOAuthEmailUnverified, userMsg: MsgOAuthEmailUnverified}
+	case errors.Is(cause, errAuthnUserDisabled):
+		return &authnError{cause: cause, userCode: CodeAccountDisabled, userMsg: MsgAccountDisabled}
+	}
+	return &authnError{cause: cause, userCode: CodeOAuthFailed, userMsg: MsgOAuthFailed}
 }

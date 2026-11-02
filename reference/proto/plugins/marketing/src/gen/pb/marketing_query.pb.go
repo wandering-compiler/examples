@@ -13,6 +13,7 @@ import (
 	_ "github.com/wandering-compiler/sdk/go/pb/w17/db"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -113,18 +114,378 @@ func (x *ListSentEventsResp) GetIds() []string {
 	return nil
 }
 
+// ContactRow is one Contact, as the reads answer it.
+type ContactRow struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	UserId          string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Email           string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	Consent         bool                   `protobuf:"varint,3,opt,name=consent,proto3" json:"consent,omitempty"`
+	ConsentAt       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=consent_at,json=consentAt,proto3" json:"consent_at,omitempty"`
+	UnsubscribedAt  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=unsubscribed_at,json=unsubscribedAt,proto3" json:"unsubscribed_at,omitempty"`
+	ErasedAt        *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=erased_at,json=erasedAt,proto3" json:"erased_at,omitempty"`
+	SentBlacklisted bool                   `protobuf:"varint,7,opt,name=sent_blacklisted,json=sentBlacklisted,proto3" json:"sent_blacklisted,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ContactRow) Reset() {
+	*x = ContactRow{}
+	mi := &file_queries_marketing_query_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContactRow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContactRow) ProtoMessage() {}
+
+func (x *ContactRow) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_marketing_query_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContactRow.ProtoReflect.Descriptor instead.
+func (*ContactRow) Descriptor() ([]byte, []int) {
+	return file_queries_marketing_query_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ContactRow) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ContactRow) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *ContactRow) GetConsent() bool {
+	if x != nil {
+		return x.Consent
+	}
+	return false
+}
+
+func (x *ContactRow) GetConsentAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ConsentAt
+	}
+	return nil
+}
+
+func (x *ContactRow) GetUnsubscribedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UnsubscribedAt
+	}
+	return nil
+}
+
+func (x *ContactRow) GetErasedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ErasedAt
+	}
+	return nil
+}
+
+func (x *ContactRow) GetSentBlacklisted() bool {
+	if x != nil {
+		return x.SentBlacklisted
+	}
+	return false
+}
+
+type ListContactsReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserIds       []string               `protobuf:"bytes,1,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListContactsReq) Reset() {
+	*x = ListContactsReq{}
+	mi := &file_queries_marketing_query_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListContactsReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListContactsReq) ProtoMessage() {}
+
+func (x *ListContactsReq) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_marketing_query_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListContactsReq.ProtoReflect.Descriptor instead.
+func (*ListContactsReq) Descriptor() ([]byte, []int) {
+	return file_queries_marketing_query_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ListContactsReq) GetUserIds() []string {
+	if x != nil {
+		return x.UserIds
+	}
+	return nil
+}
+
+type ListContactsResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Contacts      []*ContactRow          `protobuf:"bytes,1,rep,name=contacts,proto3" json:"contacts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListContactsResp) Reset() {
+	*x = ListContactsResp{}
+	mi := &file_queries_marketing_query_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListContactsResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListContactsResp) ProtoMessage() {}
+
+func (x *ListContactsResp) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_marketing_query_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListContactsResp.ProtoReflect.Descriptor instead.
+func (*ListContactsResp) Descriptor() ([]byte, []int) {
+	return file_queries_marketing_query_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ListContactsResp) GetContacts() []*ContactRow {
+	if x != nil {
+		return x.Contacts
+	}
+	return nil
+}
+
+type ListContactsByEmailReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListContactsByEmailReq) Reset() {
+	*x = ListContactsByEmailReq{}
+	mi := &file_queries_marketing_query_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListContactsByEmailReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListContactsByEmailReq) ProtoMessage() {}
+
+func (x *ListContactsByEmailReq) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_marketing_query_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListContactsByEmailReq.ProtoReflect.Descriptor instead.
+func (*ListContactsByEmailReq) Descriptor() ([]byte, []int) {
+	return file_queries_marketing_query_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListContactsByEmailReq) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+type GetReconciliationReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetReconciliationReq) Reset() {
+	*x = GetReconciliationReq{}
+	mi := &file_queries_marketing_query_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetReconciliationReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetReconciliationReq) ProtoMessage() {}
+
+func (x *GetReconciliationReq) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_marketing_query_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetReconciliationReq.ProtoReflect.Descriptor instead.
+func (*GetReconciliationReq) Descriptor() ([]byte, []int) {
+	return file_queries_marketing_query_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *GetReconciliationReq) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type GetReconciliationResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	ClaimedAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=claimed_at,json=claimedAt,proto3" json:"claimed_at,omitempty"`
+	FinishedAt    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetReconciliationResp) Reset() {
+	*x = GetReconciliationResp{}
+	mi := &file_queries_marketing_query_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetReconciliationResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetReconciliationResp) ProtoMessage() {}
+
+func (x *GetReconciliationResp) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_marketing_query_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetReconciliationResp.ProtoReflect.Descriptor instead.
+func (*GetReconciliationResp) Descriptor() ([]byte, []int) {
+	return file_queries_marketing_query_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GetReconciliationResp) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GetReconciliationResp) GetClaimedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ClaimedAt
+	}
+	return nil
+}
+
+func (x *GetReconciliationResp) GetFinishedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FinishedAt
+	}
+	return nil
+}
+
 var File_queries_marketing_query_proto protoreflect.FileDescriptor
 
 const file_queries_marketing_query_proto_rawDesc = "" +
 	"\n" +
-	"\x1dqueries/marketing_query.proto\x12\x15w17.contrib.marketing\x1a\x12types/models.proto\x1a\x11w17/contrib.proto\x1a\fw17/db.proto\"0\n" +
+	"\x1dqueries/marketing_query.proto\x12\x15w17.contrib.marketing\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x12types/models.proto\x1a\x11w17/contrib.proto\x1a\fw17/db.proto\x1a\x0fw17/field.proto\"0\n" +
 	"\x11ListSentEventsReq\x12\x10\n" +
 	"\x03ids\x18\x01 \x03(\tR\x03ids:\t\xfa\xf4\x18\x05brevo\"1\n" +
 	"\x12ListSentEventsResp\x12\x10\n" +
-	"\x03ids\x18\x01 \x03(\tR\x03ids:\t\xfa\xf4\x18\x05brevo2\xe0\x01\n" +
+	"\x03ids\x18\x01 \x03(\tR\x03ids:\t\xfa\xf4\x18\x05brevo\"\xe2\x02\n" +
+	"\n" +
+	"ContactRow\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
+	"\x05email\x18\x02 \x01(\tR\x05email\x12\x18\n" +
+	"\aconsent\x18\x03 \x01(\bR\aconsent\x12C\n" +
+	"\n" +
+	"consent_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\tconsentAt\x12M\n" +
+	"\x0funsubscribed_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x0eunsubscribedAt\x12A\n" +
+	"\terased_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\berasedAt\x12)\n" +
+	"\x10sent_blacklisted\x18\a \x01(\bR\x0fsentBlacklisted:\t\xfa\xf4\x18\x05brevo\"7\n" +
+	"\x0fListContactsReq\x12\x19\n" +
+	"\buser_ids\x18\x01 \x03(\tR\auserIds:\t\xfa\xf4\x18\x05brevo\"\\\n" +
+	"\x10ListContactsResp\x12=\n" +
+	"\bcontacts\x18\x01 \x03(\v2!.w17.contrib.marketing.ContactRowR\bcontacts:\t\xfa\xf4\x18\x05brevo\"D\n" +
+	"\x16ListContactsByEmailReq\x12\x1f\n" +
+	"\x05email\x18\x01 \x01(\tB\t\xca\xf3\x18\x05\b\x04@\xc0\x02R\x05email:\t\xfa\xf4\x18\x05brevo\"?\n" +
+	"\x14GetReconciliationReq\x12\x1c\n" +
+	"\x04name\x18\x01 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\x04name:\t\xfa\xf4\x18\x05brevo\"\xb8\x01\n" +
+	"\x15GetReconciliationResp\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x129\n" +
+	"\n" +
+	"claimed_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tclaimedAt\x12E\n" +
+	"\vfinished_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\n" +
+	"finishedAt:\t\xfa\xf4\x18\x05brevo2\x8a\n" +
+	"\n" +
 	"\x0eMarketingQuery\x12\xcd\x01\n" +
 	"\x0eListSentEvents\x12(.w17.contrib.marketing.ListSentEventsReq\x1a).w17.contrib.marketing.ListSentEventsResp\"f\xf2\xf3\x18YBW\n" +
-	"\x04main\x12OSELECT ROWS_TO_ARRAY(s.id) AS ids FROM @module.SentEvent s WHERE s.id IN (:ids)\x8a\xf5\x18\x05brevoB\xde\x01\n" +
+	"\x04main\x12OSELECT ROWS_TO_ARRAY(s.id) AS ids FROM @module.SentEvent s WHERE s.id IN (:ids)\x8a\xf5\x18\x05brevo\x12\x87\x03\n" +
+	"\fListContacts\x12&.w17.contrib.marketing.ListContactsReq\x1a'.w17.contrib.marketing.ListContactsResp\"\xa5\x02\xf2\xf3\x18\x97\x02B\x94\x02\n" +
+	"\x04main\x12\x8b\x02SELECT c.user_id AS user_id, c.email AS email, c.consent AS consent,        c.consent_at AS consent_at, c.unsubscribed_at AS unsubscribed_at, c.erased_at AS erased_at,        c.sent_blacklisted AS sent_blacklisted FROM @module.Contact c WHERE c.user_id IN (:user_ids)\x8a\xf5\x18\x05brevo\x12\x8d\x03\n" +
+	"\x13ListContactsByEmail\x12-.w17.contrib.marketing.ListContactsByEmailReq\x1a'.w17.contrib.marketing.ListContactsResp\"\x9d\x02\xf2\xf3\x18\x8f\x02B\x8c\x02\n" +
+	"\x04main\x12\x83\x02SELECT c.user_id AS user_id, c.email AS email, c.consent AS consent,        c.consent_at AS consent_at, c.unsubscribed_at AS unsubscribed_at, c.erased_at AS erased_at,        c.sent_blacklisted AS sent_blacklisted FROM @module.Contact c WHERE c.email = :email\x8a\xf5\x18\x05brevo\x12\x8d\x02\n" +
+	"\x11GetReconciliation\x12+.w17.contrib.marketing.GetReconciliationReq\x1a,.w17.contrib.marketing.GetReconciliationResp\"\x9c\x01\xf2\xf3\x18\x8e\x01B\x8b\x01\n" +
+	"\x04main\x12\x82\x01SELECT r.name AS name, r.claimed_at AS claimed_at, r.finished_at AS finished_at FROM @module.Reconciliation r WHERE r.name = :name\x8a\xf5\x18\x05brevoB\xde\x01\n" +
 	"\x19com.w17.contrib.marketingB\x13MarketingQueryProtoP\x01Z6github.com/wandering-compiler/plugins/marketing/gen/pb\xa2\x02\x03WCM\xaa\x02\x15W17.Contrib.Marketing\xca\x02\x15W17\\Contrib\\Marketing\xe2\x02!W17\\Contrib\\Marketing\\GPBMetadata\xea\x02\x17W17::Contrib::Marketingb\x06proto3"
 
 var (
@@ -139,19 +500,38 @@ func file_queries_marketing_query_proto_rawDescGZIP() []byte {
 	return file_queries_marketing_query_proto_rawDescData
 }
 
-var file_queries_marketing_query_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_queries_marketing_query_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_queries_marketing_query_proto_goTypes = []any{
-	(*ListSentEventsReq)(nil),  // 0: w17.contrib.marketing.ListSentEventsReq
-	(*ListSentEventsResp)(nil), // 1: w17.contrib.marketing.ListSentEventsResp
+	(*ListSentEventsReq)(nil),      // 0: w17.contrib.marketing.ListSentEventsReq
+	(*ListSentEventsResp)(nil),     // 1: w17.contrib.marketing.ListSentEventsResp
+	(*ContactRow)(nil),             // 2: w17.contrib.marketing.ContactRow
+	(*ListContactsReq)(nil),        // 3: w17.contrib.marketing.ListContactsReq
+	(*ListContactsResp)(nil),       // 4: w17.contrib.marketing.ListContactsResp
+	(*ListContactsByEmailReq)(nil), // 5: w17.contrib.marketing.ListContactsByEmailReq
+	(*GetReconciliationReq)(nil),   // 6: w17.contrib.marketing.GetReconciliationReq
+	(*GetReconciliationResp)(nil),  // 7: w17.contrib.marketing.GetReconciliationResp
+	(*timestamppb.Timestamp)(nil),  // 8: google.protobuf.Timestamp
 }
 var file_queries_marketing_query_proto_depIdxs = []int32{
-	0, // 0: w17.contrib.marketing.MarketingQuery.ListSentEvents:input_type -> w17.contrib.marketing.ListSentEventsReq
-	1, // 1: w17.contrib.marketing.MarketingQuery.ListSentEvents:output_type -> w17.contrib.marketing.ListSentEventsResp
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	8,  // 0: w17.contrib.marketing.ContactRow.consent_at:type_name -> google.protobuf.Timestamp
+	8,  // 1: w17.contrib.marketing.ContactRow.unsubscribed_at:type_name -> google.protobuf.Timestamp
+	8,  // 2: w17.contrib.marketing.ContactRow.erased_at:type_name -> google.protobuf.Timestamp
+	2,  // 3: w17.contrib.marketing.ListContactsResp.contacts:type_name -> w17.contrib.marketing.ContactRow
+	8,  // 4: w17.contrib.marketing.GetReconciliationResp.claimed_at:type_name -> google.protobuf.Timestamp
+	8,  // 5: w17.contrib.marketing.GetReconciliationResp.finished_at:type_name -> google.protobuf.Timestamp
+	0,  // 6: w17.contrib.marketing.MarketingQuery.ListSentEvents:input_type -> w17.contrib.marketing.ListSentEventsReq
+	3,  // 7: w17.contrib.marketing.MarketingQuery.ListContacts:input_type -> w17.contrib.marketing.ListContactsReq
+	5,  // 8: w17.contrib.marketing.MarketingQuery.ListContactsByEmail:input_type -> w17.contrib.marketing.ListContactsByEmailReq
+	6,  // 9: w17.contrib.marketing.MarketingQuery.GetReconciliation:input_type -> w17.contrib.marketing.GetReconciliationReq
+	1,  // 10: w17.contrib.marketing.MarketingQuery.ListSentEvents:output_type -> w17.contrib.marketing.ListSentEventsResp
+	4,  // 11: w17.contrib.marketing.MarketingQuery.ListContacts:output_type -> w17.contrib.marketing.ListContactsResp
+	4,  // 12: w17.contrib.marketing.MarketingQuery.ListContactsByEmail:output_type -> w17.contrib.marketing.ListContactsResp
+	7,  // 13: w17.contrib.marketing.MarketingQuery.GetReconciliation:output_type -> w17.contrib.marketing.GetReconciliationResp
+	10, // [10:14] is the sub-list for method output_type
+	6,  // [6:10] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_queries_marketing_query_proto_init() }
@@ -166,7 +546,7 @@ func file_queries_marketing_query_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_queries_marketing_query_proto_rawDesc), len(file_queries_marketing_query_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
@@ -179,4 +559,4 @@ func file_queries_marketing_query_proto_init() {
 	file_queries_marketing_query_proto_depIdxs = nil
 }
 
-// emit-sha256: 234740cb47816cd635641a8283a066ba79468b60cbd27e38d43d97173ef1fa67
+// emit-sha256: e2bf57dead96d4d3b5541d16e3dfc6f869cd4294d7ea2785c35cf6a9f01b74f2

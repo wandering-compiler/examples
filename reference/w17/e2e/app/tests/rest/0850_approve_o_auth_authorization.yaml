@@ -1,0 +1,9 @@
+# Approving a request that does not exist mints nothing: not found, and no
+# redirect with a code (see 0840 for why a REST step has no pending one).
+method: auth.AuthService.ApproveOAuthAuthorization
+pre:
+    - auth/auth.yaml
+input:
+    request_id: e2e-no-such-request
+expect_error:
+    code: NOT_FOUND

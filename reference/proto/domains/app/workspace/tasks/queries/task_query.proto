@@ -414,7 +414,7 @@ service TaskQuery {
         name: "main",
         dql:
           "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
-          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id, t.resolution "
           "FROM tasks.Task t "
           "ORDER BY t.id ASC"
       }
@@ -448,7 +448,7 @@ service TaskQuery {
         name: "main",
         dql:
           "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
-          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id, t.resolution "
           "FROM tasks.Task t "
           "ORDER BY t.id ASC"
       }
@@ -474,7 +474,7 @@ service TaskQuery {
         name: "main",
         dql:
           "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
-          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id, t.resolution "
           "FROM tasks.Task t "
           "ORDER BY t.id ASC"
       }
@@ -776,7 +776,7 @@ service TaskQuery {
       ops: {
         name: "main",
         dql:
-          "SELECT c.id, c.name, c.color, c.parent_id, c.completed_count "
+          "SELECT c.id, c.name, c.color, c.parent_id, c.completed_count, c.slug "
           "FROM tasks.TaskCategory c "
           "ORDER BY c.id ASC"
       }
@@ -802,7 +802,7 @@ service TaskQuery {
         name: "main",
         dql:
           "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
-          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id, t.resolution "
           "FROM tasks.Task t "
           "ORDER BY t.id DESC"
       }
@@ -822,7 +822,7 @@ service TaskQuery {
         // can say what frame 2 will be. This was unordered until the
         // e2e runner learned to assert a frame SEQUENCE and the first
         // case that tried to name one had nothing to name.
-        dql:  "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, t.status, t.priority, t.created_at FROM tasks.Task t WHERE t.user_id = :user_id ORDER BY t.id"
+        dql:  "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, t.status, t.priority, t.created_at, t.assignee_id, t.project_id, t.resolution FROM tasks.Task t WHERE t.user_id = :user_id ORDER BY t.id"
       }
     };
   }
@@ -855,7 +855,11 @@ service TaskQuery {
           "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
           "       t.priority AS t_priority, t.created_at AS t_created_at, "
           "       t.assignee_id AS t_assignee_id, t.project_id AS t_project_id, "
-          "       c.id AS c_id, c.name AS c_name, c.color AS c_color "
+          "       c.id AS c_id, c.name AS c_name, c.color AS c_color, "
+          "       t.resolution AS t_resolution, "
+          "       c.parent_id AS c_parent_id, "
+          "       c.completed_count AS c_completed_count, "
+          "       c.slug AS c_slug "
           "FROM tasks.Task t JOIN t.category c "
           "WHERE t.id = :id"
       }
@@ -938,6 +942,7 @@ service TaskQuery {
           "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
           "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
           "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       t.resolution AS t_resolution, "
           "       t.assignee_id AS t_assignee_id, t.project_id AS t_project_id, "
           "       c.id AS c_id, c.task_id AS c_task_id, c.body_text AS c_body_text, "
           "       c.created_at AS c_created_at "
@@ -961,6 +966,9 @@ service TaskQuery {
           "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
           "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
           "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       t.assignee_id AS t_assignee_id, "
+          "       t.project_id AS t_project_id, "
+          "       t.resolution AS t_resolution, "
           "       p.id AS p_id, p.owner_id AS p_owner_id, p.name AS p_name, "
           "       p.color AS p_color, p.created_at AS p_created_at "
           "FROM tasks.Task t JOIN t.project p "
@@ -979,7 +987,7 @@ service TaskQuery {
         name: "main",
         dql:
           "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
-          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id, t.resolution "
           "FROM tasks.Project p JOIN p.tasks t "
           "WHERE p.id = :project_id "
           "ORDER BY t.id ASC"
@@ -998,7 +1006,7 @@ service TaskQuery {
         name: "main",
         dql:
           "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
-          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id, t.resolution "
           "FROM tasks.Tag g JOIN g.tag_links tl JOIN tl.task t "
           "WHERE g.slug = :slug "
           "ORDER BY t.id ASC"
@@ -1037,6 +1045,9 @@ service TaskQuery {
           "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
           "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
           "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       t.assignee_id AS t_assignee_id, "
+          "       t.project_id AS t_project_id, "
+          "       t.resolution AS t_resolution, "
           "       a.id AS a_id, a.task_id AS a_task_id, a.body_text AS a_body_text, "
           "       a.created_at AS a_created_at "
           "FROM tasks.Task t "
@@ -1082,6 +1093,9 @@ service TaskQuery {
           "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
           "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
           "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       t.assignee_id AS t_assignee_id, "
+          "       t.project_id AS t_project_id, "
+          "       t.resolution AS t_resolution, "
           "       a.id AS a_id, a.task_id AS a_task_id, a.body_text AS a_body_text, "
           "       a.created_at AS a_created_at "
           "FROM tasks.Task t "
@@ -1117,6 +1131,9 @@ service TaskQuery {
           "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
           "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
           "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       t.assignee_id AS t_assignee_id, "
+          "       t.project_id AS t_project_id, "
+          "       t.resolution AS t_resolution, "
           "       a.id AS a_id, a.task_id AS a_task_id, a.body_text AS a_body_text, "
           "       a.created_at AS a_created_at "
           "FROM tasks.Task t "
@@ -1166,6 +1183,9 @@ service TaskQuery {
           "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
           "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
           "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       t.assignee_id AS t_assignee_id, "
+          "       t.project_id AS t_project_id, "
+          "       t.resolution AS t_resolution, "
           "       a.id AS a_id, a.task_id AS a_task_id, a.body_text AS a_body_text, "
           "       a.created_at AS a_created_at "
           "FROM tasks.Task t "
@@ -1204,6 +1224,9 @@ service TaskQuery {
           "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
           "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
           "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       t.assignee_id AS t_assignee_id, "
+          "       t.project_id AS t_project_id, "
+          "       t.resolution AS t_resolution, "
           "       a.id AS a_id, a.task_id AS a_task_id, a.body_text AS a_body_text, "
           "       a.created_at AS a_created_at "
           "FROM tasks.Task t "
@@ -1245,6 +1268,9 @@ service TaskQuery {
           "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
           "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
           "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       t.assignee_id AS t_assignee_id, "
+          "       t.project_id AS t_project_id, "
+          "       t.resolution AS t_resolution, "
           "       a.id AS a_id, a.task_id AS a_task_id, a.body_text AS a_body_text, "
           "       a.created_at AS a_created_at "
           "FROM tasks.Task t "
@@ -1270,6 +1296,9 @@ service TaskQuery {
           "SELECT t.id AS t_id, t.user_id AS t_user_id, t.category_id AS t_category_id, "
           "       t.title AS t_title, t.body_text AS t_body_text, t.status AS t_status, "
           "       t.priority AS t_priority, t.created_at AS t_created_at, "
+          "       t.assignee_id AS t_assignee_id, "
+          "       t.project_id AS t_project_id, "
+          "       t.resolution AS t_resolution, "
           "       a.id AS a_id, a.task_id AS a_task_id, a.filename AS a_filename, "
           "       a.content_type AS a_content_type, a.size_bytes AS a_size_bytes, "
           "       a.uploaded_at AS a_uploaded_at "
@@ -1720,8 +1749,21 @@ message TenantNoteStreamRow {
   int64  id    = 1;
   string title = 2;
 }
+// TenantNoteRow — a note as the tenant lists answer with it: every column
+// but `public_token`. The token is the share link's capability, handed out
+// by the method that mints it; a list of a tenant's notes is not a way to
+// collect every live link. A generated query fills every field of its
+// response, so the lists that leave the token out answer with a message
+// that does not have one, rather than with TenantNote and an empty token.
+message TenantNoteRow {
+  int64                     id         = 1;
+  string                    tenant_id  = 2 [(w17.field) = { type: UUID }];
+  string                    title      = 3 [(w17.field) = { type: CHAR, max_len: 200 }];
+  string                    body       = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
 message ListTenantNotesResp {
-  repeated e2e.app.tasks.TenantNote notes = 1;
+  repeated TenantNoteRow notes = 1;
 }
 
 // The capability-link pair.
@@ -1774,7 +1816,7 @@ message ListTenantNotesForPublicLinkResp {
 // query was allowed to see.
 message ListAllTenantNotesReq {}
 message ListAllTenantNotesResp {
-  repeated e2e.app.tasks.TenantNote notes = 1;
+  repeated TenantNoteRow notes = 1;
 }
 
 // ListTenantNotesByTag — same list shape, filtered through the
@@ -1784,7 +1826,7 @@ message ListTenantNotesByTagReq {
   string tag = 1;
 }
 message ListTenantNotesByTagResp {
-  repeated e2e.app.tasks.TenantNote notes = 1;
+  repeated TenantNoteRow notes = 1;
 }
 
 // ListTenantNotesPagedWithTagCount — paged list rows carrying a per-row

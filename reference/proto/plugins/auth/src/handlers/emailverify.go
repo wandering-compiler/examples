@@ -15,7 +15,7 @@ import (
 	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
 )
 
-// This file implements the `email_verification` feature (E1). Staged only
+// This file implements the `email_verification` feature. Staged only
 // when the activation enables `email_verification` (plugin.yaml go_files).
 
 const defaultEmailVerificationTTLSeconds = 24 * 60 * 60 // 24 hours
@@ -53,12 +53,17 @@ func (h *AuthServiceHandler) RequestEmailVerification(ctx context.Context, req *
 		return nil, err
 	}
 	expiresAt := timestamppb.New(time.Now().Add(h.emailVerificationTTL()))
+	clear, sealed, err := h.deliver(token)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := h.Mutation.CreateEmailVerificationToken(ctx, &pb.CreateEmailVerificationTokenReq{
-		UserId:    user.GetId(),
-		TokenHash: sha256Hex(token),
-		ExpiresAt: expiresAt,
-		Email:     user.GetEmail(),
-		Token:     token,
+		UserId:      user.GetId(),
+		TokenHash:   sha256Hex(token),
+		ExpiresAt:   expiresAt,
+		Email:       user.GetEmail(),
+		Token:       clear,
+		SealedToken: sealed,
 	}); err != nil {
 		return nil, err
 	}
@@ -72,8 +77,7 @@ func (h *AuthServiceHandler) VerifyEmail(ctx context.Context, req *pb.VerifyEmai
 	// Same pairing as ResetPassword: the consume spends the token and the
 	// write is what it authorised. Apart, a failure between them burns a
 	// valid link and leaves the address unverified, so the person has to ask
-	// for another one to reach a state the first one already paid for
-	// (a consumer).
+	// for another one to reach a state the first one already paid for.
 	var tx *distx.TxHandle
 	txCtx := ctx
 	var err error
@@ -121,9 +125,23 @@ func (h *AuthServiceHandler) consumeAndMarkVerified(txCtx context.Context, token
 // `email_verification` is active, which is what makes the field reference
 // below safe to compile — `User.email_verified_at` does not exist otherwise.
 func init() {
+	secretDeliveryFeatures = append(secretDeliveryFeatures, "email_verification")
 	inviteVerifiedEmailGate = inviteVerifiedEmailGateImpl
+	emailProofEnforced = true
 	markEmailDerived = markEmailDerivedImpl
 	markEmailConfirmed = markEmailConfirmedImpl
+	erasers = append(erasers, spendVerificationLinks)
+	spendVerifyLinks = func(ctx context.Context, h *AuthServiceHandler, userID string) error {
+		return spendVerificationLinks(ctx, h, userID, "", "")
+	}
+}
+
+// spendVerificationLinks is email_verification's eraser: every live
+// verification link of the account is marked used, so none can stamp the
+// erased account verified (SpendEmailVerificationTokens). The rows stay.
+func spendVerificationLinks(ctx context.Context, h *AuthServiceHandler, userID, _, _ string) error {
+	_, err := h.Mutation.SpendEmailVerificationTokens(ctx, &pb.SpendEmailVerificationTokensReq{UserId: userID})
+	return err
 }
 
 // markEmailConfirmedImpl records a SELF_CONFIRMED address through the same
@@ -207,12 +225,3 @@ func inviteVerifiedEmailGateImpl(ctx context.Context, h *AuthServiceHandler, use
 		CodeEmailNotVerified, MsgInviteNeedsVerifiedEmail,
 	).Err()
 }
-
-// The three floors, weakest first. Strings rather than an enum because the knob
-// is an env var an operator types, and a typo has to be readable in the refusal
-// rather than silently becoming zero.
-const (
-	emailProofNone    = "none"
-	emailProofDerived = "derived"
-	emailProofFull    = "full"
-)

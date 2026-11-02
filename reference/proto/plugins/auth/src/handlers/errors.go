@@ -12,6 +12,8 @@ import (
 	"github.com/wandering-compiler/sdk/go/lib/i18n"
 	"github.com/wandering-compiler/sdk/go/lib/principal"
 	w17pb "github.com/wandering-compiler/sdk/go/pb/w17"
+
+	"github.com/wandering-compiler/plugins/auth/lib/passwordhash"
 )
 
 // authnError is the opaque error every auth-handler failure
@@ -35,7 +37,18 @@ type authnError struct {
 	// would be wrong for most of them.
 	userCode string
 	userMsg  string
+
+	// denied marks a refusal reached AFTER the credential was accepted: the
+	// caller is signed in and may not act where the request asked to
+	// (DeniedOrgNotMember). It answers PERMISSION_DENIED, never
+	// UNAUTHENTICATED — a client that signs out on 401 must not sign out a
+	// valid session over an organization it named.
+	denied bool
 }
+
+// orgNotMemberMessage is the status message of DeniedOrgNotMember: the same
+// for an organization that does not exist and one the caller is not in.
+const orgNotMemberMessage = "the caller is not a member of the organization this request names"
 
 const authnErrorMessage = "invalid credentials"
 
@@ -44,6 +57,9 @@ const authnErrorMessage = "invalid credentials"
 // errors.Unwrap or use slog's structured fields with both the
 // returned error AND the unwrapped cause.
 func (e *authnError) Error() string {
+	if e.denied {
+		return orgNotMemberMessage
+	}
 	return authnErrorMessage
 }
 
@@ -56,12 +72,11 @@ func (e *authnError) Error() string {
 //
 // This used to be fixed "regardless of cause", and the comment listed what it
 // collapsed: "no such email", "wrong password", "DB transient failure". The
-// first two belong together; the third is not a refusal at all. A consumer
-// built a facade that wanted to tell an outage from a rejection and could not,
-// because the information was destroyed here — so their running service, with
-// its database down, told people their password was wrong. That is a lie they
-// cannot check, and it sends them to reset a password that was fine (a consumer,
-// 2026-09-23).
+// first two belong together; the third is not a refusal at all. A facade that
+// wants to tell an outage from a rejection cannot, if the information is
+// destroyed here — so a running service, with its database down, tells people
+// their password is wrong. That is a lie they cannot check, and it sends them
+// to reset a password that was fine.
 //
 // Nothing leaks: the operational answer is the same for every caller and every
 // address, so "the service is degraded" says nothing about whether an account
@@ -74,6 +89,9 @@ func (e *authnError) GRPCStatus() *status.Status {
 	if c := operationalCode(e.cause); c != codes.OK {
 		return withUserDetail(status.New(c, "the authentication service is temporarily unavailable"),
 			CodeAuthUnavailable, MsgAuthUnavailable)
+	}
+	if e.denied {
+		return withUserDetail(status.New(codes.PermissionDenied, orgNotMemberMessage), e.userCode, e.userMsg)
 	}
 	st := status.New(codes.Unauthenticated, authnErrorMessage)
 	if e.userCode == "" {
@@ -93,12 +111,13 @@ func (e *authnError) GRPCStatus() *status.Status {
 // that is the anti-enumeration rule this file exists for, and it is why the
 // sentence beside it names both.
 //
-// Only SIGN-IN mints CodeInvalidCredentials. Every other flow that refuses —
-// a missing bearer header, a bad MFA code, a spent reset token — goes out
-// with no detail at all and renders the gateway's generic sentence. That is
-// deliberate: those flows want their own wording, and inventing it here from
-// the cause is how the anti-enumeration rule gets broken by accident (see
-// UnauthenticatedSignIn).
+// Only SIGN-IN mints CodeInvalidCredentials, and only a second-factor code
+// refusal mints CodeMfaCodeRefused (UnauthenticatedMfaCode). Every other flow
+// that refuses — a missing bearer header, a spent reset token — goes out with
+// no detail at all and renders the gateway's generic sentence. That is
+// deliberate: those flows want their own wording, chosen by the flow that
+// knows it, and inventing it here from the cause is how the anti-enumeration
+// rule gets broken by accident (see UnauthenticatedSignIn).
 const (
 	CodeInvalidCredentials = "INVALID_CREDENTIALS" // #nosec G101 -- the NAME of the code a client dispatches on, not a credential value
 	CodeAuthUnavailable    = "AUTH_UNAVAILABLE"
@@ -110,13 +129,22 @@ const (
 	CodeEmailNotVerified = "EMAIL_NOT_VERIFIED"
 
 	// CodeOrgNotMember: the credential was ACCEPTED, and the organization the
-	// request named (W17-Org) is not one the caller belongs to or owns. Not
-	// folded into the opaque answer, because it is not a credential refusal:
+	// request named (W17-Org) is not one the caller belongs to or owns. It is
+	// PERMISSION_DENIED (DeniedOrgNotMember), not folded into the opaque
+	// UNAUTHENTICATED answer, because it is not a credential refusal:
 	// it used to render "You are not signed in." to a caller who was, and
 	// whose real mistake — usually an org ID where the slug goes — that
-	// sentence hides (2026-10-04). It reveals nothing: an org that does not
+	// sentence hides. It reveals nothing: an org that does not
 	// exist and one the caller is not in answer the same.
 	CodeOrgNotMember = "ORG_NOT_MEMBER"
+
+	// CodeMfaCodeRefused: a second-factor code (an authenticator code, an
+	// emailed code, a recovery code) was refused — wrong, expired, already
+	// used, out of attempts, or raised for another device. ONE code for every
+	// cause, so it stays as opaque as the status: it only stops the person
+	// being told they are not signed in when what failed was the code they
+	// typed (they were, on ConfirmTotp; they half were, on VerifyMfa).
+	CodeMfaCodeRefused = "MFA_CODE_REFUSED"
 
 	// CodeOrgMismatch: the request's `org` field names a different
 	// organization than the one authentication resolved for it. Through
@@ -131,6 +159,18 @@ const (
 	// the answer; under sign_up_confirmation only ConfirmSignUp says it, to
 	// whoever holds the code mailed to that address.
 	CodeEmailTaken = "EMAIL_TAKEN"
+
+	// CodeEmailInvalid: an address no account may be given. Today that is the
+	// domain erased accounts are re-addressed to (erasedEmailDomain): an
+	// account holding `erased-<id>@erased.invalid` before the account with
+	// that id is erased would block its erasure for good (the address is
+	// unique).
+	CodeEmailInvalid = "EMAIL_INVALID"
+
+	// CodeClientRevoked: registering a (client_id, redirect_uri) pair whose
+	// registration was revoked. A revoked registration is history and is not
+	// reused; the operator registers the callback under another client_id.
+	CodeClientRevoked = "CLIENT_REVOKED"
 
 	// CodeRoleAboveCaller: a role the caller tried to hand out (an invitation,
 	// a grant) carries permissions the caller does not hold. Reached only by a
@@ -157,10 +197,196 @@ const (
 	// already confirmed (new recovery codes are GenerateRecoveryCodes).
 	CodeTotpAlreadyConfirmed = "TOTP_ALREADY_CONFIRMED"
 
+	// CodeTwoFactorDisabled: an enrolment where the second factor is
+	// disabled (two_factor_policy, or the organization's policy).
+	CodeTwoFactorDisabled = "TWO_FACTOR_DISABLED"
+
 	// CodeStepUpLocked: too many wrong codes for a change to the
 	// authenticator; it is refused for a while, whatever the code.
 	CodeStepUpLocked = "STEP_UP_LOCKED"
+
+	// CodeSessionRequired: an operation that creates a credential (an API
+	// token, a CLI session, an authenticator, recovery codes, a trusted
+	// callback) called with an API token. It needs a signed-in session.
+	CodeSessionRequired = "SESSION_REQUIRED"
+
+	// CodePasswordAttemptsSpent: ChangePassword's current password was
+	// guessed wrong too often; it spends the account's sign-in budget.
+	CodePasswordAttemptsSpent = "PASSWORD_ATTEMPTS_SPENT"
+
+	// CodePasswordTooLong: the new password is longer than the configured
+	// algorithm can hash (bcrypt: 72 bytes).
+	CodePasswordTooLong = "PASSWORD_TOO_LONG"
+
+	// CodePasswordNotConfirmed: ConfirmPassword (step_up) was given a password
+	// that is not the caller's.
+	CodePasswordNotConfirmed = "PASSWORD_NOT_CONFIRMED"
+
+	// CodePasswordStepUpLocked: too many wrong passwords to ConfirmPassword
+	// in this session (step_up); it is locked for a while.
+	CodePasswordStepUpLocked = "PASSWORD_STEP_UP_LOCKED"
+	// CodeBotAllowlistInvalid: an entry of a machine account's allowlist is
+	// neither a CIDR nor an address, or the list is too long (bot_token_guard).
+	CodeBotAllowlistInvalid = "BOT_ALLOWLIST_INVALID"
+	// An OAuth sign-in request the consent page names is unknown, already
+	// decided or expired (oauth_server).
+	CodeOAuthRequestGone = "OAUTH_REQUEST_GONE"
+	// A connected app the caller names is not theirs, or not there.
+	CodeOAuthAppUnknown = "OAUTH_APP_UNKNOWN"
+	// The consent page must name one of the user's organizations for an
+	// app's grant (oauth_server with org_membership).
+	CodeOAuthOrgRequired = "OAUTH_ORG_REQUIRED"
+	// The audience gateway the request came through admits none of the
+	// caller's memberships (membership_kinds): a client calling the staff
+	// surface, or anyone without a membership of an admitted kind.
+	CodeMembershipNotAdmitted = "MEMBERSHIP_NOT_ADMITTED"
+	// The inviter's kind of membership may not hand out the invitation's
+	// kind (membership_kinds): a client inviting staff.
+	CodeInviteKindNotAllowed = "INVITE_KIND_NOT_ALLOWED"
+	// org_packages: the organization's packages do not open the audience the
+	// request came through; a package call from inside an organization; a
+	// package the domain does not declare; a default package given or taken.
+	CodePackageAudienceOff = "PACKAGE_AUDIENCE_OFF"
+	CodePackagesRealmOnly  = "PACKAGES_REALM_ONLY"
+	CodePackageUnknown     = "PACKAGE_UNKNOWN"
+	CodePackageDefault     = "PACKAGE_DEFAULT"
+	// org_hosts: a host call from inside an organization; a host already
+	// bound to another organization; a host that is no DNS name.
+	CodeHostsRealmOnly = "HOSTS_REALM_ONLY"
+	CodeHostTaken      = "HOST_TAKEN"
+	CodeHostInvalid    = "HOST_INVALID"
+	// An audience taking the tenant from the host: a W17-Org selector naming
+	// another organization than the host's, or a selector on an audience
+	// that does not take the tenant from it (its tenant_from omits DEFAULT).
+	CodeOrgHostConflict        = "ORG_HOST_CONFLICT"
+	CodeOrgSelectorNotAccepted = "ORG_SELECTOR_NOT_ACCEPTED"
+	// org_signup: a policy call from inside an organization; a policy that
+	// names no kind with membership kinds on (or one without them), or an
+	// open one with no role; a registration two open kinds of one audience
+	// could take.
+	CodeSignUpPoliciesRealmOnly = "SIGNUP_POLICIES_REALM_ONLY"
+	CodeSignUpPolicyInvalid     = "SIGNUP_POLICY_INVALID"
+	CodeSignUpKindAmbiguous     = "SIGNUP_KIND_AMBIGUOUS"
+	CodeSignUpHostConflict      = "SIGNUP_HOST_CONFLICT"
+	// org_two_factor_policy: the backoffice's policy calls from inside an
+	// organization; a policy value that is none of the three, or a kind the
+	// deployment's memberships do not have.
+	CodeTwoFactorPoliciesRealmOnly = "TWO_FACTOR_POLICIES_REALM_ONLY"
+	CodeTwoFactorPolicyInvalid     = "TWO_FACTOR_POLICY_INVALID"
+	// product_roles: a product or a role the catalogue does not name; an
+	// org-held grant of a role the product holds realm-wide only; a grant
+	// above what the caller holds; one for someone outside the organization;
+	// the backoffice's calls from inside an organization.
+	CodeProductUnknown        = "PRODUCT_UNKNOWN"
+	CodeProductRoleUnknown    = "PRODUCT_ROLE_UNKNOWN"
+	CodeProductRoleRealmHeld  = "PRODUCT_ROLE_REALM_HELD"
+	CodeProductRoleAbove      = "PRODUCT_ROLE_ABOVE_CALLER"
+	CodeProductRoleNotMember  = "PRODUCT_ROLE_NOT_MEMBER"
+	CodeProductRolesRealmOnly = "PRODUCT_ROLES_REALM_ONLY"
+	// product_roles: an identity role naming a permission no product has.
+	CodeProductPermissionUnknown = "PRODUCT_PERMISSION_UNKNOWN"
+	// product_plans: a grant the organization's plan does not carry; a plan
+	// call from inside an organization.
+	CodeProductRoleNotInPlan  = "PRODUCT_ROLE_NOT_IN_PLAN"
+	CodeProductPlansRealmOnly = "PRODUCT_PLANS_REALM_ONLY"
+	// named_product_plans: no live plan of the id; a live plan of the name
+	// exists; a plan organizations are on cannot be deleted.
+	CodeProductPlanUnknown   = "PRODUCT_PLAN_UNKNOWN"
+	CodeProductPlanNameTaken = "PRODUCT_PLAN_NAME_TAKEN"
+	CodeProductPlanInUse     = "PRODUCT_PLAN_IN_USE"
+
+	// CodeSignUpNotInvited: under invite_only, a registration with no
+	// pending invitation for its address and no valid invitation link.
+	CodeSignUpNotInvited = "SIGNUP_NOT_INVITED"
+
+	// CodeInviteOtherAddress: the invitation link is bound to a different
+	// address than the one registering. Says nothing about which address.
+	CodeInviteOtherAddress = "INVITE_OTHER_ADDRESS"
+
+	// CodeSignUpClosed: the address is outside sign_up_allowlist.
+	CodeSignUpClosed = "SIGNUP_CLOSED"
+
+	// The OAuth refusals below are said plainly because none of them tells
+	// an attacker more than they already had. OAUTH_ACCOUNT_UNVERIFIED and
+	// ACCOUNT_DISABLED are reached only after the provider proved the
+	// caller owns the address (or the linked subject). OAUTH_EMAIL_UNVERIFIED
+	// is NOT: the provider did not verify the address, so whoever controls
+	// the profile can name any address. It answers what the refusal itself
+	// already answered — the callback succeeds when no account holds the
+	// address and refuses when one does — and adds nothing about the account.
+
+	// CodeOAuthAccountUnverified: an account exists for the provider's
+	// address, and that account never verified it, so it is not linked.
+	CodeOAuthAccountUnverified = "OAUTH_ACCOUNT_UNVERIFIED"
+
+	// CodeOAuthEmailUnverified: an account exists for the address, and the
+	// provider did not verify it, so it is not linked.
+	CodeOAuthEmailUnverified = "OAUTH_EMAIL_UNVERIFIED"
+
+	// CodeAccountDisabled: the provider sign-in resolved to an account an
+	// administrator disabled. Only OAuth says this; a password sign-in to a
+	// disabled account stays INVALID_CREDENTIALS.
+	CodeAccountDisabled = "ACCOUNT_DISABLED"
+
+	// CodeOAuthFailed: every other OAuth refusal — the state, the login code,
+	// the verifier, the provider's answer. The sign-in starts again.
+	CodeOAuthFailed = "OAUTH_FAILED"
+
+	// CodeSessionExpired: the bearer is a token this deployment issued and
+	// it is past its expires_at — sign in again (or, for an API token, create
+	// a new one). Not folded into the opaque answer: an expired token is not a
+	// guess, and "invalid credentials" sent its holder looking for what was
+	// wrong with a credential that had merely run out. It reveals nothing the
+	// holder lacked — they hold the token, and its expiry is a property of it.
+	// An UNKNOWN token still answers the opaque refusal with no detail.
+	// Also the ErrorInfo reason (domain ErrorDomain), which a client reads
+	// together with the expires_at metadata.
+	CodeSessionExpired = "SESSION_EXPIRED"
+
+	// The device-binding refusals. Every token is bound to the key of the
+	// device it was issued to (DPoP, RFC 9449), and each of these tells the
+	// client what to do with its key; all three are also the ErrorInfo reason
+	// (domain ErrorDomain).
+	//
+	// CodeDeviceProofRequired: no proof of possession where one is needed —
+	// a mint request, or an authenticated request (no proof, or the token
+	// sent as Bearer). Decided before any token lookup. A token proved by
+	// another key, or bound to none (minted before device binding), gets the
+	// opaque refusal instead, like an unknown one: its thief learns nothing.
+	CodeDeviceProofRequired = "DEVICE_PROOF_REQUIRED"
+
+	// CodeDeviceRevoked: the device was revoked, for good. The client
+	// discards its key, generates a new one and signs in again as a new
+	// device.
+	CodeDeviceRevoked = "DEVICE_REVOKED"
+
+	// CodeDeviceKeyRequired: an API token (CreateApiToken, IssueBotToken)
+	// asked for without the public key of the client that will use it. Every
+	// token is bound to a device key, so none is minted unbound.
+	CodeDeviceKeyRequired = "DEVICE_KEY_REQUIRED"
 )
+
+// The refusals of the key an API token's request names (CreateApiToken,
+// IssueBotToken). ErrorDetail only, never a google.rpc.ErrorInfo and never
+// Unauthenticated: they are about the key in the request body, not the
+// caller's own device, so a client must not read them as "my key is gone".
+const (
+	// CodeDeviceKeyInvalid: public_key is not a public P-256 or Ed25519 JWK
+	// (malformed, another key type or curve, a point off the curve), carries a
+	// private member, or is the key of a device that signs in to the account.
+	CodeDeviceKeyInvalid = "DEVICE_KEY_INVALID"
+	// CodeDeviceKeyRevoked: the key names a device of the token's owner that
+	// was revoked, for good. The program generates a new key.
+	CodeDeviceKeyRevoked = "DEVICE_KEY_REVOKED"
+	// CodeBotKeyMismatch: the machine account already has a key and the
+	// request names another (device/bot-one-key). Its replicas share the one
+	// key; to replace it, revoke the account's device first.
+	CodeBotKeyMismatch = "BOT_KEY_MISMATCH"
+)
+
+// ErrorDomain is the google.rpc.ErrorInfo domain of the refusals this plugin
+// describes with one.
+const ErrorDomain = "auth.w17"
 
 // The sentences a person reads, and the ONE place each is written.
 //
@@ -191,10 +417,32 @@ const (
 
 	MsgOrgMismatch = "This request names two different organizations. Name one."
 
+	// About the CODE, and the same for every cause: naming the cause would
+	// tell a guesser which half of the attempt was wrong.
+	MsgMfaCodeRefused = "That code is not valid. Check it and try again, or request a new one."
+
+	MsgSignUpNotInvited = "Registration is by invitation only. Ask the organization you are joining to invite you."
+
+	MsgInviteOtherAddress = "This invitation is for a different email address, or has already been used. Ask for a new invitation."
+
+	MsgSignUpClosed = "Registration is not open for this email address."
+
+	MsgOAuthAccountUnverified = "An account with this email address exists but has not verified it. Sign in with your password and verify the address first."
+
+	MsgOAuthEmailUnverified = "An account with this email address exists, and the sign-in provider has not verified the address. Sign in with your password instead."
+
+	MsgAccountDisabled = "This account has been disabled."
+
+	MsgOAuthFailed = "Signing in with the provider did not complete. Please start again."
+
 	// Not "try again": the generic AlreadyExists sentence ("Another change
 	// reached this first. Please try again.") sent a person who already has an
 	// account round the registration form instead of to sign-in.
 	MsgEmailTaken = "An account with this address already exists. Sign in instead."
+
+	MsgEmailInvalid = "This email address cannot be used. Use another address."
+
+	MsgClientRevoked = "This callback was registered under this client ID and revoked. Register it under a new client ID."
 
 	MsgRoleAboveCaller = "That role carries permissions you do not hold. A role can be granted only by someone who holds everything it grants."
 
@@ -210,20 +458,111 @@ const (
 
 	MsgTotpAlreadyConfirmed = "This authenticator app is already set up. To get new recovery codes, generate them."
 
+	MsgTwoFactorDisabled = "Two-step sign-in is switched off here."
+
 	MsgStepUpLocked = "Too many wrong codes. Wait 15 minutes and try again."
+
+	// Names what to do instead: the caller holds a working credential, just
+	// not one this operation accepts.
+	MsgSessionRequired = "Sign in to do this. An API token cannot create credentials."
+
+	MsgPasswordTooLong = "This password is too long. Use a shorter one."
+
+	MsgPasswordAttemptsSpent = "Too many wrong passwords. Wait a while and try again." //nolint:gosec // G101: a message about passwords, not one
+
+	// step_up: the password the caller typed to confirm it is them is not
+	// theirs. Says no more than that — they are signed in already.
+	MsgPasswordNotConfirmed = "That is not your password. Type the password you sign in with."
+
+	MsgPasswordStepUpLocked = "Too many wrong passwords. Wait 15 minutes and try again." //nolint:gosec // G101: a message about passwords, not one
+	MsgBotAllowlistInvalid  = "{entry} is not an address or a network (for example 203.0.113.7 or 203.0.113.0/24)."
+	MsgBotAllowlistTooLong  = "The list is too long: at most {max} entries."
+
+	// {date} is the expiry, UTC. Names the remedy, which differs by kind: a
+	// session is renewed by signing in, an API token only by minting another.
+	MsgSessionExpired  = "Your session expired on {date}. Sign in again."
+	MsgAPITokenExpired = "This API token expired on {date}. Create a new token." // #nosec G101 -- the SENTENCE a person reads, not a credential value
+
+	// The device-binding refusals. A person reads them when their app could
+	// not (or no longer may) prove which device it runs on; the remedy is
+	// always the same — sign in again — and the app does the key handling.
+	MsgDeviceProofRequired = "This app did not prove which device it runs on. Reload or update it, then sign in again."
+	MsgDeviceRevoked       = "This device was signed out for good. Sign in again to use it as a new device."
+
+	// An API token is bound to the key of the program that will use it. The
+	// remedies name what to send: its PUBLIC key, never the private one.
+	MsgClientKeyNeeded  = "Give the public key of the program that will use this token."
+	MsgClientKeyInvalid = "That public key cannot be used. Give a P-256 or Ed25519 public key as a JWK."
+	MsgClientKeyPrivate = "That key contains its private part. Give only the public key, and keep the private key where the program runs."
+	MsgClientKeyRevoked = "That key belongs to a device that was revoked. Generate a new key for the program."
+	MsgClientKeySignsIn = "That key belongs to a device you sign in with. Generate a separate key for the program."
+	MsgBotKeyMismatch   = "This machine account already has a different key. Use that key, or revoke the account's device to replace it."
+
+	MsgOAuthRequestGone           = "This sign-in request has expired or was already answered. Start again from the application."
+	MsgOAuthAppUnknown            = "This connected app is not one of yours, or was already disconnected."
+	MsgOAuthOrgRequired           = "Choose one of your organizations for this application."
+	MsgMembershipNotAdmitted      = "This part of the service is not open to you: none of your memberships is of a kind it admits."
+	MsgInviteKindNotAllowed       = "You cannot invite someone as this kind of member."
+	MsgPackageAudienceOff         = "Your organization's plan does not include this part of the service."
+	MsgPackagesRealmOnly          = "An organization's plan is changed by the platform, not from inside the organization."
+	MsgPackageUnknown             = "There is no such package."
+	MsgPackageDefault             = "Every organization has this package; it is not given or taken."
+	MsgHostsRealmOnly             = "Which organization a host serves is set by the platform, not from inside an organization."
+	MsgHostTaken                  = "This host already serves another organization."
+	MsgHostInvalid                = "This is not a host name."
+	MsgOrgHostConflict            = "This address belongs to another organization than the one you chose."
+	MsgOrgSelectorNotAccepted     = "The organization is taken from the address here, not chosen."
+	MsgSignUpPoliciesRealmOnly    = "Who may register into an organization is set by the platform, not from inside the organization."
+	MsgSignUpPolicyKind           = "Name the kind of membership this applies to."
+	MsgSignUpPolicyNoKind         = "This deployment has no kinds of membership; leave the kind empty."
+	MsgSignUpPolicyRole           = "Choose the role people get when they register."
+	MsgSignUpKindAmbiguous        = "Registration here is not set up correctly. Contact the organization."
+	MsgSignUpHostConflict         = "This registration names another address than the one it arrived on."
+	MsgTwoFactorPoliciesRealmOnly = "From inside an organization, change its two-step sign-in in the organization's own settings."
+	MsgTwoFactorPolicyValue       = "Choose required, optional or disabled."
+	MsgProductUnknown             = "There is no such product."
+	MsgProductRoleUnknown         = "The product has no such role."
+	MsgProductRoleRealmHeld       = "This role is held across the whole platform, not in one organization."
+	MsgProductRoleAbove           = "You can only give a role that your own role includes."
+	MsgProductRoleNotMember       = "This person is not a member of the organization."
+	MsgProductRolesRealmOnly      = "This is managed by the platform, not from inside an organization."
+	MsgProductPermissionUnknown   = "No product has this permission."
+	MsgProductRoleNotInPlan       = "Your organization's plan does not include this role."
+	MsgProductPlansRealmOnly      = "An organization's plan is changed by the platform, not from inside the organization."
+	MsgProductPlanUnknown         = "There is no such plan."
+	MsgProductPlanNameTaken       = "A plan with this name already exists. Choose another name."
+	MsgProductPlanInUse           = "Organizations are on this plan. Move them to another plan first."
 )
+
+// isUniqueConflict is a write refused by a unique index: storage reports it as
+// InvalidArgument with an ErrorDetail{code: UNIQUE_VIOLATION} (or, from a fake
+// store, AlreadyExists).
+func isUniqueConflict(err error) bool {
+	st, ok := status.FromError(err)
+	if !ok {
+		return false
+	}
+	if st.Code() == codes.AlreadyExists {
+		return true
+	}
+	for _, d := range st.Details() {
+		if ed, ok := d.(*w17pb.ErrorDetail); ok && ed.GetCode() == "UNIQUE_VIOLATION" {
+			return true
+		}
+	}
+	return false
+}
 
 // isEmailTaken reports whether creating an account failed on the address's
 // unique index.
 //
 // Storage reports a unique violation as InvalidArgument carrying an
-// ErrorDetail{code: UNIQUE_VIOLATION} (grpcerr C-3 folded every
-// validation-class violation into InvalidArgument), never as AlreadyExists.
-// A check for AlreadyExists alone therefore never fired against a real store:
-// the handler tests passed because their fake store answered AlreadyExists,
-// and live the caller read "The request could not be accepted as sent." (found
-// by examples/auth-proof). AlreadyExists is still accepted, for a store that
-// answers that way.
+// ErrorDetail{code: UNIQUE_VIOLATION} (grpcerr folds every validation-class
+// violation into InvalidArgument), never as AlreadyExists. A check for
+// AlreadyExists alone therefore never fires against a real store: handler tests
+// pass because their fake store answers AlreadyExists, and live the caller
+// reads "The request could not be accepted as sent.". AlreadyExists is still
+// accepted, for a store that answers that way.
 //
 // The field is the address — or, under tenant_scope, the composite that
 // includes it; a unique violation on some other column is not this refusal.
@@ -244,6 +583,26 @@ func isEmailTaken(err error) bool {
 		}
 	}
 	return false
+}
+
+// erasedEmailDomain is the domain an erased account's address is replaced
+// with (erasedAddress, `user_admin`). `.invalid` is reserved (RFC 2606), so no
+// real mailbox is in it; refuseReservedEmail keeps every other path from
+// writing it.
+const erasedEmailDomain = "erased.invalid"
+
+// refuseReservedEmail refuses an address in erasedEmailDomain, at every path
+// that gives an account an address (SignUp, ConfirmSignUp, the OAuth account
+// creation, the admin's UpdateAccount, CreateBot). Only an erasure writes one:
+// an account that held `erased-<id>@erased.invalid` first would make the
+// erasure of account <id> fail on the unique address for good.
+func refuseReservedEmail(ctx context.Context, email string) error {
+	if strings.HasSuffix(normalizeEmail(email), "@"+erasedEmailDomain) {
+		return refusal(ctx, codes.InvalidArgument,
+			"the "+erasedEmailDomain+" domain is reserved for erased accounts",
+			CodeEmailInvalid, "email", MsgEmailInvalid, nil)
+	}
+	return nil
 }
 
 // emailTaken is the refusal for registering an address that has an account.
@@ -311,8 +670,22 @@ func deliberateStatus(cause error) (*status.Status, bool) {
 	if errors.As(cause, &we) {
 		return status.New(we.code, we.msg), true
 	}
+	var se *statusError
+	if errors.As(cause, &se) {
+		return se.st, true
+	}
 	return nil, false
 }
+
+// statusError is a wireError that carries a whole status, details included,
+// for a refusal whose details need the request context to build (a translated
+// ErrorDetail) — GRPCStatus has none. Same rule as wireError: only this
+// package constructs one, so nothing downstream can steer the wire answer.
+type statusError struct{ st *status.Status }
+
+func (e *statusError) Error() string { return e.st.Message() }
+
+func (e *statusError) GRPCStatus() *status.Status { return e.st }
 
 // operationalCode reports the wire code to use when a cause describes the
 // SERVICE rather than the credential, and codes.OK when it does not.
@@ -412,13 +785,28 @@ func UnauthenticatedSignIn(cause error) error {
 	}
 }
 
-// UnauthenticatedOrgNotMember is the refusal of a request scoped into an
-// organization the caller does not belong to. Same code and status message as
-// every other authentication refusal — the contract — plus the pair a gateway
-// renders, so the person reads what is actually wrong. Here rather than beside
-// its caller because this file is staged with every feature.
-func UnauthenticatedOrgNotMember(cause error) error {
-	return &authnError{cause: cause, userCode: CodeOrgNotMember, userMsg: MsgOrgNotMember}
+// UnauthenticatedMfaCode is the refusal of a second-factor code: the same
+// opaque Unauthenticated status, plus the pair a gateway renders so the
+// person reads that the CODE was refused. Every refusal of a code carries the
+// identical pair — a wrong code, an expired, consumed or unknown challenge,
+// a spent attempt budget, another device's key — or the sentence becomes the
+// oracle the status is opaque to avoid. An outage stays an outage
+// (operational causes keep their own pair) and a missing session stays the
+// generic answer: neither is about the code.
+func UnauthenticatedMfaCode(cause error) error {
+	return &authnError{cause: cause, userCode: CodeMfaCodeRefused, userMsg: MsgMfaCodeRefused}
+}
+
+// DeniedOrgNotMember is the refusal of a request scoped into an organization
+// the caller does not belong to (or that does not exist — the two answer the
+// same, so it is no oracle of which organizations exist). The credential was
+// accepted, so it is an authorization refusal: PERMISSION_DENIED with
+// ORG_NOT_MEMBER, which every transport renders as 403 — never the 401 that
+// tells a client its session is gone. Still an authnError, so the decorator
+// loop keeps it and an outage under it stays an outage. Here rather than
+// beside its caller because this file is staged with every feature.
+func DeniedOrgNotMember(cause error) error {
+	return &authnError{cause: cause, userCode: CodeOrgNotMember, userMsg: MsgOrgNotMember, denied: true}
 }
 
 // refusal is a status whose message is the operator's copy and whose
@@ -460,4 +848,16 @@ func refuseOtherOrg(ctx context.Context, org string) error {
 	return refusal(ctx, codes.InvalidArgument,
 		"request field org "+org+" is not the organization this request was authenticated in",
 		CodeOrgMismatch, "org", MsgOrgMismatch, nil)
+}
+
+// hashPasswordErr answers a failed hash of a person's new password: a password
+// the algorithm cannot take (passwordhash.ErrTooLong) is their input to fix,
+// so it is refused on the field, not passed on as a server error.
+func hashPasswordErr(ctx context.Context, err error, field string) error {
+	if errors.Is(err, passwordhash.ErrTooLong) {
+		return refusal(ctx, codes.InvalidArgument,
+			"the password is longer than the password hash accepts (bcrypt: 72 bytes)",
+			CodePasswordTooLong, field, MsgPasswordTooLong, nil)
+	}
+	return err
 }

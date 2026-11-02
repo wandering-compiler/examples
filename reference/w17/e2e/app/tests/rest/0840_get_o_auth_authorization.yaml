@@ -1,0 +1,14 @@
+# The consent page's read, on a request that does not exist.
+#
+# A pending authorization is minted by the OAuth wire (/oauth/authorize),
+# not by a REST route, so a REST scenario has none to read; the MCP
+# scenario walks the whole flow through these routes. What a REST step can
+# state is the refusal: an unknown, decided or expired request is not
+# found, never an empty consent page a browser would render.
+method: auth.AuthService.GetOAuthAuthorization
+pre:
+    - auth/auth.yaml
+input:
+    request_id: e2e-no-such-request
+expect_error:
+    code: NOT_FOUND
