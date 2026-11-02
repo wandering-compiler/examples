@@ -1,12 +1,9 @@
-# Edit, then REGENERATE before running: the suite executes the BAKED
-# copy of this file (scenarios_gen_test.go), not the file itself.
-# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
-# silently asserts the previous expectations and passes.
+# Approving a request that does not exist mints nothing: not found, and no
+# redirect with a code (see 0840 for why a REST step has no pending one).
 method: auth.AuthService.ApproveOAuthAuthorization
 pre:
     - auth/auth.yaml
 input:
-    request_id: e2e-value
-    org_id: e2e-value
-expect:
-    redirect_url: {matcher: not_empty}
+    request_id: e2e-no-such-request
+expect_error:
+    code: NOT_FOUND

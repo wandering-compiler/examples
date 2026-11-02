@@ -212,6 +212,21 @@ option (w17.acl_roles) = {
   all_permissions_at_signup: true
 };
 
+// e2e-mcp — the same "everything" for the MCP realm. An MCP access token
+// (oauth_server) holds the user's mcp-realm roles alone, never their
+// session roles, so without one the MCP scenario's token passes no gate.
+option (w17.acl_roles) = {
+  key:             "e2e-mcp"
+  name:            "e2e-mcp"
+  activation:      "auth"
+  realm:           "mcp"
+  scope:           ACL_ROLE_SCOPE_REALM
+  all_permissions: true
+  first_user:      true
+  default:         true
+  all_permissions_at_signup: true
+};
+
 option (w17.acl_roles) = {
   key:             "platform-staff"
   name:            "platform-staff"

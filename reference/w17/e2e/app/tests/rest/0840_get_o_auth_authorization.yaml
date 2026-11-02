@@ -1,20 +1,14 @@
-# Edit, then REGENERATE before running: the suite executes the BAKED
-# copy of this file (scenarios_gen_test.go), not the file itself.
-# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
-# silently asserts the previous expectations and passes.
+# The consent page's read, on a request that does not exist.
+#
+# A pending authorization is minted by the OAuth wire (/oauth/authorize),
+# not by a REST route, so a REST scenario has none to read; the MCP
+# scenario walks the whole flow through these routes. What a REST step can
+# state is the refusal: an unknown, decided or expired request is not
+# found, never an empty consent page a browser would render.
 method: auth.AuthService.GetOAuthAuthorization
 pre:
     - auth/auth.yaml
 input:
-    request_id: e2e-value
-expect:
-    client_name: {matcher: not_empty}
-    client_uri: {matcher: not_empty}
-    logo_uri: {matcher: not_empty}
-    client_id: {matcher: not_empty}
-    redirect_host: {matcher: not_empty}
-    kind: {matcher: not_empty}
-    resource: {matcher: not_empty}
-    scope: {matcher: not_empty}
-    expires_at: {matcher: not_empty}
-    orgs: {matcher: unwritten}
+    request_id: e2e-no-such-request
+expect_error:
+    code: NOT_FOUND
