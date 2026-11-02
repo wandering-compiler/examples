@@ -19,6 +19,7 @@ input:
     user_id: 1
     category_id: 9223372036854775807
     title: A category no picker offers
+    body_text: Every other field is valid, so the category is what is refused.
     priority: 3
     idempotency_key: ${random:uuid}
 expect_error:
