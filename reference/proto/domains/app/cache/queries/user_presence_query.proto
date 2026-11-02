@@ -53,7 +53,7 @@ message GetUserWithPresenceReq {
 // effort cache" contract; differs from the reverse
 // direction which treats KV-parent miss as NotFound).
 message GetUserWithPresenceResp {
-  e2e.app.users.User              user     = 1;
+  e2e.app.users.UserProfile       user     = 1;
   e2e.app.cache.UserPresenceCache presence = 2;
 }
 

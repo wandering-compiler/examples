@@ -10,6 +10,19 @@ import "w17/field.proto";
 // email is unique (data-level UNIQUE INDEX synthesised by ir.Build
 // from `(w17.field).unique`). status is a small enum for the
 // active / disabled / deleted lifecycle states.
+// UserProfile — a user as the cache reads answer with it: every User column
+// but the password hash and the encrypted recovery hint, neither of which a
+// session or presence lookup has any business carrying. A generated query
+// fills every field of its response, so those reads answer with this message
+// rather than with User and two fields left empty.
+message UserProfile {
+  int64                     id           = 1;
+  string                    email        = 2 [(w17.field) = { type: EMAIL }];
+  string                    display_name = 3 [(w17.field) = { type: CHAR, max_len: 120 }];
+  User.Status               status       = 4;
+  google.protobuf.Timestamp created_at   = 5;
+}
+
 message User {
   option (w17.db.table) = { name: "users" };
 
