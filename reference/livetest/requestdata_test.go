@@ -416,3 +416,67 @@ func waitForEntry(t *testing.T, rdb *redis.Client, key, needle string) string {
 		time.Sleep(200 * time.Millisecond)
 	}
 }
+
+const streamTasksMethod = "/e2e.app.tasks.TasksService/StreamTasks"
+
+// A stream is ONE record, written when it closes, with its total duration
+// and the messages it carried: the server-sent events this client read are
+// the record's messages_sent, and an SSE client sends none.
+func TestRequestData_AStreamIsOneRecordWithItsMessages(t *testing.T) {
+	token := signUp(t)
+	opened := time.Now()
+	// User 1's tasks: every other case writes there, so the stream has frames.
+	req, err := http.NewRequest(http.MethodGet, gateway+"/api/v1/tasks/stream?user_id=1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	resp, err := api.Do(req, token)
+	if err != nil {
+		t.Fatalf("open the stream: %v", err)
+	}
+	frames := 0
+	errored := false
+	sc := bufio.NewScanner(resp.Body)
+	sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
+	for sc.Scan() {
+		line := sc.Text()
+		switch {
+		case strings.HasPrefix(line, "event: error"):
+			errored = true
+		case strings.HasPrefix(line, "data:") && !errored:
+			frames++
+		}
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || errored {
+		t.Fatalf("stream status %d, error frame %v", resp.StatusCode, errored)
+	}
+	if frames == 0 {
+		t.Fatal("the stream sent no frame: nothing to count")
+	}
+
+	// Recorded asynchronously, once the stream closed.
+	var got *w17pb.RequestEventMeta
+	deadline := time.Now().Add(15 * time.Second)
+	for got == nil && time.Now().Before(deadline) {
+		_, records := readStream(t)
+		for _, r := range records {
+			if m := r.Meta; m.GetMethod() == streamTasksMethod && !m.GetStart().AsTime().Before(opened.Add(-time.Second)) && m.GetUserId() != "" {
+				got = m
+			}
+		}
+		if got == nil {
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	if got == nil {
+		t.Fatalf("no record of the stream opened at %s", opened.Format(time.RFC3339Nano))
+	}
+	if got.GetMessagesSent() != int64(frames) || got.GetMessagesReceived() != 0 {
+		t.Errorf("record counts sent %d received %d, the client read %d frames and sent none", got.GetMessagesSent(), got.GetMessagesReceived(), frames)
+	}
+	if got.GetHttpStatus() != http.StatusOK || got.GetRoute() != "/api/v1/tasks/stream" || got.GetDurationMicros() <= 0 {
+		t.Errorf("record meta %v: want status 200, the route and a duration", got)
+	}
+}
