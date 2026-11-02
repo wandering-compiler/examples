@@ -19,6 +19,15 @@ msgstr "Active"
 msgid "Add {name}"
 msgstr "Add {name}"
 
+msgid "Admin Revoked"
+msgstr "Admin Revoked"
+
+msgid "All Tokens Revoked"
+msgstr "All Tokens Revoked"
+
+msgid "Api Token Revoked"
+msgstr "Api Token Revoked"
+
 msgid "Apply"
 msgstr "Apply"
 
@@ -39,6 +48,9 @@ msgstr "Clear"
 
 msgid "Close"
 msgstr "Close"
+
+msgid "Code Replayed"
+msgstr "Code Replayed"
 
 msgid "Comment"
 msgstr "Comment"
@@ -79,6 +91,9 @@ msgstr "Deleted"
 msgid "Detail"
 msgstr "Detail"
 
+msgid "Device Revoked"
+msgstr "Device Revoked"
+
 msgid "Directory"
 msgstr "Directory"
 
@@ -109,6 +124,9 @@ msgstr "Enter your credentials to continue."
 msgid "Flag as reviewed"
 msgstr "Flag as reviewed"
 
+msgid "Grant Revoked"
+msgstr "Grant Revoked"
+
 msgid "In Progress"
 msgstr "In Progress"
 
@@ -129,6 +147,9 @@ msgstr "Light theme"
 
 msgid "Loading…"
 msgstr "Loading…"
+
+msgid "Logout"
+msgstr "Logout"
 
 msgid "Next"
 msgstr "Next"
@@ -166,14 +187,23 @@ msgstr "Overwrite the status note on every selected milestone?"
 msgid "Password"
 msgstr "Password"
 
+msgid "Password Changed"
+msgstr "Password Changed"
+
+msgid "Password Reset"
+msgstr "Password Reset"
+
 msgid "Previous"
 msgstr "Previous"
 
 msgid "Provenance"
 msgstr "Provenance"
 
-msgid "Re-enable the selected accounts?"
-msgstr "Re-enable the selected accounts?"
+msgid "Re-enable the selected accounts? An erased account stays disabled."
+msgstr "Re-enable the selected accounts? An erased account stays disabled."
+
+msgid "Refresh Reused"
+msgstr "Refresh Reused"
 
 msgid "Rows per page"
 msgstr "Rows per page"
@@ -247,14 +277,26 @@ msgstr "This page has no list configured."
 msgid "This sign-in link cannot be used here. Sign in again."
 msgstr "This sign-in link cannot be used here. Sign in again."
 
+msgid "Token Revoked"
+msgstr "Token Revoked"
+
 msgid "Total users"
 msgstr "Total users"
 
 msgid "Unavailable"
 msgstr "Unavailable"
 
+msgid "Unbound Session"
+msgstr "Unbound Session"
+
 msgid "Urgency"
 msgstr "Urgency"
+
+msgid "User Disabled"
+msgstr "User Disabled"
+
+msgid "User Erased"
+msgstr "User Erased"
 
 msgid "Username"
 msgstr "Username"

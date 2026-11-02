@@ -12,7 +12,7 @@ import (
 	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
 )
 
-// This file implements the `password_reset` feature (E1). It is staged into
+// This file implements the `password_reset` feature. It is staged into
 // a bundle only when the activation enables `password_reset` (plugin.yaml
 // maps the feature to this file via go_files). Standalone (the plugin
 // author's own `go test`) always compiles it.
@@ -36,6 +36,14 @@ func (h *AuthServiceHandler) passwordResetTTL() time.Duration {
 // empty success — whether or not the email exists — so the endpoint can't
 // be used to enumerate registered accounts. The token's hash + expiry are
 // stored; the plaintext is never persisted.
+//
+// The answer must not differ in TIME either (password_reset gap 3). Both
+// paths do the same work before answering — the address lookup — and the
+// known address's link is minted after the answer, detached from the request
+// (mintResetLinkDetached). Minting inline made a registered address answer an
+// INSERT and an event emit slower than an unknown one, and its failure came
+// back to the caller: an error only an existing account can produce. Now
+// neither the clock nor the error channel says anything.
 func (h *AuthServiceHandler) RequestPasswordReset(ctx context.Context, req *pb.RequestPasswordResetReq) (*pb.RequestPasswordResetResp, error) {
 	email := normalizeEmail(req.GetEmail())
 	userResp, err := h.Query.GetUserByEmail(ctx, &pb.GetUserByEmailReq{Email: email})
@@ -45,22 +53,38 @@ func (h *AuthServiceHandler) RequestPasswordReset(ctx context.Context, req *pb.R
 		return &pb.RequestPasswordResetResp{}, nil
 	}
 	user := userResp.GetUser()
+	detached := context.WithoutCancel(ctx)
+	runDetached(func() { _ = h.mintResetLink(detached, user) })
+	return &pb.RequestPasswordResetResp{}, nil
+}
 
+// runDetached runs a request's follow-up work after the answer is sent. A
+// seam so a test can run it inline or hold it.
+var runDetached = func(f func()) { go f() }
+
+// mintResetLink stores a fresh reset link for user and emits
+// PasswordResetRequested through CreatePasswordResetToken. Its error has no
+// caller to reach (see RequestPasswordReset): a link that failed to mint is
+// the same to the person as a mail that did not arrive — they ask again.
+func (h *AuthServiceHandler) mintResetLink(ctx context.Context, user *pb.User) error {
 	token, err := randomURLToken()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	expiresAt := timestamppb.New(time.Now().Add(h.passwordResetTTL()))
-	if _, err := h.Mutation.CreatePasswordResetToken(ctx, &pb.CreatePasswordResetTokenReq{
-		UserId:    user.GetId(),
-		TokenHash: sha256Hex(token),
-		ExpiresAt: expiresAt,
-		Email:     user.GetEmail(), // canonical stored email for the delivery channel
-		Token:     token,           // plaintext — event-only, never persisted
-	}); err != nil {
-		return nil, err
+	clear, sealed, err := h.deliver(token)
+	if err != nil {
+		return err
 	}
-	return &pb.RequestPasswordResetResp{}, nil
+	_, err = h.Mutation.CreatePasswordResetToken(ctx, &pb.CreatePasswordResetTokenReq{
+		UserId:      user.GetId(),
+		TokenHash:   sha256Hex(token),
+		ExpiresAt:   expiresAt,
+		Email:       user.GetEmail(), // canonical stored email for the delivery channel
+		Token:       clear,           // event-only, never persisted; empty when sealed
+		SealedToken: sealed,
+	})
+	return err
 }
 
 // ResetPassword consumes a reset token (atomically: single-use + not
@@ -73,7 +97,7 @@ func (h *AuthServiceHandler) ResetPassword(ctx context.Context, req *pb.ResetPas
 	// Apart, the token is spent before the password changes: a failure in
 	// between burns a valid link and leaves the old password in place, so the
 	// person is left with NEITHER — and they asked for that link precisely
-	// because they could not get in (a consumer). The consume must come first
+	// because they could not get in. The consume must come first
 	// (it is the check), so the only honest arrangement is to roll the pair
 	// back together.
 	var tx *distx.TxHandle
@@ -85,6 +109,16 @@ func (h *AuthServiceHandler) ResetPassword(ctx context.Context, req *pb.ResetPas
 		}
 	}
 	userID, err := h.consumeAndSetPassword(txCtx, sha256Hex(req.GetToken()), req.GetNewPassword())
+	if err == nil && tx != nil {
+		// Every existing token (sessions + API tokens; reason PASSWORD_RESET,
+		// the rows stay) is revoked IN the reset's transaction: a reset
+		// implies the prior credential may be compromised, and a thief's
+		// session that survives the reset is the one outcome the reset exists
+		// to prevent (password_reset gap 4). A sweep that fails rolls the
+		// whole reset back — the password unchanged, the link not spent — so
+		// the person retries instead of believing they are safe.
+		_, err = h.Mutation.RevokeTokensForReset(txCtx, &pb.RevokeTokensForResetReq{UserId: userID})
+	}
 	if err != nil {
 		if tx != nil {
 			_ = tx.Rollback(ctx)
@@ -95,20 +129,15 @@ func (h *AuthServiceHandler) ResetPassword(ctx context.Context, req *pb.ResetPas
 		if err := tx.Commit(ctx); err != nil {
 			return nil, err
 		}
+		return &pb.ResetPasswordResp{SessionsRevoked: true}, nil
 	}
 
-	// Revoke every existing token (sessions + API tokens): a reset implies the
-	// prior credential may be compromised. Deliberately OUTSIDE the
-	// transaction and still best-effort — the password is committed by now and
-	// a failed sweep must not undo it — but the outcome is REPORTED.
-	//
-	// It used to be `_, _ =` under a comment saying the error was "logged by
-	// the caller's interceptor". It was discarded here, before any interceptor
-	// could see it, and this plugin has no logging at all. So the one case the
-	// sweep exists for — a reset after a theft — could leave the thief's
-	// session alive and tell nobody, least of all the person who had just
-	// reset their password believing it had done something.
-	_, sweepErr := h.Mutation.DeleteUserSessionsForReset(ctx, &pb.DeleteUserSessionsForResetReq{UserId: userID})
+	// Without a transaction coordinator (a hand-built handler; a generated
+	// bundle always wires one) the statements commit one by one: the password
+	// is already written, so a failed sweep cannot undo it. It is still never
+	// silent — the outcome is REPORTED, so the person is told to sign out
+	// everywhere rather than left believing the reset ended every session.
+	_, sweepErr := h.Mutation.RevokeTokensForReset(ctx, &pb.RevokeTokensForResetReq{UserId: userID})
 	return &pb.ResetPasswordResp{SessionsRevoked: sweepErr == nil}, nil
 }
 
@@ -127,11 +156,11 @@ func (h *AuthServiceHandler) consumeAndSetPassword(txCtx context.Context, tokenH
 		// Through the opaque constructor, not raw.
 		//
 		// The statement carries RETURNING, so "no live row" arrives as
-		// NotFound — an ERROR, not an empty response. Returned raw it told a
-		// caller apart "this token is unknown/used/expired" from every other
-		// outcome, which is the enumeration the opaque refusal exists to
-		// prevent, and it made the `== ""` branch below unreachable: written
-		// for a shape this mutation never produces (a consumer).
+		// NotFound — an ERROR, not an empty response. Returned raw it would
+		// tell a caller apart "this token is unknown/used/expired" from every
+		// other outcome, which is the enumeration the opaque refusal exists to
+		// prevent, and the `== ""` branch below is unreachable for it: that
+		// branch handles a shape this mutation never produces.
 		//
 		// Unauthenticated() classifies: a refusal stays opaque, an outage
 		// comes back as Unavailable rather than dressed as a bad token.
@@ -143,7 +172,7 @@ func (h *AuthServiceHandler) consumeAndSetPassword(txCtx context.Context, tokenH
 	}
 	hash, err := h.PasswordHash.Hash(newPassword)
 	if err != nil {
-		return "", err
+		return "", hashPasswordErr(txCtx, err, "new_password")
 	}
 	if _, err := h.Mutation.UpdateUserPassword(txCtx, &pb.UpdateUserPasswordReq{
 		UserId:       userID,
@@ -151,5 +180,21 @@ func (h *AuthServiceHandler) consumeAndSetPassword(txCtx context.Context, tokenH
 	}); err != nil {
 		return "", err
 	}
+	// Every other link the person asked for dies with this one: each would
+	// set the password again, and a link sitting in a mailbox someone else
+	// reads is exactly what a reset is meant to end.
+	if err := spendResetLinks(txCtx, h, userID); err != nil {
+		return "", err
+	}
 	return userID, nil
+}
+
+// init lets the always-compiled password paths spend reset links when this
+// feature is staged (see spendResetLinks in auth_service.go).
+func init() {
+	secretDeliveryFeatures = append(secretDeliveryFeatures, "password_reset")
+	spendResetLinks = func(ctx context.Context, h *AuthServiceHandler, userID string) error {
+		_, err := h.Mutation.SpendPasswordResetTokens(ctx, &pb.SpendPasswordResetTokensReq{UserId: userID})
+		return err
+	}
 }

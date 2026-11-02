@@ -8,6 +8,7 @@ import (
 	"github.com/wandering-compiler/sdk/go/service/tx/distx"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
@@ -31,7 +32,15 @@ import (
 // that the caller has not proven they may know.
 var errCurrentPasswordWrong = errors.New("current password does not match")
 
-// nilUUID names no token: DeleteOtherSessionTokens keeps none when the caller
+// currentPasswordWrong is the refusal of a wrong current password: on the
+// field, as ConfirmPassword's. Not Unauthenticated — the caller's session is
+// fine, and a client answers Unauthenticated by signing the person out.
+func currentPasswordWrong(ctx context.Context) error {
+	return refusal(ctx, codes.PermissionDenied, errCurrentPasswordWrong.Error(),
+		CodePasswordNotConfirmed, "current_password", MsgPasswordNotConfirmed, nil)
+}
+
+// nilUUID names no token: RevokeOtherSessionTokens keeps none when the caller
 // holds no session (an API-token bearer). The column is a uuid, so an empty
 // string would not compare — it would fail to bind.
 const nilUUID = "00000000-0000-0000-0000-000000000000"
@@ -41,10 +50,11 @@ const nilUUID = "00000000-0000-0000-0000-000000000000"
 //
 // Bearer tokens do not derive from the password, so without the sweep they
 // kept working: changing a password after a session leaked did not evict
-// whoever held it. The sweep is DeleteOtherSessionTokens, a primitive this
-// feature owns — not DeleteUserSessionsForReset (`password_reset`) or
-// DeleteAllUserTokens (`devices`), which would make this feature depend on
-// one of them. API tokens are kept; see below.
+// whoever held it. The sweep is RevokeOtherSessionTokens, a primitive this
+// feature owns — not RevokeTokensForReset (`password_reset`) or
+// RevokeAllUserTokens (`devices`), which would make this feature depend on
+// one of them. The sessions are revoked (reason PASSWORD_CHANGED, the caller
+// as revoked_by), not deleted. API tokens are kept; see below.
 func (h *AuthServiceHandler) ChangePassword(ctx context.Context, req *pb.ChangePasswordReq) (*pb.ChangePasswordResp, error) {
 	userID, err := callerUserID(ctx)
 	if err != nil {
@@ -62,17 +72,30 @@ func (h *AuthServiceHandler) ChangePassword(ctx context.Context, req *pb.ChangeP
 	if err != nil {
 		return nil, err
 	}
+	// The current password is a guess like a sign-in's, so it spends the same
+	// per-account budget, counted before it is checked: a stolen session is
+	// no unlimited oracle for the password (password_change/guess-budget).
+	md, _ := metadata.FromIncomingContext(ctx)
+	thumbprint := firstMeta(md, dpopJKTKey)
+	if err := spendSignInBudget(ctx, h, userID, thumbprint); err != nil {
+		if errors.Is(err, errSignInThrottled) {
+			return nil, refusal(ctx, codes.ResourceExhausted, "password_change: the account's password guess budget is spent",
+				CodePasswordAttemptsSpent, "current_password", MsgPasswordAttemptsSpent, nil)
+		}
+		return nil, err
+	}
 	currentHash := got.GetUser().GetPasswordHash()
 	ok, _, _ := h.PasswordHash.VerifyAndRotate(currentHash, req.GetCurrentPassword(), nil)
 	if !ok {
-		return nil, Unauthenticated(errCurrentPasswordWrong)
+		return nil, currentPasswordWrong(ctx)
 	}
+	resetSignInBudget(ctx, h, userID, thumbprint)
 
 	// Hashing is CPU-bound and deliberately outside any transaction, the
 	// same shape SignUp uses.
 	hashed, err := h.PasswordHash.Hash(req.GetNewPassword())
 	if err != nil {
-		return nil, err
+		return nil, hashPasswordErr(ctx, err, "new_password")
 	}
 	// COMPARE-AND-SWAP on the hash that was just verified, not a bare write
 	// keyed on the user id.
@@ -121,7 +144,7 @@ func (h *AuthServiceHandler) ChangePassword(ctx context.Context, req *pb.ChangeP
 		CurrentHash:  currentHash,
 	}); err != nil {
 		if status.Code(err) == codes.NotFound {
-			return fail(Unauthenticated(errCurrentPasswordWrong))
+			return fail(currentPasswordWrong(ctx))
 		}
 		return fail(err)
 	}
@@ -129,11 +152,14 @@ func (h *AuthServiceHandler) ChangePassword(ctx context.Context, req *pb.ChangeP
 	if keep == "" {
 		keep = nilUUID
 	}
-	if _, err := h.Mutation.DeleteOtherSessionTokens(txCtx, &pb.DeleteOtherSessionTokensReq{
+	if _, err := h.Mutation.RevokeOtherSessionTokens(txCtx, &pb.RevokeOtherSessionTokensReq{
 		UserId:      userID,
 		KeepTokenId: keep,
-		TokenType:   pb.TokenType_TOKEN_TYPE_SESSION,
 	}); err != nil {
+		return fail(err)
+	}
+	// A reset link asked for before the change would undo it.
+	if err := spendResetLinks(txCtx, h, userID); err != nil {
 		return fail(err)
 	}
 	if tx != nil {

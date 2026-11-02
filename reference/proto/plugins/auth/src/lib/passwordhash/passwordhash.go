@@ -1,7 +1,7 @@
 // Package passwordhash hashes + verifies credentials for every
 // PASSWORD-typed field a wandering-compiler project declares.
 //
-// REV-151 — invoked by the storage codegen at INSERT / UPDATE
+// Invoked by the storage codegen at INSERT / UPDATE
 // time (Hash) and by hand-written auth backends at credential
 // check time (Verify). The per-project algorithm + tuning live
 // in the lock's `password:` block; LoadProject reads
@@ -101,6 +101,11 @@ func DefaultParams() Params {
 		PBKDF2Iters:     600000,
 	}
 }
+
+// ErrTooLong is Hash's refusal of a password the algorithm cannot take whole:
+// bcrypt reads at most 72 bytes, and refuses more rather than ignore the rest.
+// It is the person's input, not a fault, so callers answer it as one.
+var ErrTooLong = bcrypt.ErrPasswordTooLong
 
 // saltSize for newly-generated hashes (16 bytes = 128 bits,
 // well above the 64-bit minimum every modern algo recommends).

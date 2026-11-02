@@ -10,6 +10,9 @@ msgstr ""
 msgid "Another change reached this first. Please try again."
 msgstr ""
 
+msgid "Choose the organization to act in: name it in the W17-Org header (the organization's slug) and try again."
+msgstr ""
+
 msgid "No file was attached."
 msgstr ""
 

@@ -4,7 +4,7 @@
 // 	protoc        (unknown)
 // source: types/models.proto
 
-// Marketing plugin — its one table.
+// Marketing plugin — its tables.
 //
 // SentEvent remembers the request records already sent to the marketing
 // tool. The request stream delivers at least once (a failed batch comes back
@@ -86,6 +86,199 @@ func (x *SentEvent) GetSentAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// Contact is what the plugin knows about a user's contact in the marketing
+// tool, kept so that every write of the contact can say whether campaigns may
+// reach it (Brevo's emailBlacklisted) without asking anyone: the last consent
+// auth announced (MarketingConsentChanged) and when it was decided, and when
+// the person unsubscribed in the tool itself. Without it an address change
+// (UserUpdated) could only guess, and Brevo subscribes an address it is told
+// nothing about. A row exists for every user an auth event named since the
+// plugin kept them; a user without one has an unknown consent, which is no
+// consent.
+type Contact struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// user_id — auth's user id: the contact's ext_id in the tool.
+	UserId string `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// email — the last address auth announced, lower-cased: how a webhook of
+	// the tool, which names only the address, finds the user. Cleared when the
+	// account is erased.
+	Email string `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	// consent — the last marketing consent auth announced; meaningful only
+	// with consent_at.
+	Consent bool `protobuf:"varint,3,opt,name=consent,proto3" json:"consent,omitempty"`
+	// consent_at — when the user decided it (the event's decided_at). NULL =
+	// the plugin was never told: unknown, which is no consent.
+	ConsentAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=consent_at,json=consentAt,proto3" json:"consent_at,omitempty"`
+	// unsubscribed_at — when the person unsubscribed in the tool (its
+	// unsubscribe webhook). A consent decided before it does not subscribe
+	// the contact again; one decided after it does.
+	UnsubscribedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=unsubscribed_at,json=unsubscribedAt,proto3" json:"unsubscribed_at,omitempty"`
+	// erased_at — the account was erased (UserDeleted): the address is gone,
+	// and a late event of the user writes nothing to the tool.
+	ErasedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=erased_at,json=erasedAt,proto3" json:"erased_at,omitempty"`
+	// sent_blacklisted — the emailBlacklisted the plugin last wrote to the
+	// tool, or found there. FALSE until it writes one: before this column the
+	// plugin left every contact subscribed. A contact the tool blacklists while
+	// this says FALSE is one the person unsubscribed in the tool, and the
+	// plugin never subscribes it again on that decision.
+	SentBlacklisted bool `protobuf:"varint,7,opt,name=sent_blacklisted,json=sentBlacklisted,proto3" json:"sent_blacklisted,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *Contact) Reset() {
+	*x = Contact{}
+	mi := &file_types_models_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Contact) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Contact) ProtoMessage() {}
+
+func (x *Contact) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Contact.ProtoReflect.Descriptor instead.
+func (*Contact) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Contact) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *Contact) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *Contact) GetConsent() bool {
+	if x != nil {
+		return x.Consent
+	}
+	return false
+}
+
+func (x *Contact) GetConsentAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ConsentAt
+	}
+	return nil
+}
+
+func (x *Contact) GetUnsubscribedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UnsubscribedAt
+	}
+	return nil
+}
+
+func (x *Contact) GetErasedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ErasedAt
+	}
+	return nil
+}
+
+func (x *Contact) GetSentBlacklisted() bool {
+	if x != nil {
+		return x.SentBlacklisted
+	}
+	return false
+}
+
+// Reconciliation records a one-time job over the contacts already in the
+// tool, so it runs once per deployment, whichever replica starts first. A
+// replica claims it (claimed_by, claimed_at) and renews the claim as it
+// goes; a claim not renewed for a while is taken over, since its replica is
+// gone; finished_at says it is done.
+type Reconciliation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// claimed_by — the replica running it, a random id of its process.
+	ClaimedBy     string                 `protobuf:"bytes,2,opt,name=claimed_by,json=claimedBy,proto3" json:"claimed_by,omitempty"`
+	ClaimedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=claimed_at,json=claimedAt,proto3" json:"claimed_at,omitempty"`
+	FinishedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Reconciliation) Reset() {
+	*x = Reconciliation{}
+	mi := &file_types_models_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Reconciliation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Reconciliation) ProtoMessage() {}
+
+func (x *Reconciliation) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Reconciliation.ProtoReflect.Descriptor instead.
+func (*Reconciliation) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Reconciliation) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Reconciliation) GetClaimedBy() string {
+	if x != nil {
+		return x.ClaimedBy
+	}
+	return ""
+}
+
+func (x *Reconciliation) GetClaimedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ClaimedAt
+	}
+	return nil
+}
+
+func (x *Reconciliation) GetFinishedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FinishedAt
+	}
+	return nil
+}
+
 var File_types_models_proto protoreflect.FileDescriptor
 
 const file_types_models_proto_rawDesc = "" +
@@ -94,7 +287,25 @@ const file_types_models_proto_rawDesc = "" +
 	"\tSentEvent\x12\x1a\n" +
 	"\x02id\x18\x01 \x01(\tB\n" +
 	"\xca\xf3\x18\x06\b\x01\x10\x01@ R\x02id\x12@\n" +
-	"\asent_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\x06sentAt:\r\xc2\xf3\x18\x00\xfa\xf4\x18\x05brevoB\xd6\x01\n" +
+	"\asent_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\x06sentAt:\r\xc2\xf3\x18\x00\xfa\xf4\x18\x05brevo\"\x92\x03\n" +
+	"\aContact\x12!\n" +
+	"\auser_id\x18\x01 \x01(\tB\b\xca\xf3\x18\x04\b\x03\x10\x01R\x06userId\x12'\n" +
+	"\x05email\x18\x02 \x01(\tB\x11\xca\xf3\x18\a\b\x04(\x01@\xc0\x02\xd2\xf3\x18\x02\b\x01R\x05email\x12!\n" +
+	"\aconsent\x18\x03 \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\aconsent\x12C\n" +
+	"\n" +
+	"consent_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\tconsentAt\x12M\n" +
+	"\x0funsubscribed_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x0eunsubscribedAt\x12A\n" +
+	"\terased_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\berasedAt\x122\n" +
+	"\x10sent_blacklisted\x18\a \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\x0fsentBlacklisted:\r\xc2\xf3\x18\x00\xfa\xf4\x18\x05brevo\"\xf2\x01\n" +
+	"\x0eReconciliation\x12\x1e\n" +
+	"\x04name\x18\x01 \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x01\x10\x01@@R\x04name\x12'\n" +
+	"\n" +
+	"claimed_by\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\tclaimedBy\x12A\n" +
+	"\n" +
+	"claimed_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\tclaimedAt\x12E\n" +
+	"\vfinished_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\n" +
+	"finishedAt:\r\xc2\xf3\x18\x00\xfa\xf4\x18\x05brevoB\xd6\x01\n" +
 	"\x19com.w17.contrib.marketingB\vModelsProtoP\x01Z6github.com/wandering-compiler/plugins/marketing/gen/pb\xa2\x02\x03WCM\xaa\x02\x15W17.Contrib.Marketing\xca\x02\x15W17\\Contrib\\Marketing\xe2\x02!W17\\Contrib\\Marketing\\GPBMetadata\xea\x02\x17W17::Contrib::Marketingb\x06proto3"
 
 var (
@@ -109,18 +320,25 @@ func file_types_models_proto_rawDescGZIP() []byte {
 	return file_types_models_proto_rawDescData
 }
 
-var file_types_models_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_types_models_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_types_models_proto_goTypes = []any{
 	(*SentEvent)(nil),             // 0: w17.contrib.marketing.SentEvent
-	(*timestamppb.Timestamp)(nil), // 1: google.protobuf.Timestamp
+	(*Contact)(nil),               // 1: w17.contrib.marketing.Contact
+	(*Reconciliation)(nil),        // 2: w17.contrib.marketing.Reconciliation
+	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
 }
 var file_types_models_proto_depIdxs = []int32{
-	1, // 0: w17.contrib.marketing.SentEvent.sent_at:type_name -> google.protobuf.Timestamp
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	3, // 0: w17.contrib.marketing.SentEvent.sent_at:type_name -> google.protobuf.Timestamp
+	3, // 1: w17.contrib.marketing.Contact.consent_at:type_name -> google.protobuf.Timestamp
+	3, // 2: w17.contrib.marketing.Contact.unsubscribed_at:type_name -> google.protobuf.Timestamp
+	3, // 3: w17.contrib.marketing.Contact.erased_at:type_name -> google.protobuf.Timestamp
+	3, // 4: w17.contrib.marketing.Reconciliation.claimed_at:type_name -> google.protobuf.Timestamp
+	3, // 5: w17.contrib.marketing.Reconciliation.finished_at:type_name -> google.protobuf.Timestamp
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_types_models_proto_init() }
@@ -134,7 +352,7 @@ func file_types_models_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_types_models_proto_rawDesc), len(file_types_models_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
@@ -147,4 +365,4 @@ func file_types_models_proto_init() {
 	file_types_models_proto_depIdxs = nil
 }
 
-// emit-sha256: efabc467ae40ddc4e1900f20e739e3c3367d7b7f79270962883a542fb9a06ebe
+// emit-sha256: 4a4ea2347c203043899b8d7fcaa3c7cd44a3ec98f464d13f61b9e84568cf8483

@@ -39,17 +39,15 @@ import "domains/app/workspace/users/queries/user_query.proto";
 import "w17/request_events.proto";
 import "w17/lock.proto";
 
-option (w17.lock_checksum) = "f4b99ded7e6b4e6ad0b92425983bbaa8a84f09ef4b6e4913895536d8c0cd5ec5";
+option (w17.lock_checksum) = "07cf463e092a04b3b51d78f6804153ec5aa0df5b3d57b52218a82141a6424718";
 
 // RequestEvent is one record.
 message RequestEvent {
+  reserved 1, 2, 3, 4, 14, 18;
+
   w17.RequestEventMeta meta = 50001;
 
   oneof request {
-    .e2e.app.admin_auth.DeleteOrganizationReq request_admin_auth_delete_organization_req = 1;
-    .e2e.app.admin_auth.DeleteUserReq request_admin_auth_delete_user_req = 2;
-    .e2e.app.admin_auth.DisableUsersReq request_admin_auth_disable_users_req = 3;
-    .e2e.app.admin_auth.EnableUsersReq request_admin_auth_enable_users_req = 4;
     .e2e.app.admin_auth.GetOrgMembershipReq request_admin_auth_get_org_membership_req = 5;
     .e2e.app.admin_auth.GetOrganizationReq request_admin_auth_get_organization_req = 6;
     .e2e.app.admin_auth.GetUserReq request_admin_auth_get_user_req = 7;
@@ -59,11 +57,9 @@ message RequestEvent {
     .e2e.app.admin_auth.ListUserTokensReq request_admin_auth_list_user_tokens_req = 11;
     .e2e.app.admin_auth.ListUsersReq request_admin_auth_list_users_req = 12;
     .e2e.app.admin_auth.RemoveOrgMembershipReq request_admin_auth_remove_org_membership_req = 13;
-    .e2e.app.admin_auth.RevokeUserTokenReq request_admin_auth_revoke_user_token_req = 14;
     .e2e.app.admin_auth.SignInReq request_admin_auth_sign_in_req = 15;
     .e2e.app.admin_auth.UpdateOrgMembershipRoleReq request_admin_auth_update_org_membership_role_req = 16;
     .e2e.app.admin_auth.UpdateOrganizationReq request_admin_auth_update_organization_req = 17;
-    .e2e.app.admin_auth.UpdateUserReq request_admin_auth_update_user_req = 18;
     .e2e.app.auth.DeleteRoleReq request_auth_delete_role_req = 19;
     .e2e.app.auth.GetRoleReq request_auth_get_role_req = 20;
     .e2e.app.auth.ListRolesReq request_auth_list_roles_req = 21;
@@ -193,6 +189,12 @@ message RequestEvent {
     .e2e.app.users.RetireDirectoryPlanReq request_users_retire_directory_plan_req = 145;
     .e2e.app.users.StreamDirectoryUpdatesReq request_users_stream_directory_updates_req = 146;
     .e2e.app.users.UpgradeDirectoryPlanReq request_users_upgrade_directory_plan_req = 147;
+    .e2e.app.admin_auth.DisableAccountsReq request_admin_auth_disable_accounts_req = 149;
+    .e2e.app.admin_auth.EnableAccountsReq request_admin_auth_enable_accounts_req = 150;
+    .e2e.app.admin_auth.EraseAccountReq request_admin_auth_erase_account_req = 151;
+    .e2e.app.admin_auth.RemoveOrganizationReq request_admin_auth_remove_organization_req = 152;
+    .e2e.app.admin_auth.RevokeSessionReq request_admin_auth_revoke_session_req = 153;
+    .e2e.app.admin_auth.UpdateAccountReq request_admin_auth_update_account_req = 154;
   }
 
   oneof response {

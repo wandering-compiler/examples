@@ -21,8 +21,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MarketingMutation_RecordSentEvent_FullMethodName        = "/w17.contrib.marketing.MarketingMutation/RecordSentEvent"
-	MarketingMutation_ForgetSentEventsBefore_FullMethodName = "/w17.contrib.marketing.MarketingMutation/ForgetSentEventsBefore"
+	MarketingMutation_RecordSentEvent_FullMethodName           = "/w17.contrib.marketing.MarketingMutation/RecordSentEvent"
+	MarketingMutation_ForgetSentEventsBefore_FullMethodName    = "/w17.contrib.marketing.MarketingMutation/ForgetSentEventsBefore"
+	MarketingMutation_SetContactEmail_FullMethodName           = "/w17.contrib.marketing.MarketingMutation/SetContactEmail"
+	MarketingMutation_EnsureContact_FullMethodName             = "/w17.contrib.marketing.MarketingMutation/EnsureContact"
+	MarketingMutation_SetContactConsent_FullMethodName         = "/w17.contrib.marketing.MarketingMutation/SetContactConsent"
+	MarketingMutation_SetContactUnsubscribed_FullMethodName    = "/w17.contrib.marketing.MarketingMutation/SetContactUnsubscribed"
+	MarketingMutation_SetContactSentBlacklisted_FullMethodName = "/w17.contrib.marketing.MarketingMutation/SetContactSentBlacklisted"
+	MarketingMutation_EraseContact_FullMethodName              = "/w17.contrib.marketing.MarketingMutation/EraseContact"
+	MarketingMutation_ClaimReconciliation_FullMethodName       = "/w17.contrib.marketing.MarketingMutation/ClaimReconciliation"
+	MarketingMutation_TakeOverReconciliation_FullMethodName    = "/w17.contrib.marketing.MarketingMutation/TakeOverReconciliation"
+	MarketingMutation_RenewReconciliation_FullMethodName       = "/w17.contrib.marketing.MarketingMutation/RenewReconciliation"
+	MarketingMutation_FinishReconciliation_FullMethodName      = "/w17.contrib.marketing.MarketingMutation/FinishReconciliation"
 )
 
 // MarketingMutationClient is the client API for MarketingMutation service.
@@ -37,6 +47,42 @@ type MarketingMutationClient interface {
 	// ForgetSentEventsBefore — drop what the stream can no longer redeliver.
 	// Gated brevo.
 	ForgetSentEventsBefore(ctx context.Context, in *ForgetSentEventsBeforeReq, opts ...grpc.CallOption) (*ForgetSentEventsBeforeResp, error)
+	// SetContactEmail — the user's last address, lower-cased by the caller.
+	// Gated brevo.
+	SetContactEmail(ctx context.Context, in *SetContactEmailReq, opts ...grpc.CallOption) (*ContactWriteResp, error)
+	// EnsureContact — the user's row, created empty when there is none, so
+	// the conditional writes below have a row to hold back. Gated brevo.
+	EnsureContact(ctx context.Context, in *EnsureContactReq, opts ...grpc.CallOption) (*ContactWriteResp, error)
+	// SetContactConsent — the last consent auth announced and when it was
+	// decided, only when it is newer than the one kept: two deliveries at once
+	// (or two replicas) cannot let an older decision overwrite a newer one.
+	// NotFound = the kept one is as new or newer. Gated brevo.
+	SetContactConsent(ctx context.Context, in *SetContactConsentReq, opts ...grpc.CallOption) (*ContactUpdatedResp, error)
+	// SetContactUnsubscribed — the person unsubscribed in the tool, kept when
+	// it is later than the unsubscribe kept. NotFound = an older one. Gated
+	// brevo.
+	SetContactUnsubscribed(ctx context.Context, in *SetContactUnsubscribedReq, opts ...grpc.CallOption) (*ContactUpdatedResp, error)
+	// SetContactSentBlacklisted — the emailBlacklisted the plugin last wrote
+	// to (or found in) the tool, which tells a Brevo-side unsubscribe from the
+	// plugin's own blacklisting. Gated brevo.
+	SetContactSentBlacklisted(ctx context.Context, in *SetContactSentBlacklistedReq, opts ...grpc.CallOption) (*ContactWriteResp, error)
+	// EraseContact — the account was erased: the address goes, and the row
+	// stays as the record that it did. Gated brevo.
+	EraseContact(ctx context.Context, in *EraseContactReq, opts ...grpc.CallOption) (*ContactWriteResp, error)
+	// ClaimReconciliation — start a one-time job. A UNIQUE_VIOLATION is a
+	// job some replica started already. Gated brevo.
+	ClaimReconciliation(ctx context.Context, in *ClaimReconciliationReq, opts ...grpc.CallOption) (*ReconciliationResp, error)
+	// TakeOverReconciliation — claim an unfinished job that this owner holds
+	// already (its run failed and is retried), or whose claim was not renewed
+	// since stale_before (its replica is gone). NotFound = finished, or another
+	// replica holds it. Gated brevo.
+	TakeOverReconciliation(ctx context.Context, in *TakeOverReconciliationReq, opts ...grpc.CallOption) (*ReconciliationResp, error)
+	// RenewReconciliation — the owner is still at it. NotFound = it lost the
+	// claim. Gated brevo.
+	RenewReconciliation(ctx context.Context, in *ReconciliationOwnerReq, opts ...grpc.CallOption) (*ReconciliationResp, error)
+	// FinishReconciliation — the job is done; it does not run again. Gated
+	// brevo.
+	FinishReconciliation(ctx context.Context, in *ReconciliationOwnerReq, opts ...grpc.CallOption) (*ReconciliationResp, error)
 }
 
 type marketingMutationClient struct {
@@ -67,6 +113,106 @@ func (c *marketingMutationClient) ForgetSentEventsBefore(ctx context.Context, in
 	return out, nil
 }
 
+func (c *marketingMutationClient) SetContactEmail(ctx context.Context, in *SetContactEmailReq, opts ...grpc.CallOption) (*ContactWriteResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ContactWriteResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_SetContactEmail_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketingMutationClient) EnsureContact(ctx context.Context, in *EnsureContactReq, opts ...grpc.CallOption) (*ContactWriteResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ContactWriteResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_EnsureContact_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketingMutationClient) SetContactConsent(ctx context.Context, in *SetContactConsentReq, opts ...grpc.CallOption) (*ContactUpdatedResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ContactUpdatedResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_SetContactConsent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketingMutationClient) SetContactUnsubscribed(ctx context.Context, in *SetContactUnsubscribedReq, opts ...grpc.CallOption) (*ContactUpdatedResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ContactUpdatedResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_SetContactUnsubscribed_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketingMutationClient) SetContactSentBlacklisted(ctx context.Context, in *SetContactSentBlacklistedReq, opts ...grpc.CallOption) (*ContactWriteResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ContactWriteResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_SetContactSentBlacklisted_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketingMutationClient) EraseContact(ctx context.Context, in *EraseContactReq, opts ...grpc.CallOption) (*ContactWriteResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ContactWriteResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_EraseContact_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketingMutationClient) ClaimReconciliation(ctx context.Context, in *ClaimReconciliationReq, opts ...grpc.CallOption) (*ReconciliationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReconciliationResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_ClaimReconciliation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketingMutationClient) TakeOverReconciliation(ctx context.Context, in *TakeOverReconciliationReq, opts ...grpc.CallOption) (*ReconciliationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReconciliationResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_TakeOverReconciliation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketingMutationClient) RenewReconciliation(ctx context.Context, in *ReconciliationOwnerReq, opts ...grpc.CallOption) (*ReconciliationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReconciliationResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_RenewReconciliation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketingMutationClient) FinishReconciliation(ctx context.Context, in *ReconciliationOwnerReq, opts ...grpc.CallOption) (*ReconciliationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReconciliationResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_FinishReconciliation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MarketingMutationServer is the server API for MarketingMutation service.
 // All implementations should embed UnimplementedMarketingMutationServer
 // for forward compatibility.
@@ -79,6 +225,42 @@ type MarketingMutationServer interface {
 	// ForgetSentEventsBefore — drop what the stream can no longer redeliver.
 	// Gated brevo.
 	ForgetSentEventsBefore(context.Context, *ForgetSentEventsBeforeReq) (*ForgetSentEventsBeforeResp, error)
+	// SetContactEmail — the user's last address, lower-cased by the caller.
+	// Gated brevo.
+	SetContactEmail(context.Context, *SetContactEmailReq) (*ContactWriteResp, error)
+	// EnsureContact — the user's row, created empty when there is none, so
+	// the conditional writes below have a row to hold back. Gated brevo.
+	EnsureContact(context.Context, *EnsureContactReq) (*ContactWriteResp, error)
+	// SetContactConsent — the last consent auth announced and when it was
+	// decided, only when it is newer than the one kept: two deliveries at once
+	// (or two replicas) cannot let an older decision overwrite a newer one.
+	// NotFound = the kept one is as new or newer. Gated brevo.
+	SetContactConsent(context.Context, *SetContactConsentReq) (*ContactUpdatedResp, error)
+	// SetContactUnsubscribed — the person unsubscribed in the tool, kept when
+	// it is later than the unsubscribe kept. NotFound = an older one. Gated
+	// brevo.
+	SetContactUnsubscribed(context.Context, *SetContactUnsubscribedReq) (*ContactUpdatedResp, error)
+	// SetContactSentBlacklisted — the emailBlacklisted the plugin last wrote
+	// to (or found in) the tool, which tells a Brevo-side unsubscribe from the
+	// plugin's own blacklisting. Gated brevo.
+	SetContactSentBlacklisted(context.Context, *SetContactSentBlacklistedReq) (*ContactWriteResp, error)
+	// EraseContact — the account was erased: the address goes, and the row
+	// stays as the record that it did. Gated brevo.
+	EraseContact(context.Context, *EraseContactReq) (*ContactWriteResp, error)
+	// ClaimReconciliation — start a one-time job. A UNIQUE_VIOLATION is a
+	// job some replica started already. Gated brevo.
+	ClaimReconciliation(context.Context, *ClaimReconciliationReq) (*ReconciliationResp, error)
+	// TakeOverReconciliation — claim an unfinished job that this owner holds
+	// already (its run failed and is retried), or whose claim was not renewed
+	// since stale_before (its replica is gone). NotFound = finished, or another
+	// replica holds it. Gated brevo.
+	TakeOverReconciliation(context.Context, *TakeOverReconciliationReq) (*ReconciliationResp, error)
+	// RenewReconciliation — the owner is still at it. NotFound = it lost the
+	// claim. Gated brevo.
+	RenewReconciliation(context.Context, *ReconciliationOwnerReq) (*ReconciliationResp, error)
+	// FinishReconciliation — the job is done; it does not run again. Gated
+	// brevo.
+	FinishReconciliation(context.Context, *ReconciliationOwnerReq) (*ReconciliationResp, error)
 }
 
 // UnimplementedMarketingMutationServer should be embedded to have
@@ -93,6 +275,36 @@ func (UnimplementedMarketingMutationServer) RecordSentEvent(context.Context, *Re
 }
 func (UnimplementedMarketingMutationServer) ForgetSentEventsBefore(context.Context, *ForgetSentEventsBeforeReq) (*ForgetSentEventsBeforeResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method ForgetSentEventsBefore not implemented")
+}
+func (UnimplementedMarketingMutationServer) SetContactEmail(context.Context, *SetContactEmailReq) (*ContactWriteResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetContactEmail not implemented")
+}
+func (UnimplementedMarketingMutationServer) EnsureContact(context.Context, *EnsureContactReq) (*ContactWriteResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method EnsureContact not implemented")
+}
+func (UnimplementedMarketingMutationServer) SetContactConsent(context.Context, *SetContactConsentReq) (*ContactUpdatedResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetContactConsent not implemented")
+}
+func (UnimplementedMarketingMutationServer) SetContactUnsubscribed(context.Context, *SetContactUnsubscribedReq) (*ContactUpdatedResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetContactUnsubscribed not implemented")
+}
+func (UnimplementedMarketingMutationServer) SetContactSentBlacklisted(context.Context, *SetContactSentBlacklistedReq) (*ContactWriteResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetContactSentBlacklisted not implemented")
+}
+func (UnimplementedMarketingMutationServer) EraseContact(context.Context, *EraseContactReq) (*ContactWriteResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method EraseContact not implemented")
+}
+func (UnimplementedMarketingMutationServer) ClaimReconciliation(context.Context, *ClaimReconciliationReq) (*ReconciliationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClaimReconciliation not implemented")
+}
+func (UnimplementedMarketingMutationServer) TakeOverReconciliation(context.Context, *TakeOverReconciliationReq) (*ReconciliationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method TakeOverReconciliation not implemented")
+}
+func (UnimplementedMarketingMutationServer) RenewReconciliation(context.Context, *ReconciliationOwnerReq) (*ReconciliationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RenewReconciliation not implemented")
+}
+func (UnimplementedMarketingMutationServer) FinishReconciliation(context.Context, *ReconciliationOwnerReq) (*ReconciliationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method FinishReconciliation not implemented")
 }
 func (UnimplementedMarketingMutationServer) testEmbeddedByValue() {}
 
@@ -150,6 +362,186 @@ func _MarketingMutation_ForgetSentEventsBefore_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MarketingMutation_SetContactEmail_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetContactEmailReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).SetContactEmail(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_SetContactEmail_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).SetContactEmail(ctx, req.(*SetContactEmailReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketingMutation_EnsureContact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EnsureContactReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).EnsureContact(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_EnsureContact_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).EnsureContact(ctx, req.(*EnsureContactReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketingMutation_SetContactConsent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetContactConsentReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).SetContactConsent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_SetContactConsent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).SetContactConsent(ctx, req.(*SetContactConsentReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketingMutation_SetContactUnsubscribed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetContactUnsubscribedReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).SetContactUnsubscribed(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_SetContactUnsubscribed_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).SetContactUnsubscribed(ctx, req.(*SetContactUnsubscribedReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketingMutation_SetContactSentBlacklisted_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetContactSentBlacklistedReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).SetContactSentBlacklisted(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_SetContactSentBlacklisted_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).SetContactSentBlacklisted(ctx, req.(*SetContactSentBlacklistedReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketingMutation_EraseContact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EraseContactReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).EraseContact(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_EraseContact_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).EraseContact(ctx, req.(*EraseContactReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketingMutation_ClaimReconciliation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClaimReconciliationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).ClaimReconciliation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_ClaimReconciliation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).ClaimReconciliation(ctx, req.(*ClaimReconciliationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketingMutation_TakeOverReconciliation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TakeOverReconciliationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).TakeOverReconciliation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_TakeOverReconciliation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).TakeOverReconciliation(ctx, req.(*TakeOverReconciliationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketingMutation_RenewReconciliation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReconciliationOwnerReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).RenewReconciliation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_RenewReconciliation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).RenewReconciliation(ctx, req.(*ReconciliationOwnerReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketingMutation_FinishReconciliation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReconciliationOwnerReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).FinishReconciliation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_FinishReconciliation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).FinishReconciliation(ctx, req.(*ReconciliationOwnerReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MarketingMutation_ServiceDesc is the grpc.ServiceDesc for MarketingMutation service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -165,9 +557,49 @@ var MarketingMutation_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ForgetSentEventsBefore",
 			Handler:    _MarketingMutation_ForgetSentEventsBefore_Handler,
 		},
+		{
+			MethodName: "SetContactEmail",
+			Handler:    _MarketingMutation_SetContactEmail_Handler,
+		},
+		{
+			MethodName: "EnsureContact",
+			Handler:    _MarketingMutation_EnsureContact_Handler,
+		},
+		{
+			MethodName: "SetContactConsent",
+			Handler:    _MarketingMutation_SetContactConsent_Handler,
+		},
+		{
+			MethodName: "SetContactUnsubscribed",
+			Handler:    _MarketingMutation_SetContactUnsubscribed_Handler,
+		},
+		{
+			MethodName: "SetContactSentBlacklisted",
+			Handler:    _MarketingMutation_SetContactSentBlacklisted_Handler,
+		},
+		{
+			MethodName: "EraseContact",
+			Handler:    _MarketingMutation_EraseContact_Handler,
+		},
+		{
+			MethodName: "ClaimReconciliation",
+			Handler:    _MarketingMutation_ClaimReconciliation_Handler,
+		},
+		{
+			MethodName: "TakeOverReconciliation",
+			Handler:    _MarketingMutation_TakeOverReconciliation_Handler,
+		},
+		{
+			MethodName: "RenewReconciliation",
+			Handler:    _MarketingMutation_RenewReconciliation_Handler,
+		},
+		{
+			MethodName: "FinishReconciliation",
+			Handler:    _MarketingMutation_FinishReconciliation_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "mutations/marketing_mutation.proto",
 }
 
-// emit-sha256: 98495c93f2651190c8adc5fd5b387f8c4c591319a8033750432ed31d2145d59a
+// emit-sha256: 18d783afeafa4226c6c7015cb01392e88d0ea4d35812e6fd65a96ae9ea4c8151

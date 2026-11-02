@@ -5,6 +5,7 @@ package pb
 
 import (
 	redact "github.com/wandering-compiler/sdk/go/lib/redact"
+	protowire "google.golang.org/protobuf/encoding/protowire"
 )
 
 // What of each message the request event stream and the telemetry sinks
@@ -15,9 +16,11 @@ func init() {
 		"w17.contrib.auth.GetUserByEmailResp":                {},
 		"w17.contrib.auth.GetUserByTokenReq":                 {},
 		"w17.contrib.auth.GetUserByTokenResp":                {},
+		"w17.contrib.auth.GetExpiredTokenReq":                {},
+		"w17.contrib.auth.GetExpiredTokenResp":               {},
 		"w17.contrib.auth.GetUserPermissionsReq":             {},
 		"w17.contrib.auth.GetUserPermissionsResp":            {},
-		"w17.contrib.auth.GetUserByTokenWithPermissionsReq":  {},
+		"w17.contrib.auth.GetUserByTokenWithPermissionsReq":  {Skip: []protowire.Number{1 /* legacy_token */}},
 		"w17.contrib.auth.GetUserRoleGrantsReq":              {},
 		"w17.contrib.auth.GetUserRoleGrantsResp":             {},
 		"w17.contrib.auth.ListRoleGrantsReq":                 {},
@@ -31,17 +34,24 @@ func init() {
 		"w17.contrib.auth.GetDefaultRolesReq":                {},
 		"w17.contrib.auth.GetDefaultRolesResp":               {},
 		"w17.contrib.auth.ListRolesReq":                      {},
+		"w17.contrib.auth.ListRealmSuperadminsReq":           {},
+		"w17.contrib.auth.ListRealmSuperadminsResp":          {},
+		"w17.contrib.auth.RealmSuperadminRow":                {},
 		"w17.contrib.auth.ListRolesResp":                     {},
 		"w17.contrib.auth.GetRoleReq":                        {},
 		"w17.contrib.auth.GetUserByIdReq":                    {},
 		"w17.contrib.auth.GetUserByIdResp":                   {},
+		"w17.contrib.auth.GetDeviceTrustRevokedAtReq":        {},
+		"w17.contrib.auth.GetDeviceTrustRevokedAtResp":       {},
 		"w17.contrib.auth.GetUserTenantReq":                  {},
 		"w17.contrib.auth.GetUserTenantResp":                 {},
 		"w17.contrib.auth.GetTenantBySlugReq":                {},
 		"w17.contrib.auth.GetTenantBySlugResp":               {},
 		"w17.contrib.auth.GetTenantByDomainReq":              {},
 		"w17.contrib.auth.GetTenantByDomainResp":             {},
+		"w17.contrib.auth.ListUserSignInEventsReq":           {},
+		"w17.contrib.auth.ListUserSignInEventsResp":          {},
 	})
 }
 
-// emit-sha256: 046b1e4ca1e9ed8160774694f057fea15967f5f2df3f3a0f27e00508df780981
+// emit-sha256: 1eed71eee50d880e0ddb9eda7f0b996f2cb0ddace629c88e7f257817d6da23e3

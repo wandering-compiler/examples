@@ -19,6 +19,15 @@ msgstr "Active"
 msgid "Add {name}"
 msgstr "Add {name}"
 
+msgid "Admin Revoked"
+msgstr ""
+
+msgid "All Tokens Revoked"
+msgstr ""
+
+msgid "Api Token Revoked"
+msgstr ""
+
 msgid "Apply"
 msgstr "Apply"
 
@@ -39,6 +48,9 @@ msgstr "Clear"
 
 msgid "Close"
 msgstr "Close"
+
+msgid "Code Replayed"
+msgstr ""
 
 msgid "Comment"
 msgstr "Comment"
@@ -79,6 +91,9 @@ msgstr "Deleted"
 msgid "Detail"
 msgstr "Detail"
 
+msgid "Device Revoked"
+msgstr ""
+
 msgid "Directory"
 msgstr "Directory"
 
@@ -109,6 +124,9 @@ msgstr "Enter your credentials to continue."
 msgid "Flag as reviewed"
 msgstr "Flag as reviewed"
 
+msgid "Grant Revoked"
+msgstr ""
+
 msgid "In Progress"
 msgstr "In Progress"
 
@@ -129,6 +147,9 @@ msgstr "Light theme"
 
 msgid "Loading…"
 msgstr "Načítání…"
+
+msgid "Logout"
+msgstr ""
 
 msgid "Next"
 msgstr "Next"
@@ -166,14 +187,23 @@ msgstr "Overwrite the status note on every selected milestone?"
 msgid "Password"
 msgstr "Password"
 
+msgid "Password Changed"
+msgstr ""
+
+msgid "Password Reset"
+msgstr ""
+
 msgid "Previous"
 msgstr "Previous"
 
 msgid "Provenance"
 msgstr "Provenance"
 
-msgid "Re-enable the selected accounts?"
-msgstr "Re-enable the selected accounts?"
+msgid "Re-enable the selected accounts? An erased account stays disabled."
+msgstr ""
+
+msgid "Refresh Reused"
+msgstr ""
 
 msgid "Rows per page"
 msgstr "Řádků na stránku"
@@ -247,14 +277,26 @@ msgstr "This page has no list configured."
 msgid "This sign-in link cannot be used here. Sign in again."
 msgstr ""
 
+msgid "Token Revoked"
+msgstr ""
+
 msgid "Total users"
 msgstr "Total users"
 
 msgid "Unavailable"
 msgstr "Unavailable"
 
+msgid "Unbound Session"
+msgstr ""
+
 msgid "Urgency"
 msgstr "Urgency"
+
+msgid "User Disabled"
+msgstr ""
+
+msgid "User Erased"
+msgstr ""
 
 msgid "Username"
 msgstr "Username"

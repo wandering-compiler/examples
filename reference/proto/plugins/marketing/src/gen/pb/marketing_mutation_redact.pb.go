@@ -11,11 +11,23 @@ import (
 // may write: the fields left out of a record (sensitive by label or type).
 func init() {
 	redact.Register(map[string]redact.Plan{
-		"w17.contrib.marketing.RecordSentEventReq":         {},
-		"w17.contrib.marketing.RecordSentEventResp":        {},
-		"w17.contrib.marketing.ForgetSentEventsBeforeReq":  {},
-		"w17.contrib.marketing.ForgetSentEventsBeforeResp": {},
+		"w17.contrib.marketing.RecordSentEventReq":           {},
+		"w17.contrib.marketing.RecordSentEventResp":          {},
+		"w17.contrib.marketing.ForgetSentEventsBeforeReq":    {},
+		"w17.contrib.marketing.ForgetSentEventsBeforeResp":   {},
+		"w17.contrib.marketing.SetContactEmailReq":           {},
+		"w17.contrib.marketing.SetContactConsentReq":         {},
+		"w17.contrib.marketing.SetContactUnsubscribedReq":    {},
+		"w17.contrib.marketing.EraseContactReq":              {},
+		"w17.contrib.marketing.ContactWriteResp":             {},
+		"w17.contrib.marketing.EnsureContactReq":             {},
+		"w17.contrib.marketing.SetContactSentBlacklistedReq": {},
+		"w17.contrib.marketing.ContactUpdatedResp":           {},
+		"w17.contrib.marketing.ClaimReconciliationReq":       {},
+		"w17.contrib.marketing.TakeOverReconciliationReq":    {},
+		"w17.contrib.marketing.ReconciliationOwnerReq":       {},
+		"w17.contrib.marketing.ReconciliationResp":           {},
 	})
 }
 
-// emit-sha256: 16f9ac3785a3338c4fae102583359b8dd580215fc5cacb2d09e3fa4de500e612
+// emit-sha256: b8131f0f3c00c77116cd49d4b51cd7fa43949358884937e5c969a5c1e3bb4ed1

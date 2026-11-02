@@ -13,11 +13,8 @@ syntax = "proto3";
 // `@project` / `@pkg` / `@self` expanded.
 //
 // Tables target the project's lock-declared default connection
-// (per Phase A) — this v1 plugin omits any
-// (w17.module).connection annotation. Phase M (alias maps)
-// adds a `(w17.module).connection = "main"` annotation that
-// the activation maps to a real project connection; until
-// then, default-connection binding stays implicit.
+// — this plugin omits any (w17.module).connection annotation,
+// so default-connection binding stays implicit.
 //
 // Identifier strategy — every PK + every FK across this plugin
 // is UUID (string carrier, type: UUID). PKs carry
@@ -53,6 +50,11 @@ enum TokenType {
   TOKEN_TYPE_UNSPECIFIED = 0;
   TOKEN_TYPE_SESSION     = 1;
   TOKEN_TYPE_API         = 2;
+  // An access token the OAuth authorization server issued an MCP client
+  // (oauth_server): mcp_only, for one resource. Its permissions are the
+  // user's roles of realm `mcp`, so a bot's `api` roles never reach an MCP
+  // client and an MCP client never holds a person's session roles.
+  TOKEN_TYPE_MCP         = 3;
 }
 
 // User — the project-wide identity record. One row per
@@ -79,7 +81,6 @@ message User {
   // unverified user (a project can layer that policy on); the column just
   // records the fact for projects that want to gate features on it. Field-
   // gated `email_verification`: absent entirely when the feature is off.
-  // E1.
   google.protobuf.Timestamp email_verified_at = 6 [
     (w17.field) = { type: DATETIME, null: true },
     (w17.contrib.plugin_feature_field) = "email_verification"
@@ -128,11 +129,13 @@ message User {
 
   // disabled_at — when an admin soft-disabled this account (the
   // Django `is_active` analogue, inverted: NULL = active, non-NULL =
-  // disabled). SignIn rejects a disabled account BEFORE issuing a
-  // token (handlers/user_admin.go overrides the signInDisabledGate
-  // seam); existing session/API tokens keep working until they
-  // expire or are revoked — disable is a login gate, not a session
-  // kill (delete the account, or revoke its tokens, for that). Set /
+  // disabled). A disabled account holds no working credential:
+  // SignIn and every other path that issues a token refuse it, and
+  // Authenticate refuses every token it already has, session or API,
+  // for as long as it stays disabled (handlers/user_admin.go overrides
+  // the signInDisabledGate seam). DisableUsers also revokes the tokens
+  // (USER_DISABLED); the check on every request covers one minted after
+  // it. Set /
   // cleared by AuthMutation.DisableUsers / EnableUsers from the admin
   // Users page. Field-gated `user_admin`: absent entirely when the
   // feature is off, so the always-compiled SignIn handler must reach
@@ -162,6 +165,160 @@ message User {
     (w17.field) = { zero_is_value: true, default_int: 0 },
     (w17.contrib.plugin_feature_field) = "service_account"
   ];
+
+  // device_trust_revoked_at — when this account's device trust was last
+  // revoked as a whole. A Device trusted at or before this instant no longer
+  // counts as trusted (`two_factor_scope=new_devices` challenges it again).
+  // NULL = never revoked.
+  //
+  // Written by the statements that end an account's credentials, in the same
+  // statement: a password CHANGE (UpdateUserPasswordIfUnchanged) and
+  // disabling the account (DisableUsers). A changed password usually means
+  // "someone else may have the old one", and a device that person signed in
+  // from must not keep skipping the second factor. A stamp on the account,
+  // not a write to every Device row: those statements belong to other
+  // features and stay single-statement.
+  //
+  // Base tier since device identity became base (it was gated `devices`).
+  google.protobuf.Timestamp device_trust_revoked_at = 10 [
+    (w17.field) = { type: DATETIME, null: true }
+  ];
+
+  // erased_at — when this account was ERASED on request (GDPR): NULL = never.
+  // Erasure is not a delete. The row stays, with its history, and its personal
+  // data is replaced in place: the email becomes `erased-<id>@erased.invalid`
+  // (unique, non-routable, and it frees the old address for a new sign-up),
+  // the password hash becomes the unusable `!`, and the account is disabled,
+  // its tokens and devices revoked. Set once by AuthMutation.EraseUser, never
+  // cleared: EnableUsers and UpdateUser leave an erased account alone, so it
+  // cannot be turned back into a usable one. Field-gated `user_admin`, like
+  // disabled_at: the erase action belongs to the admin Users page.
+  google.protobuf.Timestamp erased_at = 11 [
+    (w17.field) = { type: DATETIME, null: true },
+    (w17.contrib.plugin_feature_field) = "user_admin"
+  ];
+
+  // marketing_consent — whether the user agreed to marketing messages. FALSE
+  // until they say yes: an account that was never asked has not consented.
+  // Set only by the user themselves (AuthService.SetMarketingConsent); it
+  // says nothing about what is recorded about them, only whether they may be
+  // written to. Authenticate answers it (AuthResp.marketing_consent), so the
+  // request stream carries it to whoever sends the messages. Field-gated
+  // `marketing_consent`.
+  bool marketing_consent = 12 [
+    (w17.field) = { default_auto: FALSE },
+    (w17.contrib.plugin_feature_field) = "marketing_consent"
+  ];
+
+  // marketing_consent_at — when the user last gave or withdrew it: the
+  // record of WHEN, which consent law asks a controller to be able to show.
+  // NULL = never asked, which a UI reads to know whether to ask.
+  google.protobuf.Timestamp marketing_consent_at = 13 [
+    (w17.field) = { type: DATETIME, null: true },
+    (w17.contrib.plugin_feature_field) = "marketing_consent"
+  ];
+
+  // allowed_cidrs — where a machine account's bearer tokens are accepted
+  // from: comma-separated CIDRs (an address alone is its /32 or /128), as
+  // SetBotAllowlist canonicalised them. Empty = anywhere. Checked against the
+  // client address the gateway resolved through its trusted proxies
+  // (x-w17-client-addr), never against a header the client wrote; a request
+  // with no resolved address is refused while a list is set. Only a bot's
+  // BEARER tokens: a bound token proves its key, and a person is never
+  // limited by address. Field-gated `bot_token_guard`.
+  string allowed_cidrs = 14 [
+    (w17.field) = { type: CHAR, max_len: 2048, blank: true },
+    (w17.contrib.plugin_feature_field) = "bot_token_guard"
+  ];
+
+  // sign_in_failures / sign_in_window_at — SignIn's per-account guess
+  // budget (sign-in/failure-budget): the password attempts counted since
+  // sign_in_window_at, the start of the current window. Every attempt is
+  // counted before its password is checked, in one statement
+  // (CountSignInAttempt); a correct password resets both
+  // (ResetSignInAttempts). Base tier.
+  int64 sign_in_failures = 15 [(w17.field) = { type: COUNTER, default_int: 0 }];
+  google.protobuf.Timestamp sign_in_window_at = 16 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+// BotTokenUse — where and for what a machine account's bearer token is used:
+// one row per (token, client address, surface, method), with the first and
+// the latest use. A summary, not a request log: it grows only with a new
+// combination, so a bot calling the same method from the same place in a loop
+// keeps one row. last_used_at is written at most once a minute per row (like
+// UserToken.last_used_at). Nothing is deleted. Gated `bot_token_guard`.
+message BotTokenUse {
+  option (w17.db.table) = {
+    indexes: [
+      { unique: true, fields: [ { name: "token_id" }, { name: "address" }, { name: "surface" }, { name: "method" } ] },
+      { fields: [ { name: "user_id" }, { name: "last_used_at" } ] }
+    ]
+  };
+  option (w17.contrib.plugin_feature) = "bot_token_guard";
+
+  string id       = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string token_id = 2 [(w17.field) = { type: UUID }];
+  string user_id  = 3 [(w17.field) = { type: UUID }];
+  // The client address the gateway resolved; empty where it has none (the
+  // CLI surface, MCP over stdio).
+  string address  = 4 [(w17.field) = { type: CHAR, max_len: 45, blank: true }];
+  // rest | events | rpc | mcp | admin | cli (x-w17-surface).
+  string surface  = 5 [(w17.field) = { type: CHAR, max_len: 16, blank: true }];
+  // The called RPC's full method, or the route (x-w17-method).
+  string method   = 6 [(w17.field) = { type: CHAR, max_len: 255, blank: true }];
+  google.protobuf.Timestamp first_used_at = 7 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp last_used_at  = 8 [(w17.field) = { type: DATETIME, default_auto: NOW }];
+}
+
+// RevokeReason — why a UserToken stopped being valid before its expiry. The
+// first revocation wins: every revoking statement is guarded on
+// `revoked_at IS NULL`, so a later one never rewrites the time, the reason or
+// who did it.
+//
+// Values are explicit and never reused; a token revoked by a path added later
+// gets a new number. NONE (0) is the stored value of every live token, which is
+// why it is a real value (`zero_is_value`) rather than the proto3 sentinel.
+// Prefixed because proto enum values share the package's scope.
+enum RevokeReason {
+  // Not revoked.
+  REVOKE_REASON_NONE = 0;
+  // The holder signed out (Logout).
+  REVOKE_REASON_LOGOUT = 1;
+  // The owner revoked their own API token (RevokeApiToken).
+  REVOKE_REASON_API_TOKEN_REVOKED = 2;
+  // A password change signed the account out of its other sessions.
+  REVOKE_REASON_PASSWORD_CHANGED = 3;
+  // A password reset ended every token of the account.
+  REVOKE_REASON_PASSWORD_RESET = 4;
+  // The device the token is bound to was revoked (RevokeDevice and the
+  // revoke-others / revoke-all calls).
+  REVOKE_REASON_DEVICE_REVOKED = 5;
+  // A session bound to no device (minted before device binding), ended by
+  // RevokeOtherDevices / RevokeAllDevices.
+  REVOKE_REASON_UNBOUND_SESSION = 6;
+  // An operator revoked it from the admin Sessions page.
+  REVOKE_REASON_ADMIN_REVOKED = 7;
+  // The account was disabled (DisableUsers).
+  REVOKE_REASON_USER_DISABLED = 8;
+  // The account was erased (EraseUser).
+  REVOKE_REASON_USER_ERASED = 9;
+  // Project code revoked it through the low-level AuthMutation.RevokeToken
+  // (by the token itself, e.g. while rotating it).
+  REVOKE_REASON_TOKEN_REVOKED = 10;
+  // Project code revoked every token of the account through
+  // AuthMutation.RevokeAllUserTokens.
+  REVOKE_REASON_ALL_TOKENS_REVOKED = 11;
+  // A refresh token of an OAuth grant was presented after it had been used:
+  // a copy is in someone else's hands, so the whole grant ends
+  // (oauth_server, OAuth 2.1 §4.3.1).
+  REVOKE_REASON_REFRESH_REUSED = 12;
+  // The OAuth grant the token belongs to was revoked — by the user
+  // ("connected apps"), an operator, or the client (RFC 7009).
+  REVOKE_REASON_GRANT_REVOKED = 13;
+  // The authorization code that minted the session was presented again
+  // after it was redeemed: a copy in someone else's hands (OAuth 2.1
+  // §4.1.3).
+  REVOKE_REASON_CODE_REPLAYED = 14;
 }
 
 // AccountKind separates people from machines.
@@ -222,8 +379,11 @@ message Tenant {
 
 // UserToken — bearer-token record. Project clients trade an
 // (email, password) sign-in for a long-lived token they send
-// on subsequent requests. v1: tokens are immortal until
-// explicitly revoked or rotated.
+// on subsequent requests. A token ends when it expires or is
+// revoked, and in both cases the row STAYS: revoking sets
+// revoked_at (+ revoked_by, revoke_reason), and nothing deletes a
+// token, so the table is the history of every credential the
+// account ever held.
 //
 // v1 LIMITATION — no DB-level FK constraint on `user_id`. The
 // FK target table name is `<registered_as>_user`, but plugin
@@ -238,20 +398,16 @@ message UserToken {
   option (w17.db.table) = {};
 
   string id = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  // Phase N3 — storage codegen mutation-handler preamble fills
-  // this column app-side via `randstr.Token(64)` at INSERT time
-  // (the `(w17.field).default_auto = CRYPTO_RANDOM` annotation
-  // triggers the synthesized SetPair + bind). Caller's
-  // IssueTokenReq carries NO `token` field — the codegen owns
-  // the value end-to-end.
-  // SECRET, not CHAR: this IS the bearer credential, so the admin masks it
-  // and leaves it out of list views. max_len + unique stay — the stored value
-  // is the token itself, so it has a real width and a real identity.
+  // LEGACY: the bearer token in the clear, as rows minted before 0.1.0-rc.24
+  // still hold it. Nothing writes it any more — a token is stored only as
+  // token_hash — and the lookup that finds a row by it moves the row to the
+  // hash and clears this column (UpgradeTokenHash). A later release drops it,
+  // which ends every legacy token that was never used in between.
   string token = 2 [(w17.field) = {
     type: SECRET
     max_len: 64
     unique: true
-    default_auto: CRYPTO_RANDOM
+    null: true
   }];
   string user_id = 3 [
     (w17.field) = { type: UUID },
@@ -296,64 +452,417 @@ message UserToken {
     (w17.contrib.plugin_feature_field) = "api_token"
   ];
 
-  // device_id — the Device this session belongs to, behind `devices`.
-  // Stamped by IssueToken, whose SET list carries `?feature(devices)
-  // device_id = :device_id`; "log out a device" = delete every token
-  // carrying its id. Field-gated: dropped entirely with the rest of the
-  // device surface, exactly like the api_token columns above — a project
-  // not tracking devices carries no device_id column, and the same
-  // IssueToken emits an INSERT that never names it.
+  // device_id — the Device this token is BOUND to (DPoP's `cnf.jkt`, kept
+  // as a reference to the Device row whose `thumbprint` is the binding).
+  // Every session mint path (SignIn, SignUp, ConfirmSignUp, VerifyMfa,
+  // OAuthExchange, CliToken) stamps it from the request's proof of
+  // possession; an API token (CreateApiToken, IssueBotToken) from the public
+  // key its request names — the program that will use it. Authenticate
+  // refuses a token whose device's thumbprint is not the one the request's
+  // proof was signed with, and a token with none.
   // No DB-level FK (the activation-rename caveat that applies to every
   // cross-table id ref in this plugin — see the message header).
-  // Nullable: not every token is device-bound. SignUp / API tokens leave
-  // the field unset, so device_id stays NULL there; only the sign-in
-  // paths under `devices` (SignIn / VerifyMfa) pass one. A NOT NULL
-  // column would break SignUp the moment `devices` is enabled.
+  // Nullable only for rows minted before device binding (refused by
+  // Authenticate, so their holders sign in once more) and for MCP-flow
+  // tokens (mcp_only).
   string device_id = 9 [
     (w17.field) = { type: UUID, null: true },
+    (w17.db.column) = { index: true }
+  ];
+
+  // mcp_only — a token issued by the MCP OAuth 2.1 flow, for MCP clients,
+  // which cannot sign DPoP proofs yet. It is accepted WITHOUT a proof, and
+  // only on the MCP surface: Authenticate takes a proofless request only
+  // when the gateway marks it `x-w17-surface: mcp` (a gateway-owned key no
+  // client can set), and only for a token with this flag. Refused on every
+  // other surface, with or without a proof (it is bound to no device). The
+  // authorization server that mints it sets it; nothing else does — every
+  // other mint leaves the FALSE default. Base tier.
+  bool mcp_only = 11 [(w17.field) = { default_auto: FALSE }];
+
+  // token_hash — sha256 (hex) of the bearer token, the only form a token is
+  // stored in. The handler that mints a token generates it, stores this
+  // hash and hands the token to the caller once; a lookup hashes the
+  // presented bearer and compares. Whoever reads the table or a backup gets
+  // nothing they can present. SECRET keeps it out of admin list views even
+  // so. NULL only on a legacy row (see `token`).
+  string token_hash = 10 [(w17.field) = {
+    type: SECRET
+    max_len: 64
+    unique: true
+    null: true
+  }];
+
+  // revoked_at — when the token was revoked; NULL = not revoked. BASE-TIER,
+  // like expires_at: revocation applies to every token. Every revoking
+  // statement is an UPDATE guarded on `revoked_at IS NULL`, so the first
+  // revocation's time, reason and actor stand and a later one changes
+  // nothing. Every token lookup refuses a revoked token exactly as it refuses
+  // an expired one (`revoked_at IS NULL` beside the expiry predicate), and the
+  // miss-path lookup reads the row so the key's holder hears SESSION_EXPIRED
+  // (or DEVICE_REVOKED) as for an expired token, and anyone else the opaque
+  // refusal. Never cleared: a revoked token is not revived.
+  google.protobuf.Timestamp revoked_at = 12 [(w17.field) = { type: DATETIME, null: true }];
+
+  // revoked_by — the account that revoked it: the holder for a logout, a
+  // password change or a device revocation, the operator for an admin
+  // revocation or erasure. NULL when the system did it (a password reset, a
+  // disable, the low-level RevokeToken primitive). No DB-level FK (the
+  // activation-rename caveat in the message header).
+  string revoked_by = 13 [(w17.field) = { type: UUID, null: true }];
+
+  // revoke_reason — why (RevokeReason). NONE on a live token. Written in the
+  // same statement as revoked_at, so the two never disagree.
+  RevokeReason revoke_reason = 14 [(w17.field) = { type: ENUM, zero_is_value: true, default_int: 0 }];
+
+  // public_computer — the session was signed in with "this is a public
+  // computer" (SignIn, VerifyMfa through its challenge, OAuthExchange,
+  // SignUp, ConfirmSignUp): it got the public session lifetime
+  // (public_session_ttl_seconds) and its device was not made trusted. Shown
+  // on the admin Sessions page; the client keeps such a token in session
+  // storage only. FALSE for every other token. Base tier.
+  bool public_computer = 15 [(w17.field) = { default_auto: FALSE }];
+
+  // approved_by_device_id — the Device row of the session that AUTHORIZED a
+  // token bound to another key: for a CLI session (cli_login's CliToken) the
+  // browser session that approved the login (CliAuthorize); for an API token
+  // the caller's device that created it (CreateApiToken) or, for a machine
+  // account's token, the operator's device that issued it (IssueBotToken).
+  // The token itself is bound to the CLI's, the program's or the machine
+  // account's own key (device_id); the authorizing device is a different one
+  // and is recorded here, so an operator can see "approved from device X".
+  // Revoking that device revokes the tokens it approved of the same owner: a
+  // stolen session could otherwise approve a key of the thief's that outlives
+  // the revocation. CLI sessions end with every revocation of the device
+  // (RevokeDeviceTokens' "approved" op); API tokens when that ONE device is
+  // revoked on purpose — the owner's RevokeDevice, the admin Devices revoke
+  // (RevokeApprovedApiTokens) — and not by RevokeOtherDevices /
+  // RevokeAllDevices, which spare API tokens. A machine account's token is
+  // owned by the machine account, not the operator, so revoking the
+  // operator's device leaves it (it is bound to the account's one key; revoke
+  // the account's device to end it). NULL on every
+  // other token, and when the authorizing request was bound to no device. Base
+  // tier. No DB-level FK (the activation-rename caveat in the message header).
+  string approved_by_device_id = 16 [(w17.field) = { type: UUID, null: true }];
+
+  // bearer — a machine account's token that works WITHOUT a proof of
+  // possession (device/bot-bearer): bound to no device, presented as
+  // `Bearer`, and recognisable by its prefix (botBearerPrefix) so that
+  // Authenticate still refuses every other proofless request before the
+  // lookup. Only IssueBotToken's keyless path sets it (through IssueApiToken's bearer),
+  // only for an account of kind BOT, and always with an expires_at. The flag on
+  // the row is what authorizes the request, never the prefix: a token without
+  // the flag is refused proofless whatever it looks like. FALSE on every other
+  // token. Gated service_account.
+  bool bearer = 17 [
+    (w17.field) = { default_auto: FALSE },
+    (w17.contrib.plugin_feature_field) = "service_account"
+  ];
+
+  // stepped_up_at — when the person last confirmed their password IN THIS
+  // SESSION (ConfirmPassword), so a sensitive action can ask "did they prove
+  // they are themselves just now?" rather than only "is the token valid?". A
+  // stolen token and its key do not carry the password. NULL until the first
+  // confirmation. Gated step_up.
+  google.protobuf.Timestamp stepped_up_at = 18 [
+    (w17.field) = { type: DATETIME, null: true },
+    (w17.contrib.plugin_feature_field) = "step_up"
+  ];
+  // step_up_attempts / step_up_locked_until — the guess budget of
+  // ConfirmPassword in this session. The step-up exists for the case where
+  // the token is in the wrong hands, and those hands would otherwise have an
+  // unbounded online oracle for the password: five wrong ones in a row lock
+  // it for fifteen minutes; a confirmation resets the count. Gated step_up.
+  int64 step_up_attempts = 19 [
+    (w17.field) = { type: COUNTER, default_int: 0 },
+    (w17.contrib.plugin_feature_field) = "step_up"
+  ];
+  google.protobuf.Timestamp step_up_locked_until = 20 [
+    (w17.field) = { type: DATETIME, null: true },
+    (w17.contrib.plugin_feature_field) = "step_up"
+  ];
+
+  // --- oauth_server: an access token the authorization server issued ---
+  // oauth_grant_id — the OAuth grant (a "connected app") the token belongs
+  // to; revoking the grant revokes it. NULL on every other token.
+  string oauth_grant_id = 21 [
+    (w17.field) = { type: UUID, null: true },
     (w17.db.column) = { index: true },
-    (w17.contrib.plugin_feature_field) = "devices"
+    (w17.contrib.plugin_feature_field) = "oauth_server"
+  ];
+  // resource — the protected resource (RFC 8707) the token is for: an MCP
+  // surface's public URL. Authenticate refuses it on any other resource
+  // (the gateway names the one it serves, x-w17-mcp-resource). NULL on every
+  // other token.
+  string resource = 22 [
+    (w17.field) = { type: URL, max_len: 2048, null: true },
+    (w17.contrib.plugin_feature_field) = "oauth_server"
+  ];
+  // org_id — the organization the user chose on the consent page: an MCP
+  // client sends no W17-Org, so the token carries its organization, and a
+  // W17-Org naming another is refused. NULL without organizations.
+  string oauth_org_id = 23 [
+    (w17.field) = { type: UUID, null: true },
+    (w17.contrib.plugin_feature_field) = "oauth_server"
+  ];
+
+  // --- step_up_code: a step-up proven with the second factor ---
+  // step_up_code_hash — the hash of the code RequestStepUpCode mailed for
+  // THIS session (a person without an authenticator), so only the session
+  // that asked can spend it; ConfirmStepUp clears it. NULL when none is out.
+  // step_up_code_sent_at — when it was sent: the code expires
+  // mfa_code_ttl_seconds later, and a new one is sent at most once a minute.
+  // Gated step_up_code.
+  string step_up_code_hash = 24 [
+    (w17.field) = { type: CHAR, max_len: 255, null: true },
+    (w17.contrib.plugin_feature_field) = "step_up_code"
+  ];
+  google.protobuf.Timestamp step_up_code_sent_at = 25 [
+    (w17.field) = { type: DATETIME, null: true },
+    (w17.contrib.plugin_feature_field) = "step_up_code"
   ];
 }
 
-// Device — a tracked device/session anchor for a user. Created or
-// refreshed at sign-in; `trusted_at` marks it as seen-and-passed-2FA,
-// the signal `two_factor`'s new-device mode reads. `identifier` is the
-// stable client device-id when the request carries `X-Device-Id`,
-// else a server-derived UA+IP fingerprint hash — best-effort, so churn
-// reads as a new device (an extra 2FA prompt, the safe failure). Behind
-// `devices`: present only when the activation enables device tracking.
+// Device — one (user, device key) pair. Base tier: every session is bound
+// to one.
 //
-// (user_id, identifier) is unique so sign-in upserts deterministically.
-// Same no-DB-FK caveat as the rest of the plugin (user_id is app-
-// enforced; see UserToken).
+// A device is identified by the RFC 7638 JWK thumbprint of the public key
+// its client signs DPoP proofs with (base64url SHA-256, 43 characters). The
+// gateway verifies the proof and hands the thumbprint to the plugin as the
+// `x-w17-dpop-jkt` metadata; no header, body field or envelope value a
+// client sends can name a device. The private key never leaves the client.
+//
+// Keyed by (user_id, thumbprint), not by the thumbprint alone: trust and
+// revocation belong to the pair, so one browser shared by two accounts is
+// two rows, and one account's trust never carries over to the other.
+//
+// `trusted_at` is the signal `two_factor_scope=new_devices` reads: set by a
+// sign-in that passed the second factor, renewed by a later one, and void
+// when it is not later than User.device_trust_revoked_at. Holding the key
+// is the proof, so there is no separate trust token to steal.
+//
+// `revoked_at` ends the pair for good: every token bound to it is refused,
+// and a sign-in with the same key is refused with DEVICE_REVOKED. The row
+// is never deleted and never revived — a client answers DEVICE_REVOKED by
+// generating a new key, which is a new device (and passes the second factor
+// like any new device).
+//
+// Same no-DB-FK caveat as the rest of the plugin (user_id is app-enforced;
+// see UserToken).
 message Device {
   option (w17.db.table) = {
     indexes: [
-      { unique: true, fields: [{ name: "user_id" }, { name: "identifier" }] }
+      { unique: true, fields: [{ name: "user_id" }, { name: "thumbprint" }] }
     ]
   };
-  option (w17.contrib.plugin_feature) = "devices";
+
+  // 3 = identifier (a client-chosen X-Device-Id or a UA+IP fingerprint),
+  // 9 = trust_token_hash (a server-issued trust token the client replayed):
+  // both replaced by the key thumbprint.
+  reserved 3, 9;
+  reserved "identifier", "trust_token_hash";
 
   string id          = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
   string user_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
-  string identifier  = 3 [(w17.field) = { type: CHAR, max_len: 128 }]; // device-id header | fp hash
+  // RFC 7638 JWK thumbprint of the device's public key: base64url (no
+  // padding) of a SHA-256, always 43 characters. NULL only on a LEGACY row —
+  // a device recorded before device binding, named by a client-chosen id
+  // and never by a key. Such rows are kept as history (nothing in the auth
+  // tables is deleted) and can never be used: no key matches them, so
+  // RegisterDevice never finds one, a token bound to one resolves with no
+  // thumbprint and is refused, and ListUserDevices leaves them out. The
+  // unique (user_id, thumbprint) index does not make NULLs collide (the
+  // default NULLS DISTINCT of every supported dialect), so any number of
+  // legacy rows coexist while live keys stay unique per user.
+  string thumbprint  = 10 [(w17.field) = { type: CHAR, max_len: 43, null: true }];
   string label       = 4 [(w17.field) = { type: CHAR, max_len: 255, blank: true }]; // UA-derived friendly name
-  // IP-as-string (CHAR, not INET): the fingerprint path may resolve no
-  // client IP (absent X-Forwarded-For), and an empty string is a valid
-  // CHAR but not a valid INET. Stored for display in ListDevices only.
+  // IP-as-string (CHAR, not INET): the request may carry no client IP
+  // (absent X-Forwarded-For), and an empty string is a valid CHAR but not a
+  // valid INET. Stored for display in ListDevices only.
   string ip          = 5 [(w17.field) = { type: CHAR, max_len: 45, blank: true }];
   google.protobuf.Timestamp trusted_at   = 6 [(w17.field) = { type: DATETIME, null: true }];
   google.protobuf.Timestamp last_seen_at = 7 [(w17.field) = { type: DATETIME, default_auto: NOW }];
   google.protobuf.Timestamp created_at   = 8 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
-  // C2 — SHA-256 hex of the SERVER-issued device-trust token. A device
-  // counts as trusted (new-device 2FA is skipped) only when the client
-  // presents a trust token whose hash matches this column — proving
-  // possession of a server-minted secret rather than a client-chosen
-  // X-Device-Id. Empty until a login mints one; rotated every login.
-  // Stored hashed (never the plaintext) so a DB read can't impersonate a
-  // device.
-  string trust_token_hash = 9 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
+  // When the pair was revoked; NULL = live. Set once, never cleared.
+  google.protobuf.Timestamp revoked_at   = 11 [(w17.field) = { type: DATETIME, null: true }];
+  // api_key — a PROGRAM's key, named in an API-token request (CreateApiToken,
+  // IssueBotToken) rather than proved by a sign-in. Set when the row is
+  // created and never changed: a key is a program's or a signed-in client's
+  // for good. A program key never signs in (every sign-in mint refuses it),
+  // a signed-in client's key is never taken for an API token, and the
+  // owner's device management (`devices`: ListDevices, RevokeOtherDevices,
+  // RevokeAllDevices) lists and revokes signed-in devices only — an API
+  // token ends by RevokeApiToken, by revoking its device on the admin
+  // Devices page, or by revoking the one device that created it. Base tier.
+  bool api_key = 12 [(w17.field) = { default_auto: FALSE }];
+  // sign_in_failures / sign_in_window_at — the device's own guess budget
+  // for its account, spent only while the account's is (sign-in/
+  // failure-budget): then only a key that already signed in to the account
+  // may try, and this bounds how often. Reset with the account's by a
+  // correct password. Base tier.
+  int64 sign_in_failures = 13 [(w17.field) = { type: COUNTER, default_int: 0 }];
+  google.protobuf.Timestamp sign_in_window_at = 14 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+// SignInMethod — which mint path a SignInEvent records. Values are explicit
+// and never reused; a mint path added later gets a new number. Prefixed
+// because proto enum values share the package's scope.
+enum SignInMethod {
+  SIGN_IN_METHOD_UNSPECIFIED = 0;
+  // SignIn: an address and a password (the admin's sign-in included).
+  SIGN_IN_METHOD_PASSWORD = 1;
+  // VerifyMfa: the second step of a password sign-in (two_factor).
+  SIGN_IN_METHOD_MFA = 2;
+  // SignUp when it issues a session (sign_up_turnkey without
+  // sign_up_confirmation). A parked registration signs nobody in and is not
+  // recorded; its ConfirmSignUp is.
+  SIGN_IN_METHOD_SIGN_UP = 3;
+  // ConfirmSignUp (sign_up_confirmation).
+  SIGN_IN_METHOD_SIGN_UP_CONFIRM = 4;
+  // OAuthExchange: the page redeems the provider's login code (oauth).
+  SIGN_IN_METHOD_OAUTH = 5;
+  // CliToken: a CLI redeems the code a signed-in browser approved
+  // (cli_login).
+  SIGN_IN_METHOD_CLI = 6;
+  // CreateApiToken: a signed-in person issues an API token bound to a
+  // program's key (api_token). Not a sign-in of the request's own client, but
+  // a credential minted for a device all the same; the row names that
+  // device, and the client address and user agent of the creating request.
+  SIGN_IN_METHOD_API_TOKEN = 7;
+  // IssueBotToken: an operator issues a machine account's token bound to its
+  // key (service_account). The row names the machine account and its device,
+  // and the operator's client address and user agent.
+  SIGN_IN_METHOD_BOT_TOKEN = 8;
+  // ExchangeOAuthToken: an application the user approved on the consent
+  // page redeems its code or refreshes its token (oauth_server) — an MCP
+  // client, or w17ctl's browser login. The row names the client.
+  SIGN_IN_METHOD_AUTHORIZED_APP = 9;
+}
+
+// SignInOutcome — how a sign-in attempt ended. One value per refusal the mint
+// paths make; what the caller was told is unchanged (most of these reach the
+// wire as the same opaque refusal — the history is the operator's, never the
+// caller's). Values are explicit and never reused.
+enum SignInOutcome {
+  SIGN_IN_OUTCOME_UNSPECIFIED = 0;
+  // A session was issued.
+  SIGN_IN_OUTCOME_OK = 1;
+  // The password was right and a second factor was asked for (SignIn
+  // answered mfa_required). VerifyMfa records how it ended.
+  SIGN_IN_OUTCOME_MFA_REQUIRED = 2;
+  // No account has the address (user_id NULL).
+  SIGN_IN_OUTCOME_UNKNOWN_ACCOUNT = 3;
+  // The account exists; the password was wrong.
+  SIGN_IN_OUTCOME_WRONG_PASSWORD = 4;
+  // The account is disabled (or erased).
+  SIGN_IN_OUTCOME_ACCOUNT_DISABLED = 5;
+  // A machine account (service_account) tried a password sign-in.
+  SIGN_IN_OUTCOME_MACHINE_ACCOUNT = 6;
+  // The request proved no device key (DEVICE_PROOF_REQUIRED).
+  SIGN_IN_OUTCOME_DEVICE_PROOF_REQUIRED = 7;
+  // The device key was revoked for this account (DEVICE_REVOKED; for an API
+  // or machine-account token, the key its request names: DEVICE_KEY_REVOKED).
+  SIGN_IN_OUTCOME_DEVICE_REVOKED = 8;
+  // A single-use code was wrong, unknown, expired or spent: the second
+  // factor's code, a sign-up confirmation code, an OAuth login code or its
+  // verifier, a CLI code, its verifier or its redirect.
+  SIGN_IN_OUTCOME_WRONG_CODE = 9;
+  // The code's attempt budget was spent (an MFA challenge, a pending
+  // sign-up).
+  SIGN_IN_OUTCOME_TOO_MANY_ATTEMPTS = 10;
+  // VerifyMfa signed by another key than the challenged sign-in.
+  SIGN_IN_OUTCOME_OTHER_DEVICE = 11;
+  // Too many second-factor challenges for the account in the window.
+  SIGN_IN_OUTCOME_RATE_LIMITED = 12;
+  // A registration named an address that has an account (EMAIL_TAKEN).
+  SIGN_IN_OUTCOME_EMAIL_TAKEN = 13;
+  // A registration refused by a sign-up gate: the reserved domain, the
+  // allowlist, invite-only, an invitation for another address, an unknown
+  // tenant.
+  SIGN_IN_OUTCOME_SIGN_UP_REFUSED = 14;
+  // OAuth refused to link an identity: the account or the provider has not
+  // verified the address.
+  SIGN_IN_OUTCOME_UNVERIFIED_EMAIL = 15;
+  // A registered CLI-login client failed its authentication or is revoked.
+  SIGN_IN_OUTCOME_CLIENT_REFUSED = 16;
+  // The service failed (a store or coordinator outage, an unexpected
+  // error): the caller was told so, or refused.
+  SIGN_IN_OUTCOME_ERROR = 17;
+  // Any other refusal (for example a CLI exchange after the approving
+  // session ended).
+  SIGN_IN_OUTCOME_REFUSED = 18;
+  // An API or machine-account token was asked for with no key, a key that is
+  // not a public P-256 or Ed25519 JWK (a private one included), or — for a
+  // machine account — another key than the one it has (DEVICE_KEY_REQUIRED,
+  // DEVICE_KEY_INVALID, BOT_KEY_MISMATCH).
+  SIGN_IN_OUTCOME_KEY_REFUSED = 19;
+  // SignIn's guess budget was spent: the account's, from a key that never
+  // signed in to it, or the device's own (sign-in/failure-budget).
+  SIGN_IN_OUTCOME_THROTTLED = 20;
+}
+
+// SignInEvent — the sign-in history: one row per sign-in attempt on every
+// mint path (SignInMethod above), whatever its outcome, failures included.
+// Base tier.
+//
+// APPEND-ONLY. A row is written once (RecordSignInEvent) and never updated
+// or deleted, with one exception: an erasure (user_admin's EraseUsers)
+// pseudonymises the personal columns of the erased account's rows — address,
+// ip and user_agent — in place (EraseSignInEvents), and the row stays.
+//
+// A successful sign-in writes its row in the transaction that mints the
+// session, so a session never exists without its history row; a refusal
+// writes it on its own, and a failure to write it is logged and does not
+// change the refusal the caller gets. An attempt at an account erased
+// before it is written without the client's address and user agent, and
+// with the account's placeholder address.
+//
+//   user_id     the account the attempt reached; NULL when it reached none
+//               (an unknown address, or a refusal before any account was
+//               looked up).
+//   address     what the attempt named, normalised (trimmed, lower-case):
+//               the typed address of a password sign-in or registration,
+//               the provider's address of an OAuth one; blank when the path
+//               names none (VerifyMfa, CliToken).
+//   device_id   the Device ROW's UUID the attempt registered or found (as
+//               UserToken.device_id is, for the session it issued); NULL
+//               when it got no further (a wrong password registers no
+//               device). NOT the device_id of events and AuthResp: that
+//               one is the key thumbprint, the column below.
+//   thumbprint  the key that signed the request's proof (the gateway's
+//               x-w17-dpop-jkt), even with no Device row; NULL without a
+//               proof. This is the id the events and AuthResp.device_id
+//               carry, so it is the column to match them on.
+//   ip, user_agent  the client address (first X-Forwarded-For hop) and user
+//               agent, as Device.ip / Device.label take them. Display only.
+//
+// No DB-level FK on user_id / device_id (the activation-rename caveat, see
+// UserToken).
+message SignInEvent {
+  option (w17.db.table) = {
+    indexes: [
+      { fields: [{ name: "user_id" }, { name: "created_at" }] },
+      { fields: [{ name: "address" }, { name: "created_at" }] }
+    ]
+  };
+
+  string id = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  google.protobuf.Timestamp created_at = 2 [
+    (w17.field) = { type: DATETIME, default_auto: NOW, immutable: true },
+    (w17.db.column) = { index: true }
+  ];
+  string user_id    = 3 [(w17.field) = { type: UUID, null: true }];
+  string address    = 4 [(w17.field) = { type: CHAR, max_len: 320, blank: true }];
+  string device_id  = 5 [(w17.field) = { type: UUID, null: true }];
+  string thumbprint = 6 [(w17.field) = { type: CHAR, max_len: 43, null: true }];
+  string ip         = 7 [(w17.field) = { type: CHAR, max_len: 45, blank: true }];
+  string user_agent = 8 [(w17.field) = { type: CHAR, max_len: 255, blank: true }];
+  SignInMethod  method  = 9 [(w17.field) = { type: ENUM }];
+  SignInOutcome outcome = 10 [(w17.field) = { type: ENUM }];
+  // The attempt asked for a public-computer session (SignIn, OAuthExchange,
+  // SignUp, ConfirmSignUp; VerifyMfa takes it from its challenge). Recorded
+  // whatever the outcome.
+  bool public_computer = 11 [(w17.field) = { default_auto: FALSE }];
 }
 
 // OAuthProvider — an admin-configured OAuth2/OIDC server, behind `oauth`.
@@ -371,9 +880,9 @@ message Device {
 // cannot seed `secret` (the console holds no key), so seeding the legacy
 // column is how a dev sandbox gets one until it is removed in a later release.
 //
-// It was PASSWORD until 2026-09-09 — the annotation for a hash you VERIFY
-// against, whose rules all follow from that. The one that bit: fixtures refuse
-// a PASSWORD value that is not PHC-encoded, correctly for a credential and
+// It is not PASSWORD — the annotation for a hash you VERIFY against, whose
+// rules all follow from that. The one that would bite: fixtures refuse a
+// PASSWORD value that is not PHC-encoded, correctly for a credential and
 // wrongly here, so this row could not be seeded at all.
 //
 // Operators CRUD these through the generated admin. Same no-DB-FK caveat as
@@ -407,7 +916,21 @@ message OAuthProvider {
     (w17.db.column) = { index: true },
     (w17.contrib.plugin_feature_field) = "tenant_scope"
   ];
-  string secret = 15 [(w17.field) = { type: CRYPTED_SECRET, null: true }]; // the client secret
+  string secret = 15 [(w17.field) = { type: CRYPTED_SECRET, null: true }]; // the client secret, or the key it is signed with (team_id)
+
+  // response_mode — how the provider comes back to the callback: empty, by
+  // the query string of a GET; or "form_post", by an HTML form the browser
+  // POSTs (POST /auth/oauth/{name}/callback). Sign in with Apple requires
+  // form_post whenever the scopes ask for the address, which this plugin
+  // needs.
+  string response_mode = 16 [(w17.field) = { type: CHAR, max_len: 16, blank: true }];
+  // team_id + key_id — a provider whose client secret is a JWT signed with a
+  // key it issued (Sign in with Apple). `secret` then holds that key (a
+  // PKCS#8 PEM, ES256), and each token exchange sends a JWT minted from it:
+  // iss team_id, sub client_id, aud the token endpoint's origin, kid key_id,
+  // valid five minutes. Both empty = `secret` is the client secret itself.
+  string team_id = 17 [(w17.field) = { type: CHAR, max_len: 64, blank: true }];
+  string key_id  = 18 [(w17.field) = { type: CHAR, max_len: 64, blank: true }];
 }
 
 // OAuthIdentity — links a local User to an external IdP subject, behind
@@ -443,9 +966,20 @@ message OAuthIdentity {
 // writes it any more: a row that still has it is read through the old key
 // once and moved into `seed` (MoveTotpSeed), so the column empties itself as
 // people sign in. It, the knob and lib/secretbox go in a later release.
+//
+// An authenticator is never deleted. Disabling it, or enrolling a new one in
+// its place, revokes it (RevokeTotpSecret): revoked_at is stamped, the seed and
+// the legacy secret are cleared — a revoked authenticator's seed is not kept
+// usable at rest — and the row stays as the record of when the account had an
+// authenticator. Every reader and every verifying statement reads the live row
+// only (`revoked_at IS NULL`), so a revoked one verifies nothing.
+//
+// One LIVE authenticator per user: the unique index is (user_id, ended_key),
+// and ended_key is '' on the live row and the row's own id once it is revoked
+// (the mechanism every re-addable auth table uses — see ended_key on UserRole).
 message UserTotpSecret {
   option (w17.db.table) = {
-    indexes: [ { unique: true, fields: [{ name: "user_id" }] } ]
+    indexes: [ { unique: true, fields: [{ name: "user_id" }, { name: "ended_key" }] } ]
   };
   option (w17.contrib.plugin_feature) = "two_factor";
 
@@ -469,6 +1003,12 @@ message UserTotpSecret {
   // refuses while locked; a success resets the count.
   int64  stepup_attempts = 8 [(w17.field) = { type: COUNTER, default_int: 0 }];
   google.protobuf.Timestamp stepup_locked_until = 9 [(w17.field) = { type: DATETIME, null: true }];
+  // revoked_at — when the authenticator was disabled or replaced by a new
+  // enrolment. NULL = the live one.
+  google.protobuf.Timestamp revoked_at = 10 [(w17.field) = { type: DATETIME, null: true }];
+  // ended_key — '' while live, the row's own id once revoked; part of the
+  // unique index, so a revoked row frees the user for a new enrolment.
+  string ended_key = 11 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
 }
 
 // UserRecoveryCode — the one-time codes that stand in for the authenticator
@@ -478,6 +1018,10 @@ message UserTotpSecret {
 // so it is looked up by hash rather than verified against a slow hash, and
 // guessing is bounded by the challenge's attempt budget like any MFA code.
 // used_at NULL = still usable; ConsumeRecoveryCode spends one atomically.
+//
+// A set is never deleted. Replacing it (GenerateRecoveryCodes, a new
+// confirmation) or disabling the authenticator revokes the unused codes
+// (revoked_at), and a revoked code is refused exactly like a used one.
 message UserRecoveryCode {
   option (w17.db.table) = {
     indexes: [ { unique: true, fields: [{ name: "user_id" }, { name: "code_hash" }] } ]
@@ -489,6 +1033,10 @@ message UserRecoveryCode {
   string code_hash = 3 [(w17.field) = { type: CHAR, max_len: 64 }]; // hex sha256 of the normalised code
   google.protobuf.Timestamp used_at    = 4 [(w17.field) = { type: DATETIME, null: true }];
   google.protobuf.Timestamp created_at = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  // revoked_at — the set this code belongs to was replaced, or the
+  // authenticator disabled, before the code was used. NULL = still part of
+  // the live set.
+  google.protobuf.Timestamp revoked_at = 6 [(w17.field) = { type: DATETIME, null: true }];
 }
 
 // MfaChallenge — a pending second-factor verification, behind
@@ -513,8 +1061,20 @@ message MfaChallenge {
   // attempts — failed VerifyMfa tries against this challenge. VerifyMfa
   // increments it on every wrong code and refuses once it reaches the
   // lockout threshold, so a 6-digit second factor can't be brute-forced
-  // within the TTL (Q43-auth-mfa).
+  // within the TTL.
   int64 attempts     = 6 [(w17.field) = { type: COUNTER, default_int: 0 }];
+  // thumbprint — the device key that passed the password (SignIn's proof).
+  // VerifyMfa must be signed by the same key: the second factor completes
+  // the sign-in of THAT device, so the session it issues and the trust it
+  // grants land on the key that was challenged. NULL only on a challenge
+  // raised before device binding (refused, like any other key).
+  string thumbprint  = 7 [(w17.field) = { type: CHAR, max_len: 43, null: true }];
+  // public_computer — the challenged SignIn asked for a public-computer
+  // session. VerifyMfa completes the sign-in the SignIn started, so it takes
+  // the choice from here and never from its own request: the session gets the
+  // public lifetime and the device is not trusted, even though the second
+  // factor passed.
+  bool public_computer = 8 [(w17.field) = { default_auto: FALSE }];
 }
 
 // PendingSignUp — a registration that has not yet proved its address
@@ -527,7 +1087,10 @@ message MfaChallenge {
 // or on purpose by someone who knows the address — would block that address for
 // good. Pending rows hold nothing: any number may exist for one address, none
 // of them can sign in, and each dies at expires_at. The first one confirmed
-// becomes the account and the rest are deleted with it.
+// becomes the account (claimed_at) and the rest are ended with it
+// (superseded_at). Nothing deletes a pending row: a claimed, superseded or
+// expired one stays, and every statement that reads a registration as live
+// requires all three to say it is not over.
 //
 // Only hashes are stored: the password the User will get, and the code (the
 // plaintext travels once, in SignUpConfirmationRequested).
@@ -553,6 +1116,30 @@ message PendingSignUp {
     (w17.field) = { type: UUID, null: true },
     (w17.contrib.plugin_feature_field) = "tenant_scope"
   ];
+  // claimed_at — the registration became the account (ClaimPendingSignUp:
+  // one guarded UPDATE, so two confirmations racing on one row get one
+  // account).
+  google.protobuf.Timestamp claimed_at = 9 [(w17.field) = { type: DATETIME, null: true }];
+  // superseded_at — another registration of the same address became the
+  // account first (SupersedePendingSignUpsForEmail, in the confirming
+  // transaction).
+  google.protobuf.Timestamp superseded_at = 10 [(w17.field) = { type: DATETIME, null: true }];
+  // join_org_id / join_kind / join_role — the organization an open
+  // registration on its host joins (org_signup), decided when the
+  // registration is REQUESTED — when it is known whether it came with an
+  // invitation — and written when it is confirmed. NULL / '' = joins none.
+  string join_org_id = 11 [
+    (w17.field) = { type: UUID, null: true },
+    (w17.contrib.plugin_feature_field) = "org_signup"
+  ];
+  string join_kind = 12 [
+    (w17.field) = { type: CHAR, max_len: 32, blank: true, default_string: "" },
+    (w17.contrib.plugin_feature_field) = "org_signup"
+  ];
+  string join_role = 13 [
+    (w17.field) = { type: CHAR, max_len: 128, blank: true, default_string: "" },
+    (w17.contrib.plugin_feature_field) = "org_signup"
+  ];
 }
 
 // PasswordResetToken — a single-use, time-bounded credential the
@@ -560,7 +1147,7 @@ message PendingSignUp {
 // password. Only the SHA-256 hash of the token is stored (a DB read
 // can't reset an account); the plaintext travels once, in the
 // PasswordResetRequested event, for a hand-written delivery channel
-// (e-mail). E1.
+// (e-mail).
 message PasswordResetToken {
   option (w17.db.table) = {};
   option (w17.contrib.plugin_feature) = "password_reset";
@@ -576,7 +1163,7 @@ message PasswordResetToken {
 // EmailVerificationToken — single-use, time-bounded token the
 // `email_verification` flow mints to confirm a user owns their address.
 // Same hashed-at-rest + single-plaintext-delivery contract as
-// PasswordResetToken. E1.
+// PasswordResetToken.
 message EmailVerificationToken {
   option (w17.db.table) = {};
   option (w17.contrib.plugin_feature) = "email_verification";
@@ -595,12 +1182,24 @@ message EmailVerificationToken {
 // CRUD them at runtime. Role assignment to users goes through
 // UserRole; role's permission membership goes through
 // RolePermission.
+//
+// A role is never deleted. DeleteRole stamps deleted_at, revokes every grant
+// of the role (UserRole) and releases its name: ended_key moves from '' to the
+// row's own id, and `name` is unique only together with it, so a new role may
+// take the name. A PRESET role (preset_key set) may be deleted too and keeps
+// its preset_key: the role seed matches the row by that key and rewrites only
+// the columns it declares, never deleted_at, so a deleted preset stays deleted
+// across re-seeds (declare it under a new key to bring it back). The deleted
+// row keeps its id, name, flags and RolePermission rows as the record of what
+// it granted. Every role reader reads live roles only.
 message Role {
-  option (w17.db.table) = {};
+  option (w17.db.table) = {
+    indexes: [ { unique: true, fields: [{ name: "name" }, { name: "ended_key" }] } ]
+  };
   option (w17.contrib.plugin_feature) = "rbac";
 
   string id          = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string name        = 2 [(w17.field) = { type: SLUG, max_len: 100, unique: true }];
+  string name        = 2 [(w17.field) = { type: SLUG, max_len: 100 }];
   string description = 3 [(w17.field) = { type: TEXT, max_len: 500, blank: true }];
   google.protobuf.Timestamp created_at = 4 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
 
@@ -669,7 +1268,7 @@ message Role {
   // from the declaration — so a change in how that derivation is spelled
   // re-minted every id, the upsert matched nothing, and the INSERT collided
   // with the unique over `name`, taking `stack build` down on any database
-  // old enough to hold the previous ids (two consumers, 2026-09-24).
+  // old enough to hold the previous ids.
   //
   // NULL stays NULL-able and PostgreSQL treats NULLs as DISTINCT, so the
   // customer's own rows — the whole point of this column — are untouched by
@@ -701,10 +1300,9 @@ message Role {
   // declaration asked for, so both queries ask this column before they
   // honour a NULL.
   //
-  // This comment used to name "the project's own role-assignment surface"
-  // as the reader, and no such reader existed — the column was written by
-  // the seed and read by nothing, so `scope: ORG` was a declaration with
-  // no enforcement point anywhere (T2-5 pass #11, D11-3). Enforcement sits
+  // The project has no role-assignment surface that reads this column; a
+  // column written by the seed and read by nothing would make `scope: ORG`
+  // a declaration with no enforcement point anywhere. Enforcement sits
   // on the READ side deliberately: a write-side check would only bind rows
   // written after it, while the queries decide what every existing row
   // means, every time they run.
@@ -713,6 +1311,39 @@ message Role {
   bool org_scoped = 11 [
     (w17.field) = { default_auto: FALSE },
     (w17.contrib.plugin_feature_field) = "org_membership"
+  ];
+
+  // deleted_at — when DeleteRole retired the role. NULL = live.
+  google.protobuf.Timestamp deleted_at = 12 [(w17.field) = { type: DATETIME, null: true }];
+
+  // ended_key — '' while the row is live, the row's own id once it has ended
+  // (here: deleted). It is part of the unique index over the row's natural
+  // key, so the ended row keeps every column and still frees that key for a
+  // new live row: every live row shares the one value '', so two live rows
+  // still collide, and every ended row carries a value of its own.
+  //
+  // The mechanism every auth table whose key must be reusable after a removal
+  // uses (Role.name, Organization.slug, UserRole, OrgMembership,
+  // UserTotpSecret): a full index, which every dialect builds — a partial
+  // `WHERE deleted_at IS NULL` index is refused on MySQL — and a re-add is a
+  // plain INSERT of a new row, so no row is ever rewritten back to live and the
+  // ended rows are the history.
+  string ended_key = 13 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+
+  // org_id — the organization that OWNS this role: a custom role one
+  // organization composed for itself (AuthService.CreateOrgRole). NULL for
+  // every role the seed declares, and for a realm's own roles, which every
+  // organization shares.
+  //
+  // It decides who SEES the role, not where a grant of it applies: that stays
+  // UserRole.org_id, read by the permission queries as before. A custom role
+  // is org-scoped (org_scoped = TRUE) and is offered, accepted and edited only
+  // in its own organization (ListOrgRoleRows), so one company's roles never
+  // appear in another's pickers. Gated org_roles; app-enforced, no DB-level FK.
+  string org_id = 14 [
+    (w17.field) = { type: UUID, null: true },
+    (w17.db.column) = { index: true },
+    (w17.contrib.plugin_feature_field) = "org_roles"
   ];
 }
 
@@ -736,6 +1367,17 @@ message Role {
 // has no FK target by design (the catalog is a proto enum,
 // not a DB table); the CHECK constraint covers the integrity
 // the FK would have provided.
+//
+// A permission is never deleted from a role. RemovePermissionFromRole stamps
+// removed_at (and removed_by), and every permission reader skips a removed
+// row. Unlike the other re-addable tables (see Role.ended_key), RolePermission
+// keeps ONE row per (role, permission) for good, and adding a removed
+// permission back REVIVES it (AddPermissionToRole: an UPSERT that clears
+// removed_at): the unique (role_id, permission_id) index is the conflict
+// target of the platform's role seed (`upsert_on: [role_id, permission_id]`),
+// so it cannot take an ended_key column without breaking every seed. What the
+// revive overwrites is kept in RolePermissionChange, which both mutations
+// append to.
 message RolePermission {
   option (w17.db.table) = {
     indexes: [
@@ -754,6 +1396,43 @@ message RolePermission {
     (w17.db.column) = { index: true }
   ];
   google.protobuf.Timestamp created_at = 4 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  // removed_at / removed_by — the permission was taken from the role, and by
+  // whom (NULL when the caller named nobody). NULL removed_at = granted.
+  google.protobuf.Timestamp removed_at = 5 [(w17.field) = { type: DATETIME, null: true }];
+  string removed_by = 6 [(w17.field) = { type: UUID, null: true }];
+}
+
+// RolePermissionChangeKind — what a RolePermissionChange row records.
+enum RolePermissionChangeKind {
+  ROLE_PERMISSION_CHANGE_KIND_UNSPECIFIED = 0;
+  ROLE_PERMISSION_CHANGE_KIND_ADDED       = 1;
+  ROLE_PERMISSION_CHANGE_KIND_REMOVED     = 2;
+}
+
+// RolePermissionChange — the append-only log of AddPermissionToRole and
+// RemovePermissionFromRole. RolePermission keeps one row per pair and an add
+// revives a removed one (see RolePermission), so the row alone shows only the
+// latest state; this table keeps every change. Written in the same statement
+// list (one transaction) as the change itself, never updated, never deleted.
+// The platform's role seed writes RolePermission directly: with this table
+// present it logs its own changes here (changed_by NULL), each in the same
+// statement as the change; a role seed older than that logs nothing.
+//
+// permission_id is a plain number, not CHECK-constrained to the deployed
+// catalogue like RolePermission's: a log row must survive a permission that
+// was later dropped from the lock.
+message RolePermissionChange {
+  option (w17.db.table) = {};
+  option (w17.contrib.plugin_feature) = "rbac";
+
+  string id            = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string role_id       = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  int32  permission_id = 3 [(w17.field) = { type: NUMBER }];
+  RolePermissionChangeKind kind = 4 [(w17.field) = { type: ENUM }];
+  // changed_by — the account that made the change; NULL when the caller
+  // named nobody (an admin binding, project code).
+  string changed_by    = 5 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp created_at = 6 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
 }
 
 // UserRole — M2M link User ↔ Role. Composite uniqueness prevents
@@ -778,14 +1457,22 @@ message RolePermission {
 //
 // v1 LIMITATION — no DB-level FK on `user_id` / `role_id` / `org_id`
 // (activation-rename caveat applies; see UserToken).
+//
+// A grant is never deleted. Revoking one (RevokeRoleFromUser, a membership's
+// role change or removal, DeleteRole, DeleteOrganization) stamps revoked_at
+// (and revoked_by when the caller is known) and moves ended_key from '' to the
+// row's own id; every index above includes ended_key, so the revoked row stays
+// as the record of the grant while the same grant can be written again — as a
+// NEW row, by the same plain INSERT (see Role.ended_key). Every permission
+// reader counts live grants only (`revoked_at IS NULL`).
 message UserRole {
   option (w17.db.table) = {
     indexes: [
-      { unique: true, fields: [{ name: "user_id" }, { name: "role_id" }],
+      { unique: true, fields: [{ name: "user_id" }, { name: "role_id" }, { name: "ended_key" }],
         plugin_feature_unless: "org_membership" },
-      { unique: true, fields: [{ name: "user_id" }, { name: "role_id" }],
+      { unique: true, fields: [{ name: "user_id" }, { name: "role_id" }, { name: "ended_key" }],
         where: "org_id IS NULL", plugin_feature: "org_membership" },
-      { unique: true, fields: [{ name: "user_id" }, { name: "role_id" }, { name: "org_id" }],
+      { unique: true, fields: [{ name: "user_id" }, { name: "role_id" }, { name: "org_id" }, { name: "ended_key" }],
         where: "org_id IS NOT NULL", plugin_feature: "org_membership" }
     ]
   };
@@ -839,6 +1526,13 @@ message UserRole {
     (w17.db.column) = { index: true },
     (w17.contrib.plugin_feature_field) = "org_membership"
   ];
+
+  // revoked_at / revoked_by — the grant was revoked, and by whom (NULL when
+  // the caller named nobody: an admin binding, a cascade, project code).
+  google.protobuf.Timestamp revoked_at = 6 [(w17.field) = { type: DATETIME, null: true }];
+  string revoked_by = 7 [(w17.field) = { type: UUID, null: true }];
+  // ended_key — '' while live, the row's own id once revoked (Role.ended_key).
+  string ended_key  = 8 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
 }
 
 // TokenPermission — the per-API-token permission subset (least-privilege
@@ -885,8 +1579,15 @@ message TokenPermission {
 // the hot path of an auth check, to hold one label — and `enabled` is per row
 // so an operator can retire a single callback without touching the others.
 //
-// Requested by a consumer who had the whole flow working on loopback and
-// could not deploy it (a consumer, 2026-09-23).
+// A registration is never deleted: revoking one sets `revoked_at`, and the row
+// stays as the record of what was trusted and when. A revoked row is refused by
+// every resolver and cannot be re-enabled, and its (client_id, redirect_uri)
+// pair stays taken: client_id is the operator's choice, so registering the
+// callback again means choosing a new client_id (RegisterClient refuses the
+// old pair with CLIENT_REVOKED rather than reviving it).
+//
+// Without it, a flow that works on loopback cannot be deployed behind any
+// other callback.
 message AuthClient {
   option (w17.db.table) = {
     indexes: [
@@ -915,13 +1616,92 @@ message AuthClient {
   // registration either — loopback is served without one, per RFC 8252 §7.3,
   // and that is the only public-client shape this flow offers.
   //
-  // The flow was built for CLIs (2026-06-28), where a secret cannot be kept
-  // and PKCE alone is the right answer. Extending it past loopback to browser
-  // and server apps (a consumer) carried that shape onto clients that CAN keep
-  // one, which left the redirect allowlist as the only thing standing between
-  // a registration and a delivered code (a consumer).
+  // The flow was built for CLIs, where a secret cannot be kept and PKCE
+  // alone is the right answer. Extending it past loopback to browser and
+  // server apps carries that shape onto clients that CAN keep one, which
+  // without a secret would leave the redirect allowlist as the only thing
+  // standing between a registration and a delivered code.
   string client_secret = 7 [(w17.field) = { type: PASSWORD }];
   google.protobuf.Timestamp created_at = 6 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  // revoked_at — when the registration was revoked (AuthMutation.RevokeAuthClient);
+  // NULL = live. Set once, never cleared. A revoked row is refused by
+  // GetRegisteredRedirect and GetAuthClientSecret exactly as an unregistered
+  // one, and SetAuthClientEnabled leaves it alone, so it cannot come back. Its
+  // pair stays taken (the unique index is not partial: that is refused on
+  // MySQL), so a re-registration uses a new client_id.
+  google.protobuf.Timestamp revoked_at = 8 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+// AuthClientRow — a registered client as the registry answers it: every
+// AuthClient column but `client_secret`, the hash that has one reader
+// (GetAuthClientSecret) and that neither ListClients nor RegisterClient may
+// hand to its caller. A generated query fills every field of its
+// response, so the list answers with a message that has no secret.
+message AuthClientRow {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  string id           = 1 [(w17.field) = { type: UUID }];
+  string client_id    = 2 [(w17.field) = { type: SLUG, max_len: 64 }];
+  string name         = 3 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
+  string redirect_uri = 4 [(w17.field) = { type: URL, max_len: 2048 }];
+  bool   enabled      = 5;
+  google.protobuf.Timestamp created_at = 6 [(w17.field) = { type: DATETIME }];
+  google.protobuf.Timestamp revoked_at = 8 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+// BootstrapClaim — the one row that says the bootstrap administrator has
+// been handed out (rbac).
+//
+// The first account gets the `first_user` roles (typically every
+// permission). Deciding that from "no users yet" alone is a read, and two
+// sign-ups reading it at the same time both see zero. The decision is
+// therefore also a write: the sign-up that gets the first_user roles inserts
+// this row, keyed on a constant, in its own transaction, and a concurrent
+// one that conflicts on the key gets the default roles instead. Once
+// written, the row stays: deleting every account later does not reopen the
+// bootstrap. Only a sign-up writes it, so a seeded first account (or a
+// deployment with users before this table existed) leaves it empty.
+message BootstrapClaim {
+  option (w17.db.table) = {};
+  option (w17.contrib.plugin_feature) = "rbac";
+
+  string slot    = 1 [(w17.field) = { type: SLUG, max_len: 32, pk: true }];
+  string user_id = 2 [(w17.field) = { type: UUID }];
+  google.protobuf.Timestamp created_at = 3 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+}
+
+// OAuthLoginCode — the single-use code an OAuth callback hands the browser
+// instead of a session (oauth).
+//
+// The callback is a browser redirect, so whatever it carries lands in a URL
+// any page can be made to open. A session there would sign the opener in,
+// and a callback link minted by one person would sign in whoever followed
+// it. The code is worth nothing on its own: OAuthExchange redeems it once,
+// within minutes, and only with the PKCE verifier whose challenge the
+// browser that STARTED the flow sent to OAuthAuthorizeURL.
+message OAuthLoginCode {
+  option (w17.db.table) = {};
+  option (w17.contrib.plugin_feature) = "oauth";
+
+  string id             = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  // user_id is the account the code signs in to. NULL when the identity
+  // belongs to no account yet: the callback then keeps the verified
+  // identity below, and OAuthExchange creates the account — with the
+  // invitation the page passes there, never through a URL.
+  optional string user_id = 2 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { index: true }];
+  string code_hash      = 3 [(w17.field) = { type: CHAR, max_len: 64, unique: true }]; // sha256 hex of the code
+  string code_challenge = 4 [(w17.field) = { type: CHAR, max_len: 64 }];                // challengeDigest (sha256 hex) of the authorize step's PKCE challenge
+  google.protobuf.Timestamp expires_at  = 5 [(w17.field) = { type: DATETIME }];
+  google.protobuf.Timestamp consumed_at = 6 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp created_at  = 7 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  // The provider-verified identity, kept for a code whose account does not
+  // exist yet (user_id NULL). The defaults fill the rows written before these
+  // columns existed: login codes are never purged, so adding a NOT NULL
+  // column without one fails the migration of any deployment that has
+  // signed someone in through a provider.
+  optional string provider_id = 8 [(w17.field) = { type: UUID, null: true }];
+  string external_id    = 9  [(w17.field) = { type: CHAR, max_len: 255, blank: true, default_string: "" }];
+  string email          = 10 [(w17.field) = { type: CHAR, max_len: 320, blank: true, default_string: "" }];
+  bool   email_verified = 11 [(w17.field) = { default_auto: FALSE }];
 }
 
 // CliAuthCode is a single-use PKCE authorization code minted by
@@ -931,7 +1711,7 @@ message AuthClient {
 // code is bound to the approving user + the CLI's PKCE challenge and
 // expires in seconds. consumed_at enforces single-use (the atomic
 // ConsumeCliAuthCode flips it under a not-consumed/not-expired WHERE).
-// Mirrors PasswordResetToken (E1).
+// Mirrors PasswordResetToken.
 message CliAuthCode {
   option (w17.db.table) = {};
   option (w17.contrib.plugin_feature) = "cli_login";
@@ -957,43 +1737,227 @@ message CliAuthCode {
   google.protobuf.Timestamp expires_at  = 5 [(w17.field) = { type: DATETIME }];
   google.protobuf.Timestamp consumed_at = 6 [(w17.field) = { type: DATETIME, null: true }];
   google.protobuf.Timestamp created_at  = 7 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  // session_expires_at — when the browser session that APPROVED this code
+  // expires. CliToken mints the CLI's session no later than this, so a CLI
+  // login lasts only as long as the session that granted it. Without the cap
+  // a session could renew itself indefinitely: approve a CLI login shortly
+  // before it expires, receive a fresh full-lifetime session, repeat.
+  //
+  // NULL when the approving session never expires (and on a code minted
+  // before this column existed); CliToken then uses the normal session TTL.
+  google.protobuf.Timestamp session_expires_at = 10 [(w17.field) = { type: DATETIME, null: true }];
+  // approved_by_device_id — the Device row the approving browser session is
+  // bound to (read with its expiry by CliAuthorize). CliToken copies it onto
+  // the CLI session as UserToken.approved_by_device_id; the CLI session is
+  // bound to the CLI's own key, never to this one. NULL when the approving
+  // session is bound to no device, and on a code minted before this column.
+  string approved_by_device_id = 11 [(w17.field) = { type: UUID, null: true }];
+}
+
+// ── oauth_server — the OAuth 2.1 authorization server ─────────
+//
+// MCP clients (Claude, Cursor, …) and w17ctl sign a user in here: the client
+// registers (RFC 7591) or names a metadata document (CIMD), sends the user's
+// browser to the authorization endpoint, the user approves on the project's
+// consent page, and the client exchanges the code (PKCE) for a token. The
+// wire is SDK lib/oauthas in the REST gateway; these rows are the state.
+// Nothing here is deleted: an ended row is stamped.
+
+// OAuthClientKind — how a client came to be known.
+enum OAuthClientKind {
+  OAUTH_CLIENT_KIND_UNSPECIFIED = 0;
+  // Registered itself at the registration endpoint (RFC 7591); its
+  // client_id is one this server minted.
+  OAUTH_CLIENT_KIND_DCR = 1;
+  // Its client_id is an https URL serving its metadata (Client ID Metadata
+  // Document), fetched by this server.
+  OAUTH_CLIENT_KIND_CIMD = 2;
+}
+
+// OAuthGrantKind — what an authorization yields.
+enum OAuthGrantKind {
+  OAUTH_GRANT_KIND_UNSPECIFIED = 0;
+  // An mcp_only access token for one resource, with a refresh token: what an
+  // MCP client asks for (a `resource` on the request).
+  OAUTH_GRANT_KIND_MCP = 1;
+  // A session bound to the key of the program redeeming the code (DPoP),
+  // with no refresh token: w17ctl's browser login (no `resource`, a loopback
+  // redirect, a DPoP proof at the token endpoint).
+  OAUTH_GRANT_KIND_SESSION = 2;
+}
+
+// OAuthDecision — what the user decided on the consent page.
+enum OAuthDecision {
+  OAUTH_DECISION_UNDECIDED = 0;
+  OAUTH_DECISION_APPROVED = 1;
+  OAUTH_DECISION_DENIED = 2;
+}
+
+// OAuthClient — a public OAuth client (no secret: token_endpoint_auth_method
+// none, PKCE is the binding). A confidential client is an AuthClient.
+message OAuthClient {
+  option (w17.db.table) = {};
+  option (w17.contrib.plugin_feature) = "oauth_server";
+
+  string id = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  // client_id — what the client sends: an id this server minted (DCR) or
+  // the https URL of its metadata document (CIMD). Looked up by its hash, so
+  // the unique index stays small whatever the URL's length.
+  string client_id = 2 [(w17.field) = { type: CHAR, max_len: 2048 }];
+  string client_id_hash = 3 [(w17.field) = { type: CHAR, max_len: 64, unique: true }];
+  OAuthClientKind kind = 4 [(w17.field) = { type: ENUM }];
+  // The name and links the consent page shows, as the client stated them.
+  // Unverified: the page shows the redirect's host beside them, which is
+  // the one thing the client cannot choose freely.
+  string client_name = 5 [(w17.field) = { type: CHAR, max_len: 200, blank: true, default_string: "" }];
+  string client_uri = 6 [(w17.field) = { type: CHAR, max_len: 2048, blank: true, default_string: "" }];
+  string logo_uri = 7 [(w17.field) = { type: CHAR, max_len: 2048, blank: true, default_string: "" }];
+  // redirect_uris — every redirect the client may use, one per line; an
+  // authorization request's redirect must equal one of them (a loopback one
+  // with any port, RFC 8252 §7.3).
+  string redirect_uris = 8 [(w17.field) = { type: TEXT, max_len: 20000 }];
+  string software_id = 9 [(w17.field) = { type: CHAR, max_len: 200, blank: true, default_string: "" }];
+  // created_ip — the address that registered it (DCR), for the operator.
+  string created_ip = 10 [(w17.field) = { type: CHAR, max_len: 64, blank: true, default_string: "" }];
+  google.protobuf.Timestamp created_at = 11 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  // metadata_fetched_at — when a CIMD client's document was last read; it is
+  // read again once it is a day old.
+  google.protobuf.Timestamp metadata_fetched_at = 12 [(w17.field) = { type: DATETIME, null: true }];
+  // disabled_at — an operator disabled the client: no new authorization,
+  // and its grants stop refreshing.
+  google.protobuf.Timestamp disabled_at = 13 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+// OAuthAuthorization — one authorization request, from the authorization
+// endpoint to the consent page's decision and the code's redemption. The
+// opaque request id the consent page carries and the code are stored as
+// hashes only.
+message OAuthAuthorization {
+  option (w17.db.table) = {};
+  option (w17.contrib.plugin_feature) = "oauth_server";
+
+  string id = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string request_hash = 2 [(w17.field) = { type: CHAR, max_len: 64, unique: true }];
+  string client_row_id = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  OAuthGrantKind kind = 4 [(w17.field) = { type: ENUM }];
+  string redirect_uri = 5 [(w17.field) = { type: CHAR, max_len: 2048 }];
+  string state = 6 [(w17.field) = { type: CHAR, max_len: 1024, blank: true, default_string: "" }];
+  string code_challenge = 7 [(w17.field) = { type: CHAR, max_len: 128 }];
+  string scope = 8 [(w17.field) = { type: CHAR, max_len: 200, blank: true, default_string: "" }];
+  // resource — the protected resource the token will be for (an MCP grant);
+  // blank for a session grant.
+  string resource = 9 [(w17.field) = { type: CHAR, max_len: 2048, blank: true, default_string: "" }];
+  // issuer — the server's issuer, sent back with the code (RFC 9207 iss).
+  string issuer = 10 [(w17.field) = { type: CHAR, max_len: 2048 }];
+  string created_ip = 11 [(w17.field) = { type: CHAR, max_len: 64, blank: true, default_string: "" }];
+  google.protobuf.Timestamp created_at = 12 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  // expires_at — the request must be decided before this (10 minutes).
+  google.protobuf.Timestamp expires_at = 13 [(w17.field) = { type: DATETIME }];
+  google.protobuf.Timestamp decided_at = 14 [(w17.field) = { type: DATETIME, null: true }];
+  OAuthDecision decision = 15 [(w17.field) = { type: ENUM, zero_is_value: true, default_int: 0 }];
+  // Who decided, in which organization, from which device and session.
+  string user_id = 16 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { index: true }];
+  string org_id = 17 [(w17.field) = { type: UUID, null: true }];
+  string approved_by_device_id = 18 [(w17.field) = { type: UUID, null: true }];
+  // session_expires_at — when the approving session expires: a session
+  // grant mints no later than this (as a CLI login does), so a session
+  // cannot renew itself through this server. NULL = that session never
+  // expires.
+  google.protobuf.Timestamp session_expires_at = 19 [(w17.field) = { type: DATETIME, null: true }];
+  // The code, once approved: its hash, its expiry (60 s) and its
+  // redemption. Burned before PKCE is checked.
+  string code_hash = 20 [(w17.field) = { type: CHAR, max_len: 64, null: true, unique: true }];
+  google.protobuf.Timestamp code_expires_at = 21 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp code_consumed_at = 22 [(w17.field) = { type: DATETIME, null: true }];
+  // The session a session-kind code minted (its token hash), so a replay of
+  // the code ends it (OAuth 2.1 §4.1.3). An MCP code's grant is found by
+  // OAuthGrant.authorization_id instead.
+  string session_token_hash = 23 [(w17.field) = { type: CHAR, max_len: 64, null: true }];
+}
+
+// OAuthGrant — what the user approved for an MCP client: a "connected app".
+// Its access tokens are UserToken rows (mcp_only, oauth_grant_id); its
+// refresh tokens OAuthRefreshToken rows. Revoking it ends both.
+message OAuthGrant {
+  option (w17.db.table) = {};
+  option (w17.contrib.plugin_feature) = "oauth_server";
+
+  string id = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string user_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string org_id = 3 [(w17.field) = { type: UUID, null: true }];
+  string client_row_id = 4 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string authorization_id = 5 [(w17.field) = { type: UUID }];
+  string resource = 6 [(w17.field) = { type: CHAR, max_len: 2048 }];
+  string scope = 7 [(w17.field) = { type: CHAR, max_len: 200, blank: true, default_string: "" }];
+  // The device of the approving session: revoking it revokes the grant.
+  string approved_by_device_id = 8 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp created_at = 9 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  // expires_at — the grant's own end (oauth_grant_max_days); no refresh
+  // outlives it.
+  google.protobuf.Timestamp expires_at = 10 [(w17.field) = { type: DATETIME }];
+  google.protobuf.Timestamp last_used_at = 11 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp revoked_at = 12 [(w17.field) = { type: DATETIME, null: true }];
+  string revoked_by = 13 [(w17.field) = { type: UUID, null: true }];
+  RevokeReason revoke_reason = 14 [(w17.field) = { type: ENUM, zero_is_value: true, default_int: 0 }];
+}
+
+// OAuthRefreshToken — one refresh token of a grant, stored as its hash.
+// Each use spends it and issues the next (rotation); a spent one presented
+// again ends the grant.
+message OAuthRefreshToken {
+  option (w17.db.table) = {};
+  option (w17.contrib.plugin_feature) = "oauth_server";
+
+  string id = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string grant_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string token_hash = 3 [(w17.field) = { type: CHAR, max_len: 64, unique: true }];
+  google.protobuf.Timestamp created_at = 4 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp expires_at = 5 [(w17.field) = { type: DATETIME }];
+  google.protobuf.Timestamp used_at = 6 [(w17.field) = { type: DATETIME, null: true }];
 }
 
 // Organization is a GitHub-style org — a membership boundary an identity
 // can belong to MANY of (a private personal org + a company org + …). The
 // `org_membership` feature's generalization of single-tenant tenant_scope:
 // where Tenant is 1:1 with a User, an Organization is M2M via OrgMembership.
+//
+// An organization is never deleted. DeleteOrganization stamps deleted_at,
+// removes every membership and revokes every grant scoped to it, and releases
+// its slug (ended_key, see Role.ended_key) so a new organization may take it.
+// Every organization reader reads live organizations only, so a deleted one is
+// invisible and cannot be selected.
+//
+// An organization has no owner. Who administers it is decided by roles alone:
+// the person who creates one is made its administrator by an org-scoped role
+// granted on their membership, like anybody they later promote.
 message Organization {
-  option (w17.db.table) = {};
+  option (w17.db.table) = {
+    indexes: [ { unique: true, fields: [{ name: "slug" }, { name: "ended_key" }] } ]
+  };
   option (w17.contrib.plugin_feature) = "org_membership";
 
+  // 6 = owner_id, the account that "owned" the organization. It was read as
+  // root authority — a synthetic wildcard grant over the whole deployed
+  // permission lock, selection of the organization without a membership, a
+  // membership nobody could change — and nothing in the plugin ever wrote it.
+  // Dropped: a project's next generated migration drops the column. The step
+  // is lossy and nothing asks to confirm it (the migration carries only a
+  // drop_column RISK comment); nothing it held granted anything a role should
+  // not.
+  reserved 6;
+  reserved "owner_id";
+
   string id   = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string slug = 2 [(w17.field) = { type: SLUG, max_len: 64, unique: true }];
+  string slug = 2 [(w17.field) = { type: SLUG, max_len: 64 }];
   string name = 3 [(w17.field) = { type: CHAR, max_len: 128 }];
   // kind groups the org for the CLI's picker: "private" (personal) or
   // "company". Free-form (not an enum) so a project can add its own kinds.
   string kind = 4 [(w17.field) = { type: CHAR, max_len: 32, blank: true }];
   google.protobuf.Timestamp created_at = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
-  // owner_id — the account that OWNS this organization, and the only
-  // authorization fact that is not a role grant.
-  //
-  // Ownership is a property of the organization, not a permission somebody
-  // was handed, so it is recorded here rather than as a row in UserRole. A
-  // principal whose id matches this column is granted the whole permission
-  // catalogue by GetUserOrgPermissions — see that query for why the
-  // expansion cannot happen in SQL.
-  //
-  // This deliberately replaces reading `OrgMembership.role == "owner"`.
-  // That column is free-form and documented as such ("project policy owns
-  // the vocabulary; the plugin only passes it through"), so hanging
-  // authorization on one of its values would turn every writer of that
-  // string into a privilege-granting path.
-  //
-  // Nullable, and left so: organizations created before this column existed
-  // have no owner, and an absent owner must read as "nobody is
-  // auto-granted" rather than as an error. App-enforced, no DB-level FK —
-  // the same caveat every other link in this plugin carries.
-  string owner_id = 6 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { index: true }];
+  // deleted_at — when DeleteOrganization retired it. NULL = live.
+  google.protobuf.Timestamp deleted_at = 7 [(w17.field) = { type: DATETIME, null: true }];
+  // ended_key — '' while live, the row's own id once deleted (Role.ended_key).
+  string ended_key = 8 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
 }
 
 // OrgMembership is the M2M link between a User and an Organization, with
@@ -1002,10 +1966,20 @@ message Organization {
 // org's id into scopes[org_id] (Authenticate decorator) after validating
 // the principal's membership — so per-org data isolation reuses the
 // existing (w17.db.scope) machinery with no client-trusted org input.
+//
+// A membership is never deleted. Removing one stamps removed_at (and
+// removed_by) and moves ended_key to the row's own id, so the person can be
+// added again — a new row, by the same INSERT — while the removed row stays as
+// the record (see Role.ended_key). Every membership reader reads live rows
+// only.
 message OrgMembership {
   option (w17.db.table) = {
     indexes: [
-      { unique: true, fields: [{ name: "user_id" }, { name: "org_id" }] }
+      // One live membership per (user, org) — with membership_kinds too: a
+      // membership has ONE kind, so a person is an organization's staff or
+      // its client, never both (they may be staff of one and client of
+      // another).
+      { unique: true, fields: [{ name: "user_id" }, { name: "org_id" }, { name: "ended_key" }] }
     ]
   };
   option (w17.contrib.plugin_feature) = "org_membership";
@@ -1013,10 +1987,26 @@ message OrgMembership {
   string id      = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
   string user_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
   string org_id  = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
-  // role: owner | admin | member. Free-form CHAR — project policy owns the
-  // vocabulary; the plugin only passes it through.
-  string role    = 4 [(w17.field) = { type: CHAR, max_len: 32 }];
+  // role: a label (admin | member, a Role.name). Free-form CHAR — project
+  // policy owns the vocabulary; the plugin only passes it through, and it
+  // grants nothing: authority comes from the roles granted on the membership. An accepted invitation and
+  // the admin's role edit write a Role.name here, so it is as wide as one.
+  string role    = 4 [(w17.field) = { type: CHAR, max_len: 100 }];
   google.protobuf.Timestamp created_at = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  // removed_at / removed_by — the membership was removed, and by whom (NULL
+  // when nobody is known: an admin binding, an organization's deletion).
+  google.protobuf.Timestamp removed_at = 6 [(w17.field) = { type: DATETIME, null: true }];
+  string removed_by = 7 [(w17.field) = { type: UUID, null: true }];
+  // ended_key — '' while live, the row's own id once removed (Role.ended_key).
+  string ended_key  = 8 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+  // kind — which kind of member this is (membership_kinds): `staff`,
+  // `client`, … The project names the kinds, the plugin carries them. An
+  // audience gateway admits a caller only through a membership of a kind it
+  // accepts. '' is a membership of no kind, from before the feature.
+  string kind = 9 [
+    (w17.field) = { type: CHAR, max_len: 32, blank: true, default_string: "" },
+    (w17.contrib.plugin_feature_field) = "membership_kinds"
+  ];
 }
 
 // OrgInvite — a pending invitation for an EMAIL to join an Organization
@@ -1037,21 +2027,15 @@ message OrgMembership {
 // account's email. That leaves a window: someone who guesses an invited
 // address and registers it first inherits the membership and the role.
 //
-// ⚠️ This comment used to say the window "closes when `email_verification` is
-// enabled". IT DOES NOT, and did not on the day it was written. That feature
-// adds a column and two RPCs; it blocks nothing. A project could turn it on,
-// verify nobody, and be told by this file that it was covered — which is what
-// happened: a consumer measured 19 accounts of 19 with the column NULL and
-// asked which side was supposed to enforce it (a consumer).
+// ⚠️ Enabling `email_verification` does NOT close the window. That feature
+// adds a column and two RPCs; it blocks nothing. A project can turn it on,
+// verify nobody, and every account still has the column NULL.
 //
-// What closes it today is `invite_requires_verified_email`, which refuses an
-// acceptance from an unverified account. It is off by default, so the weak
-// proof is still the shipped behaviour and is now named rather than implied.
-//
-// What closes it PROPERLY is moving the proof off the address and onto the
-// link — a single-use token on the invitation, which also removes the need to
-// verify anything. That is a model change, made deliberately rather than
-// guessed at.
+// The proof moved onto the link: an invitation carries a single-use token, and
+// accepting through it (AcceptOrgInvite) needs no proved address. Accepting
+// from the account's own list without the link (AcceptMyOrgInvite) has only
+// the address to go on, and `email_proof_required` (none | derived | full)
+// sets how proved it must be; `none`, the default, leaves the window open.
 //
 // `role` is a Role.name, not free text: accepting writes BOTH the
 // OrgMembership row (carrying this name as its label) and the UserRole grant
@@ -1061,12 +2045,13 @@ message OrgInvite {
   option (w17.db.table) = {
     indexes: [
       // One PENDING invite per (org, email). Partial, because a consumed
-      // invite must not block a later re-invite — the same person can be
-      // removed from an org and invited back. PG + SQLite only, which is
-      // the support surface this plugin's other `where:` indexes already
-      // assume.
+      // or closed invite must not block a later re-invite — the same person
+      // can be removed from an org and invited back. PG + SQLite only, which
+      // is the support surface this plugin's other `where:` indexes already
+      // assume (org_invite requires org_membership, whose UserRole indexes
+      // are partial too).
       { unique: true, fields: [{ name: "org_id" }, { name: "email" }],
-        where: "accepted_at IS NULL" }
+        where: "accepted_at IS NULL AND closed_at IS NULL" }
     ]
   };
   option (w17.contrib.plugin_feature) = "org_invite";
@@ -1105,9 +2090,8 @@ message OrgInvite {
   google.protobuf.Timestamp created_at  = 8 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
   // sha256 hex of the single-use token that IS the invitation link.
   //
-  // The same shape `PasswordResetToken` and `EmailVerificationToken` carry, and a
-  // consumer put the reason best: that shape existed twice in this plugin and not
-  // where it was needed. Only the hash is stored; the plaintext is returned to the
+  // The same shape `PasswordResetToken` and `EmailVerificationToken` carry: it
+  // existed twice in this plugin and not where it was needed. Only the hash is stored; the plaintext is returned to the
   // INVITER once, because here the sender is the delivery channel — unlike a
   // password reset, where the token goes to the mailbox and never to a caller.
   //
@@ -1116,7 +2100,7 @@ message OrgInvite {
   // meaning the same thing is two names for one state, and they drift.
   string token_hash = 9 [(w17.field) = { type: CHAR, max_len: 128, unique: true }];
   // Consumer-owned, OPAQUE. Whatever the caller needs paired with this invitation —
-  // the reported case is "a tenant and one object in our own engine", so that
+  // for example a tenant and one object in the caller's own system, so that
   // accepting an invitation pairs both at once instead of joining a side table on
   // the e-mail address, which is the weak key this whole change is about.
   //
@@ -1150,4 +2134,418 @@ message OrgInvite {
   // fills those rows. An empty snapshot is refused at accept: such an
   // invitation was never checked, and the inviter can send a new one.
   string role_snapshot = 11 [(w17.field) = { type: TEXT, blank: true, default_string: "" }];
+
+  // closed_at / closed_by — the invitation ended without being accepted:
+  // withdrawn (CloseOrgInvite, the withdrawing account as closed_by), or,
+  // once expired, closed so the address can be invited again
+  // (CloseExpiredOrgInvite, closed_by NULL). Nothing deletes an invitation: a
+  // closed one stays, refused by every path that binds, accepts or lists
+  // pending invitations, and out of the pending index above.
+  google.protobuf.Timestamp closed_at = 12 [(w17.field) = { type: DATETIME, null: true }];
+  string closed_by = 13 [(w17.field) = { type: UUID, null: true }];
+  // kind — the kind of membership accepting creates (membership_kinds).
+  string kind = 14 [
+    (w17.field) = { type: CHAR, max_len: 32, blank: true, default_string: "" },
+    (w17.contrib.plugin_feature_field) = "membership_kinds"
+  ];
+  // product_roles — the products' roles accepting gives in the organization
+  // (product_roles): `<product>:<role key>` pairs, sorted, comma-separated;
+  // '' gives none. Held to the inviter's ceiling and the organization's plan
+  // when the invitation is made, and to the plan and the catalogue again at
+  // acceptance, which writes the grants in its own transaction.
+  string product_roles = 15 [
+    (w17.field) = { type: TEXT, blank: true, default_string: "" },
+    (w17.contrib.plugin_feature_field) = "product_roles"
+  ];
+}
+
+// ── teams — groups of an organization's members that hold roles ──
+//
+// A team is a group of PEOPLE, not a kind of role: it belongs to one
+// organization, has members, and holds org-scoped roles that every member
+// holds while they are in it. Roles stay flat — the product defines what a
+// role means (the seed, org_roles), the organization decides who holds it,
+// directly or through a team. A project may also point at a team as the
+// holder of something of its own (the console's project access).
+//
+// Nothing here is deleted: a team, a membership in one and a role held by one
+// end with a timestamp and move ended_key from '' to the row's own id (see
+// Role.ended_key), so the same thing can be written again as a new row while
+// the ended one stays as the record.
+
+// Team — one organization's group. The name is unique among the
+// organization's live teams.
+message Team {
+  option (w17.db.table) = {
+    indexes: [
+      { unique: true, fields: [{ name: "org_id" }, { name: "name" }, { name: "ended_key" }] }
+    ]
+  };
+  option (w17.contrib.plugin_feature) = "teams";
+
+  string id          = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string org_id      = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string name        = 3 [(w17.field) = { type: CHAR, max_len: 100 }];
+  string description = 4 [(w17.field) = { type: TEXT, max_len: 500, blank: true, default_string: "" }];
+  // created_by — the account that created it (NULL when nobody is known).
+  string created_by  = 5 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp created_at = 6 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  // deleted_at / deleted_by — the team was deleted (DeleteTeam, or its
+  // organization's deletion), and by whom.
+  google.protobuf.Timestamp deleted_at = 7 [(w17.field) = { type: DATETIME, null: true }];
+  string deleted_by  = 8 [(w17.field) = { type: UUID, null: true }];
+  // ended_key — '' while live, the row's own id once deleted (Role.ended_key).
+  string ended_key   = 9 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+}
+
+// TeamMember — a person in a team. Only a live member of the team's
+// organization is added, and only a person (a machine account holds its roles
+// directly). org_id is the team's, carried so that removing someone from the
+// organization ends every team membership they have there in one statement.
+//
+// A row written BEFORE the person's current organization membership grants
+// nothing (the grant query joins the membership on created_at): someone
+// removed from the organization and invited back does not walk back into the
+// teams they were in.
+message TeamMember {
+  option (w17.db.table) = {
+    indexes: [
+      { unique: true, fields: [{ name: "team_id" }, { name: "user_id" }, { name: "ended_key" }] }
+    ]
+  };
+  option (w17.contrib.plugin_feature) = "teams";
+
+  string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string team_id    = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string user_id    = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string org_id     = 4 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string added_by   = 5 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp created_at = 6 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp removed_at = 7 [(w17.field) = { type: DATETIME, null: true }];
+  string removed_by = 8 [(w17.field) = { type: UUID, null: true }];
+  string ended_key  = 9 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+}
+
+// TeamRole — a role a team holds: every live member holds it inside the
+// team's organization, for a session (a person's), never for an API token.
+// Only an org-scoped session-realm role of the organization's catalogue is
+// written here, under the role ceiling (handlers/teams.go).
+message TeamRole {
+  option (w17.db.table) = {
+    indexes: [
+      { unique: true, fields: [{ name: "team_id" }, { name: "role_id" }, { name: "ended_key" }] }
+    ]
+  };
+  option (w17.contrib.plugin_feature) = "teams";
+
+  string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string team_id    = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string role_id    = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string org_id     = 4 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string granted_by = 5 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp created_at = 6 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp revoked_at = 7 [(w17.field) = { type: DATETIME, null: true }];
+  string revoked_by = 8 [(w17.field) = { type: UUID, null: true }];
+  string ended_key  = 9 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+}
+
+// OrgPackage — a package (w17/packages.proto) an organization has been
+// given: what its members can hold (org_packages). The backoffice switches it
+// on and off; switching off ends the row (ended_at, ended_key = id), and the
+// next switch-on writes a new one, so the record of who gave what and when
+// stays. The package is named, not numbered: its methods come from the
+// domain's protos at every boot.
+message OrgPackage {
+  option (w17.db.table) = {
+    indexes: [
+      { unique: true, fields: [{ name: "org_id" }, { name: "package" }, { name: "ended_key" }] }
+    ]
+  };
+  option (w17.contrib.plugin_feature) = "org_packages";
+
+  string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string org_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string package    = 3 [(w17.field) = { type: CHAR, max_len: 64 }];
+  string enabled_by = 4 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp enabled_at = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp ended_at   = 6 [(w17.field) = { type: DATETIME, null: true }];
+  string ended_by   = 7 [(w17.field) = { type: UUID, null: true }];
+  // ended_key — '' while live, the row's own id once switched off (Role.ended_key).
+  string ended_key  = 8 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+}
+
+// OrgHost — a host (white-label or co-brand) bound to the organization it
+// serves (org_hosts). An audience that takes the tenant from the host
+// (w17/audience.proto TENANT_SOURCE_HOST) acts in this organization on a
+// request arriving on it. One live binding per host; unbinding ends the row
+// (ended_at, ended_key = id), and nothing is deleted.
+message OrgHost {
+  option (w17.db.table) = {
+    indexes: [ { unique: true, fields: [{ name: "host" }, { name: "ended_key" }] } ]
+  };
+  option (w17.contrib.plugin_feature) = "org_hosts";
+
+  string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  // host — lower-case, no port and no trailing dot: as the gateway reports it.
+  string host       = 2 [(w17.field) = { type: CHAR, max_len: 253 }];
+  string org_id     = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string bound_by   = 4 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp bound_at = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp ended_at = 6 [(w17.field) = { type: DATETIME, null: true }];
+  string ended_by   = 7 [(w17.field) = { type: UUID, null: true }];
+  // ended_key — '' while live, the row's own id once unbound (Role.ended_key).
+  string ended_key  = 8 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+}
+
+// OrgSignUpPolicy — whether an organization takes people who register
+// without an invitation, per kind of membership, and the role they get
+// (org_signup). A registration arriving on a host bound to the organization
+// (org_hosts), through an audience of that kind, becomes a member at once
+// when the policy is open; a closed one (or none, under invite_only) needs
+// an invitation. One live row per (organization, kind); replacing or
+// clearing it ends the row, and nothing is deleted.
+message OrgSignUpPolicy {
+  option (w17.db.table) = {
+    indexes: [ { unique: true, fields: [{ name: "org_id" }, { name: "kind" }, { name: "ended_key" }] } ]
+  };
+  option (w17.contrib.plugin_feature) = "org_signup";
+
+  string id      = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string org_id  = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  // kind — the membership kind it is for ('' without membership_kinds).
+  string kind    = 3 [(w17.field) = { type: CHAR, max_len: 32, blank: true, default_string: "" }];
+  // open — a registration of this kind joins without an invitation.
+  bool   open    = 4;
+  // role — the org-scoped role an open registration is given.
+  string role    = 5 [(w17.field) = { type: CHAR, max_len: 128, blank: true, default_string: "" }];
+  string set_by  = 6 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp set_at   = 7 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp ended_at = 8 [(w17.field) = { type: DATETIME, null: true }];
+  string ended_by  = 9 [(w17.field) = { type: UUID, null: true }];
+  // ended_key — '' while live, the row's own id once replaced or cleared.
+  string ended_key = 10 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+  // product_roles — the products' roles an open registration is given in the
+  // organization (product_roles), as OrgInvite.product_roles holds them.
+  string product_roles = 11 [
+    (w17.field) = { type: TEXT, blank: true, default_string: "" },
+    (w17.contrib.plugin_feature_field) = "product_roles"
+  ];
+}
+
+// OrgTwoFactorPolicy — whether an organization's people sign in with a second
+// factor, per kind of membership (org_two_factor_policy): `required` (every
+// account is challenged), `optional` (an account that confirmed an
+// authenticator is challenged, the others sign in with the password) or
+// `disabled` (nobody is challenged and no authenticator can be enrolled).
+// Absent, the activation's two_factor_policy decides. Set by the backoffice
+// realm-wide and by the organization itself. One live row per (organization,
+// kind); replacing or clearing it ends the row, and nothing is deleted.
+message OrgTwoFactorPolicy {
+  option (w17.db.table) = {
+    indexes: [ { unique: true, fields: [{ name: "org_id" }, { name: "kind" }, { name: "ended_key" }] } ]
+  };
+  option (w17.contrib.plugin_feature) = "org_two_factor_policy";
+
+  string id      = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string org_id  = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  // kind — the membership kind it is for; '' is the organization's own
+  // (every kind without a row of its own, and every member without
+  // membership_kinds).
+  string kind    = 3 [(w17.field) = { type: CHAR, max_len: 32, blank: true, default_string: "" }];
+  // policy — required | optional | disabled.
+  string policy  = 4 [(w17.field) = { type: CHAR, max_len: 16 }];
+  string set_by  = 5 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp set_at   = 6 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp ended_at = 7 [(w17.field) = { type: DATETIME, null: true }];
+  string ended_by  = 8 [(w17.field) = { type: UUID, null: true }];
+  // ended_key — '' while live, the row's own id once replaced or cleared.
+  string ended_key = 9 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+}
+
+// ProductRoleDef is a role the identity defines from its products'
+// permissions (product_roles): the backoffice's (org_id NULL — usable in every
+// organization, or realm-wide) or an organization's own (org_id set — under
+// the role ceiling there). A grant names it as product `*` (it may span
+// products); a product's preset roles (its (w17.acl_roles)) stay in the
+// catalogue and are not rows here. Retiring ends the row; nothing is deleted.
+message ProductRoleDef {
+  option (w17.db.table) = {
+    indexes: [
+      { unique: true, fields: [{ name: "key" }, { name: "ended_key" }],
+        where: "org_id IS NULL", name: "productroledef_realm_uidx" },
+      { unique: true, fields: [{ name: "org_id" }, { name: "key" }, { name: "ended_key" }],
+        where: "org_id IS NOT NULL", name: "productroledef_org_uidx" }
+    ]
+  };
+  option (w17.contrib.plugin_feature) = "product_roles";
+
+  string id          = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  // org_id — the organization that defined it; NULL = the backoffice's.
+  string org_id      = 2 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { index: true }];
+  string key         = 3 [(w17.field) = { type: CHAR, max_len: 64 }];
+  string name        = 4 [(w17.field) = { type: CHAR, max_len: 128 }];
+  // org_scoped — held in an organization; false = held realm-wide only (the
+  // backoffice's roles only).
+  bool   org_scoped  = 5;
+  // permissions — `<product>:<permission code>` pairs, sorted, comma-separated.
+  string permissions = 6 [(w17.field) = { type: TEXT, blank: true, default_string: "" }];
+  string created_by  = 7 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp created_at = 8 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp ended_at   = 9 [(w17.field) = { type: DATETIME, null: true }];
+  string ended_by    = 10 [(w17.field) = { type: UUID, null: true }];
+  // ended_key — '' while live, the row's own id once retired.
+  string ended_key   = 11 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+}
+
+// TokenProductRole is one product role an API token may use (product_roles
+// with api_token): the token's own narrowing on the products' axis, as
+// TokenPermission is on this domain's permissions. Authenticate answers a
+// product the roles the token's holder holds there AND the token names; a
+// token that names none and carries no permission subset is not narrowed. A
+// revoked token's rows stay, as its permission subset does.
+message TokenProductRole {
+  option (w17.db.table) = {
+    indexes: [
+      { unique: true, fields: [{ name: "token_id" }, { name: "product" }, { name: "role_key" }] }
+    ]
+  };
+  option (w17.contrib.plugin_feature) = "product_roles";
+
+  string id       = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string token_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  // product — the product domain, as its (w17.domain).identity names this one.
+  string product  = 3 [(w17.field) = { type: CHAR, max_len: 64 }];
+  // role_key — the product's (w17.acl_roles) key.
+  string role_key = 4 [(w17.field) = { type: CHAR, max_len: 64 }];
+  google.protobuf.Timestamp created_at = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+}
+
+// ProductRoleGrant — a role a user holds in a PRODUCT: another domain of the
+// project, whose (w17.domain).identity names this one (product_roles). Held in
+// one organization (org_id), or realm-wide (org_id NULL — the backoffice's
+// own staff). The role is the product's (w17.acl_roles) key: what it grants is
+// the product's to say, resolved by its gateway against its own lock, so this
+// table holds no permission ids of another domain. Revoking ends the row
+// (ended_at, ended_key = id); nothing is deleted.
+message ProductRoleGrant {
+  option (w17.db.table) = {
+    indexes: [
+      { unique: true, fields: [{ name: "user_id" }, { name: "product" }, { name: "role_key" }, { name: "ended_key" }],
+        where: "org_id IS NULL" },
+      { unique: true, fields: [{ name: "user_id" }, { name: "org_id" }, { name: "product" }, { name: "role_key" }, { name: "ended_key" }],
+        where: "org_id IS NOT NULL", name: "productrolegrant_org_uidx" }
+    ]
+  };
+  option (w17.contrib.plugin_feature) = "product_roles";
+
+  string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string user_id    = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  // org_id — the organization the role is held in; NULL = realm-wide.
+  string org_id     = 3 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { index: true }];
+  // product — the product domain, as its (w17.domain).identity names this one.
+  string product    = 4 [(w17.field) = { type: CHAR, max_len: 64 }];
+  // role_key — the product's (w17.acl_roles) key.
+  string role_key   = 5 [(w17.field) = { type: CHAR, max_len: 64 }];
+  string granted_by = 6 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp granted_at = 7 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp ended_at   = 8 [(w17.field) = { type: DATETIME, null: true }];
+  string ended_by   = 9 [(w17.field) = { type: UUID, null: true }];
+  // ended_key — '' while live, the row's own id once revoked (Role.ended_key).
+  string ended_key  = 10 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+}
+
+// OrgProductAllowance — one line of an organization's plan (product_plans):
+// a role of a product its members may hold, or (role_key '') the whole
+// product. The backoffice gives and takes them; an organization holds a
+// product's role only through a line of its plan. Taking a line ends the row;
+// nothing is deleted.
+message OrgProductAllowance {
+  option (w17.db.table) = {
+    indexes: [
+      { unique: true, fields: [{ name: "org_id" }, { name: "product" }, { name: "role_key" }, { name: "ended_key" }] }
+    ]
+  };
+  option (w17.contrib.plugin_feature) = "product_plans";
+
+  string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string org_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string product    = 3 [(w17.field) = { type: CHAR, max_len: 64 }];
+  // role_key — the product's role; '' = every role of the product.
+  string role_key   = 4 [(w17.field) = { type: CHAR, max_len: 64, blank: true, default_string: "" }];
+  string allowed_by = 5 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp allowed_at = 6 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp ended_at   = 7 [(w17.field) = { type: DATETIME, null: true }];
+  string ended_by   = 8 [(w17.field) = { type: UUID, null: true }];
+  // ended_key — '' while live, the row's own id once taken (Role.ended_key).
+  string ended_key  = 9 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+}
+
+// ProductPlan — a named plan (named_product_plans): a set of lines across the
+// products, defined once in the backoffice and given to organizations. An
+// organization on a plan holds what the plan's lines carry AND its own lines
+// (OrgProductAllowance) — its own add to the plan, they never take from it.
+// Editing a plan changes every organization on it on its next request.
+// Deleting one ends the row; nothing is deleted.
+message ProductPlan {
+  option (w17.db.table) = {
+    indexes: [
+      { unique: true, fields: [{ name: "name" }, { name: "ended_key" }] }
+    ]
+  };
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+
+  string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  // name — what the backoffice calls it ("basic", "pro"), unique among the
+  // live plans.
+  string name       = 2 [(w17.field) = { type: SLUG, max_len: 64 }];
+  string created_by = 3 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp created_at = 4 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp ended_at   = 5 [(w17.field) = { type: DATETIME, null: true }];
+  string ended_by   = 6 [(w17.field) = { type: UUID, null: true }];
+  // ended_key — '' while live, the row's own id once deleted (Role.ended_key).
+  string ended_key  = 7 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+}
+
+// ProductPlanLine — one line of a named plan: a role of a product, or
+// (role_key '') the whole product, as an OrgProductAllowance is for one
+// organization. Taking a line ends the row.
+message ProductPlanLine {
+  option (w17.db.table) = {
+    indexes: [
+      { unique: true, fields: [{ name: "plan_id" }, { name: "product" }, { name: "role_key" }, { name: "ended_key" }] }
+    ]
+  };
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+
+  string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string plan_id    = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string product    = 3 [(w17.field) = { type: CHAR, max_len: 64 }];
+  // role_key — the product's role; '' = every role of the product.
+  string role_key   = 4 [(w17.field) = { type: CHAR, max_len: 64, blank: true, default_string: "" }];
+  string added_by   = 5 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp added_at = 6 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp ended_at = 7 [(w17.field) = { type: DATETIME, null: true }];
+  string ended_by   = 8 [(w17.field) = { type: UUID, null: true }];
+  string ended_key  = 9 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+}
+
+// OrgProductPlanAssignment — the named plan an organization is on: at most
+// one live row per organization. Changing the plan ends the row and adds
+// another; taking it ends the row.
+message OrgProductPlanAssignment {
+  option (w17.db.table) = {
+    indexes: [
+      { unique: true, fields: [{ name: "org_id" }, { name: "ended_key" }] }
+    ]
+  };
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+
+  string id          = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string org_id      = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string plan_id     = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string assigned_by = 4 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp assigned_at = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp ended_at    = 6 [(w17.field) = { type: DATETIME, null: true }];
+  string ended_by    = 7 [(w17.field) = { type: UUID, null: true }];
+  string ended_key   = 8 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
 }

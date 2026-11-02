@@ -19,7 +19,7 @@ import "domains/app/auth/events/auth_events.proto";
 import "domains/app/workspace/tasks/events/events.proto";
 import "domains/app/workspace/users/events/events.proto";
 
-option (w17.lock_checksum) = "sha256:489f2b68da00965c94d4d9bace64091fee89f3f675dd7fde6f517defd521597c";
+option (w17.lock_checksum) = "sha256:a4502dc026e65552f640f2694efb986e18e26fb3b23ae6057d13a9fcb2241d63";
 
 // Event — wrapper carrying every (w17.event)-tagged message
 // in the "app" domain. Numeric oneof tags are monotonic across
@@ -91,5 +91,7 @@ message Event {
     .e2e.app.users.DirectoryPlanPublished     users_directory_plan_published     = 36;
     .e2e.app.users.DirectoryPlanRetired       users_directory_plan_retired       = 37;
     .e2e.app.users.DirectoryPlanUpgraded      users_directory_plan_upgraded      = 38;
+    .e2e.app.admin_auth.UserDisabled          admin_auth_user_disabled           = 39;
+    .e2e.app.admin_auth.UserEnabled           admin_auth_user_enabled            = 40;
   }
 }
