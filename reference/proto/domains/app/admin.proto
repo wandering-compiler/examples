@@ -259,17 +259,12 @@ option (w17.admin_api) = {
       // admin e2e steps 0043 / 0044.
       name: "TaskAdmin"
       model: "tasks.Task"
-      // Page-level chrome override. The model already carries
-      // `(w17.admin_title) = "#{id} {title}"`; this page shows the
-      // status instead of the id, because the operator arriving HERE
-      // is triaging, while the FK picker that reads the model-level
-      // template needs the id to tell two same-named tasks apart.
-      //
-      // The two templates must stay DIFFERENT for either to be
-      // provable. `TaskFeed` below deliberately declares none, so the
-      // three arms are: overridden (here), inherited (TaskFeed), and
-      // the model-level template itself (spec `title_templates`).
-      title: "{title} ({status})"
+      // The page's label in the navigation and its headers. A row's
+      // heading on the detail page is the model's own
+      // `(w17.admin_title) = "#{id} {title}"`, on this page and on
+      // TaskFeed alike: a page title is plain text, and codegen refuses
+      // a {field} reference in it (a label has no row to fill one from).
+      title: "Tasks to triage"
       list: {
         source: "tasks.TaskQuery.ListTasksPaged"
         columns: [
