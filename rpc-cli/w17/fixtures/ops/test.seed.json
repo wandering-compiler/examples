@@ -1,4 +1,5 @@
 {
+  "connection": "ops-postgres",
   "statements": [
     {
       "args": [
@@ -29,7 +30,7 @@
     },
     {
       "args": [
-        "jobs",
+        "\"jobs\"",
         "id"
       ],
       "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"jobs\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"jobs\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"

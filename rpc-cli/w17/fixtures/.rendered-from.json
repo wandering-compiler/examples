@@ -1,10 +1,16 @@
 {
-  "version": 1,
+  "version": 2,
   "source_root": "../../fixtures",
   "seeds": {
     "ops/test": {
       "source": "ops/test.json",
-      "sha256": "206acfc55f875fad635ed63df07a11dfc72f3531bfc74332cb527280d273be72"
+      "sha256": "206acfc55f875fad635ed63df07a11dfc72f3531bfc74332cb527280d273be72",
+      "schema": {
+        "renderer": "1",
+        "tables": {
+          "jobs.Job": "3fa4e9f20b6006762dbc2745c858e52efedf7a49d8d0e3c63c3cffd6f6551c88"
+        }
+      }
     }
   }
 }

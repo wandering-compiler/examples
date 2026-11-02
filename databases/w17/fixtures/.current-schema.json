@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "seeds": {
+    "catalog/test": {
+      "schema": {
+        "renderer": "1",
+        "tables": {
+          "docs.Document": "1cdf207fdac918a4c0254be3822f90c0f89b8950d511d9feab3981cc07f24777"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "seeds": {
+    "ops/test": {
+      "schema": {
+        "renderer": "1",
+        "tables": {
+          "jobs.Job": "3fa4e9f20b6006762dbc2745c858e52efedf7a49d8d0e3c63c3cffd6f6551c88"
+        }
+      }
+    }
+  }
+}
