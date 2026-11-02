@@ -338,6 +338,25 @@ jobs:
             sleep "$wait"
           done
           rm -f codegen.log
+          # The plugins under review can change their tables, and a binary
+          # refuses a seed rendered against another schema ("the schema it was
+          # rendered against changed"). So the swapped-in plugins get their
+          # seeds rendered again, here, as their author would before a commit.
+          # The fixture sources codegen writes and git ignores (acl-roles.json,
+          # seeded by `w17ctl test` itself) are not part of the build, so they
+          # are set aside for the render: a seed of one would name a fixture
+          # the image does not carry.
+          if [ -n "${{ inputs.plugins_ref }}" ] && [ -d w17/fixtures ]; then
+            aside="$(mktemp -d)"
+            git ls-files --others --ignored --exclude-standard -- fixtures | while read -r f; do
+              mkdir -p "$aside/$(dirname "$f")"
+              mv "$f" "$aside/$f"
+            done
+            w17ctl fixtures render --prune
+            (cd "$aside" && find . -type f) | while read -r f; do
+              mv "$aside/$f" "$f"
+            done
+          fi
           # The SDK under review, after codegen too: `go get` moves every
           # module — the generated ones included — and its go.sum to the
           # commit (`w17ctl sdk pin` would be a lock edit).
