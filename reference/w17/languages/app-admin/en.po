@@ -226,6 +226,9 @@ msgstr "Tasks over time"
 msgid "Tasks per category"
 msgstr "Tasks per category"
 
+msgid "Tasks to triage"
+msgstr "Tasks to triage"
+
 msgid "This browser cannot start a secure sign-in here — it needs HTTPS"
 msgstr "This browser cannot start a secure sign-in here — it needs HTTPS"
 
@@ -288,6 +291,3 @@ msgstr "{mode} — click to switch"
 
 msgid "{mode}. Click to switch color theme."
 msgstr "{mode}. Click to switch color theme."
-
-msgid "{title} ({status})"
-msgstr "{title} ({status})"
