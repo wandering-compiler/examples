@@ -1,10 +1,10 @@
-# Edit, then REGENERATE before running: the suite executes the BAKED
-# copy of this file (scenarios_gen_test.go), not the file itself.
-# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
-# silently asserts the previous expectations and passes.
+# The user's connected apps. The REST scenario's user approved no OAuth
+# client (that is the MCP scenario's flow, under its own user), so the list
+# is empty — and answered, not refused: a user with no connected apps sees
+# an empty page, never an error.
 method: auth.AuthService.ListMyOAuthGrants
 pre:
     - auth/auth.yaml
 input: {}
 expect:
-    grants: {matcher: unwritten}
+    grants: {matcher: empty}
