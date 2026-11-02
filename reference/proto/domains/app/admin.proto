@@ -294,6 +294,17 @@ option (w17.admin_api) = {
       }
       detail: {
         read: "tasks.TaskQuery.GetTaskWithCategory"
+        // Add a task from the admin. Its owner and its category are rows of
+        // other pages, so the form offers those rows by their text rather
+        // than asking for an id: a picker over UserAdmin ("Ada Lovelace
+        // (ada@…)") and one over TaskCategoryAdmin ("Errands"), each
+        // sending the chosen row's id.
+        create: "tasks.TaskMutation.CreateTask"
+        fields: ["user_id", "category_id", "title", "body_text", "priority"]
+        field_refs: [
+          { field: "user_id",     page: "UserAdmin",         value: "id", title: "{display_name} ({email})" },
+          { field: "category_id", page: "TaskCategoryAdmin", value: "id", title: "{name}" }
+        ]
       }
       // The one inline in this example. An inline is what turns two pages
       // into a parent/child relationship: the child's rows render INSIDE
