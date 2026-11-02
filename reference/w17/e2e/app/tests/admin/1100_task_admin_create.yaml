@@ -1,7 +1,14 @@
 # TaskAdmin's Add form: the owner and the category are picked from the
 # UserAdmin and TaskCategoryAdmin rows by their text (field_refs), and the
-# form sends the rows' ids — what this step sends. User 1 and category 1
-# ("work") are fixture rows, so the ids are ones the pickers would offer.
+# form sends the rows' ids. This step reaches that create endpoint with a
+# category no picker would offer — one that does not exist — and the form
+# gets the field-level refusal back.
+#
+# Why a refusal and not a created task: the admin scenario runs before the
+# REST one and must create no task, because rest/0025 pins an exact
+# COUNT(*) of the five seeded tasks. A refused create proves the same
+# wiring (route, request binding, the storage write and its constraint
+# mapping) without adding a row.
 #
 # Edit, then REGENERATE before running: the suite executes the BAKED
 # copy of this file (scenarios_gen_test.go), not the file itself.
@@ -10,10 +17,13 @@ pre:
     - auth/admin.yaml
 input:
     user_id: 1
-    category_id: 1
-    title: Added from the admin, owner and category picked by name
-    body_text: The form offered rows, not ids.
+    category_id: 9223372036854775807
+    title: A category no picker offers
     priority: 3
     idempotency_key: ${random:uuid}
-expect:
-    id: {matcher: not_empty}
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: category_id
+          code: INVALID_VALUE
+          message: {matcher: regex, pattern: "referenced record does not exist"}
