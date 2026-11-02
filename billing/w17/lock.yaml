@@ -46,10 +46,10 @@ plugins:
       version: 0.1.0-rc.6
 project: examples-billing
 project_id: 514a5b95-afaf-4e9a-8730-5e172520c3a2
-sdk_version: v0.1.0-rc.59
+sdk_version: v0.1.0-rc.60
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 6725c6721665d26d51940c6b1400be07deb008bb9d8037cdafec2fa4a6def3aac48fc73a5e13fb580861d0ba6488b1c6a0bdbe4d8f794381a2a16aafb895d509
+    body: dac1c1aadbea09bd7a317b13cf4834126f10384f1933f95ca445c7d1f5288bf2dd5ba07fa57d5561e5fc4c5262a40f209e6f3882a844efedbca96dd0bbd60e06
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
