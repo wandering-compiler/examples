@@ -1,0 +1,16 @@
+# The NULL side of a LEFT JOIN, through a field declared nullable.
+#
+# Each seeded document is joined to the one whose id is one lower. The first
+# (700001) has none, so its `prev_title` is SQL NULL. A response field that a
+# NULL can reach must say it can be absent (`null: true`), or the compiler
+# warns now and refuses in its next release; declared, the list reads every
+# row, and the absent value arrives empty instead of failing the scan.
+method: docs.DocumentQuery.DocumentPrev
+input: {}
+expect:
+    rows: {matcher: count, op: '==', value: 4}
+    rows.0.id: {matcher: eq, value: "700001"}
+    rows.0.prev_title: {matcher: empty}
+    rows.1.id: {matcher: eq, value: "700002"}
+    rows.1.prev_title: {matcher: eq, value: "seed alpha"}
+    rows.3.prev_title: {matcher: eq, value: "seed charlie"}

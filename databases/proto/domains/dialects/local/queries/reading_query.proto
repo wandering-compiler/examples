@@ -88,9 +88,9 @@ message ReadingNullsRow {
   int64 id = 1;
 
   // `optional` because the source column is nullable and this is its
-  // projection. A plain string here compiles too, and fails at run time
-  // on the first NULL row: the scan has nowhere to put a NULL. The seed
-  // carries a NULL so the suite reads one.
+  // projection. A plain string here would read a NULL row as "", which
+  // the compiler reports (a warning now, an error in its next release).
+  // The seed carries a NULL so the suite reads one.
   optional string attrs = 2;
 }
 

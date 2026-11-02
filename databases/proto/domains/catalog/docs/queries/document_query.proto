@@ -229,6 +229,19 @@ message DocumentNullsRow {
 
 message DocumentNullsResp { repeated DocumentNullsRow rows = 1; }
 
+message DocumentPrevReq {}
+
+// A LEFT JOIN whose joined side is NULL on a row with no match: the first
+// seeded document has no predecessor. prev_title is declared nullable, which
+// is what the compiler asks of a value an outer join NULL-extends — without
+// it the list compiles with a warning, and in the next release not at all.
+message DocumentPrevRow {
+  int64  id         = 1;
+  string prev_title = 2 [(w17.field) = { null: true }];
+}
+
+message DocumentPrevResp { repeated DocumentPrevRow rows = 1; }
+
 message DocumentPgOnlyReq {}
 
 message DocumentDepthPickRow {
@@ -594,6 +607,21 @@ service DocumentQuery {
   // key. MySQL has no such syntax and places NULLs with an `IS NULL`
   // prefix key, one key becoming two; SQLite has the keyword and stays
   // at one.
+  // The NULL side of a LEFT JOIN, read through a field declared nullable.
+  rpc DocumentPrev(DocumentPrevReq) returns (DocumentPrevResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id AS id, p.title AS prev_title "
+          "FROM docs.Document d "
+          "LEFT JOIN docs.Document p ON p.id = d.id - 1 "
+          "WHERE d.id >= 700001 AND d.id <= 700004 "
+          "ORDER BY d.id ASC"
+      }
+    };
+  }
+
   rpc DocumentNulls(DocumentNullsReq) returns (DocumentNullsResp) {
     option (w17.db.method) = {
       ops: {

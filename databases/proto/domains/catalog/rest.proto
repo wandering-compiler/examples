@@ -45,6 +45,7 @@ option (w17.rest_api) = {
         { ref: "docs.DocumentQuery.DocumentJson",     method: GET,  path: "/json" },
         { ref: "docs.DocumentQuery.DocumentAgg",      method: GET,  path: "/agg" },
         { ref: "docs.DocumentQuery.DocumentNulls",    method: GET,  path: "/nulls" },
+        { ref: "docs.DocumentQuery.DocumentPrev",     method: GET,  path: "/prev" },
         { ref: "docs.DocumentQuery.DocumentDepthPick", method: GET,  path: "/depth-pick" },
         { ref: "docs.DocumentQuery.DocumentPeers",    method: GET,  path: "/peers" },
         { ref: "docs.DocumentQuery.DocumentSumDiv",   method: GET,  path: "/sum-div" },
