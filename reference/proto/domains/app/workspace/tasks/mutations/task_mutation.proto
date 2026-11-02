@@ -382,7 +382,7 @@ message CreateTenantNoteWithPublicLinkResp {
   // handle on the new link, and a caller that had to remember what
   // it sent could not distinguish "the link exists" from "the write
   // silently dropped the column".
-  string public_token = 2;
+  string public_token = 2 [(w17.field) = { null: true }];
 }
 
 message CreateTenantNoteResp {

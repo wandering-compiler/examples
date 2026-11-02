@@ -26,14 +26,14 @@ message DocumentShape {
   string title      = 2;
   // akeys() returns text[]; array_to_string flattens it so the
   // response shape stays a plain scalar.
-  string label_keys = 3;
+  string label_keys = 3 [(w17.field) = { null: true }];
   // nlevel() is the ltree label count — 1 for "root", 3 for
   // "root.a.b".
-  int32  depth      = 4;
+  int32  depth      = 4 [(w17.field) = { null: true }];
   // unaccent() comes from an extension no column needs: the function's
   // own required_extensions is what puts `CREATE EXTENSION unaccent` in
   // the schema.
-  string title_folded = 5;
+  string title_folded = 5 [(w17.field) = { null: true }];
 }
 
 // DocumentsCoveringReq asks which footprints cover a point. The
@@ -52,11 +52,11 @@ message DocumentsCoveringReq {
 message CoveringDocument {
   int64  id            = 1;
   string title         = 2;
-  string footprint_wkt = 3;
+  string footprint_wkt = 3 [(w17.field) = { null: true }];
 
   // ST_Area over the GEOGRAPHY column, in square metres. The same ring
   // stored as geometry would answer 1.0 (square degrees).
-  double coverage_m2   = 4;
+  double coverage_m2   = 4 [(w17.field) = { null: true }];
 }
 
 message DocumentsCoveringResp { repeated CoveringDocument rows = 1; }
@@ -86,9 +86,9 @@ message CountByDepthReq {}
 // tells the typechecker this call collapses the group rather than
 // needing to appear in GROUP BY.
 message DepthGroup {
-  int32  depth          = 1;
+  int32  depth          = 1 [(w17.field) = { null: true }];
   int64  document_count = 2;
-  string titles         = 3;
+  string titles         = 3 [(w17.field) = { null: true }];
 }
 
 message CountByDepthResp { repeated DepthGroup rows = 1; }
@@ -129,7 +129,7 @@ message DocumentWindowsReq {}
 // DocumentPeriodRow.bucket.
 message DocumentWindowRow {
   int64 id              = 1;
-  int32 depth           = 2;
+  int32 depth           = 2 [(w17.field) = { null: true }];
   int64 rows_count      = 3;
   int64 range_count     = 4;
   int64 neighbour_count = 5;
@@ -173,7 +173,7 @@ message DocumentJsonReq {
 // which one it means: the Go field is a *string and stays nil on NULL.
 message DocumentJsonRow {
   int64           id         = 1;
-  string          env        = 2;
+  string          env        = 2 [(w17.field) = { null: true }];
   optional string channel    = 3;
   optional string owner_team = 4;
 }
@@ -224,16 +224,29 @@ message DocumentNullsRow {
   // one, and the generated scan reads a NULL as "". DocumentJsonRow
   // shows the other reading, where `optional` keeps "nothing was there"
   // apart from the empty string.
-  string attrs = 2;
+  string attrs = 2 [(w17.field) = { null: true }];
 }
 
 message DocumentNullsResp { repeated DocumentNullsRow rows = 1; }
+
+message DocumentPrevReq {}
+
+// A LEFT JOIN whose joined side is NULL on a row with no match: the first
+// seeded document has no predecessor. prev_title is declared nullable, which
+// is what the compiler asks of a value an outer join NULL-extends — without
+// it the list compiles with a warning, and in the next release not at all.
+message DocumentPrevRow {
+  int64  id         = 1;
+  string prev_title = 2 [(w17.field) = { null: true }];
+}
+
+message DocumentPrevResp { repeated DocumentPrevRow rows = 1; }
 
 message DocumentPgOnlyReq {}
 
 message DocumentDepthPickRow {
   int64 id    = 1;
-  int32 depth = 2;
+  int32 depth = 2 [(w17.field) = { null: true }];
 }
 
 message DocumentDepthPickResp { repeated DocumentDepthPickRow rows = 1; }
@@ -257,8 +270,8 @@ message DocumentRangeResp { repeated DocumentRangeRow rows = 1; }
 message DocumentSumDivReq {}
 
 message DocumentSumDivRow {
-  double by_int32 = 1;
-  double by_int64 = 2;
+  double by_int32 = 1 [(w17.field) = { null: true }];
+  double by_int64 = 2 [(w17.field) = { null: true }];
 }
 
 message DocumentSumDivResp { repeated DocumentSumDivRow rows = 1; }
@@ -594,6 +607,21 @@ service DocumentQuery {
   // key. MySQL has no such syntax and places NULLs with an `IS NULL`
   // prefix key, one key becoming two; SQLite has the keyword and stays
   // at one.
+  // The NULL side of a LEFT JOIN, read through a field declared nullable.
+  rpc DocumentPrev(DocumentPrevReq) returns (DocumentPrevResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT d.id AS id, p.title AS prev_title "
+          "FROM docs.Document d "
+          "LEFT JOIN docs.Document p ON p.id = d.id - 1 "
+          "WHERE d.id >= 700001 AND d.id <= 700004 "
+          "ORDER BY d.id ASC"
+      }
+    };
+  }
+
   rpc DocumentNulls(DocumentNullsReq) returns (DocumentNullsResp) {
     option (w17.db.method) = {
       ops: {
