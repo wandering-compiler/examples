@@ -1,0 +1,19 @@
+# TaskAdmin's Add form: the owner and the category are picked from the
+# UserAdmin and TaskCategoryAdmin rows by their text (field_refs), and the
+# form sends the rows' ids — what this step sends. User 1 and category 1
+# ("work") are fixture rows, so the ids are ones the pickers would offer.
+#
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+method: admin.TaskAdmin.Create
+pre:
+    - auth/admin.yaml
+input:
+    user_id: 1
+    category_id: 1
+    title: Added from the admin, owner and category picked by name
+    body_text: The form offered rows, not ids.
+    priority: 3
+    idempotency_key: ${random:uuid}
+expect:
+    id: {matcher: not_empty}
