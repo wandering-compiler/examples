@@ -22,7 +22,7 @@ message GetDirectoryPlanResp {
   int64  id               = 1;
   string tier             = 2;
   string monthly_fee      = 3;
-  string placement_region = 4;
+  string placement_region = 4 [(w17.field) = { null: true }];
 }
 
 message ListDirectoryPlansReq {}

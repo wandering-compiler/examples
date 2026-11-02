@@ -64,7 +64,7 @@ message CategoryRow {
   // Nullable COLUMN, plain proto3 field. A direct
   // `rows.Scan(&resp.Category.ParentId)` answers 500 on a top-level
   // category — which is all of them.
-  int64  parent_id = 3;
+  int64  parent_id = 3 [(w17.field) = { null: true }];
 }
 
 message TaskHeadRow {
@@ -1853,7 +1853,7 @@ message GetTenantNoteWithTagReq {
 message GetTenantNoteWithTagResp {
   int64  id    = 1;
   string title = 2;
-  string tag   = 3;
+  string tag   = 3 [(w17.field) = { null: true }];
 }
 
 // Cursor-paging fixture.

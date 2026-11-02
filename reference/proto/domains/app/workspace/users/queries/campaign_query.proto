@@ -62,8 +62,8 @@ message FlightBucketRow {
   int64          id                = 1;
   optional int64 impression_bucket = 2;
   optional int64 click_bucket      = 3;
-  double         spend_bucket      = 4;
-  double         coalesced_bucket  = 5;
+  double         spend_bucket      = 4 [(w17.field) = { null: true }];
+  double         coalesced_bucket  = 5 [(w17.field) = { null: true }];
   optional int64 abs_bucket        = 6;
 }
 message ListFlightBucketsResp { repeated FlightBucketRow rows = 1; }
@@ -95,7 +95,7 @@ message ChannelBreakdownReq { int64 campaign_id = 1; }
 // channel: a grouping set that omits a column produces NULL there, and
 // that NULL is the row's meaning ("every channel"), not a missing value.
 message ChannelBreakdownRow {
-  int64           campaign_id  = 1;
+  int64           campaign_id  = 1 [(w17.field) = { null: true }];
   optional string channel      = 2;
   optional int64  flight_count = 3;
 }
@@ -105,7 +105,7 @@ message GetCampaignAudienceSourceReq { int64 id = 1; }
 message GetCampaignAudienceSourceResp {
   int64  id          = 1;
   string name        = 2;
-  string utm_source  = 3;
+  string utm_source  = 3 [(w17.field) = { null: true }];
 }
 
 service CampaignQuery {
