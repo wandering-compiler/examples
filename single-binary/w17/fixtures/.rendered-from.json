@@ -2,17 +2,6 @@
   "version": 2,
   "source_root": "../../fixtures",
   "seeds": {
-    "app/acl-roles": {
-      "source": "app/acl-roles.json",
-      "sha256": "81537324af0a5b28a213f84da9696895c86a67e75e42f2ce11a541d7c5167661",
-      "schema": {
-        "renderer": "1",
-        "tables": {
-          "admin_auth.Role": "16509aa13b2c51a0525c27358597db34fdc70b1e35ea1ab974162b995f507d74",
-          "admin_auth.RolePermission": "a121f91d1a8395c76348b36cac9fa20f038c09b7008c9d7ab8372b5fe425dad8"
-        }
-      }
-    },
     "app/test": {
       "source": "app/test.json",
       "sha256": "5c1b74f32803f649d712a8fd18feb175d7ff2879e7bfb087f8b63f3dbd335bd0",

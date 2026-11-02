@@ -2,23 +2,6 @@
   "version": 2,
   "source_root": "../../fixtures",
   "seeds": {
-    "app/acl-roles": {
-      "source": "app/acl-roles.json",
-      "sha256": "e7490333598549d1dc8533331ea0ef3619d350e05a6365f3ba6a8528884deaa8",
-      "schema": {
-        "renderer": "1",
-        "tables": {
-          "admin_auth.Role": "7b8f982c3a6adcc51f63e4b8110a87d27016498bf74d1e619db2effd5287cfe5",
-          "admin_auth.RolePermission": "9d94383aa892bd69b415927c6d46e23d0a4da2c5df16b68518878632d3f9e3a8",
-          "admin_auth.RolePermissionChange": "9a63268bf0dbf9d2a66689e8a0b5f7cfd3a39cc072445523e0cc6b78ae54f8fb",
-          "admin_auth.UserRole": "c3fc3f1c15ab2ac0afc1c0de8a9871c20dd079cbc782ca1619fd63ebe5308627",
-          "auth.Role": "3863238891174d39392c76d5a8d71cdba83799723e76b09e3cc210e87436f868",
-          "auth.RolePermission": "10cc363fad5b3d1e7812ba8c123949a66df7f35b7a4c3c1ca807ca38e5c2ba19",
-          "auth.RolePermissionChange": "57231067ab48040e60258399df993596f979925c5dfe52605f6c72e7fbd78131",
-          "auth.UserRole": "93abda3c66516df2c8c9766c8d6dca003732c8620f6faa8875a2b695708050c3"
-        }
-      }
-    },
     "app/test": {
       "source": "app/test.json",
       "sha256": "b1edf71f9438a34862c1444314bab1d256764c0c0eab47843a31404df883c1bf",
