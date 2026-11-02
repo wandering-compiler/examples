@@ -306,6 +306,24 @@ option (w17.admin_api) = {
           { field: "category_id", page: "TaskCategoryAdmin", value: "id", title: "{name}" }
         ]
       }
+      // A toolbar action over no rows: assign someone one of the tasks they
+      // own. Both fields are pickers, and the second narrows by the first:
+      // once the person is chosen, only tasks whose `user_id` is theirs are
+      // offered (depends_on / parent) — the form never shows a task the
+      // person does not own.
+      actions: [
+        {
+          name:   "assign_own_task"
+          source: "tasks.TaskMutation.AssignTask"
+          target: ADMIN_ACTION_TARGET_PAGE
+          label:  "Assign a person one of their tasks"
+          fields: ["assignee_id", "task_id"]
+          field_refs: [
+            { field: "assignee_id", page: "UserAdmin", value: "id", title: "{display_name} ({email})" },
+            { field: "task_id", page: "TaskAdmin", value: "id", title: "{title}", depends_on: "assignee_id", parent: "user_id" }
+          ]
+        }
+      ]
       // The one inline in this example. An inline is what turns two pages
       // into a parent/child relationship: the child's rows render INSIDE
       // the parent's detail page, filtered to that parent, with their own

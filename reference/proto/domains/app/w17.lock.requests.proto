@@ -39,7 +39,7 @@ import "domains/app/workspace/users/queries/user_query.proto";
 import "w17/request_events.proto";
 import "w17/lock.proto";
 
-option (w17.lock_checksum) = "df5597fa7f269012f01b95be4e66fcc074667a1b9966c1bbc4aaad2a7d792f39";
+option (w17.lock_checksum) = "95dfec813dd734f1e7e1ef6f3846ce2d1141577c86ba03ebf7894871f7d71821";
 
 // RequestEvent is one record.
 message RequestEvent {
@@ -200,6 +200,7 @@ message RequestEvent {
     .e2e.app.auth.GetOAuthAuthorizationReq request_auth_get_o_auth_authorization_req = 157;
     .e2e.app.auth.ListMyOAuthGrantsReq request_auth_list_my_o_auth_grants_req = 158;
     .e2e.app.auth.RevokeMyOAuthGrantReq request_auth_revoke_my_o_auth_grant_req = 159;
+    .e2e.app.tasks.AssignTaskReq request_tasks_assign_task_req = 160;
   }
 
   oneof response {
