@@ -2,24 +2,6 @@
   "statements": [
     {
       "args": [
-        "00000000-0000-0000-0000-0000000000b5",
-        "00000000-0000-0000-0000-0000000000b6",
-        "member",
-        "00000000-0000-0000-0000-0000000000a2"
-      ],
-      "sql": "INSERT INTO \"admin_auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
-    },
-    {
-      "args": [
-        "00000000-0000-0000-0000-0000000000c4",
-        "00000000-0000-0000-0000-0000000000b6",
-        "member",
-        "00000000-0000-0000-0000-0000000000c3"
-      ],
-      "sql": "INSERT INTO \"admin_auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
-    },
-    {
-      "args": [
         "00000000-0000-0000-0000-0000000000b4",
         "company",
         "E2E Throwaway Org",
@@ -92,6 +74,24 @@
         "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
       ],
       "sql": "INSERT INTO \"admin_auth_user\" (\"id\", \"email\", \"password_hash\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000b5",
+        "00000000-0000-0000-0000-0000000000b6",
+        "member",
+        "00000000-0000-0000-0000-0000000000a2"
+      ],
+      "sql": "INSERT INTO \"admin_auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000c4",
+        "00000000-0000-0000-0000-0000000000b6",
+        "member",
+        "00000000-0000-0000-0000-0000000000c3"
+      ],
+      "sql": "INSERT INTO \"admin_auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
     },
     {
       "args": [
@@ -568,70 +568,70 @@
         "milestones",
         "id"
       ],
-      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"milestones\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"milestones\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"milestones\"), 1),\n\t\t\t(SELECT COUNT(*) > 0 FROM \"milestones\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
     },
     {
       "args": [
         "tags",
         "id"
       ],
-      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"tags\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"tags\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"tags\"), 1),\n\t\t\t(SELECT COUNT(*) > 0 FROM \"tags\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
     },
     {
       "args": [
         "task_categories",
         "id"
       ],
-      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"task_categories\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"task_categories\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"task_categories\"), 1),\n\t\t\t(SELECT COUNT(*) > 0 FROM \"task_categories\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
     },
     {
       "args": [
         "directory_campaigns",
         "id"
       ],
-      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"directory_campaigns\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"directory_campaigns\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"directory_campaigns\"), 1),\n\t\t\t(SELECT COUNT(*) > 0 FROM \"directory_campaigns\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
     },
     {
       "args": [
         "campaign_flights",
         "id"
       ],
-      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"campaign_flights\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"campaign_flights\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"campaign_flights\"), 1),\n\t\t\t(SELECT COUNT(*) > 0 FROM \"campaign_flights\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
     },
     {
       "args": [
         "flight_events",
         "id"
       ],
-      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"flight_events\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"flight_events\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"flight_events\"), 1),\n\t\t\t(SELECT COUNT(*) > 0 FROM \"flight_events\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
     },
     {
       "args": [
         "users",
         "id"
       ],
-      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"users\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"users\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"users\"), 1),\n\t\t\t(SELECT COUNT(*) > 0 FROM \"users\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
     },
     {
       "args": [
         "tasks",
         "id"
       ],
-      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"tasks\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"tasks\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"tasks\"), 1),\n\t\t\t(SELECT COUNT(*) > 0 FROM \"tasks\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
     },
     {
       "args": [
         "comments",
         "id"
       ],
-      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"comments\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"comments\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"comments\"), 1),\n\t\t\t(SELECT COUNT(*) > 0 FROM \"comments\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
     },
     {
       "args": [
         "task_audit_log",
         "id"
       ],
-      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"task_audit_log\"), 1),\n\t\t\t(SELECT COUNT(*) \u003e 0 FROM \"task_audit_log\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
+      "sql": "SELECT setval(\n\t\t\tseq,\n\t\t\tGREATEST((SELECT COALESCE(MAX(\"id\"), 0) FROM \"task_audit_log\"), 1),\n\t\t\t(SELECT COUNT(*) > 0 FROM \"task_audit_log\")\n\t\t) FROM pg_get_serial_sequence($1, $2) AS seq WHERE seq IS NOT NULL"
     }
   ]
 }
