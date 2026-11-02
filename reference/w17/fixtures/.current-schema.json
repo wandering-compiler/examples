@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "seeds": {
+    "app/test": {
+      "schema": {
+        "renderer": "1",
+        "tables": {
+          "admin_auth.OrgMembership": "aa024c305e0d6d96c1621ae95d47d1488df80143593a199cc326924ed7654e0c",
+          "admin_auth.Organization": "26be350c2a0a2e082a6273f4411a52c81fbabcb95e7fd983f89046ba9723d72c",
+          "admin_auth.Role": "7b8f982c3a6adcc51f63e4b8110a87d27016498bf74d1e619db2effd5287cfe5",
+          "admin_auth.User": "2a3a4309168772f5aa16a44d9f6f9e3bdeb4218d40426792c354a07df6ee5aea",
+          "admin_auth.UserRole": "c3fc3f1c15ab2ac0afc1c0de8a9871c20dd079cbc782ca1619fd63ebe5308627",
+          "admin_auth.UserToken": "8fab488ca87828ef073613ea9b9330807513388ea73ade0e769c599205eb43d3",
+          "auth.Role": "3863238891174d39392c76d5a8d71cdba83799723e76b09e3cc210e87436f868",
+          "auth.Tenant": "7a693b3f924148cb9355afcc3ff8d6ecd859fe25f0c28f139a2cd5bc57075f7c",
+          "auth.User": "4b6298435123cdfb127b81cbc3187a6803dd85d977faa329b359706b516a11d8",
+          "auth.UserRole": "93abda3c66516df2c8c9766c8d6dca003732c8620f6faa8875a2b695708050c3",
+          "auth.UserToken": "f53234d3d3df8b83982753ac6f32cd401bf88d06a94ff0000f4a31a2ddf4a18a",
+          "tasks.Comment": "0a1cd80371cd0f1224fb88d33de6671a152434e3f146ced4cf5ed0a05198492c",
+          "tasks.Milestone": "b9243bb49bba8e5167ed4624da3fbd41f6e42676429e829e210fd4f3b3ad4689",
+          "tasks.Project": "47f89e515b21804ac0904bc65616e7beb085ea089347224626cf22f1c18b1f66",
+          "tasks.Tag": "c54ee8c0fa96c0938716fe59d127d2d2849e8f8a9dc488c436214e5602f35fd0",
+          "tasks.Task": "dc202c6696b7955625a406cc69e889bcf3200752a1623744bcaa1ac52ae8cf81",
+          "tasks.TaskAuditLog": "563cbbf34f449217774b1b0b334d6ec55740abf4a1726613af689ef516db93b5",
+          "tasks.TaskCategory": "7bd99071960857329797cf42e80ef58a874767b075455a8e314ffd84e91c369f",
+          "tasks.TaskTag": "c6eff5337196506bd7b9b3483bfb7a7f1de29d51a42d4b0102e8c621f555eea1",
+          "users.CampaignFlight": "c09afe348575464c3eff0a650ac52581beb9fe0b25a6538d707e731709a2c9fe",
+          "users.DirectoryCampaign": "b04ec1e65c0bc95ff6dd648517851ea427232009a5613949a72eeacf0ad3de55",
+          "users.FlightEvent": "0d5597abced292d3cf1d29527447e80823523b202246c5b42981f747eea0ca1c",
+          "users.User": "6609e99dd4ec3ac975c3aeae42e6af8cd7fa65ae3404a5b9c734ec1da114f27d"
+        }
+      }
+    }
+  }
+}

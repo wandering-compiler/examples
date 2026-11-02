@@ -1,10 +1,16 @@
 {
-  "version": 1,
+  "version": 2,
   "source_root": "../../fixtures",
   "seeds": {
     "catalog/test": {
       "source": "catalog/test.json",
-      "sha256": "7c1e22c4e292c893171623791d0c61b2296456b15b64649ff6635391ae0a766b"
+      "sha256": "7c1e22c4e292c893171623791d0c61b2296456b15b64649ff6635391ae0a766b",
+      "schema": {
+        "renderer": "1",
+        "tables": {
+          "docs.Document": "1cdf207fdac918a4c0254be3822f90c0f89b8950d511d9feab3981cc07f24777"
+        }
+      }
     }
   }
 }

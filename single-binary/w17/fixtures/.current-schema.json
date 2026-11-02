@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "seeds": {
+    "app/test": {
+      "schema": {
+        "renderer": "1",
+        "tables": {
+          "admin_auth.Role": "16509aa13b2c51a0525c27358597db34fdc70b1e35ea1ab974162b995f507d74",
+          "admin_auth.User": "72b68862f6772546b137f8110f43b614efb271bc1cd47c2c984da0dce631bb13",
+          "admin_auth.UserRole": "02f23cfa463da8752cde7051c95b1f3822c7ae9ab2dc9ceb8afcb3c6afc3ce25",
+          "example.Note": "e0e615159949a5b0612c96ee75ff71916fc3bf6ee8b125564af044264e5a3da4"
+        }
+      }
+    }
+  }
+}
