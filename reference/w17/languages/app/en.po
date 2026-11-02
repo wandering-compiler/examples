@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-10-18 21:07+0000\n"
+"POT-Creation-Date: 2026-11-02 21:06+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -361,6 +361,9 @@ msgstr "Tasks · Task Mutation · Append Task Audits"
 msgid "Tasks · Task Mutation · Archive Task Batch"
 msgstr "Tasks · Task Mutation · Archive Task Batch"
 
+msgid "Tasks · Task Mutation · Assign Task"
+msgstr "Tasks · Task Mutation · Assign Task"
+
 msgid "Tasks · Task Mutation · Assign Task By Email"
 msgstr "Tasks · Task Mutation · Assign Task By Email"
 
@@ -378,6 +381,9 @@ msgstr "Tasks · Task Mutation · Comment On Task"
 
 msgid "Tasks · Task Mutation · Complete Task"
 msgstr "Tasks · Task Mutation · Complete Task"
+
+msgid "Tasks · Task Mutation · Create Task"
+msgstr "Tasks · Task Mutation · Create Task"
 
 msgid "Tasks · Task Mutation · Create Tenant Note"
 msgstr "Tasks · Task Mutation · Create Tenant Note"
@@ -531,6 +537,12 @@ msgstr "Tasks · Task Query · Stream Tenant Notes"
 
 msgid "Tasks · Task Tag · View"
 msgstr "Tasks · Task Tag · View"
+
+msgid "Tasks · Task · Action:assign Own Task"
+msgstr "Tasks · Task · Action:assign Own Task"
+
+msgid "Tasks · Task · Add"
+msgstr "Tasks · Task · Add"
 
 msgid "Tasks · Task · View"
 msgstr "Tasks · Task · View"

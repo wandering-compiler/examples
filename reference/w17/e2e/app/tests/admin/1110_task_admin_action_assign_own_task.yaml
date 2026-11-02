@@ -1,0 +1,16 @@
+# TaskAdmin's toolbar action "Assign a person one of their tasks": the form
+# picks the person from UserAdmin and then one of THEIR tasks from TaskAdmin
+# (task_id depends_on assignee_id, parent user_id), and sends both ids —
+# what this step sends. Task 700001 is a fixture row owned by user 1, so it
+# is one the narrowed picker offers once user 1 is chosen.
+#
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+method: admin.TaskAdmin.Action.assign_own_task
+pre:
+    - auth/admin.yaml
+input:
+    assignee_id: 1
+    task_id: 700001
+expect:
+    id: "700001"

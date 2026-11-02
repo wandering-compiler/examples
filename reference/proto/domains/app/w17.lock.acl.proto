@@ -12,8 +12,8 @@ package w17lock.app.acl;
 import "w17/lock.proto";
 import "w17/field.proto";
 
-option (w17.lock_checksum) = "sha256:77dc700f3ac898419eb53b66d89125b5b0d5f2343d6ecd4999abd862191efa06";
-option (w17.lock_signature) = "ed25519/v1:52e7fa9b23e5047dbdd4c67d91ffe3c277b0f84677255c6d522ac328f9c630ed11444264d859c1613e339dae06be1dc6df794c2240e07db54ab5e37f040dce0e";
+option (w17.lock_checksum) = "sha256:b5186dc639dce6dbc1d93a091d3315cabc0f4aaef6a5e956872fb7cfe44a6d7a";
+option (w17.lock_signature) = "ed25519/v1:54fd794cbbabc662caf07145ade1444ed2db0e32332c74115133a99b18b093b679a42b1fb0f1b9627c58746ecd9e94a2276c0019d186396e4116f81dd905480a";
 option (w17.lock_derivation) = 1;
 
 // AclPermission — every permission allocated by the cascade for
@@ -123,16 +123,20 @@ enum AclPermission {
   TASKS_TASKS_SERVICE_STREAM_PUBLIC_NOTE_UPDATES = 74 [(w17.value_display) = { label: "Tasks · Tasks Service · Stream Public Note Updates" }];
   TASKS_TASKS_SERVICE_STREAM_TASKS = 75 [(w17.value_display) = { label: "Tasks · Tasks Service · Stream Tasks" }];
   TASKS_TASKS_SERVICE_UPDATE_TASK_AND_INVALIDATE = 76 [(w17.value_display) = { label: "Tasks · Tasks Service · Update Task And Invalidate" }];
+  TASKS_TASK_ACTION_ASSIGN_OWN_TASK = 180 [(w17.value_display) = { label: "Tasks · Task · Action:assign Own Task" }];
+  TASKS_TASK_ADD = 181 [(w17.value_display) = { label: "Tasks · Task · Add" }];
   TASKS_TASK_LOOKUP_QUERY_COUNT_TASKS_PER_CATEGORY = 77 [(w17.value_display) = { label: "Tasks · Task Lookup Query · Count Tasks Per Category" }];
   TASKS_TASK_MUTATION_ADD_TASK_COMMENT = 78 [(w17.value_display) = { label: "Tasks · Task Mutation · Add Task Comment" }];
   TASKS_TASK_MUTATION_APPEND_TASK_AUDITS = 79 [(w17.value_display) = { label: "Tasks · Task Mutation · Append Task Audits" }];
   TASKS_TASK_MUTATION_ARCHIVE_TASK_BATCH = 80 [(w17.value_display) = { label: "Tasks · Task Mutation · Archive Task Batch" }];
+  TASKS_TASK_MUTATION_ASSIGN_TASK = 182 [(w17.value_display) = { label: "Tasks · Task Mutation · Assign Task" }];
   TASKS_TASK_MUTATION_ASSIGN_TASK_BY_EMAIL = 81 [(w17.value_display) = { label: "Tasks · Task Mutation · Assign Task By Email" }];
   TASKS_TASK_MUTATION_ATTACH_TENANT_NOTE_LINK = 82 [(w17.value_display) = { label: "Tasks · Task Mutation · Attach Tenant Note Link" }];
   TASKS_TASK_MUTATION_ATTACH_TENANT_NOTE_TAG = 83 [(w17.value_display) = { label: "Tasks · Task Mutation · Attach Tenant Note Tag" }];
   TASKS_TASK_MUTATION_BOOKMARK_TENANT_NOTE = 84 [(w17.value_display) = { label: "Tasks · Task Mutation · Bookmark Tenant Note" }];
   TASKS_TASK_MUTATION_COMMENT_ON_TASK = 85 [(w17.value_display) = { label: "Tasks · Task Mutation · Comment On Task" }];
   TASKS_TASK_MUTATION_COMPLETE_TASK = 86 [(w17.value_display) = { label: "Tasks · Task Mutation · Complete Task" }];
+  TASKS_TASK_MUTATION_CREATE_TASK = 183 [(w17.value_display) = { label: "Tasks · Task Mutation · Create Task" }];
   TASKS_TASK_MUTATION_CREATE_TENANT_NOTE = 87 [(w17.value_display) = { label: "Tasks · Task Mutation · Create Tenant Note" }];
   TASKS_TASK_MUTATION_CREATE_TENANT_NOTE_WITH_PUBLIC_LINK = 88 [(w17.value_display) = { label: "Tasks · Task Mutation · Create Tenant Note With Public Link" }];
   TASKS_TASK_MUTATION_DELETE_TASK_COMMENT = 89 [(w17.value_display) = { label: "Tasks · Task Mutation · Delete Task Comment" }];
