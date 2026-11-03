@@ -51,6 +51,34 @@ docker run --rm "$spa_tag" sh -c '
 
 w17ctl test --keep --project "$project"
 
+# The CLI of a composed domain: app-server runs the command tree itself, over
+# the tiers it builds in-process for the one command — they listen on no
+# network for a standalone CLI to dial. A write through the business facade,
+# then two storage reads of what it wrote.
+echo "==> app-server cli: a command runs in the composed binary, over its in-process tiers"
+# The binary the container runs: the generated image's `/server`, or — where a
+# dev overlay runs the bundle from source — `go run ./src`, the same binary.
+cid="$(docker compose -p "$project" ps -q app-server)"
+if docker inspect -f '{{json .Config.Cmd}}' "$cid" | grep -q 'go run'; then
+  server=(go run ./src)
+else
+  server=(/server)
+fi
+cli() { docker compose -p "$project" exec -T app-server "${server[@]}" cli "$@"; }
+owner=0ad10000-0000-7000-8000-0000000000e2
+created="$(cli note create "written by app-server cli" --owner-id "$owner" --body "from the operator CLI")"
+echo "    note create: $created"
+id="$(printf '%s' "$created" | sed -n 's/.*"id":"\{0,1\}\([0-9][0-9]*\).*/\1/p')"
+[ -n "$id" ] || { echo "note create printed no id" >&2; exit 1; }
+# The facade tags the title ("[checked] …", so the write went through it),
+# and the NoteChecked subscriber may already have stamped it again.
+got="$(cli note get "$id")"
+printf '%s' "$got" | grep -q "\"id\":\"$id\"" && printf '%s' "$got" | grep -q '\[checked\] written by app-server cli' \
+  || { echo "note get $id did not read the note back: $got" >&2; exit 1; }
+cli note list --owner-id "$owner" --limit 100 | grep -q "written by app-server cli" \
+  || { echo "note list did not list the note" >&2; exit 1; }
+echo "    note get $id and note list read it back"
+
 # In CI the job serves its Go module cache as a proxy (W17_GOPROXY_CONTAINER,
 # adoption.yml); the suite's container is on the stack's network, so the
 # proxy joins it and is dialled at its address there.

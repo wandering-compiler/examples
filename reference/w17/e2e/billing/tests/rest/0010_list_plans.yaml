@@ -1,0 +1,6 @@
+# billing's public REST, served by billing-server — not by app-gateway, which
+# the suite dials for app's scenarios. The run reaches it at billing's own
+# address (w17ctl test finds it in the stack). The catalogue is empty in the
+# test stack, so the answer is an empty list.
+method: core.SubscriptionQuery.ListPlans
+expect: {}

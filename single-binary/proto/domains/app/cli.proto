@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package single_binary.app;
+
+import "w17/cli.proto";
+
+// The operator CLI of the composed app-server. Its tiers listen on no
+// network, so no standalone binary could dial them: app-server runs the
+// command tree itself, as `app-server cli …`, over the tiers it builds
+// in-process for the one command. livetest/run.sh executes it inside the
+// running container — a storage read (note list / note get) and a write
+// through the business facade (note create).
+option (w17.cli_api) = {
+  name:        "default",
+  version:     "v1",
+  description: "Operator CLI for the notes."
+};

@@ -1,0 +1,13 @@
+# CommentAdmin's list filtered by a task — the value its task picker sends
+# (list.field_refs over TaskAdmin). The seeded comments span two tasks; of
+# 700002's there is one, so the filter narrows 0980's three to that one and
+# an ignored filter would answer all three.
+method: admin.CommentAdmin.List
+pre:
+    - auth/admin.yaml
+input:
+    task_id: 700002
+expect:
+    comments: {matcher: count, op: '==', value: 1}
+    comments.0.id: {matcher: eq, value: "720003"}
+    comments.0.task_id: {matcher: eq, value: "700002"}
