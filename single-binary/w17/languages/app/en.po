@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-10-28 12:54+0000\n"
+"POT-Creation-Date: 2026-11-03 14:19+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -21,6 +21,9 @@ msgstr "Authentication is temporarily unavailable. Please try again shortly."
 
 msgid "Authenticator apps are not available here. Your sign-in codes arrive by message instead."
 msgstr "Authenticator apps are not available here. Your sign-in codes arrive by message instead."
+
+msgid "Choose the organization to act in: name it in the W17-Org header (the organization's slug) and try again."
+msgstr "Choose the organization to act in: name it in the W17-Org header (the organization's slug) and try again."
 
 msgid "Confirm your email address before accepting this invitation."
 msgstr "Confirm your email address before accepting this invitation."

@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-10-15 12:06+0000\n"
+"POT-Creation-Date: 2026-11-03 14:19+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -42,6 +42,9 @@ msgstr "Copy"
 
 msgid "Copy {field}"
 msgstr "Copy {field}"
+
+msgid "Could not load the options"
+msgstr "Could not load the options"
 
 msgid "Create"
 msgstr "Create"
@@ -99,6 +102,9 @@ msgstr "No records found"
 
 msgid "No related {name} rows."
 msgstr "No related {name} rows."
+
+msgid "Nothing found"
+msgstr "Nothing found"
 
 msgid "Nothing here yet"
 msgstr "Nothing here yet"

@@ -43,12 +43,12 @@ generated_code:
         - framework: CLIENT_FRAMEWORK_CORE
           language: CLIENT_LANGUAGE_TYPESCRIPT
           output_root: w17/web-client
-          rest_surface: ""
+          rest_surface: public
           wire: CLIENT_WIRE_UNSPECIFIED
         - framework: CLIENT_FRAMEWORK_CORE
           language: CLIENT_LANGUAGE_JAVASCRIPT
           output_root: w17/js-client
-          rest_surface: ""
+          rest_surface: public
           wire: CLIENT_WIRE_UNSPECIFIED
     deploy_targets: []
     e2e: true
@@ -84,10 +84,10 @@ plugins:
       version: 0.1.0-rc.5
 project: examples-reference
 project_id: dceefc0e-edfb-477a-a230-ed461733de9a
-sdk_version: v0.1.0-rc.61
+sdk_version: v0.1.0-rc.63
 secrets: null
 signature:
     alg: ed25519/v1
-    body: a7da72cc37d28f83d2ae0a0a6ec66096875bfc390c7654d6a69f0fb34ec83dfde8ec076e0f435a6fce09940cb5aa1dec39f3967f74f2a3351c47038bd49c230c
+    body: be453d27dca6c96a1ee41020da87c08df282c0004b99de1909f1938529ac69c053c16479b610ebd389d2a63c3de96327e3848f622693182622455ec40df0b708
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

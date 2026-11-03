@@ -47,3 +47,6 @@ keys/
 
 # Base rsync ignore for `w17ctl stack` remote mode — regenerated every codegen.
 /rsync.ignore
+
+# Codegen's record of the files it wrote — describes this checkout's disk.
+/.codegen-manifest.json
