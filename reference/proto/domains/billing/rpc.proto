@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+// billing's PUBLIC gRPC surface: the plan catalogue for services that speak
+// gRPC. Served by billing-server beside its REST (rest.proto) and private
+// (private.proto) surfaces. A group name is the contract's gRPC service, so
+// it is PascalCase: the Go code generated from it exports PlansServer.
+package e2e.billing;
+
+import "w17/rpc.proto";
+
+option (w17.rpc_api) = {
+  name:        "public",
+  version:     "v1",
+  description: "The plan catalogue.",
+  unauthenticated: true,
+  groups: [ { name: "Plans", refs: [ "core.SubscriptionQuery.ListPlans" ] } ]
+};

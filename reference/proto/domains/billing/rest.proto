@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+// billing's PUBLIC REST surface: the plan catalogue, open to anyone. It is
+// served by the same billing-server as the domain's public gRPC (rpc.proto)
+// and its private surface (private.proto) — one binary, three listeners,
+// each admitting its callers its own way.
+package e2e.billing;
+
+import "w17/rest.proto";
+
+option (w17.rest_api) = {
+  name:        "billing",
+  version:     "v1",
+  prefix:      "/api/v1/billing",
+  description: "The plan catalogue.",
+  unauthenticated: true,
+  groups: [
+    {
+      prefix: "/plans",
+      endpoints: [ { ref: "core.SubscriptionQuery.ListPlans", method: GET, path: "" } ]
+    }
+  ]
+};
