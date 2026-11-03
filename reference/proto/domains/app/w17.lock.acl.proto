@@ -12,8 +12,8 @@ package w17lock.app.acl;
 import "w17/lock.proto";
 import "w17/field.proto";
 
-option (w17.lock_checksum) = "sha256:b5186dc639dce6dbc1d93a091d3315cabc0f4aaef6a5e956872fb7cfe44a6d7a";
-option (w17.lock_signature) = "ed25519/v1:54fd794cbbabc662caf07145ade1444ed2db0e32332c74115133a99b18b093b679a42b1fb0f1b9627c58746ecd9e94a2276c0019d186396e4116f81dd905480a";
+option (w17.lock_checksum) = "sha256:da37c00d7b62d4ba81b87c80686f8f93bfdf8258696229a0445988fb57b69cf5";
+option (w17.lock_signature) = "ed25519/v1:004866c32bba5b784252ee0e40c17cc3634242c64c8200ca8baa7a78a00d3179d8b1afc5fe15acee236302b27324513f6a8ce7aeec318d2895428dfc85080002";
 option (w17.lock_derivation) = 1;
 
 // AclPermission — every permission allocated by the cascade for
@@ -153,6 +153,7 @@ enum AclPermission {
   TASKS_TASK_QUERY_COUNT_TASKS_PER_DAY = 99 [(w17.value_display) = { label: "Tasks · Task Query · Count Tasks Per Day" }];
   TASKS_TASK_QUERY_GET_COMMENT = 100 [(w17.value_display) = { label: "Tasks · Task Query · Get Comment" }];
   TASKS_TASK_QUERY_GET_MILESTONE = 101 [(w17.value_display) = { label: "Tasks · Task Query · Get Milestone" }];
+  TASKS_TASK_QUERY_GET_TASK_ADMIN = 184 [(w17.value_display) = { label: "Tasks · Task Query · Get Task Admin" }];
   TASKS_TASK_QUERY_GET_TASK_AUDITS_BATCHED = 102 [(w17.value_display) = { label: "Tasks · Task Query · Get Task Audits Batched" }];
   TASKS_TASK_QUERY_GET_TASK_AUDITS_CAPPED = 103 [(w17.value_display) = { label: "Tasks · Task Query · Get Task Audits Capped" }];
   TASKS_TASK_QUERY_GET_TASK_AUDITS_FOR_TASK = 104 [(w17.value_display) = { label: "Tasks · Task Query · Get Task Audits For Task" }];

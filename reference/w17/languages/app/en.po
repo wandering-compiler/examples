@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-11-02 21:06+0000\n"
+"POT-Creation-Date: 2026-11-03 10:07+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -432,6 +432,9 @@ msgstr "Tasks · Task Query · Get Comment"
 
 msgid "Tasks · Task Query · Get Milestone"
 msgstr "Tasks · Task Query · Get Milestone"
+
+msgid "Tasks · Task Query · Get Task Admin"
+msgstr "Tasks · Task Query · Get Task Admin"
 
 msgid "Tasks · Task Query · Get Task Audit By Entry"
 msgstr "Tasks · Task Query · Get Task Audit By Entry"
