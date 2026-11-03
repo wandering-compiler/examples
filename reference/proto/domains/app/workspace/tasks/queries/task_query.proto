@@ -34,6 +34,14 @@ message LiveSearchHit {
   string title   = 2;
 }
 
+// GetTaskAdmin — TaskAdmin's detail read: the task row itself, the shape
+// its form and its pickers speak (user_id, category_id, resolution …).
+// GetTaskWithCategory nests the row under `task`, so a detail bound to it
+// showed every field of the form empty.
+message GetTaskAdminReq {
+  int64 id = 1;
+}
+
 message GetTaskWithCategoryReq {
   int64 id = 1;
 }
@@ -846,6 +854,18 @@ service TaskQuery {
   // name, CHAR(7) color) → row size well under 1 KiB.
   // Single SQL with INNER JOIN; codegen scans into both
   // pre-allocated nested messages.
+  rpc GetTaskAdmin(GetTaskAdminReq) returns (e2e.app.tasks.Task) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT t.id, t.user_id, t.category_id, t.title, t.body_text, "
+          "       t.status, t.priority, t.created_at, t.assignee_id, t.project_id, t.resolution "
+          "FROM tasks.Task t WHERE t.id = :id"
+      }
+    };
+  }
+
   rpc GetTaskWithCategory(GetTaskWithCategoryReq) returns (GetTaskWithCategoryResp) {
     option (w17.db.method) = {
       ops: {

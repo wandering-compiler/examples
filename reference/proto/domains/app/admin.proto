@@ -293,7 +293,9 @@ option (w17.admin_api) = {
         detail_link_column: "title"
       }
       detail: {
-        read: "tasks.TaskQuery.GetTaskWithCategory"
+        // The task row itself: the form's fields and its pickers name the
+        // task's own columns, which GetTaskWithCategory nests under `task`.
+        read: "tasks.TaskQuery.GetTaskAdmin"
         // Add a task from the admin. Its owner and its category are rows of
         // other pages, so the form offers those rows by their text rather
         // than asking for an id: a picker over UserAdmin ("Ada Lovelace
