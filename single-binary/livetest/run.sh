@@ -56,9 +56,15 @@ w17ctl test --keep --project "$project"
 # network for a standalone CLI to dial. A write through the business facade,
 # then two storage reads of what it wrote.
 echo "==> app-server cli: a command runs in the composed binary, over its in-process tiers"
-# This stack runs app-server with `go run ./src`; a deployed image runs the
-# same command as `/server cli …`.
-cli() { docker compose -p "$project" exec -T app-server go run ./src cli "$@"; }
+# The binary the container runs: the generated image's `/server`, or — where a
+# dev overlay runs the bundle from source — `go run ./src`, the same binary.
+cid="$(docker compose -p "$project" ps -q app-server)"
+if docker inspect -f '{{json .Config.Cmd}}' "$cid" | grep -q 'go run'; then
+  server=(go run ./src)
+else
+  server=(/server)
+fi
+cli() { docker compose -p "$project" exec -T app-server "${server[@]}" cli "$@"; }
 owner=0ad10000-0000-7000-8000-0000000000e2
 created="$(cli note create "written by app-server cli" --owner-id "$owner" --body "from the operator CLI")"
 echo "    note create: $created"
