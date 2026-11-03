@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package single_binary.app.example;
 
+import "w17/cli.proto";
 import "w17/db.proto";
 import "w17/field.proto";
 import "domains/app/example/types/models.proto";
@@ -28,12 +29,14 @@ message GetNoteAttachmentReq { int64 note_id = 1; }
 // NoteQuery — read side. Storage-tier SQL handlers.
 service NoteQuery {
   rpc GetNote(GetNoteReq) returns (Note) {
+    option (w17.cli) = { command: "note get <note_id>" };
     option (w17.db.method) = {
       ops: { name: "main", dql: "SELECT n.id, n.owner_id, n.title, n.body, n.created_at FROM example.Note n WHERE n.id = :note_id" }
     };
   }
 
   rpc ListNotes(ListNotesReq) returns (ListNotesResp) {
+    option (w17.cli) = { command: "note list" };
     option (w17.db.method) = {
       ops: {
         name: "main",

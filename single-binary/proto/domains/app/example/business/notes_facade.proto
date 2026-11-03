@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package single_binary.app.example;
 
+import "w17/cli.proto";
 import "w17/event.proto";
 import "w17/field.proto";
 import "domains/app/example/events/events.proto";
@@ -62,6 +63,7 @@ service NotesFacade {
   // event goes out for every caller of the facade: the REST gateway, an
   // in-process call in the composed binary, a bus delivery.
   rpc CreateNoteChecked(CreateNoteCheckedReq) returns (Note) {
+    option (w17.cli) = { command: "note create <title>" };
     option (w17.event_emit) = {
       event: "NoteChecked"
       payload: {
