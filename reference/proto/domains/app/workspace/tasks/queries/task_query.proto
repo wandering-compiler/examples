@@ -706,6 +706,7 @@ service TaskQuery {
         dql:
           "SELECT c.id, c.task_id, c.body_text, c.created_at "
           "FROM tasks.Comment c "
+          "WHERE ?c.task_id = :task_id "
           "ORDER BY c.id ASC"
       }
     };
@@ -2228,7 +2229,14 @@ message GetTaskCoverResp {
     }];
 }
 
-message ListAllCommentsReq {}
+message ListAllCommentsReq {
+  // The comments of one task. A filter whose value is a row of another
+  // page: CommentAdmin's list renders it as a picker over TaskAdmin's rows
+  // (`list.field_refs`), so the operator chooses a task by its title and
+  // the list is asked for its id. Optional: the picker clears to "every
+  // task", and the DQL's optional condition drops out.
+  optional int64 task_id = 1 [(w17.admin_filter) = true];
+}
 message ListAllCommentsResp {
   repeated e2e.app.tasks.Comment comments = 1;
 }

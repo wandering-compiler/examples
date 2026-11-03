@@ -369,6 +369,11 @@ option (w17.admin_api) = {
           create:  "tasks.TaskMutation.AddTaskComment"
           update:  "tasks.TaskMutation.UpdateTaskComment"
           delete_: "tasks.TaskMutation.DeleteTaskComment"
+          // The add form's author is a person, picked by name from
+          // UserAdmin's rows; the task is the parent, stamped from the URL.
+          field_refs: [
+            { field: "author_id", page: "UserAdmin", value: "id", title: "{display_name} ({email})" }
+          ]
         }
       ]
     },
@@ -592,6 +597,12 @@ option (w17.admin_api) = {
           { name: "created_at" }
         ]
         detail_link_column: "body_text"
+        // The task filter is a picker over TaskAdmin's rows: the operator
+        // filters by a task's title, the list is asked for its id. Clearing
+        // it lists every comment again.
+        field_refs: [
+          { field: "task_id", page: "TaskAdmin", value: "id", title: "{title}" }
+        ]
       }
       // The FLAT half of the fields/fieldsets pair. `CommentTaskList`
       // below renders the SAME model through the SAME update method as
