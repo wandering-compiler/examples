@@ -169,7 +169,7 @@ option (w17.admin_api) = {
     },
     {
       title: "Directory"
-      pages: ["UserAdmin", "UserDirectory", "Users", "Organizations", "OrgMemberships"]
+      pages: ["UserAdmin", "UserDirectory", "Users", "Organizations", "OrgMemberships", "FlightAdmin"]
     },
     {
       title: "Access"
@@ -650,6 +650,34 @@ option (w17.admin_api) = {
           { name: "task_id" },
           { name: "tag_id" }
         ]
+      }
+    },
+    {
+      // The page that shows MONEY as money. Its three amounts come off the
+      // wire as minor units ("1051") and their columns carry the `money`
+      // format slot with the scale and the currency: `spend` in a fixed
+      // CZK, `bid_cap` at scale 4 in the currency of its own row
+      // (`bid_currency`, which the list projects so the slot can read it),
+      // and `platform_fee` in a fixed EUR. Nothing on the page declares a
+      // format; each column inherits it from the model field.
+      name: "FlightAdmin"
+      model: "users.CampaignFlight"
+      title: "Campaign flights"
+      list: {
+        source: "users.CampaignQuery.ListFlights"
+        columns: [
+          { name: "id" },
+          { name: "channel" },
+          { name: "spend" },
+          { name: "bid_cap" },
+          { name: "bid_currency" },
+          { name: "platform_fee" }
+        ]
+        detail_link_column: "channel"
+      }
+      detail: {
+        read: "users.CampaignQuery.GetFlight"
+        readonly_fields: ["id"]
       }
     }
   ]

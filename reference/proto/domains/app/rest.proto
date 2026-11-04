@@ -329,7 +329,8 @@ option (w17.rest_api) = {
         { ref: "users.CampaignQuery.FlightWeights",               method: GET, path: "/flight-weights" },
         { ref: "users.CampaignQuery.ChannelBreakdown",            method: GET, path: "/channel-breakdown" },
         { ref: "users.CampaignQuery.ListCampaignsFromSource",     method: GET, path: "/from-source" },
-        { ref: "users.CampaignQuery.GetCampaignAudienceSource",   method: GET, path: "/{id}/audience-source" }
+        { ref: "users.CampaignQuery.GetCampaignAudienceSource",   method: GET, path: "/{id}/audience-source" },
+        { ref: "users.CampaignQuery.ListFlights",                 method: GET, path: "/flights" }
       ]
     },
     {
