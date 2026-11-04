@@ -1,0 +1,37 @@
+# MONEY on the wire: an int64 count of MINOR units, and nothing else.
+#
+# The three seeded flights carry the three currency shapes MONEY has
+# (campaign_models.proto): `spend` in a fixed CZK at scale 2, `bid_cap` at
+# scale 4 in the currency of its own row (`bid_currency`), `platform_fee` in
+# a fixed EUR. On the wire every one of them is the stored integer as a JSON
+# string — int64's rule — with no decimal point, no currency and no rounding:
+# 10.51 Kč is "1051", 0.1234 € is "1234", 15 ¥ at scale 4 is "150000".
+#
+# That is the claim: the value is exact end to end and carries neither its
+# scale nor its currency. Both travel in the format slot (the admin spec's
+# column_formats, the generated clients' slot tables), which the platform's
+# `make check-admin-i18n` renders through the shipped runtime — `10,51 Kč`
+# for a Czech reader. A server that formatted, rounded or floated the
+# amount fails here: "10.51", "1051.0" and 1051 (a JSON number) are all
+# different bytes from "1051".
+method: users.CampaignQuery.ListFlights
+pre:
+    - auth/auth.yaml
+input: {}
+expect:
+    flights: {matcher: count, op: '==', value: 3}
+    flights.0.id: {matcher: eq, value: "720101"}
+    flights.0.spend: {matcher: eq, value: "1051"}
+    flights.0.bid_currency: {matcher: eq, value: EUR}
+    flights.0.bid_cap: {matcher: eq, value: "1234"}
+    flights.0.platform_fee: {matcher: eq, value: "250"}
+    flights.1.id: {matcher: eq, value: "720102"}
+    flights.1.spend: {matcher: eq, value: "2025"}
+    flights.1.bid_currency: {matcher: eq, value: JPY}
+    flights.1.bid_cap: {matcher: eq, value: "150000"}
+    flights.1.platform_fee: {matcher: eq, value: "99"}
+    flights.2.id: {matcher: eq, value: "720201"}
+    flights.2.spend: {matcher: eq, value: "500"}
+    flights.2.bid_currency: {matcher: eq, value: USD}
+    flights.2.bid_cap: {matcher: eq, value: "12345"}
+    flights.2.platform_fee: {matcher: eq, value: "1"}
