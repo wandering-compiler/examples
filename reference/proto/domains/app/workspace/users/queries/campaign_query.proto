@@ -273,6 +273,7 @@ service CampaignQuery {
           "       COALESCE(f.spend, 0) % :bucket AS coalesced_bucket, "
           "       ABS(f.impressions) % :bucket AS abs_bucket "
           "FROM users.CampaignFlight f "
+          "WHERE f.campaign_id = :campaign_id "
           "ORDER BY f.id ASC"
       }
     };
