@@ -55,15 +55,16 @@ message ListFlightBucketsReq {
 // FlightBucketRow — one flight's numbers, each reduced modulo the same
 // divisor through a different operand SHAPE.
 //
-// The three integer buckets are `optional` for the same reason as above:
-// `CAST(0.25 AS INTEGER) % 7` is 0, and that zero is the answer, not an
-// absence.
+// Every bucket is an integer, and `optional` for the same reason as
+// above: `CAST(0.25 AS INTEGER) % 7` is 0, and that zero is the answer,
+// not an absence. The two spend buckets are integers too — `spend` is an
+// int64 count of minor units, so `spend % 7` is integer modulo over them.
 message FlightBucketRow {
   int64          id                = 1;
   optional int64 impression_bucket = 2;
   optional int64 click_bucket      = 3;
-  double         spend_bucket      = 4 [(w17.field) = { null: true }];
-  double         coalesced_bucket  = 5 [(w17.field) = { null: true }];
+  optional int64 spend_bucket      = 4;
+  optional int64 coalesced_bucket  = 5;
   optional int64 abs_bucket        = 6;
 }
 message ListFlightBucketsResp { repeated FlightBucketRow rows = 1; }
@@ -221,14 +222,12 @@ service CampaignQuery {
   // is wrong in two directions that look nothing alike. PostgreSQL has
   // no modulo operator for `float8`, so `click_rate % 7` is a
   // server-side "operator does not exist" — the CAST is not styling,
-  // it is the only way to ask the question. But `spend` also rides the
-  // DOUBLE carrier while being stored as `NUMERIC(19,4)`, where `%` is
-  // perfectly valid; refusing it because the carrier looks floating is
-  // a loud refusal of a correct query, and that is what the compiler
-  // did before the preset carve-out.
+  // it is the only way to ask the question. But `spend` is an int64
+  // count of minor units, stored as BIGINT, where `%` is perfectly
+  // valid; refusing it would be a loud refusal of a correct query.
   //
   // So the five projections are five different questions to the same
-  // guard: an integer column, a CAST target, a NUMERIC-preset column,
+  // guard: an integer column, a CAST target, a minor-units column,
   // that column inside a value-preserving COALESCE, and an integer
   // inside ABS. The two function wrappers are there because the guard
   // has to see THROUGH them — a whitelist that stopped propagating
