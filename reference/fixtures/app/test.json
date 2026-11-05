@@ -462,8 +462,11 @@
         "campaign_id": 720001,
         "channel": "search",
         "impressions": 100,
-        "spend": "10.5000",
-        "click_rate": 0.25
+        "spend": 1051,
+        "click_rate": 0.25,
+        "bid_currency": "EUR",
+        "bid_cap": 1234,
+        "platform_fee": 250
       }
     },
     {
@@ -475,8 +478,11 @@
         "campaign_id": 720001,
         "channel": "social",
         "impressions": 300,
-        "spend": "20.2500",
-        "click_rate": 0.75
+        "spend": 2025,
+        "click_rate": 0.75,
+        "bid_currency": "JPY",
+        "bid_cap": 150000,
+        "platform_fee": 99
       }
     },
     {
@@ -488,8 +494,11 @@
         "campaign_id": 720002,
         "channel": "search",
         "impressions": 50,
-        "spend": "5.0000",
-        "click_rate": 0.5
+        "spend": 500,
+        "click_rate": 0.5,
+        "bid_currency": "USD",
+        "bid_cap": 12345,
+        "platform_fee": 1
       }
     },
     {

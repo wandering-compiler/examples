@@ -71,23 +71,36 @@ message DirectoryCampaign {
 
 // CampaignFlight — one channel's slice of a campaign.
 //
-// Carries the three numeric KINDS that `%` (modulo) has to tell apart,
-// and they are three rather than one because the guard's whole job is
-// to distinguish them and it fails silently in both directions:
+// Carries the numeric KINDS that `%` (modulo) has to tell apart, and
+// they are several rather than one because the guard's whole job is to
+// distinguish them and it fails silently in both directions:
 //
 //   impressions  int64  → an integer. `%` is valid everywhere.
-//   spend        MONEY on the DOUBLE carrier → NUMERIC(19,4) on
-//                PostgreSQL, where `%` IS valid. Refusing it (which the
-//                compiler did before the preset carve-out) is a loud
-//                false refusal of a correct query.
+//   spend        MONEY → an int64 count of MINOR units (haléře: 10.51 Kč
+//                is 1051), stored as BIGINT. `%` is integer modulo over
+//                the minor units, valid everywhere — and refusing it
+//                because the type says "money" would be a loud false
+//                refusal of a correct query.
 //   click_rate   plain double → DOUBLE PRECISION, and PostgreSQL has no
 //                modulo operator for float8 at all. `click_rate % 7` is
 //                a server-side "operator does not exist" error, so the
 //                only way to bucket it is through a CAST.
+//
+// It also carries MONEY's three currency shapes, which every surface
+// renders through the one `money` format (`10,51 Kč`, `CZK 10.51`):
+//
+//   spend         a FIXED currency (`currency: "CZK"`) at the default
+//                 scale 2 — every row is in crowns.
+//   bid_cap       a PER-ROW currency (`currency_field: "bid_currency"`) at
+//                 scale 4, finer than any currency shows: 0.1234 € is
+//                 1234, displayed rounded to the currency's own decimals.
+//   platform_fee  a fixed currency again, a different one (`EUR`), so a
+//                 renderer that read one currency for the whole row would
+//                 show one of the two wrong.
 message CampaignFlight {
   option (w17.db.table) = {
     name:    "campaign_flights"
-    comment: "One channel's slice of a campaign. Impressions are exact, spend is fixed-point, click-through is a binary float."
+    comment: "One channel's slice of a campaign. Impressions are exact, spend is integer minor units, click-through is a binary float."
   };
 
   int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
@@ -102,10 +115,15 @@ message CampaignFlight {
 
   string channel     = 3 [(w17.field) = { type: CHAR, max_len: 32 }];
   int64  impressions = 4;
-  double spend       = 5 [(w17.field) = { type: MONEY }];
+  int64  spend       = 5 [(w17.field) = { type: MONEY, currency: "CZK", gte: 0 }];
   double click_rate  = 6;
 
   google.protobuf.Timestamp started_at = 7 [(w17.field) = { default_auto: NOW, immutable: true }];
+
+  // The ISO 4217 code bid_cap is in, per row.
+  string bid_currency = 8 [(w17.field) = { type: CHAR, max_len: 3 }];
+  int64  bid_cap      = 9 [(w17.field) = { type: MONEY, scale: 4, currency_field: "bid_currency", gte: 0 }];
+  int64  platform_fee = 10 [(w17.field) = { type: MONEY, currency: "EUR", gte: 0 }];
 }
 
 // FlightEvent — one recorded interaction with a flight.

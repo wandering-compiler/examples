@@ -2,5 +2,12 @@
 # the suite dials for app's scenarios. The run reaches it at billing's own
 # address (w17ctl test finds it in the stack). The catalogue is empty in the
 # test stack, so the answer is an empty list.
+#
+# An empty list is exactly what an empty `expect:` cannot tell from a route
+# that answered nothing at all, so the case asserts the WIRE: billing's own
+# server answered with a JSON document. A plans assertion would hold against
+# an empty response just the same, and say nothing more.
 method: core.SubscriptionQuery.ListPlans
-expect: {}
+expect:
+    w17_wire.content_type: {matcher: eq, value: application/json}
+    w17_wire.json: {matcher: eq, value: true}

@@ -4,6 +4,7 @@ package e2e.app.users;
 
 import "w17/db.proto";
 import "w17/field.proto";
+import "domains/app/workspace/users/types/campaign_models.proto";
 
 // Reads over the directory-campaign island, each written for a DQL
 // construct: the EXISTS shortcut over a relation (one hop and two), two
@@ -55,15 +56,17 @@ message ListFlightBucketsReq {
 // FlightBucketRow — one flight's numbers, each reduced modulo the same
 // divisor through a different operand SHAPE.
 //
-// The three integer buckets are `optional` for the same reason as above:
-// `CAST(0.25 AS INTEGER) % 7` is 0, and that zero is the answer, not an
-// absence.
+// Every bucket is an integer, and `optional` for the same reason as
+// above: `CAST(0.25 AS INTEGER) % 7` is 0, and that zero is the answer,
+// not an absence. The two money buckets are integers too — `spend` is
+// MONEY, an int64 count of minor units, so `spend % 7` is integer modulo
+// over haléře.
 message FlightBucketRow {
   int64          id                = 1;
   optional int64 impression_bucket = 2;
   optional int64 click_bucket      = 3;
-  double         spend_bucket      = 4 [(w17.field) = { null: true }];
-  double         coalesced_bucket  = 5 [(w17.field) = { null: true }];
+  optional int64 spend_bucket      = 4;
+  optional int64 coalesced_bucket  = 5;
   optional int64 abs_bucket        = 6;
 }
 message ListFlightBucketsResp { repeated FlightBucketRow rows = 1; }
@@ -100,6 +103,31 @@ message ChannelBreakdownRow {
   optional int64  flight_count = 3;
 }
 message ChannelBreakdownResp { repeated ChannelBreakdownRow rows = 1; }
+
+// Every flight with every column, MONEY ones included: the
+// FlightAdmin page's list, and a REST read of the same rows. A MONEY value
+// travels as its minor units — an int64, so a JSON string ("1051" for
+// 10.51 Kč) — and its scale and currency travel in the format slot, never
+// in the value.
+message ListFlightsReq {}
+message ListFlightsResp { repeated CampaignFlight flights = 1; }
+
+message GetFlightReq { int64 id = 1; }
+
+// GetFlightResp — one flight, flat, the shape an admin detail read takes.
+// Its MONEY fields carry no annotation of their own: each is a plain
+// projection of its column and inherits the column's format, currency
+// and scale (bid_cap's per-row currency rebinds to this message's
+// bid_currency, which the statement projects beside it).
+message GetFlightResp {
+  int64  id           = 1;
+  int64  campaign_id  = 2;
+  string channel      = 3;
+  int64  spend        = 4;
+  string bid_currency = 5;
+  int64  bid_cap      = 6;
+  int64  platform_fee = 7;
+}
 
 message GetCampaignAudienceSourceReq { int64 id = 1; }
 message GetCampaignAudienceSourceResp {
@@ -221,16 +249,15 @@ service CampaignQuery {
   // is wrong in two directions that look nothing alike. PostgreSQL has
   // no modulo operator for `float8`, so `click_rate % 7` is a
   // server-side "operator does not exist" — the CAST is not styling,
-  // it is the only way to ask the question. But `spend` also rides the
-  // DOUBLE carrier while being stored as `NUMERIC(19,4)`, where `%` is
-  // perfectly valid; refusing it because the carrier looks floating is
-  // a loud refusal of a correct query, and that is what the compiler
-  // did before the preset carve-out.
+  // it is the only way to ask the question. But `spend` is MONEY, an
+  // int64 count of minor units stored as BIGINT, where `%` is perfectly
+  // valid; refusing it because the type reads as money is a loud refusal
+  // of a correct query.
   //
   // So the five projections are five different questions to the same
-  // guard: an integer column, a CAST target, a NUMERIC-preset column,
-  // that column inside a value-preserving COALESCE, and an integer
-  // inside ABS. The two function wrappers are there because the guard
+  // guard: an integer column, a CAST target, a MONEY column (integer
+  // minor units), that column inside a value-preserving COALESCE, and an
+  // integer inside ABS. The two function wrappers are there because the guard
   // has to see THROUGH them — a whitelist that stopped propagating
   // would either refuse `COALESCE(spend, 0) % n` or, worse, let a
   // genuine float through under `ABS`.
@@ -352,6 +379,38 @@ service CampaignQuery {
           "FROM users.DirectoryCampaign c "
           "WHERE c.audience.\"utm.source\" = :source "
           "ORDER BY c.id ASC"
+      }
+    };
+  }
+
+  // ListFlights / GetFlight — every column of the flights, the
+  // three MONEY ones among them (a fixed CZK, a per-row currency at scale
+  // 4, a fixed EUR). The FlightAdmin page lists and reads them, which is
+  // where their `money` format slot is emitted.
+  rpc ListFlights(ListFlightsReq) returns (ListFlightsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT f.id, f.campaign_id, f.channel, "
+          "       f.impressions, f.spend, "
+          "       f.click_rate, f.started_at, "
+          "       f.bid_currency, f.bid_cap, "
+          "       f.platform_fee "
+          "FROM users.CampaignFlight f "
+          "ORDER BY f.id ASC"
+      }
+    };
+  }
+
+  rpc GetFlight(GetFlightReq) returns (GetFlightResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT f.id, f.campaign_id, f.channel, f.spend, f.bid_currency, f.bid_cap, f.platform_fee "
+          "FROM users.CampaignFlight f "
+          "WHERE f.id = :id"
       }
     };
   }
