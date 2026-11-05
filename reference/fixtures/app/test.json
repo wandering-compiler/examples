@@ -462,7 +462,7 @@
         "campaign_id": 720001,
         "channel": "search",
         "impressions": 100,
-        "spend": "10.5000",
+        "spend": 1051,
         "click_rate": 0.25
       }
     },
@@ -475,7 +475,7 @@
         "campaign_id": 720001,
         "channel": "social",
         "impressions": 300,
-        "spend": "20.2500",
+        "spend": 2025,
         "click_rate": 0.75
       }
     },
@@ -488,7 +488,7 @@
         "campaign_id": 720002,
         "channel": "search",
         "impressions": 50,
-        "spend": "5.0000",
+        "spend": 500,
         "click_rate": 0.5
       }
     },

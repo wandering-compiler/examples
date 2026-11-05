@@ -4,11 +4,10 @@
 # PostgreSQL has no modulo operator for `float8`, so `click_rate % 7` is
 # a server-side "operator does not exist" — the CAST is not a style
 # choice, it is the only way to ask the question of a binary float. But
-# `spend` rides the same DOUBLE carrier while being stored as
-# NUMERIC(19,4), where `%` is perfectly valid; refusing it is a loud
-# refusal of a correct query, which is what the compiler did before the
-# fixed-point carve-out. The guard has to tell those two apart from the
-# carrier alone, and until this query existed it had never been asked.
+# `spend` is an int64 count of minor units, stored as BIGINT, where `%`
+# is perfectly valid; refusing it is a loud refusal of a correct query.
+# The guard has to tell those two apart, and until this query existed it
+# had never been asked.
 #
 # The two function wrappers are the propagation half: the guard must see
 # THROUGH `COALESCE` and `ABS` to their operands, or it either refuses
@@ -18,9 +17,10 @@
 # `click_bucket` is 0 on the first row, which is the answer and not an
 # absence — 0.25 casts to 0 and 0.75 casts to 1, straddling the rounding
 # boundary on purpose. It is `optional` in the response for exactly that
-# reason. The money buckets are fractional (3.5 and 6.25), which is what
-# separates a fixed-point modulo from an integer one: an implementation
-# that truncated to integers first would answer 3 and 6.
+# reason. The spend buckets are taken over MINOR units: 10.51 is 1051
+# and 1051 % 7 is 1, where a modulo over the major units would answer
+# 3.51 (or 3, truncated). No spend bucket is 0, so a seed that lost the
+# value could not pass for the right arithmetic.
 method: users.CampaignQuery.ListFlightBuckets
 pre:
     - auth/auth.yaml
@@ -32,11 +32,12 @@ expect:
     rows.0.id: {matcher: eq, value: "720101"}
     rows.0.impression_bucket: {matcher: eq, value: "2"}
     rows.0.click_bucket: {matcher: eq, value: "0"}
-    rows.0.spend_bucket: {matcher: num, op: '==', value: 3.5}
-    rows.0.coalesced_bucket: {matcher: num, op: '==', value: 3.5}
+    rows.0.spend_bucket: {matcher: eq, value: "1"}
+    rows.0.coalesced_bucket: {matcher: eq, value: "1"}
     rows.0.abs_bucket: {matcher: eq, value: "2"}
     rows.1.id: {matcher: eq, value: "720102"}
     rows.1.impression_bucket: {matcher: eq, value: "6"}
     rows.1.click_bucket: {matcher: eq, value: "1"}
-    rows.1.spend_bucket: {matcher: num, op: '==', value: 6.25}
+    rows.1.spend_bucket: {matcher: eq, value: "2"}
+    rows.1.coalesced_bucket: {matcher: eq, value: "2"}
     rows.1.abs_bucket: {matcher: eq, value: "6"}
