@@ -9,7 +9,7 @@ syntax = "proto3";
 // can be operated independently from the app database. Story:
 // the app is a product the user can buy + run self-hosted;
 // billing tracks subscriptions / usage and is run by the
-// vendor (or by a separate operator in a multi-tenant setup).
+// vendor (or by a separate operator in a multi-organization setup).
 // Self-hosted deploys can opt out by leaving billing offline —
 // the app's facade soft-warns when billing is unreachable
 // instead of failing.
@@ -64,7 +64,7 @@ option (w17.domain) = {
 // at all. Billing runs on its own database, operated by whoever sells
 // the product, and a vendor-run database is exactly the one that ends
 // up sharing an instance with something else — a reporting replica, an
-// analytics load, a second tenant of the same operator. A schema is
+// analytics load, a second organization of the same operator. A schema is
 // what keeps `invoices` from being a name two of them argue over, and
 // it costs nothing to declare up front and a migration to add later.
 //

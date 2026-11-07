@@ -42,10 +42,21 @@ option (w17.domain) = {
       registered_as: "auth"
       channels:   [ { key: "events", value: "tasks" } ]
       auth_input: { header_name: "Authorization", scheme: "Bearer" }
-      features:   { names: [ "rbac", "authenticate_turnkey", "sign_up_turnkey", "sign_in_turnkey", "tenant_scope", "api_token", "oauth_server" ] }
-      // This project curates its own /auth routes in rest.proto —
-      // SignUp is mounted at `/{tenant_slug}/register` for URL-based
-      // tenancy, which the generic preset can't express. Plugin REST
+      features:   { names: [ "rbac", "authenticate_turnkey", "sign_up_turnkey", "sign_in_turnkey", "org_membership", "org_hosts", "org_signup", "api_token", "oauth_server" ] }
+      // The admin's pages are the staff realm's (admin_auth, below): this
+      // realm's organizations, memberships and roles are its customers', not
+      // what the operator edits there. Both realms carry rbac and
+      // org_membership, and an admin page goes to the first activation that
+      // offers it, so this one contributes none.
+      presets:    { admin: { enabled: false } }
+      // Every account belongs to an organization: a registration names the
+      // host it comes from (SignUpReq.signup_host), the organization bound
+      // to that host (org_hosts) takes it in under its open policy
+      // (org_signup), and from then on a request acts in it — the account's
+      // only one (org_from_sole_membership) — so its rows are scoped by the
+      // `org_id` data scope with no hand-written facade.
+      //
+      // This project curates its own /auth routes in rest.proto. Plugin REST
       // presets are OFF by default (opt-in via `(w17.rest_api).include`),
       // so simply NOT including "auth" leaves the hand-written routes the
       // single source. The plugin's `auth_methods` posture is still
@@ -55,18 +66,16 @@ option (w17.domain) = {
     },
     // **Second activation — the admin auth realm (item 6).** The same
     // `auth` plugin activated again under `registered_as: "admin_auth"`
-    // gives the administrator a *tenant-less* identity that shares this
-    // database but is fully isolated from the app's tenant-scoped users:
+    // gives the administrator an identity in no organization that shares this
+    // database but is fully isolated from the app's org-scoped users:
     // distinct stubs (`e2e.app.admin_auth.*` vs `e2e.app.auth.*`),
     // distinct Go package, distinct tables (`admin_auth_user` /
     // `admin_auth_user_token` / `admin_auth_role` / …). Features OMIT
-    // `tenant_scope` (the admin belongs to no tenant) and
-    // `sign_up_turnkey` (admins are seeded, never self-register) — so the
-    // sign_up_turnkey-gated signup.go and tenant_scope-gated tenant.go
-    // never stage for this realm. The admin surface (admin.proto) points
+    // `sign_up_turnkey` (admins are seeded, never self-register), so the
+    // sign_up_turnkey-gated signup.go never stages for this realm. The admin surface (admin.proto) points
     // its `login_method` / `user_lookup` at `admin_auth.AuthService.*`,
     // so the Django-style admin authenticates against THIS realm, never
-    // the tenant-scoped app users. It contributes neither REST routes nor
+    // the org-scoped app users. It contributes neither REST routes nor
     // MCP tools to the app's public gateway — because plugin REST/MCP
     // presets are opt-in and the app gateway's registries never `include`
     // "admin_auth". (This also means the old WhoAmI MCP-tool collision

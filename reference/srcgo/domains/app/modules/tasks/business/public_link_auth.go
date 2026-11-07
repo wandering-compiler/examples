@@ -10,16 +10,16 @@
 // same surface, unchanged.
 //
 // What it does is small on purpose: take the capability token the
-// gateway extracted from the URL, resolve it to the tenant that owns the
+// gateway extracted from the URL, resolve it to the organization that owns the
 // linked row, and hand that back as a scope. Everything after that is
 // the platform's — the scope value is threaded as
-// `x-w17-scope-tenant_id` and the storage codegen filters every read by
+// `x-w17-scope-org_id` and the storage codegen filters every read by
 // it, exactly as it does for a signed-in principal.
 //
 // The comparison worth keeping in mind is the alternative this replaces:
 // an `exclude_auth` route plus a hand-written `WHERE public_token = …`.
 // Both contain exactly ONE unscoped lookup. The difference is that here
-// it is a single named query on a service declared cross-tenant, its
+// it is a single named query on a service declared cross-organization, its
 // output is a scope, and every subsequent read is filtered by the
 // platform; there, the unscoped read IS the endpoint and nothing
 // downstream is filtered by anything.
@@ -82,7 +82,7 @@ func RegisterPublicLinkAuth(srv *grpc.Server, deps appdeps.Deps) {
 // that the stream's isolation comes from the scope the auth method
 // returns.
 func (s *TasksServer) StreamPublicNoteUpdates(req *taskspb.StreamPublicNoteUpdatesReq, stream taskspb.TasksService_StreamPublicNoteUpdatesServer) error {
-	notes, err := s.deps.TaskQuery.ListTenantNotesForPublicLink(stream.Context(), &taskspb.ListTenantNotesForPublicLinkReq{
+	notes, err := s.deps.TaskQuery.ListOrgNotesForPublicLink(stream.Context(), &taskspb.ListOrgNotesForPublicLinkReq{
 		PublicToken: req.GetPublicToken(),
 	})
 	if err != nil {
@@ -91,7 +91,7 @@ func (s *TasksServer) StreamPublicNoteUpdates(req *taskspb.StreamPublicNoteUpdat
 	for _, n := range notes.GetNotes() {
 		if err := stream.Send(&taskspb.PublicNoteUpdate{
 			Id:       n.GetId(),
-			TenantId: n.GetTenantId(),
+			OrgId: n.GetOrgId(),
 			Title:    n.GetTitle(),
 		}); err != nil {
 			return err
@@ -119,17 +119,17 @@ func (s *PublicLinkAuthServer) AuthenticatePublicLink(ctx context.Context, req *
 		// and bad: `public_token` is NULLable (almost no note has a
 		// share link), and one careless comparison away from "" is a
 		// query that matches an arbitrary link-less row and hands out
-		// its tenant's scope. Two checks, because the failure is silent
+		// its organization's scope. Two checks, because the failure is silent
 		// and total while a duplicated `if` costs nothing.
 		return nil, status.Error(codes.Unauthenticated, "missing capability token")
 	}
 
-	// The one cross-tenant read this feature introduces, on the service
+	// The one cross-organization read this feature introduces, on the service
 	// that declares `(w17.db.bypass_scope_service) = "*"`. It has to be
 	// unscoped: the request arrived with no identity, so no scope exists
 	// yet — producing one is this method's entire job. A scoped version
 	// would need its own answer as an input.
-	resolved, err := s.deps.TenantOpsQuery.ResolvePublicNoteToken(ctx, &taskspb.ResolvePublicNoteTokenReq{
+	resolved, err := s.deps.OrgOpsQuery.ResolvePublicNoteToken(ctx, &taskspb.ResolvePublicNoteTokenReq{
 		PublicToken: token,
 	})
 	if err != nil {
@@ -139,7 +139,7 @@ func (s *PublicLinkAuthServer) AuthenticatePublicLink(ctx context.Context, req *
 		// endpoint into an oracle for probing which tokens exist.
 		return nil, status.Error(codes.Unauthenticated, "invalid capability token")
 	}
-	if resolved.GetTenantId() == "" {
+	if resolved.GetOrgId() == "" {
 		return nil, status.Error(codes.Unauthenticated, "invalid capability token")
 	}
 
@@ -157,10 +157,10 @@ func (s *PublicLinkAuthServer) AuthenticatePublicLink(ctx context.Context, req *
 		// reach an endpoint that never declared `credential`.
 		//
 		// scopes is the whole payload. From here on the platform owns
-		// isolation: the gateway threads `x-w17-scope-tenant_id` into
+		// isolation: the gateway threads `x-w17-scope-org_id` into
 		// outgoing metadata and the storage codegen appends the filter
 		// to every read — including reads that carry no token in their
 		// DQL at all, which is the only place a broken scope would show.
-		Scopes: map[string]string{"tenant_id": resolved.GetTenantId()},
+		Scopes: map[string]string{"org_id": resolved.GetOrgId()},
 	}, nil
 }

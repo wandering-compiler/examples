@@ -9,9 +9,9 @@
 #
 # The `pre` chain tags the note once, so its count is exactly 1 —
 # the fixture's note is the only one this chain created.
-method: tasks.TaskQuery.ListTenantNotesPagedWithTagCount
+method: tasks.TaskQuery.ListOrgNotesPagedWithTagCount
 pre:
-    - fixtures/a_tenant_note_tag.yaml
+    - fixtures/an_org_note_tag.yaml
 input: {}
 expect:
     items: {matcher: count, op: '>=', value: 1}

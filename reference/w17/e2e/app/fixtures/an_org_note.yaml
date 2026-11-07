@@ -1,7 +1,7 @@
-# Creates a tenant note and captures its id for the get test. tenant_id
+# Creates an organization note and captures its id for the get test. org_id
 # is omitted on purpose — it's auto-stamped from the caller's auth scope
 # (decoded from the token), never sent in the payload.
-method: tasks.TaskMutation.CreateTenantNote
+method: tasks.TaskMutation.CreateOrgNote
 pre:
     - auth/auth.yaml
 input:

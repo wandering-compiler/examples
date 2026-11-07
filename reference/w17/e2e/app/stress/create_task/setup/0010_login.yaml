@@ -2,5 +2,5 @@
 # auth-required load op (CreateTask) reuses it — concurrent workers all
 # share this one token.
 method: auth.AuthService.SignUp
-input: {tenant_slug: tenant-alpha, email: "load-${seq}@example.com", password: e2eSecret!23}
+input: {signup_host: org-alpha.reference.test, email: "load-${seq}@example.com", password: e2eSecret!23}
 expect: {token: {capture: auth.token}}

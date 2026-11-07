@@ -5,7 +5,7 @@
 # the storage handler's own block (the one that did not compile) is the
 # defence for callers that reach storage directly, and rest/0695 is what
 # proves it builds. Both carry the same rule from the same declaration.
-method: tasks.TaskQuery.StreamTenantNotes
+method: tasks.TaskQuery.StreamOrgNotes
 pre:
     - auth/auth.yaml
 input:

@@ -55,18 +55,18 @@ option (w17.admin_api) = {
   custom_js: "w17/admin-custom"
 
   // email+password login flow served by the SECOND activation of the
-  // `auth` plugin — the tenant-less admin realm `admin_auth` (item 6),
-  // NOT the tenant-scoped `auth` realm the app's users live in. The
+  // `auth` plugin — the org-less admin realm `admin_auth` (item 6),
+  // NOT the org-scoped `auth` realm the app's users live in. The
   // administrator is a separate principal in its own `admin_auth_*`
   // tables, so an admin login never collides with — and is never
-  // scoped by — any tenant.
+  // scoped by — any organization.
   //   login_method = admin_auth.AuthService.SignIn — plugin turnkey
   //     (`sign_in_turnkey`): GetUserByEmail + passwordhash.
   //     VerifyAndRotate + IssueToken; returns { user_id, token }.
   //   user_lookup = admin_auth.AuthService.Authenticate — plugin
   //     per-request identity + permissions + scopes resolution from
-  //     the Bearer token SignIn issued. No tenant scope is stamped
-  //     (the admin_auth activation omits `tenant_scope`).
+  //     the Bearer token SignIn issued. No organization scope is stamped
+  //     (the admin realm sends no W17-Org selector).
   auth: {
     login_method: "admin_auth.AuthService.SignIn"
     user_lookup:  "admin_auth.AuthService.Authenticate"
@@ -77,7 +77,7 @@ option (w17.admin_api) = {
   // tiles with this widget grid.
   //
   //   user_stats (STAT) — the runtime fetches
-  //     GET /admin/api/widget/user_stats (backed by the cross-tenant
+  //     GET /admin/api/widget/user_stats (backed by the cross-organization
   //     COUNT(*) query users.UserQuery.CountUsers) and renders `total`
   //     as a stat cell.
   //   task_categories (CHART) — the runtime fetches
@@ -159,7 +159,7 @@ option (w17.admin_api) = {
   // would do.
   //
   // The grouping is by WHO IS ASKING, not by module: an operator
-  // triaging work does not want the tenant's org chart in the same
+  // triaging work does not want the organization's org chart in the same
   // section, and the access-control pages are the ones with a different
   // blast radius.
   nav: [

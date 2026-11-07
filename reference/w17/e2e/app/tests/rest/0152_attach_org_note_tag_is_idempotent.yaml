@@ -1,13 +1,13 @@
 # Re-attaching a tag the note already carries must be a no-op, not a
-# primary-key violation. DQL has no `DO NOTHING`, so AttachTenantNoteTag
+# primary-key violation. DQL has no `DO NOTHING`, so AttachOrgNoteTag
 # spells the idempotent link as `ON CONFLICT (note_id, tag) DO UPDATE
 # SET tag = :tag` — a no-op assignment of a conflict column.
 #
 # The `pre` chain already attached this exact tag once, so this call IS
 # the second attach.
-method: tasks.TaskMutation.AttachTenantNoteTag
+method: tasks.TaskMutation.AttachOrgNoteTag
 pre:
-    - fixtures/a_tenant_note_tag.yaml
+    - fixtures/an_org_note_tag.yaml
 input:
     note_id: ${note.id}
     tag: ${tag.value}

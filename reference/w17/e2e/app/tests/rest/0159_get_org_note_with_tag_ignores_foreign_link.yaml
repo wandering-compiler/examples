@@ -11,10 +11,10 @@
 #
 # Asserting `tag` is empty rejects the third; asserting the call
 # succeeds at all rejects the second. 0158 covers the same WHERE
-# mistake without needing a second tenant.
-method: tasks.TaskQuery.GetTenantNoteWithTag
+# mistake without needing a second organization.
+method: tasks.TaskQuery.GetOrgNoteWithTag
 pre:
-    - fixtures/a_cross_tenant_note_tag.yaml
+    - fixtures/a_cross_org_note_tag.yaml
     - auth/auth_alpha_reader.yaml
 input:
     id: ${note.id}

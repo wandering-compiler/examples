@@ -6,7 +6,7 @@
 # THE service-level `(w17.db.bypass_scope_service) = "*"` proof — the
 # other slot, on a service whose whole purpose is cross-scope work.
 #
-# Called as tenant-beta, which owns no notes of its own (0225), so a
+# Called as org-beta, which owns no notes of its own (0225), so a
 # non-zero total counted rows beta cannot see.
 #
 # `num` states that directly. It used to say `not_empty`, which on a
@@ -14,11 +14,11 @@
 # legible only from a comment saying so.
 #
 # Deliberately an aggregate rather than a list: a COUNT collapses the
-# rows, so nothing about the response shape could carry a tenant
+# rows, so nothing about the response shape could carry an organization
 # through. The only thing on trial is which rows the query could touch.
-method: tasks.TenantOpsQuery.CountAllTenantNotes
+method: tasks.OrgOpsQuery.CountAllOrgNotes
 pre:
-    - fixtures/a_tenant_note.yaml
+    - fixtures/an_org_note.yaml
     - auth/auth_beta.yaml
 input: {}
 expect:

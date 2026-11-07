@@ -17,9 +17,9 @@
 # Its pair is the fixture in `pre`, which makes the SAME call against a
 # table without the row and asserts 1. Two calls, one endpoint, two
 # numbers — that is what says the count comes off the statement.
-method: tasks.TaskMutation.EnsureTenantNoteTag
+method: tasks.TaskMutation.EnsureOrgNoteTag
 pre:
-    - fixtures/an_ensured_tenant_note_tag.yaml
+    - fixtures/an_ensured_org_note_tag.yaml
 input:
     note_id: ${note.id}
     tag: e2e-ensure-${note.id}

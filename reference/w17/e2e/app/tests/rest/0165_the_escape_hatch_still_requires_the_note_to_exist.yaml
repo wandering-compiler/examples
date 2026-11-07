@@ -1,7 +1,7 @@
 # The escape hatch drops the TENANCY half of the constraint, not the whole
 # constraint.
 #
-# 0164 proves a bookmark may cross the tenant boundary. This proves it may
+# 0164 proves a bookmark may cross the organization boundary. This proves it may
 # not point at nothing: the ordinary single-column foreign key survives, so a
 # note id no row carries is still refused.
 #
@@ -9,7 +9,7 @@
 # "dropped the foreign key entirely" — and a hatch that quietly permits a
 # dangling id is worse than one that refuses too much, because nothing ever
 # reports it.
-method: tasks.TaskMutation.BookmarkTenantNote
+method: tasks.TaskMutation.BookmarkOrgNote
 pre:
     - auth/auth_beta.yaml
 input:

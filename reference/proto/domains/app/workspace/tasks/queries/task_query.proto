@@ -1329,29 +1329,29 @@ service TaskQuery {
     };
   }
 
-  // GetTenantNote — scoped read. The DQL only
+  // GetOrgNote — scoped read. The DQL only
   // matches by `n.id`; the storage codegen auto-appends
-  // `AND n.tenant_id = $<scope>` so cross-tenant id lookups
+  // `AND n.org_id = $<scope>` so cross-organization id lookups
   // miss the row and surface as ErrNoRows (gateway → 404).
-  // Missing `x-w17-scope-tenant_id` metadata short-circuits
+  // Missing `x-w17-scope-org_id` metadata short-circuits
   // to 403 PERMISSION_DENIED before the query runs.
-  rpc GetTenantNote(GetTenantNoteReq) returns (GetTenantNoteResp) {
+  rpc GetOrgNote(GetOrgNoteReq) returns (GetOrgNoteResp) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
-          "SELECT n.id, n.tenant_id, n.title, n.body, n.created_at "
-          "FROM tasks.TenantNote n "
+          "SELECT n.id, n.org_id, n.title, n.body, n.created_at "
+          "FROM tasks.OrgNote n "
           "WHERE n.id = :id"
       }
     };
   }
 
-  // GetTenantNoteByPublicToken — the note a capability
+  // GetOrgNoteByPublicToken — the note a capability
   // link points at, read as the principal that link authenticated.
   //
   // Scoped like every other read on this service: no bypass, so the
-  // auto-WHERE adds `AND n.tenant_id = $<scope>` on top of the token
+  // auto-WHERE adds `AND n.org_id = $<scope>` on top of the token
   // predicate. The scope value came from the token itself (the auth
   // method resolved it), so the two agree by construction.
   //
@@ -1360,7 +1360,7 @@ service TaskQuery {
   // deleting the scope filter would not change this answer. This
   // endpoint proves the link authenticates; the sibling below is
   // what proves the isolation survived.
-  rpc GetTenantNoteByPublicToken(GetTenantNoteByPublicTokenReq) returns (GetTenantNoteByPublicTokenResp) {
+  rpc GetOrgNoteByPublicToken(GetOrgNoteByPublicTokenReq) returns (GetOrgNoteByPublicTokenResp) {
     // (w17.acl_endpoint) = false — a capability principal holds no
     // ROLE permissions, so gating this on one would refuse every
     // link. Its authority is the capability itself: the link proves
@@ -1377,19 +1377,19 @@ service TaskQuery {
       ops: {
         name: "main",
         dql:
-          "SELECT n.id, n.tenant_id, n.title, n.body, n.created_at "
-          "FROM tasks.TenantNote n "
+          "SELECT n.id, n.org_id, n.title, n.body, n.created_at "
+          "FROM tasks.OrgNote n "
           "WHERE n.public_token = :public_token"
       }
     };
   }
 
-  // ListTenantNotesForPublicLink — the read that can
+  // ListOrgNotesForPublicLink — the read that can
   // actually detect a broken scope filter on a capability link, and
   // the reason the public surface has two endpoints instead of one.
   //
   // There is NO token in this DQL. The only thing standing between
-  // this response and every other tenant's notes is the auto-WHERE
+  // this response and every other organization's notes is the auto-WHERE
   // fed by the scope the link's auth method returned. Strip that
   // filter and this endpoint starts answering with rows the link's
   // recipient has no relationship to — which is exactly the failure
@@ -1397,12 +1397,12 @@ service TaskQuery {
   // self-isolating whether the scope works or not.
   //
   // It is also the feature's actual claim, stated as a query: once a
-  // URL credential authenticates, tenant isolation carries into
+  // URL credential authenticates, organization isolation carries into
   // every subsequent read without the author writing a predicate.
   // An `exclude_auth` + hand-written-WHERE implementation of the
   // same link could not offer this endpoint at all — there would be
   // no scope for it to be filtered by.
-  rpc ListTenantNotesForPublicLink(ListTenantNotesForPublicLinkReq) returns (ListTenantNotesForPublicLinkResp) {
+  rpc ListOrgNotesForPublicLink(ListOrgNotesForPublicLinkReq) returns (ListOrgNotesForPublicLinkResp) {
     // (w17.acl_endpoint) = false — a capability principal holds no
     // ROLE permissions, so gating this on one would refuse every
     // link. Its authority is the capability itself: the link proves
@@ -1419,14 +1419,14 @@ service TaskQuery {
       ops: {
         name: "main",
         dql:
-          "SELECT n.id, n.tenant_id, n.title "
-          "FROM tasks.TenantNote n "
+          "SELECT n.id, n.org_id, n.title "
+          "FROM tasks.OrgNote n "
           "ORDER BY n.id ASC"
       }
     };
   }
 
-  // GetTenantNoteSummaryByPublicToken — the same capability
+  // GetOrgNoteSummaryByPublicToken — the same capability
   // link, with the credential in the QUERY STRING instead of the path.
   //
   // It exists because `credential` has two slots and a declaration the
@@ -1439,7 +1439,7 @@ service TaskQuery {
   // Prefer the path form when you control the link shape — query strings
   // are the part of a URL most eagerly recorded by proxies and
   // analytics. This slot is for link shapes that cannot use the path.
-  rpc GetTenantNoteSummaryByPublicToken(GetTenantNoteSummaryByPublicTokenReq) returns (GetTenantNoteSummaryByPublicTokenResp) {
+  rpc GetOrgNoteSummaryByPublicToken(GetOrgNoteSummaryByPublicTokenReq) returns (GetOrgNoteSummaryByPublicTokenResp) {
     // Same reasoning as its path-carried sibling above: a capability
     // principal holds no role permissions.
     option (w17.acl_endpoint) = false;
@@ -1448,99 +1448,99 @@ service TaskQuery {
         name: "main",
         dql:
           "SELECT n.id, n.title "
-          "FROM tasks.TenantNote n "
+          "FROM tasks.OrgNote n "
           "WHERE n.public_token = :public_token"
       }
     };
   }
 
   // A scoped server stream with a validated request — see
-  // StreamTenantNotesReq. ORDER BY because a stream's frame order is its
+  // StreamOrgNotesReq. ORDER BY because a stream's frame order is its
   // contract.
-  rpc StreamTenantNotes(StreamTenantNotesReq) returns (stream TenantNoteStreamRow) {
+  rpc StreamOrgNotes(StreamOrgNotesReq) returns (stream OrgNoteStreamRow) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
           "SELECT n.id, n.title "
-          "FROM tasks.TenantNote n "
+          "FROM tasks.OrgNote n "
           "WHERE n.title = :title "
           "ORDER BY n.id ASC"
       }
     };
   }
 
-  // ListTenantNotes — scoped list. No WHERE in the
+  // ListOrgNotes — scoped list. No WHERE in the
   // DQL; the auto-WHERE is the only filter, so the response is
-  // exactly the caller's tenant's notes ordered by id.
-  rpc ListTenantNotes(ListTenantNotesReq) returns (ListTenantNotesResp) {
+  // exactly the caller's organization's notes ordered by id.
+  rpc ListOrgNotes(ListOrgNotesReq) returns (ListOrgNotesResp) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
-          "SELECT n.id, n.tenant_id, n.title, n.body, n.created_at "
-          "FROM tasks.TenantNote n "
+          "SELECT n.id, n.org_id, n.title, n.body, n.created_at "
+          "FROM tasks.OrgNote n "
           "ORDER BY n.id ASC"
       }
     };
   }
 
-  // ListAllTenantNotes — the same read as ListTenantNotes above,
+  // ListAllOrgNotes — the same read as ListOrgNotes above,
   // with the scope deliberately turned OFF. This is the operator
   // shape `(w17.db.bypass_scope)` exists for: a reporting endpoint
-  // that must see every tenant's rows, declared per method so the
+  // that must see every organization's rows, declared per method so the
   // rest of the service keeps its guard.
   //
-  // Kept adjacent to ListTenantNotes ON PURPOSE. The two emit into
+  // Kept adjacent to ListOrgNotes ON PURPOSE. The two emit into
   // the same generated file from the same DQL, so the annotation is
   // the ONLY difference between them: the scoped one carries the
-  // fail-closed metadata guard and `WHERE n.tenant_id = $1`, this
+  // fail-closed metadata guard and `WHERE n.org_id = $1`, this
   // one carries neither. A gate that reads both cannot pass
   // vacuously — if the bypass silently stopped applying, this body
   // would grow a predicate its sibling already has.
   //
-  // The bypass names `tenant_id` rather than `"*"` so it stays
-  // narrow: a second scope axis added to TenantNote later would
+  // The bypass names `org_id` rather than `"*"` so it stays
+  // narrow: a second scope axis added to OrgNote later would
   // still be enforced here, and the author would have to say so
   // again to drop it.
-  rpc ListAllTenantNotes(ListAllTenantNotesReq) returns (ListAllTenantNotesResp) {
-    option (w17.db.bypass_scope) = "tenant_id";
+  rpc ListAllOrgNotes(ListAllOrgNotesReq) returns (ListAllOrgNotesResp) {
+    option (w17.db.bypass_scope) = "org_id";
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
-          "SELECT n.id, n.tenant_id, n.title, n.body, n.created_at "
-          "FROM tasks.TenantNote n "
+          "SELECT n.id, n.org_id, n.title, n.body, n.created_at "
+          "FROM tasks.OrgNote n "
           "ORDER BY n.id ASC"
       }
     };
   }
 
-  // ListTenantNotesByTag — scoped M:N read. TenantNote is the
-  // FROM (auto-WHERE on `n.tenant_id`), TenantNoteTag arrives
+  // ListOrgNotesByTag — scoped M:N read. OrgNote is the
+  // FROM (auto-WHERE on `n.org_id`), OrgNoteTag arrives
   // through a JOIN and gets its OWN predicate injected onto the
   // JOIN's ON clause: `... ON (nt.note_id = n.id) AND
-  // (nt.tenant_id = $<scope>)`.
+  // (nt.org_id = $<scope>)`.
   //
   // Both predicates are load-bearing. The FROM-side filter alone
   // would not scope the link table — nothing in the compiler
   // verifies that the authored ON condition actually relates the
   // two tables, so the joined side is scoped on its own terms.
-  rpc ListTenantNotesByTag(ListTenantNotesByTagReq) returns (ListTenantNotesByTagResp) {
+  rpc ListOrgNotesByTag(ListOrgNotesByTagReq) returns (ListOrgNotesByTagResp) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
-          "SELECT n.id, n.tenant_id, n.title, n.body, n.created_at "
-          "FROM tasks.TenantNote n "
-          "JOIN tasks.TenantNoteTag nt ON nt.note_id = n.id "
+          "SELECT n.id, n.org_id, n.title, n.body, n.created_at "
+          "FROM tasks.OrgNote n "
+          "JOIN tasks.OrgNoteTag nt ON nt.note_id = n.id "
           "WHERE nt.tag = :tag "
           "ORDER BY n.id ASC"
       }
     };
   }
 
-  // ListTenantNotesPagedWithTagCount — a PAGED scoped list carrying a
+  // ListOrgNotesPagedWithTagCount — a PAGED scoped list carrying a
   // per-row count, the "3 tags" badge beside each row of a directory.
   //
   // The count is a correlated scalar subquery, not a GROUP BY: grouping
@@ -1552,29 +1552,29 @@ service TaskQuery {
   // Both models are scoped, and the two predicates land in different
   // clauses: the note's on the outer WHERE, the link table's INSIDE the
   // subquery. The outer one does not reach the subquery — without its
-  // own predicate the badge would count other tenants' link rows.
-  rpc ListTenantNotesPagedWithTagCount(ListTenantNotesPagedWithTagCountReq) returns (ListTenantNotesPagedWithTagCountResp) {
+  // own predicate the badge would count other organizations' link rows.
+  rpc ListOrgNotesPagedWithTagCount(ListOrgNotesPagedWithTagCountReq) returns (ListOrgNotesPagedWithTagCountResp) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
           "SELECT n.id, n.title, "
-          "(SELECT COUNT(*) FROM tasks.TenantNoteTag nt WHERE nt.note_id = n.id) AS tag_count "
-          "FROM tasks.TenantNote n "
+          "(SELECT COUNT(*) FROM tasks.OrgNoteTag nt WHERE nt.note_id = n.id) AS tag_count "
+          "FROM tasks.OrgNote n "
           "ORDER BY n.id ASC"
       }
     };
   }
 
-  // GetTenantNoteWithTag — the LEFT JOIN half of the same scoped
+  // GetOrgNoteWithTag — the LEFT JOIN half of the same scoped
   // M:N surface, and the shape that makes the ON-versus-WHERE
   // placement observable at runtime.
   //
-  // The joined model's tenant predicate lands on the ON clause:
+  // The joined model's organization predicate lands on the ON clause:
   //
-  //   LEFT JOIN tenant_note_tags AS nt
-  //     ON (nt.note_id = n.id) AND (nt.tenant_id = $1)
-  //   WHERE (n.id = $2) AND (n.tenant_id = $3)
+  //   LEFT JOIN org_note_tags AS nt
+  //     ON (nt.note_id = n.id) AND (nt.org_id = $1)
+  //   WHERE (n.id = $2) AND (n.org_id = $3)
   //
   // Three placements, three different observable results for a
   // note that carries no tag of the caller's own:
@@ -1583,23 +1583,23 @@ service TaskQuery {
   //   - in the WHERE — the NULL-extended row is discarded, the
   //     LEFT JOIN silently behaves as an INNER one, and the read
   //     404s;
-  //   - absent — another tenant's tag on this note leaks into
+  //   - absent — another organization's tag on this note leaks into
   //     `tag`.
   //
   // The e2e distinguishes all three.
   //
-  // `tag` is projected bare even though `TenantNoteTag.tag` is NOT NULL
+  // `tag` is projected bare even though `OrgNoteTag.tag` is NOT NULL
   // in the schema: the no-match row hands back SQL NULL, and the scan
   // planner routes an outer-joined column through sql.NullString for
   // exactly that reason, leaving the field at its zero value.
-  rpc GetTenantNoteWithTag(GetTenantNoteWithTagReq) returns (GetTenantNoteWithTagResp) {
+  rpc GetOrgNoteWithTag(GetOrgNoteWithTagReq) returns (GetOrgNoteWithTagResp) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
           "SELECT n.id, n.title, nt.tag "
-          "FROM tasks.TenantNote n "
-          "LEFT JOIN tasks.TenantNoteTag nt ON nt.note_id = n.id "
+          "FROM tasks.OrgNote n "
+          "LEFT JOIN tasks.OrgNoteTag nt ON nt.note_id = n.id "
           "WHERE n.id = :id"
       }
     };
@@ -1727,64 +1727,64 @@ message GetTaskAuditsFuzzyResp {
   repeated e2e.app.tasks.TaskAuditLog audits = 2;
 }
 
-// TenantNote scope-fixture read side.
-// GetTenantNote returns a single note by id; the auto-WHERE
-// applied by storage codegen prevents tenant A from reading
-// tenant B's row (the WHERE picks the row by id AND
-// tenant_id, so cross-tenant lookups return ErrNoRows → 404).
+// OrgNote scope-fixture read side.
+// GetOrgNote returns a single note by id; the auto-WHERE
+// applied by storage codegen prevents organization A from reading
+// organization B's row (the WHERE picks the row by id AND
+// org_id, so cross-organization lookups return ErrNoRows → 404).
 //
 // Response is flat scalars matching the canonical
 // "single-fetch" convention in this codebase (mirror of
 // GetUserResp). Avoids the wrapper-message scan path that
 // would need dotted aliases on every SELECT target.
-message GetTenantNoteReq {
+message GetOrgNoteReq {
   int64 id = 1;
 }
-message GetTenantNoteResp {
+message GetOrgNoteResp {
   int64                     id         = 1;
-  string                    tenant_id  = 2;
+  string                    org_id  = 2;
   string                    title      = 3;
   string                    body       = 4;
   google.protobuf.Timestamp created_at = 5;
 }
 
-// ListTenantNotes returns every note in the caller's tenant.
+// ListOrgNotes returns every note in the caller's organization.
 // No request fields — the scope filter does all the work.
-// List-shape (`repeated TenantNote notes`) so the codegen
-// picks the multi-row scan path; per-row target is TenantNote
+// List-shape (`repeated OrgNote notes`) so the codegen
+// picks the multi-row scan path; per-row target is OrgNote
 // directly, so the SELECT projects bare column names that
-// match TenantNote's proto field names 1:1.
-message ListTenantNotesReq {}
+// match OrgNote's proto field names 1:1.
+message ListOrgNotesReq {}
 
-// StreamTenantNotesReq — the request of a SERVER STREAM over a SCOPED model
+// StreamOrgNotesReq — the request of a SERVER STREAM over a SCOPED model
 // that carries a VALIDATED field. That combination did not compile until
 // 2026-10-01: the validation block resolves its messages through
 // `i18n.T(ctx, …)` and a streaming handler has no `ctx` parameter, so a
 // consumer's `codegen` exited 0 on a handler `go build` refused. The
 // generator tests now pin it by parsing; this method is where it is BUILT and
 // RUN (rest/0695, rest/0696).
-message StreamTenantNotesReq {
+message StreamOrgNotesReq {
   string title = 1 [(w17.field) = { min_len: 1 }];
 }
-message TenantNoteStreamRow {
+message OrgNoteStreamRow {
   int64  id    = 1;
   string title = 2;
 }
-// TenantNoteRow — a note as the tenant lists answer with it: every column
+// OrgNoteRow — a note as the organization lists answer with it: every column
 // but `public_token`. The token is the share link's capability, handed out
-// by the method that mints it; a list of a tenant's notes is not a way to
+// by the method that mints it; a list of an organization's notes is not a way to
 // collect every live link. A generated query fills every field of its
 // response, so the lists that leave the token out answer with a message
-// that does not have one, rather than with TenantNote and an empty token.
-message TenantNoteRow {
+// that does not have one, rather than with OrgNote and an empty token.
+message OrgNoteRow {
   int64                     id         = 1;
-  string                    tenant_id  = 2 [(w17.field) = { type: UUID }];
+  string                    org_id  = 2 [(w17.field) = { type: UUID }];
   string                    title      = 3 [(w17.field) = { type: CHAR, max_len: 200 }];
   string                    body       = 4;
   google.protobuf.Timestamp created_at = 5;
 }
-message ListTenantNotesResp {
-  repeated TenantNoteRow notes = 1;
+message ListOrgNotesResp {
+  repeated OrgNoteRow notes = 1;
 }
 
 // The capability-link pair.
@@ -1795,20 +1795,20 @@ message ListTenantNotesResp {
 // reads the SAME value a second time for the auth call; the two
 // readings are independent on purpose, so a handler cannot end up
 // answering for one token while having authenticated another.
-message GetTenantNoteByPublicTokenReq {
+message GetOrgNoteByPublicTokenReq {
   string public_token = 1;
 }
-message GetTenantNoteSummaryByPublicTokenReq {
+message GetOrgNoteSummaryByPublicTokenReq {
   string public_token = 1;
 }
-message GetTenantNoteSummaryByPublicTokenResp {
+message GetOrgNoteSummaryByPublicTokenResp {
   int64  id    = 1;
   string title = 2;
 }
 
-message GetTenantNoteByPublicTokenResp {
+message GetOrgNoteByPublicTokenResp {
   int64                     id         = 1;
-  string                    tenant_id  = 2;
+  string                    org_id  = 2;
   string                    title      = 3;
   string                    body       = 4;
   google.protobuf.Timestamp created_at = 5;
@@ -1818,60 +1818,60 @@ message GetTenantNoteByPublicTokenResp {
 // uses it (it deliberately does not), but because the endpoint's URL
 // carries it and the request message has to hold what the path binds.
 // The response omits `body`: a share link's recipient is entitled to
-// see that sibling notes exist in the same tenant, which is what makes
+// see that sibling notes exist in the same organization, which is what makes
 // the scope filter observable, without being handed their contents.
-message ListTenantNotesForPublicLinkReq {
+message ListOrgNotesForPublicLinkReq {
   string public_token = 1;
 }
-message ListTenantNotesForPublicLinkResp {
+message ListOrgNotesForPublicLinkResp {
   message Item {
     int64  id        = 1;
-    string tenant_id = 2;
+    string org_id = 2;
     string title     = 3;
   }
   repeated Item notes = 1;
 }
 
-// ListAllTenantNotes — byte-identical shape to the scoped list, so
+// ListAllOrgNotes — byte-identical shape to the scoped list, so
 // the only thing separating the two responses is which rows the
 // query was allowed to see.
-message ListAllTenantNotesReq {}
-message ListAllTenantNotesResp {
-  repeated TenantNoteRow notes = 1;
+message ListAllOrgNotesReq {}
+message ListAllOrgNotesResp {
+  repeated OrgNoteRow notes = 1;
 }
 
-// ListTenantNotesByTag — same list shape, filtered through the
-// M:N link table. `tag` is the only request field; both tenant
+// ListOrgNotesByTag — same list shape, filtered through the
+// M:N link table. `tag` is the only request field; both organization
 // filters are injected.
-message ListTenantNotesByTagReq {
+message ListOrgNotesByTagReq {
   string tag = 1;
 }
-message ListTenantNotesByTagResp {
-  repeated TenantNoteRow notes = 1;
+message ListOrgNotesByTagResp {
+  repeated OrgNoteRow notes = 1;
 }
 
-// ListTenantNotesPagedWithTagCount — paged list rows carrying a per-row
+// ListOrgNotesPagedWithTagCount — paged list rows carrying a per-row
 // count. `items` is the single repeated field the gateway scans for and
 // `paging` is mandatory on a paged endpoint.
-message ListTenantNotesPagedWithTagCountReq {}
-message TenantNoteWithTagCount {
+message ListOrgNotesPagedWithTagCountReq {}
+message OrgNoteWithTagCount {
   int64  id        = 1;
   string title     = 2;
   int64  tag_count = 3;
 }
-message ListTenantNotesPagedWithTagCountResp {
-  repeated TenantNoteWithTagCount items  = 1;
+message ListOrgNotesPagedWithTagCountResp {
+  repeated OrgNoteWithTagCount items  = 1;
   w17.Paging                      paging = 2;
 }
 
-// GetTenantNoteWithTag — flat response (same reasoning as
-// GetTenantNoteResp): the single-row LEFT JOIN projects the note's
+// GetOrgNoteWithTag — flat response (same reasoning as
+// GetOrgNoteResp): the single-row LEFT JOIN projects the note's
 // own columns plus the joined `tag`, which is empty when the caller
 // has no tag of their own on this note.
-message GetTenantNoteWithTagReq {
+message GetOrgNoteWithTagReq {
   int64 id = 1;
 }
-message GetTenantNoteWithTagResp {
+message GetOrgNoteWithTagResp {
   int64  id    = 1;
   string title = 2;
   string tag   = 3 [(w17.field) = { null: true }];

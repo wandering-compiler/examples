@@ -367,14 +367,14 @@ msgstr "Tasks · Task Mutation · Assign Task"
 msgid "Tasks · Task Mutation · Assign Task By Email"
 msgstr "Tasks · Task Mutation · Assign Task By Email"
 
-msgid "Tasks · Task Mutation · Attach Tenant Note Link"
-msgstr "Tasks · Task Mutation · Attach Tenant Note Link"
+msgid "Tasks · Task Mutation · Attach Organization Note Link"
+msgstr "Tasks · Task Mutation · Attach Organization Note Link"
 
-msgid "Tasks · Task Mutation · Attach Tenant Note Tag"
-msgstr "Tasks · Task Mutation · Attach Tenant Note Tag"
+msgid "Tasks · Task Mutation · Attach Organization Note Tag"
+msgstr "Tasks · Task Mutation · Attach Organization Note Tag"
 
-msgid "Tasks · Task Mutation · Bookmark Tenant Note"
-msgstr "Tasks · Task Mutation · Bookmark Tenant Note"
+msgid "Tasks · Task Mutation · Bookmark Organization Note"
+msgstr "Tasks · Task Mutation · Bookmark Organization Note"
 
 msgid "Tasks · Task Mutation · Comment On Task"
 msgstr "Tasks · Task Mutation · Comment On Task"
@@ -385,17 +385,17 @@ msgstr "Tasks · Task Mutation · Complete Task"
 msgid "Tasks · Task Mutation · Create Task"
 msgstr "Tasks · Task Mutation · Create Task"
 
-msgid "Tasks · Task Mutation · Create Tenant Note"
-msgstr "Tasks · Task Mutation · Create Tenant Note"
+msgid "Tasks · Task Mutation · Create Organization Note"
+msgstr "Tasks · Task Mutation · Create Organization Note"
 
-msgid "Tasks · Task Mutation · Create Tenant Note With Public Link"
-msgstr "Tasks · Task Mutation · Create Tenant Note With Public Link"
+msgid "Tasks · Task Mutation · Create Organization Note With Public Link"
+msgstr "Tasks · Task Mutation · Create Organization Note With Public Link"
 
 msgid "Tasks · Task Mutation · Delete Task Comment"
 msgstr "Tasks · Task Mutation · Delete Task Comment"
 
-msgid "Tasks · Task Mutation · Ensure Tenant Note Tag"
-msgstr "Tasks · Task Mutation · Ensure Tenant Note Tag"
+msgid "Tasks · Task Mutation · Ensure Organization Note Tag"
+msgstr "Tasks · Task Mutation · Ensure Organization Note Tag"
 
 msgid "Tasks · Task Mutation · Redact Task"
 msgstr "Tasks · Task Mutation · Redact Task"
@@ -475,17 +475,17 @@ msgstr "Tasks · Task Query · Get Task Upload"
 msgid "Tasks · Task Query · Get Task With Category"
 msgstr "Tasks · Task Query · Get Task With Category"
 
-msgid "Tasks · Task Query · Get Tenant Note"
-msgstr "Tasks · Task Query · Get Tenant Note"
+msgid "Tasks · Task Query · Get Organization Note"
+msgstr "Tasks · Task Query · Get Organization Note"
 
-msgid "Tasks · Task Query · Get Tenant Note With Tag"
-msgstr "Tasks · Task Query · Get Tenant Note With Tag"
+msgid "Tasks · Task Query · Get Organization Note With Tag"
+msgstr "Tasks · Task Query · Get Organization Note With Tag"
 
 msgid "Tasks · Task Query · List All Comments"
 msgstr "Tasks · Task Query · List All Comments"
 
-msgid "Tasks · Task Query · List All Tenant Notes"
-msgstr "Tasks · Task Query · List All Tenant Notes"
+msgid "Tasks · Task Query · List All Organization Notes"
+msgstr "Tasks · Task Query · List All Organization Notes"
 
 msgid "Tasks · Task Query · List Categories With Task Counts"
 msgstr "Tasks · Task Query · List Categories With Task Counts"
@@ -526,17 +526,17 @@ msgstr "Tasks · Task Query · List Tasks Paged Tuned"
 msgid "Tasks · Task Query · List Tasks Paged With Category"
 msgstr "Tasks · Task Query · List Tasks Paged With Category"
 
-msgid "Tasks · Task Query · List Tenant Notes"
-msgstr "Tasks · Task Query · List Tenant Notes"
+msgid "Tasks · Task Query · List Organization Notes"
+msgstr "Tasks · Task Query · List Organization Notes"
 
-msgid "Tasks · Task Query · List Tenant Notes By Tag"
-msgstr "Tasks · Task Query · List Tenant Notes By Tag"
+msgid "Tasks · Task Query · List Organization Notes By Tag"
+msgstr "Tasks · Task Query · List Organization Notes By Tag"
 
-msgid "Tasks · Task Query · List Tenant Notes Paged With Tag Count"
-msgstr "Tasks · Task Query · List Tenant Notes Paged With Tag Count"
+msgid "Tasks · Task Query · List Organization Notes Paged With Tag Count"
+msgstr "Tasks · Task Query · List Organization Notes Paged With Tag Count"
 
-msgid "Tasks · Task Query · Stream Tenant Notes"
-msgstr "Tasks · Task Query · Stream Tenant Notes"
+msgid "Tasks · Task Query · Stream Organization Notes"
+msgstr "Tasks · Task Query · Stream Organization Notes"
 
 msgid "Tasks · Task Tag · View"
 msgstr "Tasks · Task Tag · View"
@@ -556,8 +556,8 @@ msgstr "Tasks · Tasks Service · Bulk Create Tasks"
 msgid "Tasks · Tasks Service · Create Task"
 msgstr "Tasks · Tasks Service · Create Task"
 
-msgid "Tasks · Tasks Service · Create Tenant Note Via Service"
-msgstr "Tasks · Tasks Service · Create Tenant Note Via Service"
+msgid "Tasks · Tasks Service · Create Organization Note Via Service"
+msgstr "Tasks · Tasks Service · Create Organization Note Via Service"
 
 msgid "Tasks · Tasks Service · Delete Task"
 msgstr "Tasks · Tasks Service · Delete Task"
@@ -583,8 +583,8 @@ msgstr "Tasks · Tasks Service · Stream Tasks"
 msgid "Tasks · Tasks Service · Update Task And Invalidate"
 msgstr "Tasks · Tasks Service · Update Task And Invalidate"
 
-msgid "Tasks · Tenant Ops Query · Count All Tenant Notes"
-msgstr "Tasks · Tenant Ops Query · Count All Tenant Notes"
+msgid "Tasks · Organization Ops Query · Count All Organization Notes"
+msgstr "Tasks · Organization Ops Query · Count All Organization Notes"
 
 msgid "That code is not right, or it has expired. Ask for a new one."
 msgstr "That code is not right, or it has expired. Ask for a new one."

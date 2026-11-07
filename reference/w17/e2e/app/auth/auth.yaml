@@ -1,6 +1,6 @@
 method: auth.AuthService.SignUp
 input:
-    tenant_slug: tenant-alpha
+    signup_host: org-alpha.reference.test
     email: user${seq}@example.com
     password: e2eSecret!23
 expect:

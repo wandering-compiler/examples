@@ -85,9 +85,10 @@ func TestMarketing_ASignUpAndAMutationReachBrevo(t *testing.T) {
 		t.Errorf("contact %s has email %q, want %q (from auth's UserCreated)", user, c.Email, email)
 	}
 	// The organization is the one the request ran in: this project's users
-	// are scoped by tenant_id (auth's tenant_scope). The sign-up was in
-	// tenant-alpha; tenant-beta (fixtures/app/test.json) is the decoy.
-	const tenantAlpha, tenantBeta = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
+	// are members of one organization (org_membership), the one bound to the
+	// host they registered on. The sign-up was in org-alpha; org-beta
+	// (fixtures/app/test.json) is the decoy.
+	const orgAlpha, orgBeta = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
 	for _, e := range c.Events {
 		if e.EventName != event {
 			continue
@@ -95,8 +96,8 @@ func TestMarketing_ASignUpAndAMutationReachBrevo(t *testing.T) {
 		if st, _ := e.EventProperties["w17_status"].(float64); st != 200 {
 			t.Errorf("event %s has w17_status %v, want 200", event, e.EventProperties["w17_status"])
 		}
-		if org, _ := e.EventProperties["w17_org_id"].(string); org != tenantAlpha {
-			t.Errorf("event %s ran in organization %q, want tenant-alpha's %s, not tenant-beta's %s (properties %v)", event, org, tenantAlpha, tenantBeta, e.EventProperties)
+		if org, _ := e.EventProperties["w17_org_id"].(string); org != orgAlpha {
+			t.Errorf("event %s ran in organization %q, want org-alpha's %s, not org-beta's %s (properties %v)", event, org, orgAlpha, orgBeta, e.EventProperties)
 		}
 		// The organization travels with the request, so the contact does not
 		// carry one (a user belongs to several).

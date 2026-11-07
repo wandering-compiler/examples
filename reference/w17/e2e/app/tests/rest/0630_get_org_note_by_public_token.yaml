@@ -14,7 +14,7 @@
 # credential stopped working altogether.
 #
 # What this DOES prove: an unauthenticated request carrying only a
-# capability token in its path reaches a tenant-scoped row, which means
+# capability token in its path reaches an org-scoped row, which means
 # the auth method resolved the token and the gateway threaded the
 # resulting scope.
 #
@@ -22,18 +22,18 @@
 # any work. `public_token` is globally unique, so `WHERE public_token =
 # :token` selects one row whether or not the auto-WHERE is appended —
 # deleting the scope filter would leave this answer unchanged.
-method: tasks.TaskQuery.GetTenantNoteByPublicToken
+method: tasks.TaskQuery.GetOrgNoteByPublicToken
 pre:
     - fixtures/a_gamma_note_with_public_link.yaml
 input:
     public_token: ${publiclink.token}
 expect:
     id: {matcher: eq, value: '${publiclink.note_id}'}
-    # tenant-gamma's seeded id (fixtures/app/test.json). Asserted
+    # org-gamma's seeded id (fixtures/app/test.json). Asserted
     # literally rather than as "not empty": the row the link resolves to
-    # must belong to the tenant the link was minted in, and a not_empty
-    # check would pass for any tenant at all.
-    tenant_id: {matcher: eq, value: '33333333-3333-3333-3333-333333333333'}
+    # must belong to the organization the link was minted in, and a not_empty
+    # check would pass for any organization at all.
+    org_id: {matcher: eq, value: '33333333-3333-3333-3333-333333333333'}
     title: {matcher: eq, value: e2e gamma shared note}
     body: {matcher: not_empty}
     created_at: {matcher: not_empty}
