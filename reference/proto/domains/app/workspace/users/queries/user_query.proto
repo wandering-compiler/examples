@@ -121,8 +121,8 @@ service UserQuery {
   // CountUsers — scalar aggregation backing the admin overview
   // STAT widget (item 5). gRPC-only; the admin console dials it
   // and renders `total` as a stat cell. The admin console is
-  // cross-tenant (no scope stamped), so the count spans every
-  // tenant. A bare COUNT(*) is cross-dialect and cheap.
+  // cross-organization (no scope stamped), so the count spans every
+  // organization. A bare COUNT(*) is cross-dialect and cheap.
   rpc CountUsers(CountUsersReq) returns (CountUsersResp) {
     option (w17.db.method) = {
       ops: { name: "main", dql: "SELECT COUNT(*) AS total FROM users.User u" }

@@ -45,13 +45,13 @@ type Deps struct {
 	AuditLogMutation   userspb.AuditLogMutationClient
 	TaskQuery          taskspb.TaskQueryClient
 	TaskMutation       taskspb.TaskMutationClient
-	// TenantOpsQuery is the declared cross-tenant surface
+	// OrgOpsQuery is the declared cross-organization surface
 	// (`(w17.db.bypass_scope_service) = "*"`). The
 	// capability-link auth backend is its only consumer here: it
-	// resolves a share token to the tenant that owns the linked row,
+	// resolves a share token to the organization that owns the linked row,
 	// which is by definition a lookup no scope can narrow — the
 	// request arrives with no identity, and producing one is the job.
-	TenantOpsQuery taskspb.TenantOpsQueryClient
+	OrgOpsQuery taskspb.OrgOpsQueryClient
 	// SessionCacheMutation — Redis-backed session store on the
 	// `cache` connection . A gRPC client to app-storage
 	// like the rest; the cache module's storage handlers run in

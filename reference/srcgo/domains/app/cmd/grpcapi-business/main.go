@@ -121,7 +121,7 @@ func main() {
 		AuditLogMutation:     appStore.AuditLogMutation(),
 		TaskQuery:            appStore.TaskQuery(),
 		TaskMutation:         appStore.TaskMutation(),
-		TenantOpsQuery:       appStore.TenantOpsQuery(),
+		OrgOpsQuery:       appStore.OrgOpsQuery(),
 		SessionCacheMutation: appStore.SessionCacheMutation(),
 		Registry:             distxCoordinator{c: plat.DistributedTransaction()},
 	}

@@ -1,0 +1,15 @@
+# Scoped M:N read: OrgNote is the FROM, OrgNoteTag arrives
+# through a JOIN. The generated SQL carries TWO injected organization
+# predicates — `n.org_id` on the WHERE and `nt.org_id` on the
+# JOIN's ON clause. This step proves the pair does not over-filter:
+# the caller's own tagged note still comes back.
+#
+# 0153 is the other half (the same tag read by another organization returns
+# nothing); neither step means much without the other.
+method: tasks.TaskQuery.ListOrgNotesByTag
+pre:
+    - fixtures/an_org_note_tag.yaml
+input:
+    tag: ${tag.value}
+expect:
+    notes: {matcher: count, op: '==', value: 1}

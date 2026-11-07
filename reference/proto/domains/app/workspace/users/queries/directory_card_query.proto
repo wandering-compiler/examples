@@ -10,7 +10,7 @@ message GetDirectoryCardReq {
   int64 id = 1;
 }
 // GetDirectoryCardResp is flat scalars, the single-fetch convention in
-// this project (mirror of GetTenantNoteResp).
+// this project (mirror of GetOrgNoteResp).
 //
 // `search_key` is here because it is the only way to see a generated
 // column at all: the write path cannot set it, so its value is either

@@ -337,12 +337,12 @@ message AppendTaskAuditsResp {
 }
 
 
-// TenantNote scope-fixture write side.
+// OrgNote scope-fixture write side.
 //
-// `tenant_id` is OPTIONAL on the wire (payload-vs-metadata
+// `org_id` is OPTIONAL on the wire (payload-vs-metadata
 // equality check). Three behaviours per request:
 //
-//   - Empty / unset payload tenant_id → storage codegen's
+//   - Empty / unset payload org_id → storage codegen's
 //     INSERT auto-stamp pulls the scope value from gRPC
 //     metadata. The persisted row matches the caller's
 //     scope no matter what JSON would have said. Canonical
@@ -352,30 +352,30 @@ message AppendTaskAuditsResp {
 //     overhead beyond a string compare).
 //   - Non-empty payload mismatched against metadata → 403
 //     PERMISSION_DENIED with "scope mismatch: payload
-//     tenant_id does not match caller's scope". Catches the
-//     schema-author mistake of exposing tenant_id on the
+//     org_id does not match caller's scope". Catches the
+//     schema-author mistake of exposing org_id on the
 //     wire AND the attacker pattern of trying to write
-//     across tenants by spoofing the JSON.
+//     across organizations by spoofing the JSON.
 //
 // The auto-stamp is the primary protection (the SQL's
-// tenant_id column ALWAYS comes from metadata, never from
+// org_id column ALWAYS comes from metadata, never from
 // the payload). The equality check is defense-in-depth +
 // clear error feedback when the schema and the wire
 // disagree.
-message CreateTenantNoteReq {
+message CreateOrgNoteReq {
   string title     = 1 [(w17.field) = { type: CHAR, max_len: 200, min_len: 1 }];
   string body      = 2;
-  string tenant_id = 3;
+  string org_id = 3;
 }
-message CreateTenantNoteWithPublicLinkReq {
+message CreateOrgNoteWithPublicLinkReq {
   string title        = 1 [(w17.field) = { type: CHAR, max_len: 200, min_len: 1 }];
   string body         = 2;
   // The capability itself. Globally unique — the auth backend is
-  // handed this value and has to answer which tenant owns it, before
+  // handed this value and has to answer which organization owns it, before
   // any scope exists to narrow by.
   string public_token = 3 [(w17.field) = { type: CHAR, max_len: 64, min_len: 1 }];
 }
-message CreateTenantNoteWithPublicLinkResp {
+message CreateOrgNoteWithPublicLinkResp {
   int64 id = 1;
   // The minted capability, echoed back. A mint operation returning
   // what it minted is not just convenience: the token is the ONLY
@@ -385,53 +385,53 @@ message CreateTenantNoteWithPublicLinkResp {
   string public_token = 2 [(w17.field) = { null: true }];
 }
 
-message CreateTenantNoteResp {
+message CreateOrgNoteResp {
   int64 id = 1;
 }
 
-// AttachTenantNoteTag — idempotent M:N link write. DQL has no
+// AttachOrgNoteTag — idempotent M:N link write. DQL has no
 // `DO NOTHING`, so the update side is a no-op assignment of a
 // conflict column: re-attaching a tag the note already carries
 // is a no-op instead of a primary-key violation.
-message AttachTenantNoteTagReq {
+message AttachOrgNoteTagReq {
   int64  note_id = 1;
   string tag     = 2 [(w17.field) = { type: CHAR, max_len: 64, min_len: 1 }];
 }
-message AttachTenantNoteTagResp {
+message AttachOrgNoteTagResp {
   int64  note_id = 1;
   string tag     = 2;
 }
 
-// AttachTenantNoteLink — the same link write as AttachTenantNoteTag, on the
+// AttachOrgNoteLink — the same link write as AttachOrgNoteTag, on the
 // pair that DOES declare an fk. Exists so 0155 can prove the composite
-// foreign key refuses a row pointing at another tenant's note.
-message AttachTenantNoteLinkReq {
+// foreign key refuses a row pointing at another organization's note.
+message AttachOrgNoteLinkReq {
   int64  note_id = 1;
   string label   = 2 [(w17.field) = { type: CHAR, max_len: 64, min_len: 1 }];
 }
-message AttachTenantNoteLinkResp {
+message AttachOrgNoteLinkResp {
   int64  note_id = 1;
   string label   = 2;
 }
 
-// BookmarkTenantNote — the escape-hatch write. Same shape as
-// AttachTenantNoteLink; the target model declares fk_cross_scope, so this
-// one succeeds across tenants where that one is refused.
-message BookmarkTenantNoteReq {
+// BookmarkOrgNote — the escape-hatch write. Same shape as
+// AttachOrgNoteLink; the target model declares fk_cross_scope, so this
+// one succeeds across organizations where that one is refused.
+message BookmarkOrgNoteReq {
   int64  note_id = 1;
   string note    = 2 [(w17.field) = { type: CHAR, max_len: 64, min_len: 1 }];
 }
-message BookmarkTenantNoteResp {
+message BookmarkOrgNoteResp {
   int64  note_id = 1;
   string note    = 2;
 }
 
-// EnsureTenantNoteTag — the same idempotent link write spelled with
+// EnsureOrgNoteTag — the same idempotent link write spelled with
 // `DO NOTHING` instead of a no-op update. It returns nothing: on a
 // conflict the action writes no row, so PG has none to hand back, and
 // the compiler refuses `RETURNING` on this form rather than let a
 // duplicate write surface as NotFound.
-message EnsureTenantNoteTagReq {
+message EnsureOrgNoteTagReq {
   int64  note_id = 1;
   string tag     = 2 [(w17.field) = { type: CHAR, max_len: 64, min_len: 1 }];
 }
@@ -447,7 +447,7 @@ message EnsureTenantNoteTagReq {
 // whole point of this endpoint — would be indistinguishable from an
 // endpoint that said nothing at all. With it the field is emitted as 0 and
 // a caller can act on it.
-message EnsureTenantNoteTagResp {
+message EnsureOrgNoteTagResp {
   optional int32 written = 1;
 }
 
@@ -699,13 +699,13 @@ service TaskMutation {
     };
   }
 
-  // CreateTenantNote — scoped INSERT. The DQL SET
+  // CreateOrgNote — scoped INSERT. The DQL SET
   // clause carries only title + body; the storage codegen
-  // appends `tenant_id = :__scope_tenant_id` from metadata,
-  // so the persisted row's tenant_id matches the caller's
+  // appends `org_id = :__scope_org_id` from metadata,
+  // so the persisted row's org_id matches the caller's
   // scope no matter what the JSON payload would have said.
-  // CreateTenantNoteWithPublicLink — the same scoped INSERT
-  // as CreateTenantNote, plus the share-link capability.
+  // CreateOrgNoteWithPublicLink — the same scoped INSERT
+  // as CreateOrgNote, plus the share-link capability.
   //
   // A separate RPC rather than a nullable field on the existing one,
   // for the reason a capability differs from an ordinary attribute:
@@ -713,15 +713,15 @@ service TaskMutation {
   // without a login"), and folding it into the general create path
   // would make every caller a potential minter by omission.
   //
-  // tenant_id is NOT in the SET here either — the scope auto-stamp
+  // org_id is NOT in the SET here either — the scope auto-stamp
   // supplies it, so a caller cannot mint a link into someone else's
-  // tenant by supplying a payload field.
-  rpc CreateTenantNoteWithPublicLink(CreateTenantNoteWithPublicLinkReq) returns (CreateTenantNoteWithPublicLinkResp) {
+  // organization by supplying a payload field.
+  rpc CreateOrgNoteWithPublicLink(CreateOrgNoteWithPublicLinkReq) returns (CreateOrgNoteWithPublicLinkResp) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
-          "INSERT INTO tasks.TenantNote SET "
+          "INSERT INTO tasks.OrgNote SET "
           "title = :title, "
           "body = :body, "
           "public_token = :public_token "
@@ -730,12 +730,12 @@ service TaskMutation {
     };
   }
 
-  rpc CreateTenantNote(CreateTenantNoteReq) returns (CreateTenantNoteResp) {
+  rpc CreateOrgNote(CreateOrgNoteReq) returns (CreateOrgNoteResp) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
-          "INSERT INTO tasks.TenantNote SET "
+          "INSERT INTO tasks.OrgNote SET "
           "title = :title, "
           "body = :body "
           "RETURNING id"
@@ -743,7 +743,7 @@ service TaskMutation {
     };
   }
 
-  // AttachTenantNoteTag — idempotent scoped UPSERT on the M:N
+  // AttachOrgNoteTag — idempotent scoped UPSERT on the M:N
   // link table. Two things are on trial here:
   //
   //   - The no-op update idiom. DQL has no `DO NOTHING`, so
@@ -752,14 +752,14 @@ service TaskMutation {
   //     tag twice and expects both calls to succeed.
   //   - The scope auto-stamp on BOTH sides of an UPSERT — the
   //     insert set and the conflict-update set each get
-  //     `tenant_id = :__scope_tenant_id`, so a link row can
-  //     neither be created in nor moved to another tenant.
-  rpc AttachTenantNoteTag(AttachTenantNoteTagReq) returns (AttachTenantNoteTagResp) {
+  //     `org_id = :__scope_org_id`, so a link row can
+  //     neither be created in nor moved to another organization.
+  rpc AttachOrgNoteTag(AttachOrgNoteTagReq) returns (AttachOrgNoteTagResp) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
-          "UPSERT INTO tasks.TenantNoteTag SET "
+          "UPSERT INTO tasks.OrgNoteTag SET "
           "note_id = :note_id, "
           "tag = :tag "
           "ON CONFLICT (note_id, tag) DO UPDATE SET tag = :tag "
@@ -768,12 +768,12 @@ service TaskMutation {
     };
   }
 
-  rpc AttachTenantNoteLink(AttachTenantNoteLinkReq) returns (AttachTenantNoteLinkResp) {
+  rpc AttachOrgNoteLink(AttachOrgNoteLinkReq) returns (AttachOrgNoteLinkResp) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
-          "UPSERT INTO tasks.TenantNoteLink SET "
+          "UPSERT INTO tasks.OrgNoteLink SET "
           "note_id = :note_id, "
           "label = :label "
           "ON CONFLICT (note_id, label) DO UPDATE SET label = :label "
@@ -782,12 +782,12 @@ service TaskMutation {
     };
   }
 
-  rpc BookmarkTenantNote(BookmarkTenantNoteReq) returns (BookmarkTenantNoteResp) {
+  rpc BookmarkOrgNote(BookmarkOrgNoteReq) returns (BookmarkOrgNoteResp) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
-          "UPSERT INTO tasks.TenantNoteBookmark SET "
+          "UPSERT INTO tasks.OrgNoteBookmark SET "
           "note_id = :note_id, "
           "note = :note "
           "ON CONFLICT (note_id, note) DO UPDATE SET note = :note "
@@ -796,8 +796,8 @@ service TaskMutation {
     };
   }
 
-  // EnsureTenantNoteTag — the `DO NOTHING` form of the same write, on
-  // the same scoped link table. What it proves that AttachTenantNoteTag
+  // EnsureOrgNoteTag — the `DO NOTHING` form of the same write, on
+  // the same scoped link table. What it proves that AttachOrgNoteTag
   // does not:
   //
   //   - the conflict path writes NOTHING (a plain INSERT would raise a
@@ -809,12 +809,12 @@ service TaskMutation {
   //
   // No RETURNING: the compiler refuses it here, since on a conflict
   // there is no row to return.
-  rpc EnsureTenantNoteTag(EnsureTenantNoteTagReq) returns (EnsureTenantNoteTagResp) {
+  rpc EnsureOrgNoteTag(EnsureOrgNoteTagReq) returns (EnsureOrgNoteTagResp) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
-          "UPSERT INTO tasks.TenantNoteTag SET "
+          "UPSERT INTO tasks.OrgNoteTag SET "
           "note_id = :note_id, "
           "tag = :tag "
           "ON CONFLICT (note_id, tag) DO NOTHING"

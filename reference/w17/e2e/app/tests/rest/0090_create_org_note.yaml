@@ -1,4 +1,4 @@
-method: tasks.TaskMutation.CreateTenantNote
+method: tasks.TaskMutation.CreateOrgNote
 pre:
     - auth/auth.yaml
 input:

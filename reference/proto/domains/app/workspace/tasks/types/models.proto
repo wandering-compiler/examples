@@ -290,7 +290,7 @@ message TaskAuditLog {
   google.protobuf.Timestamp   created_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
 }
 
-// TenantNote — data-scope fixture. Deliberately
+// OrgNote — data-scope fixture. Deliberately
 // isolated from the Task hierarchy so the existing fullstack
 // test surface (priority buckets, fan-out joins, bulk inserts,
 // streaming) stays untouched by the scope auto-WHERE / INSERT
@@ -298,33 +298,33 @@ message TaskAuditLog {
 // alongside the Task ops in TaskQuery / TaskMutation but
 // operate on their own table.
 //
-// `(w17.db.scope)` declares `tenant_id` as the scope axis;
-// path "tenant_id" is the direct column on this table. Every
-// SELECT / UPDATE / DELETE / INSERT on TenantNote gets the
-// per-request `x-w17-scope-tenant_id` metadata threaded by
+// `(w17.db.scope)` declares `org_id` as the scope axis;
+// path "org_id" is the direct column on this table. Every
+// SELECT / UPDATE / DELETE / INSERT on OrgNote gets the
+// per-request `x-w17-scope-org_id` metadata threaded by
 // the gateway; missing metadata → 403 PERMISSION_DENIED;
 // INSERT auto-stamps from metadata regardless of payload.
 //
-// tenant_id is UUID-typed but nullable in proto terms — the
+// org_id is UUID-typed but nullable in proto terms — the
 // generator-emitted INSERT omits the column from the
 // hand-supplied SET, the auto-stamp adds it, and the SELECT
 // auto-WHERE filters by it. NULL never lands in a row because
 // the auto-stamp always supplies a value (the fail-closed
 // guard refuses the request before the INSERT runs).
-message TenantNote {
-  option (w17.db.table) = { name: "tenant_notes" };
+message OrgNote {
+  option (w17.db.table) = { name: "org_notes" };
   option (w17.db.scope) = {
-    entries: [{ name: "tenant_id", path: "tenant_id" }]
+    entries: [{ name: "org_id", path: "org_id" }]
   };
 
   int64                       id         = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
-  // tenant_id — scope axis column. Auto-stamped by the
+  // org_id — scope axis column. Auto-stamped by the
   // generator on INSERT from gRPC metadata; auto-filtered on
   // every SELECT / UPDATE / DELETE. Hand-written request
-  // payloads do NOT carry tenant_id (the auto-stamp is the
+  // payloads do NOT carry org_id (the auto-stamp is the
   // single source of truth — preserves the "payload field
-  // can't cross tenants" invariant from the spec).
-  string                      tenant_id  = 2 [(w17.field) = { type: UUID }];
+  // can't cross orgs" invariant from the spec).
+  string                      org_id  = 2 [(w17.field) = { type: UUID }];
   string                      title      = 3 [(w17.field) = { type: CHAR, max_len: 200 }];
   string                      body       = 4;
   google.protobuf.Timestamp   created_at = 5 [(w17.field) = { default_auto: NOW, immutable: true }];
@@ -334,15 +334,15 @@ message TenantNote {
   // `/public/notes/{public_token}` and the gateway authenticates
   // them from that value alone.
   //
-  // GLOBALLY unique, not unique-per-tenant, and that is forced by
+  // GLOBALLY unique, not unique-per-organization, and that is forced by
   // the direction of the lookup: the auth backend is handed a token
-  // and has to answer WHICH TENANT it belongs to, before any scope
-  // exists to narrow by. A token that repeated across tenants would
+  // and has to answer WHICH ORG it belongs to, before any scope
+  // exists to narrow by. A token that repeated across organizations would
   // have no single answer.
   //
   // Which is also why the by-token read is a weak proof of scope
   // isolation and the sibling list is the real one — see
-  // `ListTenantNotesForPublicLink` in task_query.proto. Global
+  // `ListOrgNotesForPublicLink` in task_query.proto. Global
   // uniqueness makes `WHERE public_token = :token` self-isolating,
   // so removing the scope filter would not change its answer.
   //
@@ -354,34 +354,34 @@ message TenantNote {
   string                      public_token = 6 [(w17.field) = { type: CHAR, max_len: 64, unique: true, null: true }];
 }
 
-// TenantNoteTag — scoped M:N link fixture. Tags a TenantNote,
+// OrgNoteTag — scoped M:N link fixture. Tags a OrgNote,
 // and carries the SAME scope axis as the note it links, so a
 // read that joins the two is a plain many-to-many read entirely
-// inside one tenant — the shape any project modelling M:N under
-// a tenant scope hits on day one.
+// inside one organization — the shape any project modelling M:N under
+// an organization scope hits on day one.
 //
 // It exists to prove the JOIN-side scope injection end to end:
-// `ListTenantNotesByTag` reads TenantNote FROM and reaches this
+// `ListOrgNotesByTag` reads OrgNote FROM and reaches this
 // table through a JOIN, so the joined alias gets its own
-// `AND nt.tenant_id = $<scope>` on the JOIN's ON clause. Without
-// that predicate the join would admit another tenant's link rows
+// `AND nt.org_id = $<scope>` on the JOIN's ON clause. Without
+// that predicate the join would admit another organization's link rows
 // — which is why this is proven against a live PG, not only
 // against the emitted SQL string.
 //
 // Composite PK (note_id, tag) is also the ON CONFLICT arbiter
-// for AttachTenantNoteTag's idempotent UPSERT.
-message TenantNoteTag {
-  option (w17.db.table) = { name: "tenant_note_tags" };
+// for AttachOrgNoteTag's idempotent UPSERT.
+message OrgNoteTag {
+  option (w17.db.table) = { name: "org_note_tags" };
   option (w17.db.scope) = {
-    entries: [{ name: "tenant_id", path: "tenant_id" }]
+    entries: [{ name: "org_id", path: "org_id" }]
   };
 
   // Deliberately NO `fk:` — this pair carries the FK-LESS shape.
   //
-  // Both models are scoped by `tenant_id`, so declaring an fk here would
+  // Both models are scoped by `org_id`, so declaring an fk here would
   // make the compiler emit a scope-preserving COMPOSITE foreign key and the
-  // cross-tenant link row could no longer be written at all. That is the
-  // right outcome, and 0155 proves it on TenantNoteLink — but it would also
+  // cross-organization link row could no longer be written at all. That is the
+  // right outcome, and 0155 proves it on OrgNoteLink — but it would also
   // remove the only scenario in which the JOIN-side scope predicate is the
   // sole defence, which is what 0154 / 0159 exist to pin.
   //
@@ -392,56 +392,56 @@ message TenantNoteTag {
   int64  note_id   = 1 [(w17.field) = { type: ID, pk: true }];
   string tag       = 2 [(w17.field) = { type: CHAR, max_len: 64, pk: true }];
   // Scope axis column — auto-stamped from metadata on write,
-  // auto-filtered on read, exactly like TenantNote.tenant_id.
-  string tenant_id = 3 [(w17.field) = { type: UUID }];
+  // auto-filtered on read, exactly like OrgNote.org_id.
+  string org_id = 3 [(w17.field) = { type: UUID }];
 }
 
-// TenantNoteLink — the same M:N link shape as TenantNoteTag, but WITH the
+// OrgNoteLink — the same M:N link shape as OrgNoteTag, but WITH the
 // `fk:` declaration, so the compiler emits a scope-preserving composite
-// foreign key over `tenant_id`.
+// foreign key over `org_id`.
 //
 // The two models exist as a PAIR and differ in exactly one line. That is the
-// point: TenantNoteTag proves the read-side predicate still holds where no
+// point: OrgNoteTag proves the read-side predicate still holds where no
 // constraint backs it, and this one proves the database refuses the write
 // outright once both ends declare the same scope and a reference between
-// them (0155). Same tables, same tenants, one declaration apart.
-message TenantNoteLink {
-  option (w17.db.table) = { name: "tenant_note_links" };
+// them (0155). Same tables, same organizations, one declaration apart.
+message OrgNoteLink {
+  option (w17.db.table) = { name: "org_note_links" };
   option (w17.db.scope) = {
-    entries: [{ name: "tenant_id", path: "tenant_id" }]
+    entries: [{ name: "org_id", path: "org_id" }]
   };
 
   int64  note_id   = 1 [
     (w17.field)     = { type: ID, pk: true },
-    (w17.db.column) = { fk: "tasks.TenantNote", deletion_rule: CASCADE }
+    (w17.db.column) = { fk: "tasks.OrgNote", deletion_rule: CASCADE }
   ];
   string label     = 2 [(w17.field) = { type: CHAR, max_len: 64, pk: true }];
-  string tenant_id = 3 [(w17.field) = { type: UUID }];
+  string org_id = 3 [(w17.field) = { type: UUID }];
 }
 
-// TenantNoteBookmark — the ESCAPE HATCH, and the exact counterpart of
-// TenantNoteLink.
+// OrgNoteBookmark — the ESCAPE HATCH, and the exact counterpart of
+// OrgNoteLink.
 //
-// Same two models, same tenants, same `fk:` — and the opposite outcome,
+// Same two models, same organizations, same `fk:` — and the opposite outcome,
 // because this one declares `fk_cross_scope`. Bookmarking is the case the
-// hatch exists for: a tenant marking a note another tenant published is the
+// hatch exists for: an organization marking a note another organization published is the
 // point of the feature, not a leak. 0164 writes the row 0163 is refused.
 //
-// The reference still holds: opting out of the tenancy half does not opt out
+// The reference still holds: opting out of the organization isolation half does not opt out
 // of referential integrity, so a bookmark of a note that does not exist is
 // still rejected.
-message TenantNoteBookmark {
-  option (w17.db.table) = { name: "tenant_note_bookmarks" };
+message OrgNoteBookmark {
+  option (w17.db.table) = { name: "org_note_bookmarks" };
   option (w17.db.scope) = {
-    entries: [{ name: "tenant_id", path: "tenant_id" }]
+    entries: [{ name: "org_id", path: "org_id" }]
   };
 
   int64  note_id   = 1 [
     (w17.field)     = { type: ID, pk: true },
-    (w17.db.column) = { fk: "tasks.TenantNote", deletion_rule: CASCADE, fk_cross_scope: true }
+    (w17.db.column) = { fk: "tasks.OrgNote", deletion_rule: CASCADE, fk_cross_scope: true }
   ];
   string note      = 2 [(w17.field) = { type: CHAR, max_len: 64, pk: true }];
-  string tenant_id = 3 [(w17.field) = { type: UUID }];
+  string org_id = 3 [(w17.field) = { type: UUID }];
 }
 
 // TaskUpload — a file a user actually uploaded through the API, as

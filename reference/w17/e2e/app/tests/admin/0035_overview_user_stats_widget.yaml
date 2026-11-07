@@ -1,7 +1,7 @@
 # Overview STAT widget (item 5, INC-B) — LIVE proof.
 #
 # The admin overview declares one declarative STAT widget bound to the
-# cross-tenant COUNT(*) query users.UserQuery.CountUsers. The generated
+# cross-organization COUNT(*) query users.UserQuery.CountUsers. The generated
 # admin bundle mounts GET /admin/api/widget/user_stats, which calls that
 # query and returns { total } as JSON — the runtime reads `total` off it
 # and renders a stat cell. This step drives that data route directly.

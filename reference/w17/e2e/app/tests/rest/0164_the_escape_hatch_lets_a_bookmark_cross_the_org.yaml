@@ -1,9 +1,9 @@
 # The counterpart of 0163, and the reason the escape hatch exists.
 #
 # Identical setup: alpha creates a note, beta writes a link row pointing at
-# it. 0163 is REFUSED — TenantNoteLink declares `fk:` between two models
+# it. 0163 is REFUSED — OrgNoteLink declares `fk:` between two models
 # scoped by the same axis, so the composite foreign key forbids it. This one
-# SUCCEEDS, because TenantNoteBookmark declares `fk_cross_scope` on the same
+# SUCCEEDS, because OrgNoteBookmark declares `fk_cross_scope` on the same
 # reference.
 #
 # Two cases, one declaration apart, opposite outcomes. Without this pair the
@@ -11,13 +11,13 @@
 # nobody exercises is how the compiler's own vocabulary ratchet describes a
 # feature that shipped without an example.
 #
-# Bookmarking is what the hatch is FOR: a tenant marking a note another
-# tenant published is the point, not a leak. The reference is still checked —
-# opting out of the tenancy half does not opt out of referential integrity —
+# Bookmarking is what the hatch is FOR: an organization marking a note another
+# organization published is the point, not a leak. The reference is still checked —
+# opting out of the organization isolation half does not opt out of referential integrity —
 # which 0165 pins by bookmarking a note id that does not exist.
-method: tasks.TaskMutation.BookmarkTenantNote
+method: tasks.TaskMutation.BookmarkOrgNote
 pre:
-    - fixtures/a_tenant_note.yaml
+    - fixtures/an_org_note.yaml
     - auth/auth_beta.yaml
 input:
     note_id: ${note.id}

@@ -11,9 +11,9 @@
 # (Auto-scaffolded when the endpoint was declared, then filled in; it
 # keeps the number the generator gave it rather than the 016x block of
 # its siblings.)
-method: tasks.TaskQuery.ListTenantNotesPagedWithTagCount
+method: tasks.TaskQuery.ListOrgNotesPagedWithTagCount
 pre:
-    - fixtures/a_tenant_note.yaml
+    - fixtures/an_org_note.yaml
 input: {}
 expect:
     items: {matcher: count, op: '>=', value: 1}

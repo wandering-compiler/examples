@@ -12,7 +12,7 @@ import "w17/mcp.proto";
 //   include: [ "auth" ]  publishes the auth plugin's turnkey session
 //     tools (WhoAmI). Plugin MCP tools are OPT-IN — without this line,
 //     activating the plugin contributes no tools and drags in no mcp
-//     runtime. Only the "auth" realm is included; the tenant-less
+//     runtime. Only the "auth" realm is included; the org-less
 //     "admin_auth" realm is not, so its WhoAmI never collides here.
 //
 //   tools: [ … ]         publishes the project's OWN RPCs, one entry per

@@ -7,9 +7,9 @@
 #
 # On the ON, the note comes back with an empty tag, which is what a
 # hand-written scoped LEFT JOIN says.
-method: tasks.TaskQuery.GetTenantNoteWithTag
+method: tasks.TaskQuery.GetOrgNoteWithTag
 pre:
-    - fixtures/a_tenant_note.yaml
+    - fixtures/an_org_note.yaml
 input:
     id: ${note.id}
 expect:

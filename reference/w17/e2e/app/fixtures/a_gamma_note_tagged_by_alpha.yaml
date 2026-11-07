@@ -1,7 +1,7 @@
-# tenant-ALPHA tags tenant-gamma's note. The link row carries gamma's
-# note_id and alpha's tenant_id — a row that gamma's own tag count must
+# org-ALPHA tags org-gamma's note. The link row carries gamma's
+# note_id and alpha's org_id — a row that gamma's own tag count must
 # not see.
-method: tasks.TaskMutation.AttachTenantNoteTag
+method: tasks.TaskMutation.AttachOrgNoteTag
 pre:
     - fixtures/a_gamma_note.yaml
     - auth/auth.yaml

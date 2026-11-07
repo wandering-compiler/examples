@@ -134,17 +134,14 @@ option (w17.rest_api) = {
         // captures `token` and reuses it as the Bearer on every
         // subsequent authenticated request. Served by the plugin's
         // `sign_up_turnkey` / `sign_in_turnkey` features.
-        // URL-based tenancy: `{tenant_slug}` binds (PATH_VAR) into
-        // SignUpReq.tenant_slug, so POST /api/v1/auth/<slug>/register
-        // signs the new user up INTO that tenant — the plugin's SignUp
-        // handler resolves the slug to a tenant id + stamps it on the
-        // user (tenant_scope). Host-based tenancy would instead forward
-        // the Host header; this demo wires the URL form.
+        // SignUp names the host the registration comes from in its body
+        // (signup_host): the organization bound to that host takes the
+        // new account in (org_hosts + org_signup).
         // SignIn checks a password, so only a failed attempt spends the
         // gateway's per-address limit; SignUp, which creates an account,
         // spends on every request (the default). Endpoints declared here
         // rather than through the plugin's preset carry their own mode.
-        { ref: "auth.AuthService.SignUp", method: POST, path: "/{tenant_slug}/register", exclude_auth: true },
+        { ref: "auth.AuthService.SignUp", method: POST, path: "/register", exclude_auth: true },
         { ref: "auth.AuthService.SignIn", method: POST, path: "/login",    exclude_auth: true, public_limit: PUBLIC_LIMIT_FAILED_ONLY },
         // The OAuth authorization server's consent page and the user's
         // connected apps (oauth_server): an MCP client gets its token for
@@ -163,13 +160,13 @@ option (w17.rest_api) = {
         // The pair exists because ONE endpoint could not prove the
         // claim. `public_token` is globally unique (it has to be —
         // the auth method is handed a token and must answer which
-        // tenant owns it), which makes the by-token read below
+        // organization owns it), which makes the by-token read below
         // self-isolating: delete the scope filter and its answer is
         // unchanged. So it proves the link authenticates, nothing more.
         //
         // The related-notes list is the detector. Its DQL carries no
         // token at all; the only thing between it and every other
-        // tenant is the auto-WHERE fed by the scope this link's auth
+        // organization is the auto-WHERE fed by the scope this link's auth
         // method returned. That endpoint is also the feature's claim
         // made concrete — an `exclude_auth` + hand-written-WHERE
         // implementation of the same link could not offer it, because
@@ -180,16 +177,16 @@ option (w17.rest_api) = {
         // identity arriving in the URL, `exclude_auth` says it has
         // none, and an endpoint claiming both would extract a token
         // and then skip the call that consumes it.
-        { ref: "tasks.TaskQuery.GetTenantNoteByPublicToken", method: GET,
+        { ref: "tasks.TaskQuery.GetOrgNoteByPublicToken", method: GET,
           path: "/notes/{public_token}",
           credential: { path_param: "public_token" } },
-        { ref: "tasks.TaskQuery.ListTenantNotesForPublicLink", method: GET,
+        { ref: "tasks.TaskQuery.ListOrgNotesForPublicLink", method: GET,
           path: "/notes/{public_token}/related",
           credential: { path_param: "public_token" } },
         // The QUERY-string form of the same credential. Both slots are
         // exercised: extraction runs through a different runtime helper
         // per slot.
-        { ref: "tasks.TaskQuery.GetTenantNoteSummaryByPublicToken", method: GET,
+        { ref: "tasks.TaskQuery.GetOrgNoteSummaryByPublicToken", method: GET,
           path: "/note-summary",
           credential: { query_param: "public_token" } }
       ],
@@ -261,19 +258,19 @@ option (w17.rest_api) = {
         // is what says the plugin's sign-up INSERT, which knows nothing
         // about the column, still left a usable row behind.
         //
-        // BY-ID LOOKUP, DELIBERATELY. `auth.User.tenant_id` is a plain
-        // column the plugin SOURCES the tenant scope from, not a
+        // BY-ID LOOKUP, DELIBERATELY. `auth.User.org_id` is a plain
+        // column the plugin SOURCES the organization scope from, not a
         // `(w17.db.scope)` axis, so a project query over `auth_user`
-        // gets no automatic tenant predicate — reading it by id reads
-        // across tenants. That is the right contract for THIS value and
+        // gets no automatic organization predicate — reading it by id reads
+        // across organizations. That is the right contract for THIS value and
         // only for this value: it is a consent flag for a PUBLIC
-        // directory, so "is this account listable" is not tenant-private
+        // directory, so "is this account listable" is not org-private
         // information by construction. The endpoint is still ACL-gated
         // like every other one in this registry.
         //
-        // Do not copy the shape for anything the tenant owns. A project
+        // Do not copy the shape for anything the organization owns. A project
         // column belongs on a project table with its own scope axis
-        // (see tasks.TenantNote); an extension message cannot declare
+        // (see tasks.OrgNote); an extension message cannot declare
         // one, which is another reason extensions are for columns the
         // plugin's identity genuinely owns.
         { ref: "users.DirectoryCardQuery.GetDirectoryOptIn",      method: GET,  path: "/{user_id}/directory-opt-in" },
@@ -772,65 +769,65 @@ option (w17.rest_api) = {
       ]
     },
     {
-      // Multi-tenant scoped notes demo. Every
+      // Multi-organization scoped notes demo. Every
       // method on this group lives behind the data-scope
       // auto-WHERE / INSERT auto-stamp / fail-closed guard
-      // emitted by the storage codegen for `TenantNote`
+      // emitted by the storage codegen for `OrgNote`
       // (see proto/domains/app/workspace/tasks/types/models.proto).
-      // The B7 e2e suite exercises tenant isolation through
+      // The B7 e2e suite exercises organization isolation through
       // these endpoints; existing /tasks coverage stays
       // unaffected because `Task` itself is not scoped.
-      prefix:      "/tenant-notes",
-      description: "Scoped multi-tenant notes (data-scope fixture)",
+      prefix:      "/org-notes",
+      description: "Scoped multi-organization notes (data-scope fixture)",
       endpoints: [
-        { ref: "tasks.TaskMutation.CreateTenantNote", method: POST, path: "" },
+        { ref: "tasks.TaskMutation.CreateOrgNote", method: POST, path: "" },
         // Mints a note that carries a share-link capability.
         // Authenticated and scoped like every other write here: the
-        // tenant comes from the caller's scope, never from the payload,
-        // so nobody can mint a link into another tenant.
-        { ref: "tasks.TaskMutation.CreateTenantNoteWithPublicLink", method: POST, path: "/with-public-link" },
-        { ref: "tasks.TaskQuery.GetTenantNote",       method: GET,  path: "/{id}" },
-        { ref: "tasks.TaskQuery.ListTenantNotes",     method: GET,  path: "" },
+        // organization comes from the caller's scope, never from the payload,
+        // so nobody can mint a link into another organization.
+        { ref: "tasks.TaskMutation.CreateOrgNoteWithPublicLink", method: POST, path: "/with-public-link" },
+        { ref: "tasks.TaskQuery.GetOrgNote",       method: GET,  path: "/{id}" },
+        { ref: "tasks.TaskQuery.ListOrgNotes",     method: GET,  path: "" },
 
         // The scope-BYPASSED twin of the list above
         // (`(w17.db.bypass_scope)` on the method). Routed here so the
         // e2e suite can prove the bypass from the outside: the same
         // caller, the same credentials, one endpoint returning its own
-        // tenant's notes and the other returning every tenant's.
-        { ref: "tasks.TaskQuery.ListAllTenantNotes",  method: GET,  path: "/all" },
+        // organization's notes and the other returning every organization's.
+        { ref: "tasks.TaskQuery.ListAllOrgNotes",  method: GET,  path: "/all" },
 
         // The service-level bypass (`(w17.db.bypass_scope_service) =
         // "*"`), whose whole service exists to work across scopes.
-        { ref: "tasks.TenantOpsQuery.CountAllTenantNotes", method: GET, path: "/all/count" },
+        { ref: "tasks.OrgOpsQuery.CountAllOrgNotes", method: GET, path: "/all/count" },
 
-        // Scoped M:N surface. The read reaches TenantNoteTag through a
-        // JOIN, so its tenant predicate is injected onto the JOIN's ON
+        // Scoped M:N surface. The read reaches OrgNoteTag through a
+        // JOIN, so its organization predicate is injected onto the JOIN's ON
         // clause rather than the WHERE; the write is the idempotent
         // link UPSERT. Both are storage-tier methods, exposed here
         // because the e2e suite drives them over REST.
-        { ref: "tasks.TaskMutation.AttachTenantNoteTag", method: POST, path: "/tags" },
-        { ref: "tasks.TaskMutation.EnsureTenantNoteTag", method: POST, path: "/tags/ensure" },
-        { ref: "tasks.TaskMutation.AttachTenantNoteLink", method: POST, path: "/links" },
-        { ref: "tasks.TaskMutation.BookmarkTenantNote", method: POST, path: "/bookmarks" },
-        { ref: "tasks.TaskQuery.ListTenantNotesByTag",   method: GET,  path: "/by-tag/{tag}" },
-        { ref: "tasks.TaskQuery.GetTenantNoteWithTag",   method: GET,  path: "/{id}/with-tag" },
-        { ref: "tasks.TaskQuery.ListTenantNotesPagedWithTagCount", method: GET, path: "/paged-with-tag-count",
+        { ref: "tasks.TaskMutation.AttachOrgNoteTag", method: POST, path: "/tags" },
+        { ref: "tasks.TaskMutation.EnsureOrgNoteTag", method: POST, path: "/tags/ensure" },
+        { ref: "tasks.TaskMutation.AttachOrgNoteLink", method: POST, path: "/links" },
+        { ref: "tasks.TaskMutation.BookmarkOrgNote", method: POST, path: "/bookmarks" },
+        { ref: "tasks.TaskQuery.ListOrgNotesByTag",   method: GET,  path: "/by-tag/{tag}" },
+        { ref: "tasks.TaskQuery.GetOrgNoteWithTag",   method: GET,  path: "/{id}/with-tag" },
+        { ref: "tasks.TaskQuery.ListOrgNotesPagedWithTagCount", method: GET, path: "/paged-with-tag-count",
           paged: { enabled: true } },
 
         // Same scoped INSERT, but routed THROUGH the business facade
         // (TasksService) instead of straight to storage. This is the
         // one endpoint that crosses gateway → business → storage with a
         // scoped storage method at the end, so it proves the business
-        // tier relays `x-w17-scope-tenant_id` onward to storage over the
+        // tier relays `x-w17-scope-org_id` onward to storage over the
         // wire. Without that relay the storage scope guard fails closed
-        // (403) even though the direct CreateTenantNote endpoint above
+        // (403) even though the direct CreateOrgNote endpoint above
         // still passes — see the facade method's doc.
-        { ref: "tasks.TasksService.CreateTenantNoteViaService", method: POST, path: "/via-service" }
+        { ref: "tasks.TasksService.CreateOrgNoteViaService", method: POST, path: "/via-service" }
       ],
       streams: [
         // The scoped server stream with a validated request (SSE),
         // exposed straight from storage.
-        { ref: "tasks.TaskQuery.StreamTenantNotes", path: "/stream" }
+        { ref: "tasks.TaskQuery.StreamOrgNotes", path: "/stream" }
       ]
     },
     {

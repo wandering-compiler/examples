@@ -50,7 +50,7 @@ message StreamPublicNoteUpdatesReq {
 }
 message PublicNoteUpdate {
   int64  id        = 1;
-  string tenant_id = 2;
+  string org_id = 2;
   string title     = 3;
 }
 
@@ -179,20 +179,20 @@ service TasksService {
   rpc DeleteTask(DeleteTaskReq) returns (DeleteTaskResp) {
   }
 
-  // CreateTenantNoteViaService — the ONLY facade method that
-  // reaches a SCOPED storage mutation (TaskMutation.CreateTenantNote,
-  // whose `TenantNote` model carries `(w17.db.scope) tenant_id`).
+  // CreateOrgNoteViaService — the ONLY facade method that
+  // reaches a SCOPED storage mutation (TaskMutation.CreateOrgNote,
+  // whose `OrgNote` model carries `(w17.db.scope) org_id`).
   // Every other facade method above delegates to unscoped storage
   // primitives, so this is the one endpoint that exercises the
   // gateway → business → storage trust-metadata chain end to end:
-  // the gateway threads `x-w17-scope-tenant_id` to the business
+  // the gateway threads `x-w17-scope-org_id` to the business
   // tier, and the business→storage hop MUST relay it onward or the
   // storage scope guard fails closed with PermissionDenied. It is the
   // check on that relay (the direct
-  // `TaskMutation.CreateTenantNote` endpoint only covers the
+  // `TaskMutation.CreateOrgNote` endpoint only covers the
   // gateway→storage hop and never crosses the business tier). Reuses
-  // the storage CreateTenantNote request/response shape by import.
-  rpc CreateTenantNoteViaService(CreateTenantNoteReq) returns (CreateTenantNoteResp) {
+  // the storage CreateOrgNote request/response shape by import.
+  rpc CreateOrgNoteViaService(CreateOrgNoteReq) returns (CreateOrgNoteResp) {
   }
 }
 

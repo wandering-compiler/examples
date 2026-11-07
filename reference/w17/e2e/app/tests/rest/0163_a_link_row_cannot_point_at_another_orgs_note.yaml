@@ -1,22 +1,22 @@
-# tenant-beta tries to tag tenant-ALPHA's note, and the database refuses.
+# org-beta tries to tag org-ALPHA's note, and the database refuses.
 #
 # This used to SUCCEED, and the fixture that made it succeed said why in
-# its own comment: "a foreign key is not tenant-aware, so nothing stops
+# its own comment: "a foreign key is not org-aware, so nothing stops
 # beta from pointing a link row of its own at it". The row that landed
-# carried beta's tenant_id (the UPSERT auto-stamp guarantees that much)
-# while its note_id belonged to alpha — a reference across the tenant
+# carried beta's org_id (the UPSERT auto-stamp guarantees that much)
+# while its note_id belonged to alpha — a reference across the organization
 # boundary, written through the ordinary API.
 #
-# Both models are scoped by `tenant_id`, so the reference is now emitted
+# Both models are scoped by `org_id`, so the reference is now emitted
 # as a COMPOSITE foreign key over that axis:
 #
-#   FOREIGN KEY (tenant_id, note_id) REFERENCES tenant_notes (tenant_id, id)
+#   FOREIGN KEY (org_id, note_id) REFERENCES org_notes (org_id, id)
 #
-# TenantNoteLink and TenantNoteTag are the same shape one declaration apart:
+# OrgNoteLink and OrgNoteTag are the same shape one declaration apart:
 # this one declares `fk:`, the other deliberately does not, so 0154 / 0159
 # keep a scenario in which the JOIN-side predicate is the only defence.
 #
-# beta's tenant_id paired with alpha's note_id matches no row in the
+# beta's org_id paired with alpha's note_id matches no row in the
 # parent, so PG rejects the write outright. The refusal is the assertion:
 # it is the write side of the isolation, and it holds for every writer —
 # raw SQL included — rather than depending on each reader remembering to
@@ -27,9 +27,9 @@
 # constraint at its connection-bucketing seam, because no engine can
 # reference into another database), and it says nothing about rows that
 # predate it. The JOIN-side predicate remains the defence there.
-method: tasks.TaskMutation.AttachTenantNoteLink
+method: tasks.TaskMutation.AttachOrgNoteLink
 pre:
-    - fixtures/a_tenant_note.yaml
+    - fixtures/an_org_note.yaml
     - auth/auth_beta.yaml
 input:
     note_id: ${note.id}

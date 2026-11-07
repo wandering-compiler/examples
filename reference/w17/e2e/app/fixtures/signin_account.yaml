@@ -3,7 +3,7 @@
 # row whose hash the SignIn verifier accepts.
 method: auth.AuthService.SignUp
 input:
-    tenant_slug: tenant-alpha
+    signup_host: org-alpha.reference.test
     email: e2e-signin@example.com
     password: e2eSecret!23
 expect:

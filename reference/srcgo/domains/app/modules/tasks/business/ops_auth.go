@@ -121,7 +121,7 @@ func (s *OpsAuthServer) AuthenticateOps(ctx context.Context, req *taskspb.OpsAut
 		// row naming nobody is worse than one naming a service account.
 		UserId: opsServiceAccountID,
 		// No scope entries: this method grants domain-wide read
-		// authority, and inventing a tenant scope would silence the
+		// authority, and inventing an organization scope would silence the
 		// isolation the rest of the suite proves.
 	}, nil
 }

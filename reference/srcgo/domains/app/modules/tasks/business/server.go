@@ -368,16 +368,16 @@ func (s *TasksServer) UpdateTaskAndInvalidate(ctx context.Context, req *taskspb.
 	return &taskspb.UpdateTaskAndInvalidateResp{Id: storageResp.GetId()}, nil
 }
 
-// CreateTenantNoteViaService delegates to the SCOPED storage
-// mutation TaskMutation.CreateTenantNote. It is the only facade
+// CreateOrgNoteViaService delegates to the SCOPED storage
+// mutation TaskMutation.CreateOrgNote. It is the only facade
 // method that reaches a scoped storage primitive, so it is the
-// end-to-end check that the caller's tenant scope survives the
+// end-to-end check that the caller's organization scope survives the
 // gateway → business → storage chain.
 //
 // The handler simply forwards `ctx` to the storage client, exactly
 // like the unscoped facade methods above. The difference is what the
-// downstream method requires: CreateTenantNote's generated guard
-// reads `x-w17-scope-tenant_id` from its INCOMING metadata and fails
+// downstream method requires: CreateOrgNote's generated guard
+// reads `x-w17-scope-org_id` from its INCOMING metadata and fails
 // closed if it is missing. Over a real gRPC hop (app-business and
 // app-storage are separate containers here) the caller's scope lives
 // on this handler's INCOMING metadata and does NOT automatically ride
@@ -385,18 +385,18 @@ func (s *TasksServer) UpdateTaskAndInvalidate(ctx context.Context, req *taskspb.
 // (core/grpcx.DialOpts → principal.ForwardToOutgoing) is what relays
 // it. This method exists so the e2e suite drives that relay for real
 // rather than trusting it; without it the storage guard would answer
-// 403 PermissionDenied. tenant_id stays out of the payload — it is
+// 403 PermissionDenied. org_id stays out of the payload — it is
 // auto-stamped from the scope, never sent by the client.
-func (s *TasksServer) CreateTenantNoteViaService(ctx context.Context, req *taskspb.CreateTenantNoteReq) (*taskspb.CreateTenantNoteResp, error) {
-	storageResp, err := s.deps.TaskMutation.CreateTenantNote(ctx, &taskspb.CreateTenantNoteReq{
+func (s *TasksServer) CreateOrgNoteViaService(ctx context.Context, req *taskspb.CreateOrgNoteReq) (*taskspb.CreateOrgNoteResp, error) {
+	storageResp, err := s.deps.TaskMutation.CreateOrgNote(ctx, &taskspb.CreateOrgNoteReq{
 		Title:    req.GetTitle(),
 		Body:     req.GetBody(),
-		TenantId: req.GetTenantId(),
+		OrgId: req.GetOrgId(),
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &taskspb.CreateTenantNoteResp{Id: storageResp.GetId()}, nil
+	return &taskspb.CreateOrgNoteResp{Id: storageResp.GetId()}, nil
 }
 
 // OnTaskCompletedCounter increments the denormalized

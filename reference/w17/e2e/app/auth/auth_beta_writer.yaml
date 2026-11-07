@@ -1,4 +1,4 @@
-# tenant-beta, as its own fixture path.
+# org-beta, as its own fixture path.
 #
 # Byte-identical in effect to auth/auth_beta.yaml, and that is the point
 # — the same reason auth/auth_alpha_reader.yaml exists. A `pre` chain
@@ -7,12 +7,12 @@
 # no-op and the step silently runs as whoever authenticated last. A
 # distinct path re-authenticates for real.
 #
-# Used by fixtures/a_beta_tenant_note.yaml, whose whole job is to write
-# a row AS beta — a step that ran as the wrong tenant would write the
+# Used by fixtures/a_beta_org_note.yaml, whose whole job is to write
+# a row AS beta — a step that ran as the wrong organization would write the
 # row under the wrong scope and quietly defeat the case that reads it.
 method: auth.AuthService.SignUp
 input:
-    tenant_slug: tenant-beta
+    signup_host: org-beta.reference.test
     email: beta-writer${seq}@example.com
     password: e2eSecret!23
 expect:

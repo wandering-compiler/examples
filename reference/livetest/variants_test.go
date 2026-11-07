@@ -170,12 +170,13 @@ func signUpAs(t *testing.T, email string) string {
 		Token string `json:"token"`
 	}
 	body, _ := json.Marshal(map[string]string{
-		"email":    email,
-		"password": "e2eSecret!23",
+		"email":       email,
+		"password":    "e2eSecret!23",
+		"signup_host": "org-alpha.reference.test",
 	})
 	// The sign-up proves a new device key: one per account.
 	var session *device.Session
-	raw := exchange(t, http.MethodPost, "/api/v1/auth/tenant-alpha/register", "application/json", bytes.NewReader(body), http.StatusOK,
+	raw := exchange(t, http.MethodPost, "/api/v1/auth/register", "application/json", bytes.NewReader(body), http.StatusOK,
 		func(req *http.Request) (resp *http.Response, err error) {
 			resp, session, err = api.Mint(req)
 			return resp, err

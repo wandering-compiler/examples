@@ -5,7 +5,7 @@ package e2e.app.tasks;
 import "w17/db.proto";
 import "domains/app/workspace/tasks/types/models.proto";
 
-// TenantOpsQuery — the SERVICE-level half of the scope-bypass
+// OrgOpsQuery — the SERVICE-level half of the scope-bypass
 // surface (`(w17.db.bypass_scope_service)`), and the reason it is
 // its own service rather than another method on TaskQuery.
 //
@@ -15,34 +15,34 @@ import "domains/app/workspace/tasks/types/models.proto";
 // every RPC the service declares. So the service-level slot is for
 // a service whose WHOLE PURPOSE is cross-scope work — an operator
 // / reporting surface — and putting it on TaskQuery would strip the
-// guard off the scoped reads that prove tenant isolation there.
+// guard off the scoped reads that prove organization isolation there.
 //
 // `"*"` is the wildcard form: bypass EVERY scope on every scoped
 // model these methods touch. Contrast the method-level bypass on
-// `TaskQuery.ListAllTenantNotes`, which names `tenant_id`
+// `TaskQuery.ListAllOrgNotes`, which names `org_id`
 // explicitly and would therefore still enforce a second axis added
-// to TenantNote later. Both forms are load-bearing and both are
+// to OrgNote later. Both forms are load-bearing and both are
 // exercised, because they fail differently: a broken wildcard
 // leaves a predicate behind, a broken named list bypasses too much.
-service TenantOpsQuery {
+service OrgOpsQuery {
   option (w17.db.bypass_scope_service) = "*";
 
-  // CountAllTenantNotes — a cross-tenant aggregate, the plainest
+  // CountAllOrgNotes — a cross-organization aggregate, the plainest
   // thing an operator surface does. No request fields: there is
   // nothing to filter by, which is the point.
-  rpc CountAllTenantNotes(CountAllTenantNotesReq) returns (CountAllTenantNotesResp) {
+  rpc CountAllOrgNotes(CountAllOrgNotesReq) returns (CountAllOrgNotesResp) {
     option (w17.db.method) = {
       ops: {
         name: "main",
         dql:
           "SELECT COUNT(*) AS total "
-          "FROM tasks.TenantNote n"
+          "FROM tasks.OrgNote n"
       }
     };
   }
 
-  // ResolvePublicNoteToken — the token→tenant lookup a
-  // capability link's auth method runs, and the ONE cross-tenant
+  // ResolvePublicNoteToken — the token→organization lookup a
+  // capability link's auth method runs, and the ONE cross-organization
   // read this feature introduces.
   //
   // It lives here, on the declared bypass surface, because that is
@@ -56,7 +56,7 @@ service TenantOpsQuery {
   // with a hand-written WHERE. Both approaches contain exactly one
   // unscoped read. The difference is where it sits: here it is a
   // single named query on a service whose entire purpose is
-  // declared cross-tenant work, its output is a scope value, and
+  // declared cross-organization work, its output is a scope value, and
   // every read that follows is filtered by the platform. In the
   // other approach the unscoped read IS the endpoint, and nothing
   // downstream is filtered by anything.
@@ -65,16 +65,16 @@ service TenantOpsQuery {
       ops: {
         name: "main",
         dql:
-          "SELECT n.id, n.tenant_id "
-          "FROM tasks.TenantNote n "
+          "SELECT n.id, n.org_id "
+          "FROM tasks.OrgNote n "
           "WHERE n.public_token = :public_token"
       }
     };
   }
 }
 
-message CountAllTenantNotesReq {}
-message CountAllTenantNotesResp {
+message CountAllOrgNotesReq {}
+message CountAllOrgNotesResp {
   int64 total = 1;
 }
 
@@ -87,5 +87,5 @@ message ResolvePublicNoteTokenReq {
 }
 message ResolvePublicNoteTokenResp {
   int64  id        = 1;
-  string tenant_id = 2;
+  string org_id = 2;
 }

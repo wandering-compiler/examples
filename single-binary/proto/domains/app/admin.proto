@@ -7,7 +7,7 @@ import "w17/admin.proto";
 // Admin surface for the app domain — the fourth component folded into
 // the single app-server binary.
 //
-// Authenticates against the tenant-less `admin_auth` realm (the single
+// Authenticates against the org-less `admin_auth` realm (the single
 // auth activation in w17.proto). An admin surface cannot ship
 // unauthenticated — the gateway parser refuses it outright — so this is
 // the minimum wiring, not a convenience.
