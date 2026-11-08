@@ -406,35 +406,44 @@
     {
       "args": [
         720101,
+        1234,
+        "EUR",
         720001,
         "search",
         0.25,
         100,
+        250,
         1051
       ],
-      "sql": "INSERT INTO \"campaign_flights\" (\"id\", \"campaign_id\", \"channel\", \"click_rate\", \"impressions\", \"spend\") VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (\"id\") DO UPDATE SET \"campaign_id\" = EXCLUDED.\"campaign_id\", \"channel\" = EXCLUDED.\"channel\", \"click_rate\" = EXCLUDED.\"click_rate\", \"impressions\" = EXCLUDED.\"impressions\", \"spend\" = EXCLUDED.\"spend\""
+      "sql": "INSERT INTO \"campaign_flights\" (\"id\", \"bid_cap\", \"bid_currency\", \"campaign_id\", \"channel\", \"click_rate\", \"impressions\", \"platform_fee\", \"spend\") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (\"id\") DO UPDATE SET \"bid_cap\" = EXCLUDED.\"bid_cap\", \"bid_currency\" = EXCLUDED.\"bid_currency\", \"campaign_id\" = EXCLUDED.\"campaign_id\", \"channel\" = EXCLUDED.\"channel\", \"click_rate\" = EXCLUDED.\"click_rate\", \"impressions\" = EXCLUDED.\"impressions\", \"platform_fee\" = EXCLUDED.\"platform_fee\", \"spend\" = EXCLUDED.\"spend\""
     },
     {
       "args": [
         720102,
+        150000,
+        "JPY",
         720001,
         "social",
         0.75,
         300,
+        99,
         2025
       ],
-      "sql": "INSERT INTO \"campaign_flights\" (\"id\", \"campaign_id\", \"channel\", \"click_rate\", \"impressions\", \"spend\") VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (\"id\") DO UPDATE SET \"campaign_id\" = EXCLUDED.\"campaign_id\", \"channel\" = EXCLUDED.\"channel\", \"click_rate\" = EXCLUDED.\"click_rate\", \"impressions\" = EXCLUDED.\"impressions\", \"spend\" = EXCLUDED.\"spend\""
+      "sql": "INSERT INTO \"campaign_flights\" (\"id\", \"bid_cap\", \"bid_currency\", \"campaign_id\", \"channel\", \"click_rate\", \"impressions\", \"platform_fee\", \"spend\") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (\"id\") DO UPDATE SET \"bid_cap\" = EXCLUDED.\"bid_cap\", \"bid_currency\" = EXCLUDED.\"bid_currency\", \"campaign_id\" = EXCLUDED.\"campaign_id\", \"channel\" = EXCLUDED.\"channel\", \"click_rate\" = EXCLUDED.\"click_rate\", \"impressions\" = EXCLUDED.\"impressions\", \"platform_fee\" = EXCLUDED.\"platform_fee\", \"spend\" = EXCLUDED.\"spend\""
     },
     {
       "args": [
         720201,
+        12345,
+        "USD",
         720002,
         "search",
         0.5,
         50,
+        1,
         500
       ],
-      "sql": "INSERT INTO \"campaign_flights\" (\"id\", \"campaign_id\", \"channel\", \"click_rate\", \"impressions\", \"spend\") VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (\"id\") DO UPDATE SET \"campaign_id\" = EXCLUDED.\"campaign_id\", \"channel\" = EXCLUDED.\"channel\", \"click_rate\" = EXCLUDED.\"click_rate\", \"impressions\" = EXCLUDED.\"impressions\", \"spend\" = EXCLUDED.\"spend\""
+      "sql": "INSERT INTO \"campaign_flights\" (\"id\", \"bid_cap\", \"bid_currency\", \"campaign_id\", \"channel\", \"click_rate\", \"impressions\", \"platform_fee\", \"spend\") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (\"id\") DO UPDATE SET \"bid_cap\" = EXCLUDED.\"bid_cap\", \"bid_currency\" = EXCLUDED.\"bid_currency\", \"campaign_id\" = EXCLUDED.\"campaign_id\", \"channel\" = EXCLUDED.\"channel\", \"click_rate\" = EXCLUDED.\"click_rate\", \"impressions\" = EXCLUDED.\"impressions\", \"platform_fee\" = EXCLUDED.\"platform_fee\", \"spend\" = EXCLUDED.\"spend\""
     },
     {
       "args": [

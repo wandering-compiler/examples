@@ -1,0 +1,22 @@
+# The FlightAdmin detail read: one flight, flat, its MONEY fields as minor
+# units.
+#
+# GetFlightResp declares no format of its own — each amount is a plain
+# projection of its column and inherits the column's MONEY type, scale and
+# currency, and bid_cap's per-row currency rebinds to the response's own
+# `bid_currency`. Flight 720102 is the JPY one: 150000 at scale 4 is 15 ¥,
+# which the slot shows with no decimals (yen has none) — the value on the
+# wire stays the exact stored integer.
+method: admin.FlightAdmin.Read
+pre:
+    - auth/admin.yaml
+input:
+    id: 720102
+expect:
+    id: {matcher: eq, value: "720102"}
+    campaign_id: {matcher: eq, value: "720001"}
+    channel: {matcher: eq, value: social}
+    spend: {matcher: eq, value: "2025"}
+    bid_currency: {matcher: eq, value: JPY}
+    bid_cap: {matcher: eq, value: "150000"}
+    platform_fee: {matcher: eq, value: "99"}

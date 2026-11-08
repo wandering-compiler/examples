@@ -1,0 +1,26 @@
+# The FlightAdmin list — the page whose columns are MONEY.
+#
+# The admin's wire is the REST one (0890 is the same rows over REST): each
+# amount arrives as its minor units, an int64 JSON string, and the SPA
+# formats it from the spec's `money` column format — the scale, and the
+# currency fixed on the field or read off the row's `bid_currency`, which
+# is why the list must carry that column too. The rendering itself is
+# `make check-admin-i18n`'s (it runs the shipped runtime over the spec); what
+# this step proves is the half the runtime cannot: the server sends the
+# exact integer and the currency code the slot reads, for every row.
+#
+# The three flights are seeded by fixtures/app/test.json and nothing in the
+# suite writes one, so the count is exact.
+method: admin.FlightAdmin.List
+pre:
+    - auth/admin.yaml
+input: {}
+expect:
+    flights: {matcher: count, op: '==', value: 3}
+    flights.0.id: {matcher: eq, value: "720101"}
+    flights.0.spend: {matcher: eq, value: "1051"}
+    flights.0.bid_cap: {matcher: eq, value: "1234"}
+    flights.0.bid_currency: {matcher: eq, value: EUR}
+    flights.0.platform_fee: {matcher: eq, value: "250"}
+    flights.1.bid_cap: {matcher: eq, value: "150000"}
+    flights.1.bid_currency: {matcher: eq, value: JPY}

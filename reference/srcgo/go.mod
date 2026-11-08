@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/redis/go-redis/v9 v9.21.0
-	github.com/wandering-compiler/sdk/go v0.1.0-rc.63
+	github.com/wandering-compiler/sdk/go v0.1.0-rc.64
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
 )
@@ -27,7 +27,7 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.10.0 // indirect
-	github.com/klauspost/compress v1.18.6 // indirect
+	github.com/klauspost/compress v1.20.2 // indirect
 	github.com/leonelquinteros/gotext v1.7.2 // indirect
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
