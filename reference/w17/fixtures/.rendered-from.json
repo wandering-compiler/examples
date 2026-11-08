@@ -4,7 +4,7 @@
   "seeds": {
     "app/test": {
       "source": "app/test.json",
-      "sha256": "0e6637dc9527f421c5404704eecc815a5e665ce80b8b163755db9a0454cce645",
+      "sha256": "f6e1062ceae15a50a6e897f7ace869e3672e0f57df008641e8f84c276ad98579",
       "schema": {
         "renderer": "1",
         "tables": {
@@ -30,7 +30,7 @@
           "tasks.TaskAuditLog": "563cbbf34f449217774b1b0b334d6ec55740abf4a1726613af689ef516db93b5",
           "tasks.TaskCategory": "7bd99071960857329797cf42e80ef58a874767b075455a8e314ffd84e91c369f",
           "tasks.TaskTag": "c6eff5337196506bd7b9b3483bfb7a7f1de29d51a42d4b0102e8c621f555eea1",
-          "users.CampaignFlight": "0da41d53afc73e5d9f96e50a940cbc94c6bb7862b998364338340e39bce9e392",
+          "users.CampaignFlight": "4fa602c96b5847177076bb6fc39f51e3d0c0bf998ffc48aa000d1cbb63d2e8a4",
           "users.DirectoryCampaign": "b04ec1e65c0bc95ff6dd648517851ea427232009a5613949a72eeacf0ad3de55",
           "users.FlightEvent": "0d5597abced292d3cf1d29527447e80823523b202246c5b42981f747eea0ca1c",
           "users.User": "6609e99dd4ec3ac975c3aeae42e6af8cd7fa65ae3404a5b9c734ec1da114f27d"
