@@ -3,9 +3,10 @@
 // vendored SDK — keeping the plugin dependency-light and the surface
 // easy to fake in tests (mirrors the auth plugin's OAuth client).
 //
-// Money crosses the boundary here: backend.Money carries a decimal
-// string, Stripe wants integer minor units, so each amount goes through
-// toMinorUnits (exact, no float64).
+// Money crosses the boundary here: backend.Money carries ten-thousandths
+// of the major unit, Stripe wants the currency's own integer minor units, so
+// each amount goes through toMinorUnits / fromMinorUnits (exact, integer
+// only, refusing what does not convert).
 package stripe
 
 import (
@@ -133,7 +134,7 @@ func (b *Backend) CreatePayment(ctx context.Context, spec backend.PaymentSpec) (
 func (b *Backend) RefundPayment(ctx context.Context, providerPaymentID string, amount backend.Money, idemKey string) (backend.RefundResult, error) {
 	form := url.Values{}
 	form.Set("payment_intent", providerPaymentID)
-	if amount.Amount != "" {
+	if amount.Amount != 0 {
 		minor, err := positiveMinorUnits(amount.Amount, amount.Currency)
 		if err != nil {
 			return backend.RefundResult{}, err
@@ -185,10 +186,14 @@ func (b *Backend) ListRefunds(ctx context.Context, providerPaymentID string) ([]
 			if r.ID == "" {
 				return nil, fmt.Errorf("stripe: /v1/refunds: a refund on %s without an id", providerPaymentID)
 			}
+			amt, err := moneyFrom(r.Amount, r.Currency)
+			if err != nil {
+				return nil, fmt.Errorf("stripe: /v1/refunds: refund %s: %w", r.ID, err)
+			}
 			out = append(out, backend.RefundResult{
 				ProviderRefundID: r.ID,
 				Status:           r.Status,
-				Amount:           backend.Money{Amount: fromMinorUnits(r.Amount, r.Currency), Currency: r.Currency},
+				Amount:           amt,
 				Key:              r.Metadata[refundKeyMeta],
 			})
 		}
@@ -240,6 +245,14 @@ func (b *Backend) StartSubscription(ctx context.Context, spec backend.Subscripti
 	// As for refunds: the key outlives the provider's idempotency window
 	// in the subscription's metadata, where FindSubscription matches it.
 	form.Set("metadata["+subscribeKeyMeta+"]", spec.IdempotencyKey)
+	// The first invoice waits for the client to pay it, the way a charge
+	// does, and the card it is paid with pays the renewals. Under the
+	// default (allow_incomplete) the provider charged the customer's default
+	// card at once — a customer this plugin created has none — and the
+	// subscription expired unpaid, with nothing to pay it with.
+	form.Set("payment_behavior", "default_incomplete")
+	form.Set("payment_settings[save_default_payment_method]", "on_subscription")
+	form.Set("expand[]", "latest_invoice.payment_intent")
 	var resp subscriptionResp
 	if err := b.post(ctx, "/v1/subscriptions", form, spec.IdempotencyKey, &resp); err != nil {
 		return backend.SubscriptionResult{}, err
@@ -250,7 +263,56 @@ func (b *Backend) StartSubscription(ctx context.Context, spec backend.Subscripti
 	return backend.SubscriptionResult{
 		ProviderSubscriptionID: resp.ID,
 		Status:                 resp.Status,
-		CurrentPeriodEnd:       resp.CurrentPeriodEnd,
+		CurrentPeriodEnd:       periodEnd(resp.CurrentPeriodEnd, resp.Items),
+		ProviderPriceID:        resp.priceID(),
+		ClientSecret:           resp.clientSecret(),
+	}, nil
+}
+
+// apiVersion is the provider API version every call of this driver is made
+// under (Stripe-Version, set in doHeader). The driver parses the shapes of
+// this version; unpinned, the account's default version would decide them,
+// and an account on a newer one answers some elsewhere — from 2025-03-31 the
+// subscription's period end is on its items, its first invoice's payment
+// secret on the invoice's confirmation_secret. Moving it is a change to this
+// line and to the parsing the tests pin, made on purpose.
+const apiVersion = "2024-06-20"
+
+// GetSubscription reads one subscription by id, with its first payment
+// expanded. An id the provider does not know is an error.
+func (b *Backend) GetSubscription(ctx context.Context, providerSubscriptionID string) (backend.SubscriptionObject, error) {
+	if providerSubscriptionID == "" {
+		return backend.SubscriptionObject{}, &backend.InputError{Msg: "stripe: a subscription id is required"}
+	}
+	path := "/v1/subscriptions/" + url.PathEscape(providerSubscriptionID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.baseURL+path+"?"+url.Values{"expand[]": {"latest_invoice.payment_intent"}}.Encode(), nil)
+	if err != nil {
+		return backend.SubscriptionObject{}, err
+	}
+	var s subscriptionResp
+	hdr, err := b.doHeader(req, "/v1/subscriptions", "", &s)
+	if err != nil {
+		return backend.SubscriptionObject{}, err
+	}
+	if s.ID != providerSubscriptionID {
+		return backend.SubscriptionObject{}, fmt.Errorf("stripe: /v1/subscriptions: asked for %s, answered %q", providerSubscriptionID, s.ID)
+	}
+	var at int64
+	if t, perr := http.ParseTime(hdr.Get("Date")); perr == nil {
+		at = t.Unix()
+	}
+	return backend.SubscriptionObject{
+		SubscriptionResult: backend.SubscriptionResult{
+			ProviderSubscriptionID: s.ID,
+			Status:                 s.Status,
+			CurrentPeriodEnd:       periodEnd(s.CurrentPeriodEnd, s.Items),
+			ProviderPriceID:        s.priceID(),
+			ClientSecret:           s.clientSecret(),
+		},
+		ProviderCustomerID: s.Customer,
+		Created:            s.Created,
+		ReadAt:             at,
+		Marks:              marks(s.Metadata),
 	}, nil
 }
 
@@ -276,7 +338,7 @@ func (b *Backend) FindSubscription(ctx context.Context, providerCustomerID, idem
 				return backend.SubscriptionResult{
 					ProviderSubscriptionID: s.ID,
 					Status:                 s.Status,
-					CurrentPeriodEnd:       s.CurrentPeriodEnd,
+					CurrentPeriodEnd:       periodEnd(s.CurrentPeriodEnd, s.Items),
 					ProviderPriceID:        s.priceID(),
 				}, true, nil
 			}
@@ -325,7 +387,11 @@ func (b *Backend) ListPaymentPage(ctx context.Context, q backend.ListQuery) ([]b
 		if p.ID == "" {
 			return nil, false, fmt.Errorf("stripe: /v1/payment_intents: an intent without an id")
 		}
-		out = append(out, paymentObject(p))
+		obj, err := paymentObject(p)
+		if err != nil {
+			return nil, false, err
+		}
+		out = append(out, obj)
 	}
 	return out, list.HasMore, nil
 }
@@ -344,33 +410,42 @@ func (b *Backend) GetPayment(ctx context.Context, providerPaymentID string) (bac
 	if p.ID != providerPaymentID {
 		return backend.PaymentObject{}, fmt.Errorf("stripe: /v1/payment_intents: asked for %s, answered %q", providerPaymentID, p.ID)
 	}
-	return paymentObject(p), nil
+	return paymentObject(p)
 }
 
 // paymentObject is the provider-neutral form of a payment intent.
-func paymentObject(p paymentIntentObject) backend.PaymentObject {
+func paymentObject(p paymentIntentObject) (backend.PaymentObject, error) {
 	cur := strings.ToLower(p.Currency)
+	amt, err := moneyFrom(p.Amount, cur)
+	if err != nil {
+		return backend.PaymentObject{}, fmt.Errorf("stripe: payment intent %s: %w", p.ID, err)
+	}
+	rec, err := received(p.AmountReceived, cur)
+	if err != nil {
+		return backend.PaymentObject{}, fmt.Errorf("stripe: payment intent %s: %w", p.ID, err)
+	}
 	return backend.PaymentObject{
 		ProviderPaymentID:  p.ID,
 		ProviderCustomerID: p.Customer,
 		Status:             p.Status,
-		Amount:             backend.Money{Amount: fromMinorUnits(p.Amount, cur), Currency: cur},
+		Amount:             amt,
 		Description:        p.Description,
 		// A failed attempt leaves the intent requires_payment_method
 		// with the attempt's error, which a fresh intent has none of.
 		Failed:   p.Status == "requires_payment_method" && len(p.LastPaymentError) > 0 && string(p.LastPaymentError) != "null",
 		Created:  p.Created,
 		Marks:    marks(p.Metadata),
-		Received: received(p.AmountReceived, cur),
-	}
+		Received: rec,
+	}, nil
 }
 
-// received is an intent's amount_received as Money, empty when absent.
-func received(minor *int64, cur string) backend.Money {
+// received is an intent's amount_received as Money, empty (no Currency)
+// when absent.
+func received(minor *int64, cur string) (backend.Money, error) {
 	if minor == nil || cur == "" {
-		return backend.Money{}
+		return backend.Money{}, nil
 	}
-	return backend.Money{Amount: fromMinorUnits(*minor, cur), Currency: cur}
+	return moneyFrom(*minor, cur)
 }
 
 // ListRefundPage lists one page of the account's refunds, of every payment.
@@ -384,11 +459,15 @@ func (b *Backend) ListRefundPage(ctx context.Context, q backend.ListQuery) ([]ba
 		if r.ID == "" {
 			return nil, false, fmt.Errorf("stripe: /v1/refunds: a refund without an id")
 		}
+		amt, err := moneyFrom(r.Amount, r.Currency)
+		if err != nil {
+			return nil, false, fmt.Errorf("stripe: /v1/refunds: refund %s: %w", r.ID, err)
+		}
 		out = append(out, backend.ListedRefund{
 			RefundResult: backend.RefundResult{
 				ProviderRefundID: r.ID,
 				Status:           r.Status,
-				Amount:           backend.Money{Amount: fromMinorUnits(r.Amount, r.Currency), Currency: r.Currency},
+				Amount:           amt,
 				Key:              r.Metadata[refundKeyMeta],
 			},
 			ProviderPaymentID: r.PaymentIntent,
@@ -415,7 +494,7 @@ func (b *Backend) ListSubscriptionPage(ctx context.Context, q backend.ListQuery)
 			SubscriptionResult: backend.SubscriptionResult{
 				ProviderSubscriptionID: s.ID,
 				Status:                 s.Status,
-				CurrentPeriodEnd:       s.CurrentPeriodEnd,
+				CurrentPeriodEnd:       periodEnd(s.CurrentPeriodEnd, s.Items),
 				ProviderPriceID:        s.priceID(),
 			},
 			ProviderCustomerID: s.Customer,
@@ -509,6 +588,7 @@ func (b *Backend) do(req *http.Request, path, idemKey string, out any) error {
 func (b *Backend) doHeader(req *http.Request, path, idemKey string, out any) (http.Header, error) {
 	req.Header.Set("Authorization", "Bearer "+b.apiKey)
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Stripe-Version", apiVersion)
 	if idemKey != "" {
 		req.Header.Set("Idempotency-Key", idemKey)
 	}

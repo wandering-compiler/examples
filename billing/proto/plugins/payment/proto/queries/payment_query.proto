@@ -45,17 +45,55 @@ message GetRefundByIdempotencyKeyReq  { string idempotency_key = 1 [(w17.field) 
 message GetRefundByIdempotencyKeyResp { Refund refund = 1; }
 
 message SumRefundsForPaymentReq  { string payment_id = 1 [(w17.field) = { type: UUID }]; }
-message SumRefundsForPaymentResp { string total = 1 [(w17.field) = { type: DECIMAL, precision: 20, scale: 4 }]; }
+// currency: the refunds' currency (a payment's refunds are all in its
+// own), so the total renders as money; empty when there are none.
+message SumRefundsForPaymentResp {
+  int64  total    = 1 [(w17.field) = { type: MONEY, scale: 4, currency_field: "currency" }];
+  string currency = 2;
+}
 
 // LockPaymentForRefund — the payment's amount and status, read under a row
 // lock (see the rpc).
 message LockPaymentForRefundReq { string id = 1 [(w17.field) = { type: UUID }]; }
 message LockPaymentForRefundResp {
   string id                = 1;
-  string amount            = 2;
+  int64  amount            = 2 [(w17.field) = { type: MONEY, scale: 4, currency_field: "currency" }];
   int32  status            = 3;
-  string received_amount   = 4;
-  string received_currency = 5;
+  // What the provider took, recorded only for a payment held at
+  // AMOUNT_MISMATCH — NULL otherwise. refundAllowed refuses a mismatched
+  // payment that records none rather than judge a refund against "".
+  int64 received_amount   = 4 [(w17.field) = { type: MONEY, scale: 4, currency_field: "received_currency", null: true }];
+  string received_currency = 5 [(w17.field) = { null: true }];
+  // The payment's currency: what `amount` is in (its money format reads it).
+  string currency          = 6;
+}
+
+// LockCustomerForSubscribe — the customer row, locked (see the rpc).
+message LockCustomerForSubscribeReq {
+  option (w17.contrib.plugin_feature) = "subscriptions";
+  string id = 1 [(w17.field) = { type: UUID }];
+}
+message LockCustomerForSubscribeResp {
+  option (w17.contrib.plugin_feature) = "subscriptions";
+  string id = 1;
+}
+
+// ListOpenSubscriptions — a customer's subscriptions to one plan that have
+// not ended (every status but CANCELED).
+message ListOpenSubscriptionsReq {
+  option (w17.contrib.plugin_feature) = "subscriptions";
+  string customer_id = 1 [(w17.field) = { type: UUID }];
+  string plan_id     = 2 [(w17.field) = { type: UUID }];
+}
+message ListOpenSubscriptionsResp {
+  option (w17.contrib.plugin_feature) = "subscriptions";
+  repeated OpenSubscription subscriptions = 1;
+}
+message OpenSubscription {
+  option (w17.contrib.plugin_feature) = "subscriptions";
+  string id                       = 1;
+  string provider_subscription_id = 2;
+  int32  status                   = 3;
 }
 
 // GetProcessedWebhookEvent — one ledger row by its provider event id (the
@@ -88,7 +126,8 @@ message SumLostDisputesForPaymentReq {
 }
 message SumLostDisputesForPaymentResp {
   option (w17.contrib.plugin_feature) = "stripe_webhooks";
-  string total = 1 [(w17.field) = { type: DECIMAL, precision: 20, scale: 4 }];
+  int64  total    = 1 [(w17.field) = { type: MONEY, scale: 4, currency_field: "currency" }];
+  string currency = 2;
 }
 
 // SumTopupCredit — the credit a top-up holds in the ledger: the sum of the
@@ -108,7 +147,7 @@ message SumTopupCreditReq {
 }
 message SumTopupCreditResp {
   option (w17.contrib.plugin_feature) = "prepaid";
-  string total = 1 [(w17.field) = { type: DECIMAL, precision: 20, scale: 4 }];
+  int64 total = 1 [(w17.field) = { type: MONEY, scale: 4 }];
 }
 
 message GetCreditBalanceReq {
@@ -348,7 +387,7 @@ service PaymentQuery {
     option (w17.db.method) = {
       ops: {
         name: "main"
-        dql: "SELECT p.id AS id, p.amount AS amount, p.status AS status, p.received_amount AS received_amount, p.received_currency AS received_currency FROM @module.Payment p WHERE p.id = :id"
+        dql: "SELECT p.id AS id, p.amount AS amount, p.status AS status, p.received_amount AS received_amount, p.received_currency AS received_currency, p.currency AS currency FROM @module.Payment p WHERE p.id = :id"
       }
     };
     option (w17.db.lock) = {
@@ -367,7 +406,7 @@ service PaymentQuery {
     option (w17.db.method) = {
       ops: {
         name: "main"
-        dql: "SELECT COALESCE(SUM(r.amount), 0) AS total FROM @module.Refund r WHERE r.payment_id = :payment_id AND r.status <> 3 AND r.status <> 4"
+        dql: "SELECT COALESCE(SUM(r.amount), 0) AS total, COALESCE(MIN(r.currency), '') AS currency FROM @module.Refund r WHERE r.payment_id = :payment_id AND r.status <> 3 AND r.status <> 4"
       }
     };
   }
@@ -395,6 +434,43 @@ service PaymentQuery {
   // GetDisputeByProviderId — one Dispute by the provider's dispute id. The
   // webhook reads it when MarkDisputeStatus matched no row: a row that exists
   // is already closed or newer (acknowledge), a missing one is created.
+  // LockCustomerForSubscribe — SELECT … FOR UPDATE on one Customer row,
+  // inside Subscribe's transaction. Subscribes of one customer run one after
+  // the other from here until the subscription is recorded, so two clicks of
+  // "subscribe" under different keys cannot both find no open subscription
+  // to the plan and both start one. Outside a transaction it is a plain read.
+  rpc LockCustomerForSubscribe(LockCustomerForSubscribeReq) returns (LockCustomerForSubscribeResp) {
+    option (w17.contrib.plugin_feature_rpc) = "subscriptions";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql: "SELECT c.id AS id FROM @module.Customer c WHERE c.id = :id"
+      }
+    };
+    option (w17.db.lock) = {
+      locks: [
+        { resource: "Customer", kind: SELECT_FOR_UPDATE }
+      ]
+    };
+  }
+
+  // ListOpenSubscriptions — the customer's subscriptions to a plan that have
+  // not ended: Subscribe allows one, and hands back one still waiting for its
+  // first payment instead of starting another. Newest first.
+  rpc ListOpenSubscriptions(ListOpenSubscriptionsReq) returns (ListOpenSubscriptionsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "subscriptions";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT s.id AS id, s.provider_subscription_id AS provider_subscription_id, s.status AS status "
+          "FROM @module.Subscription s "
+          "WHERE s.customer_id = :customer_id AND s.plan_id = :plan_id AND s.status <> 4 "
+          "ORDER BY s.created_at DESC"
+      }
+    };
+  }
+
   // GetProcessedWebhookEvent — whether a delivery's event was already
   // processed in full. IngestStripe reads it first, after the signature: the
   // ledger is written only once every side effect of an event has completed,
@@ -430,7 +506,8 @@ service PaymentQuery {
           "       d.status AS dispute.status, "
           "       d.provider_event_at AS dispute.provider_event_at, "
           "       d.created_at AS dispute.created_at, "
-          "       d.updated_at AS dispute.updated_at "
+          "       d.updated_at AS dispute.updated_at, "
+          "       d.closed_at AS dispute.closed_at "
           "FROM @module.Dispute d WHERE d.provider_dispute_id = :provider_dispute_id"
       }
     };
@@ -443,7 +520,7 @@ service PaymentQuery {
     option (w17.db.method) = {
       ops: {
         name: "main"
-        dql: "SELECT COALESCE(SUM(d.amount), 0) AS total FROM @module.Dispute d WHERE d.payment_id = :payment_id AND d.status = 6"
+        dql: "SELECT COALESCE(SUM(d.amount), 0) AS total, COALESCE(MIN(d.currency), '') AS currency FROM @module.Dispute d WHERE d.payment_id = :payment_id AND d.status = 6"
       }
     };
   }
@@ -540,7 +617,8 @@ service PaymentQuery {
           "       m.period AS meter.period, "
           "       m.total AS meter.total, "
           "       m.reported_total AS meter.reported_total, "
-          "       m.updated_at AS meter.updated_at "
+          "       m.updated_at AS meter.updated_at, "
+          "       m.id AS meter.id "
           "FROM @module.UsageMeter m "
           "WHERE m.user_id = :user_id AND m.meter = :meter AND m.period = :period"
       }
@@ -565,7 +643,8 @@ service PaymentQuery {
           "       r.quantity AS record.quantity, "
           "       r.item_ref AS record.item_ref, "
           "       r.idempotency_key AS record.idempotency_key, "
-          "       r.created_at AS record.created_at "
+          "       r.created_at AS record.created_at, "
+          "       r.metadata AS record.metadata "
           "FROM @module.UsageRecord r WHERE r.idempotency_key = :idempotency_key"
       }
     };
@@ -632,7 +711,8 @@ service PaymentQuery {
           "       s.status AS subscription.status, "
           "       s.current_period_end AS subscription.current_period_end, "
           "       s.created_at AS subscription.created_at, "
-          "       s.updated_at AS subscription.updated_at "
+          "       s.updated_at AS subscription.updated_at, "
+          "       s.provider_event_at AS subscription.provider_event_at "
           "FROM @module.Subscription s WHERE s.id = :id"
       }
     };
@@ -657,7 +737,8 @@ service PaymentQuery {
           "       s.status AS subscription.status, "
           "       s.current_period_end AS subscription.current_period_end, "
           "       s.created_at AS subscription.created_at, "
-          "       s.updated_at AS subscription.updated_at "
+          "       s.updated_at AS subscription.updated_at, "
+          "       s.provider_event_at AS subscription.provider_event_at "
           "FROM @module.Subscription s WHERE s.provider_subscription_id = :provider_subscription_id"
       }
     };
