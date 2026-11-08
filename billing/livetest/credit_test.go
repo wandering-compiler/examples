@@ -21,6 +21,10 @@ func balanceOf(t *testing.T, a account) string {
 		} `json:"balance"`
 	}
 	call(t, a.token, http.MethodGet, "/api/v1/billing/credit/balance", nil, http.StatusOK, &resp)
+	// The balance is an int64, and the JSON wire leaves a zero out.
+	if resp.Balance.Balance == "" {
+		return "0"
+	}
 	return resp.Balance.Balance
 }
 

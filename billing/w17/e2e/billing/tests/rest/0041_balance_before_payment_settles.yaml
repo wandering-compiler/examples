@@ -3,5 +3,6 @@ method: payment.PaymentService.GetMyCreditBalance
 pre: [auth/auth.yaml, fixtures/a_top_up.yaml]
 input: {}
 expect:
+    # An int64 zero is left out on the JSON wire: absent or 0.
     balance:
-        balance: {matcher: eq, value: "0"}
+        balance: {matcher: empty}
