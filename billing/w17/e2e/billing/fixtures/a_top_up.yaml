@@ -2,7 +2,7 @@
 # provider.
 method: payment.PaymentService.TopUpCredit
 input:
-    amount: "10.00"
+    amount: "100000"
     currency: usd
     idempotency_key: top-up-${seq}
 expect:

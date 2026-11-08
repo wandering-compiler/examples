@@ -41,7 +41,7 @@ func TestTopUp_CreditedOnceOnConfirmation(t *testing.T) {
 		Payment payment `json:"payment"`
 	}
 	call(t, a.token, http.MethodPost, "/api/v1/credit/top-ups", map[string]any{
-		"amount": "10.00", "currency": "usd", "idempotency_key": "top-up-" + randomHex(6),
+		"amount": "100000", "currency": "usd", "idempotency_key": "top-up-" + randomHex(6),
 	}, http.StatusOK, &resp)
 	if got := balanceOf(t, a); got != "0" {
 		t.Fatalf("balance before the provider confirmed = %q, want 0", got)
@@ -67,8 +67,8 @@ func TestTopUp_CreditedOnceOnConfirmation(t *testing.T) {
 	if got := deliverSigned(t, succeeded(t, resp.Payment.ProviderPaymentID)); got != http.StatusOK {
 		t.Fatalf("second event answered %d", got)
 	}
-	if got := balanceOf(t, a); got != "10.0000" {
-		t.Fatalf("balance = %q, want 10.0000 (credited once)", got)
+	if got := balanceOf(t, a); got != "100000" {
+		t.Fatalf("balance = %q, want 100000 (10.00, credited once)", got)
 	}
 	ledgerMatchesBalance(t, a.id)
 }
@@ -82,7 +82,7 @@ func TestSpend_ConcurrentSpendsNeverOverdraw(t *testing.T) {
 	ctx := context.Background()
 	const balance, spends = 5, 20
 	if _, err := payments.GrantCredit(ctx, &paymentpb.GrantCreditReq{
-		UserId: a.id, Amount: "5", Reason: "welcome", IdempotencyKey: "grant-" + randomHex(6),
+		UserId: a.id, Amount: 50000, Reason: "welcome", IdempotencyKey: "grant-" + randomHex(6),
 	}); err != nil {
 		t.Fatalf("GrantCredit: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestSpend_ConcurrentSpendsNeverOverdraw(t *testing.T) {
 	for range spends {
 		wg.Go(func() {
 			_, err := payments.SpendCredit(ctx, &paymentpb.SpendCreditReq{
-				UserId: a.id, Amount: "1", Reason: "export", IdempotencyKey: "spend-" + randomHex(6),
+				UserId: a.id, Amount: 10000, Reason: "export", IdempotencyKey: "spend-" + randomHex(6),
 			})
 			switch status.Code(err) {
 			case codes.OK:
@@ -108,7 +108,7 @@ func TestSpend_ConcurrentSpendsNeverOverdraw(t *testing.T) {
 	if ok.Load() != balance || refused.Load() != spends-balance {
 		t.Fatalf("%d spends succeeded and %d were refused, want %d and %d", ok.Load(), refused.Load(), balance, spends-balance)
 	}
-	if got := balanceOf(t, a); got != "0.0000" && got != "0" {
+	if got := balanceOf(t, a); got != "0" {
 		t.Fatalf("balance = %q, want 0", got)
 	}
 	ledgerMatchesBalance(t, a.id)
@@ -119,12 +119,12 @@ func TestSpend_RefusedSpendRollsBack(t *testing.T) {
 	a := signUp(t)
 	ctx := context.Background()
 	if _, err := payments.GrantCredit(ctx, &paymentpb.GrantCreditReq{
-		UserId: a.id, Amount: "2", Reason: "welcome", IdempotencyKey: "grant-" + randomHex(6),
+		UserId: a.id, Amount: 20000, Reason: "welcome", IdempotencyKey: "grant-" + randomHex(6),
 	}); err != nil {
 		t.Fatalf("GrantCredit: %v", err)
 	}
 	_, err := payments.SpendCredit(ctx, &paymentpb.SpendCreditReq{
-		UserId: a.id, Amount: "3", Reason: "export", IdempotencyKey: "spend-" + randomHex(6),
+		UserId: a.id, Amount: 30000, Reason: "export", IdempotencyKey: "spend-" + randomHex(6),
 	})
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("overdrawing spend: %v, want FailedPrecondition", err)
@@ -132,8 +132,8 @@ func TestSpend_RefusedSpendRollsBack(t *testing.T) {
 	if got := count(t, `SELECT count(*) FROM payment_creditledger WHERE user_id = $1`, a.id); got != 1 {
 		t.Fatalf("ledger rows = %d, want only the grant", got)
 	}
-	if got := balanceOf(t, a); got != "2.0000" {
-		t.Fatalf("balance = %q, want 2.0000", got)
+	if got := balanceOf(t, a); got != "20000" {
+		t.Fatalf("balance = %q, want 20000", got)
 	}
 }
 
@@ -144,7 +144,7 @@ func TestCharge_ConcurrentFirstChargesShareOneCustomer(t *testing.T) {
 	var wg sync.WaitGroup
 	for range n {
 		wg.Go(func() {
-			if _, err := tryPay(a, "1.00"); err != nil {
+			if _, err := tryPay(a, "10000"); err != nil {
 				t.Error(err)
 			}
 		})
@@ -169,7 +169,7 @@ func TestCharge_SameKeyFromTwoPeopleIsTwoPayments(t *testing.T) {
 	var pa, pb struct {
 		Payment payment `json:"payment"`
 	}
-	body := map[string]any{"amount": "8.00", "currency": "eur", "idempotency_key": key}
+	body := map[string]any{"amount": "80000", "currency": "eur", "idempotency_key": key}
 	call(t, a.token, http.MethodPost, "/api/v1/billing/payments", body, http.StatusOK, &pa)
 	call(t, b.token, http.MethodPost, "/api/v1/billing/payments", body, http.StatusOK, &pb)
 	if pa.Payment.ID == pb.Payment.ID {
