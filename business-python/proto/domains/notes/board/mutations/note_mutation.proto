@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package business_python.notes.board;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/notes/board/types/models.proto";
+
+message CreateNoteReq {
+  string batch = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 64 }];
+  string title = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+  string body  = 3 [(w17.field) = { type: TEXT }];
+}
+
+message RecordMarkReq {
+  int64  note_id = 1;
+  string mark    = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 40 }];
+}
+
+// NoteMutation — write side. Generated storage-tier SQL handlers, called by
+// the Python business tier only.
+service NoteMutation {
+  rpc CreateNote(CreateNoteReq) returns (Note) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO board.Note SET batch = :batch, title = :title, body = :body RETURNING id, batch, title, body, created_at"
+      }
+    };
+  }
+
+  rpc RecordMark(RecordMarkReq) returns (NoteMark) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO board.NoteMark SET note_id = :note_id, mark = :mark RETURNING id, note_id, mark, created_at"
+      }
+    };
+  }
+}

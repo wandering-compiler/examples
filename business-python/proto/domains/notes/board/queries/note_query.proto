@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package business_python.notes.board;
+
+import "w17/db.proto";
+import "w17/paging.proto";
+import "domains/notes/board/types/models.proto";
+
+message GetNoteReq { int64 note_id = 1; }
+
+message ListBatchReq { string batch = 1; }
+
+// The page of one batch, oldest first. `w17.Paging` makes the method paged:
+// the storage handler applies the page size and the cursor's keyset that
+// arrive as `x-w17-paging-*` metadata.
+message ListBatchResp {
+  repeated Note items  = 1;
+  w17.Paging    paging = 2;
+}
+
+message CountMarksReq {
+  int64  note_id = 1;
+  string mark    = 2;
+}
+
+message CountMarksResp {
+  int64 marks = 1;
+}
+
+// NoteQuery — read side. Generated storage-tier SQL handlers.
+service NoteQuery {
+  rpc GetNote(GetNoteReq) returns (Note) {
+    option (w17.db.method) = {
+      ops: { name: "main", dql: "SELECT n.id, n.batch, n.title, n.body, n.created_at FROM board.Note n WHERE n.id = :note_id" }
+    };
+  }
+
+  // ListBatch — the page the business tier's NotesService.ListNotes serves.
+  // `ORDER BY n.id` is the keyset a cursor resumes from.
+  rpc ListBatch(ListBatchReq) returns (ListBatchResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:
+          "SELECT n.id, n.batch, n.title, n.body, n.created_at "
+          "FROM board.Note n "
+          "WHERE n.batch = :batch "
+          "ORDER BY n.id ASC"
+      }
+    };
+  }
+
+  // CountMarks — how many marks of one kind a note has: `delivered`
+  // (the subscriber ran) or `committed` (the on_commit hook ran).
+  rpc CountMarks(CountMarksReq) returns (CountMarksResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "SELECT COUNT(m.id) AS marks FROM board.NoteMark m WHERE m.note_id = :note_id AND m.mark = :mark"
+      }
+    };
+  }
+}

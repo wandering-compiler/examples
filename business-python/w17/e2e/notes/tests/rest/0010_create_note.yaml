@@ -1,0 +1,31 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The Python business tier writes the note through the generated storage
+# mutation and publishes NoteCreated (the method's `(w17.event_emit)`). The
+# subscriber — the generated eventbus runner calling the same Python tier's
+# NotesEvents.OnNoteCreated — records a `delivered` mark and publishes
+# NoteDelivered, so both events arriving prove the whole loop:
+# Python emit → NATS → Go subscriber runner → Python handler → Python emit.
+method: board.NotesService.CreateNote
+input:
+    batch: single
+    title: written by the python tier
+    body: b
+expect:
+    id: {capture: note.id, match: {matcher: not_empty}}
+    batch: {matcher: eq, value: single}
+    title: {matcher: eq, value: written by the python tier}
+    body: {matcher: eq, value: b}
+    created_at: {matcher: not_empty}
+await_events:
+    - topic: note.created
+      timeout_ms: 15000
+      match:
+        note_id: {matcher: not_empty}
+        batch: {matcher: eq, value: single}
+        title: {matcher: eq, value: written by the python tier}
+    - topic: note.delivered
+      timeout_ms: 30000
+      match:
+        note_id: {matcher: not_empty}

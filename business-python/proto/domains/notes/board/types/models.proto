@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package business_python.notes.board;
+
+import "google/protobuf/timestamp.proto";
+import "w17/db.proto";
+import "w17/field.proto";
+
+// Note — the one model the business tier writes and pages through.
+//
+// `batch` groups the notes one test writes, so a list the suite reads back
+// holds exactly what that test wrote, whatever ran before it.
+message Note {
+  option (w17.db.table) = { name: "notes" };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  string batch = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 64 }];
+
+  string title = 3 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+
+  string body = 4 [(w17.field) = { type: TEXT }];
+
+  google.protobuf.Timestamp created_at = 5 [(w17.field) = { default_auto: NOW, immutable: true }];
+}
+
+// NoteMark — one row per thing that happened to a note AFTER its write:
+//
+//   - `delivered`: the NoteCreated subscriber (NotesEvents.OnNoteCreated)
+//     received the event;
+//   - `committed`: CreateNoteInTx's on_commit hook ran, after the
+//     transaction committed.
+//
+// Both are written by the Python business tier through the generated
+// storage mutation RecordMark, and read back over REST by CountMarks.
+message NoteMark {
+  option (w17.db.table) = { name: "note_marks" };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  int64 note_id = 2;
+
+  string mark = 3 [(w17.field) = { type: CHAR, min_len: 1, max_len: 40 }];
+
+  google.protobuf.Timestamp created_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
+}

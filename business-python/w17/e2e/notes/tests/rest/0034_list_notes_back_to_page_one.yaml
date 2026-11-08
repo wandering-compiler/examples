@@ -1,0 +1,12 @@
+# Back to page 1 from page 2's previous cursor: storage runs the page with
+# the ORDER BY flipped, the gateway turns the rows round, and the previous
+# cursor itself came from the position storage reported (its first row).
+method: board.NotesService.ListNotes
+input:
+    batch: paged
+    limit: 2
+    cursor: ${notes_page.previous_cursor}
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    items.0.title: {matcher: eq, value: page note 1}
+    items.1.title: {matcher: eq, value: page note 2}
