@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-11-04 10:15+0000\n"
+"POT-Creation-Date: 2026-11-08 12:38+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -22,14 +22,23 @@ msgstr "A token cannot expire in the past. Choose a later date."
 msgid "A token without a key must expire within a year. Choose an earlier date."
 msgstr "A token without a key must expire within a year. Choose an earlier date."
 
+msgid "Admin Auth · Auth Mutation · Delete Role"
+msgstr "Admin Auth · Auth Mutation · Delete Role"
+
 msgid "Admin Auth · Auth Mutation · Update Organization"
 msgstr "Admin Auth · Auth Mutation · Update Organization"
+
+msgid "Admin Auth · Auth Mutation · Update Role"
+msgstr "Admin Auth · Auth Mutation · Update Role"
 
 msgid "Admin Auth · Auth Query · Get Org Membership"
 msgstr "Admin Auth · Auth Query · Get Org Membership"
 
 msgid "Admin Auth · Auth Query · Get Organization"
 msgstr "Admin Auth · Auth Query · Get Organization"
+
+msgid "Admin Auth · Auth Query · Get Role"
+msgstr "Admin Auth · Auth Query · Get Role"
 
 msgid "Admin Auth · Auth Query · Get User"
 msgstr "Admin Auth · Auth Query · Get User"
@@ -42,6 +51,9 @@ msgstr "Admin Auth · Auth Query · List Org Memberships"
 
 msgid "Admin Auth · Auth Query · List Organizations"
 msgstr "Admin Auth · Auth Query · List Organizations"
+
+msgid "Admin Auth · Auth Query · List Roles"
+msgstr "Admin Auth · Auth Query · List Roles"
 
 msgid "Admin Auth · Auth Query · List User Tokens"
 msgstr "Admin Auth · Auth Query · List User Tokens"
@@ -91,6 +103,15 @@ msgstr "Admin Auth · Organization · Delete"
 msgid "Admin Auth · Organization · View"
 msgstr "Admin Auth · Organization · View"
 
+msgid "Admin Auth · Role · Change"
+msgstr "Admin Auth · Role · Change"
+
+msgid "Admin Auth · Role · Delete"
+msgstr "Admin Auth · Role · Delete"
+
+msgid "Admin Auth · Role · View"
+msgstr "Admin Auth · Role · View"
+
 msgid "Admin Auth · User Token · Delete"
 msgstr "Admin Auth · User Token · Delete"
 
@@ -127,18 +148,6 @@ msgstr "An organization's plan is changed by the platform, not from inside the o
 msgid "Another change reached this first. Please try again."
 msgstr "Another change reached this first. Please try again."
 
-msgid "Auth · Auth Mutation · Delete Role"
-msgstr "Auth · Auth Mutation · Delete Role"
-
-msgid "Auth · Auth Mutation · Update Role"
-msgstr "Auth · Auth Mutation · Update Role"
-
-msgid "Auth · Auth Query · Get Role"
-msgstr "Auth · Auth Query · Get Role"
-
-msgid "Auth · Auth Query · List Roles"
-msgstr "Auth · Auth Query · List Roles"
-
 msgid "Auth · Auth Service · Approve Oauth Authorization"
 msgstr "Auth · Auth Service · Approve Oauth Authorization"
 
@@ -156,15 +165,6 @@ msgstr "Auth · Auth Service · Revoke My Oauth Grant"
 
 msgid "Auth · Auth Service · Who Am I"
 msgstr "Auth · Auth Service · Who Am I"
-
-msgid "Auth · Role · Change"
-msgstr "Auth · Role · Change"
-
-msgid "Auth · Role · Delete"
-msgstr "Auth · Role · Delete"
-
-msgid "Auth · Role · View"
-msgstr "Auth · Role · View"
 
 msgid "Authentication is temporarily unavailable. Please try again shortly."
 msgstr "Authentication is temporarily unavailable. Please try again shortly."
@@ -349,6 +349,9 @@ msgstr "Tasks · Milestone · Change"
 msgid "Tasks · Milestone · View"
 msgstr "Tasks · Milestone · View"
 
+msgid "Tasks · Org Ops Query · Count All Org Notes"
+msgstr "Tasks · Org Ops Query · Count All Org Notes"
+
 msgid "Tasks · Task Lookup Query · Count Tasks Per Category"
 msgstr "Tasks · Task Lookup Query · Count Tasks Per Category"
 
@@ -367,14 +370,14 @@ msgstr "Tasks · Task Mutation · Assign Task"
 msgid "Tasks · Task Mutation · Assign Task By Email"
 msgstr "Tasks · Task Mutation · Assign Task By Email"
 
-msgid "Tasks · Task Mutation · Attach Organization Note Link"
-msgstr "Tasks · Task Mutation · Attach Organization Note Link"
+msgid "Tasks · Task Mutation · Attach Org Note Link"
+msgstr "Tasks · Task Mutation · Attach Org Note Link"
 
-msgid "Tasks · Task Mutation · Attach Organization Note Tag"
-msgstr "Tasks · Task Mutation · Attach Organization Note Tag"
+msgid "Tasks · Task Mutation · Attach Org Note Tag"
+msgstr "Tasks · Task Mutation · Attach Org Note Tag"
 
-msgid "Tasks · Task Mutation · Bookmark Organization Note"
-msgstr "Tasks · Task Mutation · Bookmark Organization Note"
+msgid "Tasks · Task Mutation · Bookmark Org Note"
+msgstr "Tasks · Task Mutation · Bookmark Org Note"
 
 msgid "Tasks · Task Mutation · Comment On Task"
 msgstr "Tasks · Task Mutation · Comment On Task"
@@ -382,20 +385,20 @@ msgstr "Tasks · Task Mutation · Comment On Task"
 msgid "Tasks · Task Mutation · Complete Task"
 msgstr "Tasks · Task Mutation · Complete Task"
 
+msgid "Tasks · Task Mutation · Create Org Note"
+msgstr "Tasks · Task Mutation · Create Org Note"
+
+msgid "Tasks · Task Mutation · Create Org Note With Public Link"
+msgstr "Tasks · Task Mutation · Create Org Note With Public Link"
+
 msgid "Tasks · Task Mutation · Create Task"
 msgstr "Tasks · Task Mutation · Create Task"
-
-msgid "Tasks · Task Mutation · Create Organization Note"
-msgstr "Tasks · Task Mutation · Create Organization Note"
-
-msgid "Tasks · Task Mutation · Create Organization Note With Public Link"
-msgstr "Tasks · Task Mutation · Create Organization Note With Public Link"
 
 msgid "Tasks · Task Mutation · Delete Task Comment"
 msgstr "Tasks · Task Mutation · Delete Task Comment"
 
-msgid "Tasks · Task Mutation · Ensure Organization Note Tag"
-msgstr "Tasks · Task Mutation · Ensure Organization Note Tag"
+msgid "Tasks · Task Mutation · Ensure Org Note Tag"
+msgstr "Tasks · Task Mutation · Ensure Org Note Tag"
 
 msgid "Tasks · Task Mutation · Redact Task"
 msgstr "Tasks · Task Mutation · Redact Task"
@@ -432,6 +435,12 @@ msgstr "Tasks · Task Query · Get Comment"
 
 msgid "Tasks · Task Query · Get Milestone"
 msgstr "Tasks · Task Query · Get Milestone"
+
+msgid "Tasks · Task Query · Get Org Note"
+msgstr "Tasks · Task Query · Get Org Note"
+
+msgid "Tasks · Task Query · Get Org Note With Tag"
+msgstr "Tasks · Task Query · Get Org Note With Tag"
 
 msgid "Tasks · Task Query · Get Task Admin"
 msgstr "Tasks · Task Query · Get Task Admin"
@@ -475,17 +484,11 @@ msgstr "Tasks · Task Query · Get Task Upload"
 msgid "Tasks · Task Query · Get Task With Category"
 msgstr "Tasks · Task Query · Get Task With Category"
 
-msgid "Tasks · Task Query · Get Organization Note"
-msgstr "Tasks · Task Query · Get Organization Note"
-
-msgid "Tasks · Task Query · Get Organization Note With Tag"
-msgstr "Tasks · Task Query · Get Organization Note With Tag"
-
 msgid "Tasks · Task Query · List All Comments"
 msgstr "Tasks · Task Query · List All Comments"
 
-msgid "Tasks · Task Query · List All Organization Notes"
-msgstr "Tasks · Task Query · List All Organization Notes"
+msgid "Tasks · Task Query · List All Org Notes"
+msgstr "Tasks · Task Query · List All Org Notes"
 
 msgid "Tasks · Task Query · List Categories With Task Counts"
 msgstr "Tasks · Task Query · List Categories With Task Counts"
@@ -498,6 +501,15 @@ msgstr "Tasks · Task Query · List Milestones Admin"
 
 msgid "Tasks · Task Query · List Milestones Sorted"
 msgstr "Tasks · Task Query · List Milestones Sorted"
+
+msgid "Tasks · Task Query · List Org Notes"
+msgstr "Tasks · Task Query · List Org Notes"
+
+msgid "Tasks · Task Query · List Org Notes By Tag"
+msgstr "Tasks · Task Query · List Org Notes By Tag"
+
+msgid "Tasks · Task Query · List Org Notes Paged With Tag Count"
+msgstr "Tasks · Task Query · List Org Notes Paged With Tag Count"
 
 msgid "Tasks · Task Query · List Task Categories Admin"
 msgstr "Tasks · Task Query · List Task Categories Admin"
@@ -526,17 +538,8 @@ msgstr "Tasks · Task Query · List Tasks Paged Tuned"
 msgid "Tasks · Task Query · List Tasks Paged With Category"
 msgstr "Tasks · Task Query · List Tasks Paged With Category"
 
-msgid "Tasks · Task Query · List Organization Notes"
-msgstr "Tasks · Task Query · List Organization Notes"
-
-msgid "Tasks · Task Query · List Organization Notes By Tag"
-msgstr "Tasks · Task Query · List Organization Notes By Tag"
-
-msgid "Tasks · Task Query · List Organization Notes Paged With Tag Count"
-msgstr "Tasks · Task Query · List Organization Notes Paged With Tag Count"
-
-msgid "Tasks · Task Query · Stream Organization Notes"
-msgstr "Tasks · Task Query · Stream Organization Notes"
+msgid "Tasks · Task Query · Stream Org Notes"
+msgstr "Tasks · Task Query · Stream Org Notes"
 
 msgid "Tasks · Task Tag · View"
 msgstr "Tasks · Task Tag · View"
@@ -553,11 +556,11 @@ msgstr "Tasks · Task · View"
 msgid "Tasks · Tasks Service · Bulk Create Tasks"
 msgstr "Tasks · Tasks Service · Bulk Create Tasks"
 
+msgid "Tasks · Tasks Service · Create Org Note Via Service"
+msgstr "Tasks · Tasks Service · Create Org Note Via Service"
+
 msgid "Tasks · Tasks Service · Create Task"
 msgstr "Tasks · Tasks Service · Create Task"
-
-msgid "Tasks · Tasks Service · Create Organization Note Via Service"
-msgstr "Tasks · Tasks Service · Create Organization Note Via Service"
 
 msgid "Tasks · Tasks Service · Delete Task"
 msgstr "Tasks · Tasks Service · Delete Task"
@@ -582,9 +585,6 @@ msgstr "Tasks · Tasks Service · Stream Tasks"
 
 msgid "Tasks · Tasks Service · Update Task And Invalidate"
 msgstr "Tasks · Tasks Service · Update Task And Invalidate"
-
-msgid "Tasks · Organization Ops Query · Count All Organization Notes"
-msgstr "Tasks · Organization Ops Query · Count All Organization Notes"
 
 msgid "That code is not right, or it has expired. Ask for a new one."
 msgstr "That code is not right, or it has expired. Ask for a new one."

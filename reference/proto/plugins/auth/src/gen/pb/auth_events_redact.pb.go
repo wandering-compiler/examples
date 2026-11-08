@@ -24,7 +24,13 @@ func init() {
 		"w17.contrib.auth.UserRoleRevoked":       {},
 		"w17.contrib.auth.RolePermissionAdded":   {},
 		"w17.contrib.auth.RolePermissionRemoved": {},
+		"w17.contrib.auth.OrganizationCreated":   {},
+		"w17.contrib.auth.OrgMembershipAdded":    {},
+		"w17.contrib.auth.OrganizationDeleted":   {},
+		"w17.contrib.auth.OrganizationUpdated":   {},
+		"w17.contrib.auth.OrgMembershipUpdated":  {},
+		"w17.contrib.auth.OrgMembershipRemoved":  {},
 	})
 }
 
-// emit-sha256: a244200b5fd6b008c0a42af6db61282653dc74630451eda562b77b3db9670c8b
+// emit-sha256: 166771c36234386bdf400f7a1e3996de275a2aa91d46396c8077cba7b9c99fb7

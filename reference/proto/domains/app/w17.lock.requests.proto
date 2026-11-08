@@ -13,8 +13,6 @@ import "domains/app/admin_auth/business/auth_service.proto";
 import "domains/app/admin_auth/mutations/auth_mutation.proto";
 import "domains/app/admin_auth/queries/auth_query.proto";
 import "domains/app/auth/business/auth_service.proto";
-import "domains/app/auth/mutations/auth_mutation.proto";
-import "domains/app/auth/queries/auth_query.proto";
 import "domains/app/cache/mutations/device_profile_mutation.proto";
 import "domains/app/cache/mutations/session_cache_mutation.proto";
 import "domains/app/cache/mutations/user_presence_mutation.proto";
@@ -26,9 +24,9 @@ import "domains/app/cache/queries/user_session_query.proto";
 import "domains/app/workspace/tasks/business/tasks_business.proto";
 import "domains/app/workspace/tasks/mutations/milestone_mutation.proto";
 import "domains/app/workspace/tasks/mutations/task_mutation.proto";
+import "domains/app/workspace/tasks/queries/org_ops_query.proto";
 import "domains/app/workspace/tasks/queries/task_lookup_query.proto";
 import "domains/app/workspace/tasks/queries/task_query.proto";
-import "domains/app/workspace/tasks/queries/tenant_ops_query.proto";
 import "domains/app/workspace/users/business/users_business.proto";
 import "domains/app/workspace/users/mutations/directory_card_mutation.proto";
 import "domains/app/workspace/users/mutations/directory_plan_mutation.proto";
@@ -39,11 +37,11 @@ import "domains/app/workspace/users/queries/user_query.proto";
 import "w17/request_events.proto";
 import "w17/lock.proto";
 
-option (w17.lock_checksum) = "08f3b10b23701fdf9e9dbec1cd26fcff2ca45fd12acf41903eb8651973671641";
+option (w17.lock_checksum) = "4db57b568a278adf14c295cbbdd7740db894c1d056622d08438a6c8a5e0250c9";
 
 // RequestEvent is one record.
 message RequestEvent {
-  reserved 1, 2, 3, 4, 14, 18;
+  reserved 1, 2, 3, 4, 14, 18, 19, 20, 21, 24, 47, 48, 49, 52, 59, 60, 63, 80, 81, 82, 83, 85, 102, 103, 104, 105, 113;
 
   w17.RequestEventMeta meta = 50001;
 
@@ -60,12 +58,8 @@ message RequestEvent {
     .e2e.app.admin_auth.SignInReq request_admin_auth_sign_in_req = 15;
     .e2e.app.admin_auth.UpdateOrgMembershipRoleReq request_admin_auth_update_org_membership_role_req = 16;
     .e2e.app.admin_auth.UpdateOrganizationReq request_admin_auth_update_organization_req = 17;
-    .e2e.app.auth.DeleteRoleReq request_auth_delete_role_req = 19;
-    .e2e.app.auth.GetRoleReq request_auth_get_role_req = 20;
-    .e2e.app.auth.ListRolesReq request_auth_list_roles_req = 21;
     .e2e.app.auth.SignInReq request_auth_sign_in_req = 22;
     .e2e.app.auth.SignUpReq request_auth_sign_up_req = 23;
-    .e2e.app.auth.UpdateRoleReq request_auth_update_role_req = 24;
     .e2e.app.auth.WhoAmIReq request_auth_who_am_i_req = 25;
     .e2e.app.cache.DeleteUserSessionReq request_cache_delete_user_session_req = 26;
     .e2e.app.cache.GetApiTokenReq request_cache_get_api_token_req = 27;
@@ -88,23 +82,16 @@ message RequestEvent {
     .e2e.app.tasks.AppendTaskAuditsReq request_tasks_append_task_audits_req = 44;
     .e2e.app.tasks.ArchiveTaskBatchReq request_tasks_archive_task_batch_req = 45;
     .e2e.app.tasks.AssignTaskByEmailReq request_tasks_assign_task_by_email_req = 46;
-    .e2e.app.tasks.AttachTenantNoteLinkReq request_tasks_attach_tenant_note_link_req = 47;
-    .e2e.app.tasks.AttachTenantNoteTagReq request_tasks_attach_tenant_note_tag_req = 48;
-    .e2e.app.tasks.BookmarkTenantNoteReq request_tasks_bookmark_tenant_note_req = 49;
     .e2e.app.tasks.CommentOnTaskReq request_tasks_comment_on_task_req = 50;
     .e2e.app.tasks.CompleteTaskReq request_tasks_complete_task_req = 51;
-    .e2e.app.tasks.CountAllTenantNotesReq request_tasks_count_all_tenant_notes_req = 52;
     .e2e.app.tasks.CountTasksByCategoryReq request_tasks_count_tasks_by_category_req = 53;
     .e2e.app.tasks.CountTasksByStatusReq request_tasks_count_tasks_by_status_req = 54;
     .e2e.app.tasks.CountTasksPerCategoryReq request_tasks_count_tasks_per_category_req = 55;
     .e2e.app.tasks.CountTasksPerDayReq request_tasks_count_tasks_per_day_req = 56;
     .e2e.app.tasks.CreateMilestoneReq request_tasks_create_milestone_req = 57;
     .e2e.app.tasks.CreateTaskReq request_tasks_create_task_req = 58;
-    .e2e.app.tasks.CreateTenantNoteReq request_tasks_create_tenant_note_req = 59;
-    .e2e.app.tasks.CreateTenantNoteWithPublicLinkReq request_tasks_create_tenant_note_with_public_link_req = 60;
     .e2e.app.tasks.DeleteTaskCommentReq request_tasks_delete_task_comment_req = 61;
     .e2e.app.tasks.DeleteTaskReq request_tasks_delete_task_req = 62;
-    .e2e.app.tasks.EnsureTenantNoteTagReq request_tasks_ensure_tenant_note_tag_req = 63;
     .e2e.app.tasks.GetCommentReq request_tasks_get_comment_req = 64;
     .e2e.app.tasks.GetMilestoneReq request_tasks_get_milestone_req = 65;
     .e2e.app.tasks.GetTaskAuditByEntryReq request_tasks_get_task_audit_by_entry_req = 66;
@@ -121,12 +108,7 @@ message RequestEvent {
     .e2e.app.tasks.GetTaskUploadReq request_tasks_get_task_upload_req = 77;
     .e2e.app.tasks.GetTaskWithCategoryReq request_tasks_get_task_with_category_req = 78;
     .e2e.app.tasks.GetTaskWithCommentsReq request_tasks_get_task_with_comments_req = 79;
-    .e2e.app.tasks.GetTenantNoteByPublicTokenReq request_tasks_get_tenant_note_by_public_token_req = 80;
-    .e2e.app.tasks.GetTenantNoteReq request_tasks_get_tenant_note_req = 81;
-    .e2e.app.tasks.GetTenantNoteSummaryByPublicTokenReq request_tasks_get_tenant_note_summary_by_public_token_req = 82;
-    .e2e.app.tasks.GetTenantNoteWithTagReq request_tasks_get_tenant_note_with_tag_req = 83;
     .e2e.app.tasks.ListAllCommentsReq request_tasks_list_all_comments_req = 84;
-    .e2e.app.tasks.ListAllTenantNotesReq request_tasks_list_all_tenant_notes_req = 85;
     .e2e.app.tasks.ListCategoriesWithTaskCountsReq request_tasks_list_categories_with_task_counts_req = 86;
     .e2e.app.tasks.ListCommentsWhileTaskOpenReq request_tasks_list_comments_while_task_open_req = 87;
     .e2e.app.tasks.ListCommentsWithTaskAdminReq request_tasks_list_comments_with_task_admin_req = 88;
@@ -143,10 +125,6 @@ message RequestEvent {
     .e2e.app.tasks.ListTasksPagedReq request_tasks_list_tasks_paged_req = 99;
     .e2e.app.tasks.ListTasksPagedTunedReq request_tasks_list_tasks_paged_tuned_req = 100;
     .e2e.app.tasks.ListTasksPagedWithCategoryReq request_tasks_list_tasks_paged_with_category_req = 101;
-    .e2e.app.tasks.ListTenantNotesByTagReq request_tasks_list_tenant_notes_by_tag_req = 102;
-    .e2e.app.tasks.ListTenantNotesForPublicLinkReq request_tasks_list_tenant_notes_for_public_link_req = 103;
-    .e2e.app.tasks.ListTenantNotesPagedWithTagCountReq request_tasks_list_tenant_notes_paged_with_tag_count_req = 104;
-    .e2e.app.tasks.ListTenantNotesReq request_tasks_list_tenant_notes_req = 105;
     .e2e.app.tasks.LiveSearchReq request_tasks_live_search_req = 106;
     .e2e.app.tasks.MarkMilestonesReviewedReq request_tasks_mark_milestones_reviewed_req = 107;
     .e2e.app.tasks.RedactTaskReq request_tasks_redact_task_req = 108;
@@ -154,7 +132,6 @@ message RequestEvent {
     .e2e.app.tasks.SnapshotCommentReq request_tasks_snapshot_comment_req = 110;
     .e2e.app.tasks.StreamPublicNoteUpdatesReq request_tasks_stream_public_note_updates_req = 111;
     .e2e.app.tasks.StreamTasksReq request_tasks_stream_tasks_req = 112;
-    .e2e.app.tasks.StreamTenantNotesReq request_tasks_stream_tenant_notes_req = 113;
     .e2e.app.tasks.TaskInput request_tasks_task_input = 114;
     .e2e.app.tasks.UpdateMilestoneReq request_tasks_update_milestone_req = 115;
     .e2e.app.tasks.UpdateTaskAndInvalidateReq request_tasks_update_task_and_invalidate_req = 116;
@@ -202,6 +179,29 @@ message RequestEvent {
     .e2e.app.auth.RevokeMyOAuthGrantReq request_auth_revoke_my_o_auth_grant_req = 159;
     .e2e.app.tasks.AssignTaskReq request_tasks_assign_task_req = 160;
     .e2e.app.tasks.GetTaskAdminReq request_tasks_get_task_admin_req = 161;
+    .e2e.app.admin_auth.DeleteRoleReq request_admin_auth_delete_role_req = 162;
+    .e2e.app.admin_auth.GetRoleReq request_admin_auth_get_role_req = 163;
+    .e2e.app.admin_auth.ListRolesReq request_admin_auth_list_roles_req = 164;
+    .e2e.app.admin_auth.UpdateRoleReq request_admin_auth_update_role_req = 165;
+    .e2e.app.tasks.AttachOrgNoteLinkReq request_tasks_attach_org_note_link_req = 166;
+    .e2e.app.tasks.AttachOrgNoteTagReq request_tasks_attach_org_note_tag_req = 167;
+    .e2e.app.tasks.BookmarkOrgNoteReq request_tasks_bookmark_org_note_req = 168;
+    .e2e.app.tasks.CountAllOrgNotesReq request_tasks_count_all_org_notes_req = 169;
+    .e2e.app.tasks.CreateOrgNoteReq request_tasks_create_org_note_req = 170;
+    .e2e.app.tasks.CreateOrgNoteWithPublicLinkReq request_tasks_create_org_note_with_public_link_req = 171;
+    .e2e.app.tasks.EnsureOrgNoteTagReq request_tasks_ensure_org_note_tag_req = 172;
+    .e2e.app.tasks.GetOrgNoteByPublicTokenReq request_tasks_get_org_note_by_public_token_req = 173;
+    .e2e.app.tasks.GetOrgNoteReq request_tasks_get_org_note_req = 174;
+    .e2e.app.tasks.GetOrgNoteSummaryByPublicTokenReq request_tasks_get_org_note_summary_by_public_token_req = 175;
+    .e2e.app.tasks.GetOrgNoteWithTagReq request_tasks_get_org_note_with_tag_req = 176;
+    .e2e.app.tasks.ListAllOrgNotesReq request_tasks_list_all_org_notes_req = 177;
+    .e2e.app.tasks.ListOrgNotesByTagReq request_tasks_list_org_notes_by_tag_req = 178;
+    .e2e.app.tasks.ListOrgNotesForPublicLinkReq request_tasks_list_org_notes_for_public_link_req = 179;
+    .e2e.app.tasks.ListOrgNotesPagedWithTagCountReq request_tasks_list_org_notes_paged_with_tag_count_req = 180;
+    .e2e.app.tasks.ListOrgNotesReq request_tasks_list_org_notes_req = 181;
+    .e2e.app.tasks.StreamOrgNotesReq request_tasks_stream_org_notes_req = 182;
+    .e2e.app.users.GetFlightReq request_users_get_flight_req = 183;
+    .e2e.app.users.ListFlightsReq request_users_list_flights_req = 184;
   }
 
   oneof response {

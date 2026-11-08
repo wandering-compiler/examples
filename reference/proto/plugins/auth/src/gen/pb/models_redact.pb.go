@@ -13,7 +13,6 @@ import (
 func init() {
 	redact.Register(map[string]redact.Plan{
 		"w17.contrib.auth.User":                 {Skip: []protowire.Number{3 /* password_hash */}},
-		"w17.contrib.auth.Tenant":               {},
 		"w17.contrib.auth.UserToken":            {Skip: []protowire.Number{2 /* token */, 10 /* token_hash */}},
 		"w17.contrib.auth.Device":               {},
 		"w17.contrib.auth.SignInEvent":          {},
@@ -27,7 +26,11 @@ func init() {
 		"w17.contrib.auth.OAuthAuthorization":   {},
 		"w17.contrib.auth.OAuthGrant":           {},
 		"w17.contrib.auth.OAuthRefreshToken":    {},
+		"w17.contrib.auth.Organization":         {},
+		"w17.contrib.auth.OrgMembership":        {},
+		"w17.contrib.auth.OrgHost":              {},
+		"w17.contrib.auth.OrgSignUpPolicy":      {},
 	})
 }
 
-// emit-sha256: 8fad21ac75d3784d3b5455af0a33ed26b9fc8109fba006e8b1159f6bffcc687d
+// emit-sha256: 7f77cd00c1fe7b35ec49bc5781e6fcdba5695b365a017f6612984fcc698ba812

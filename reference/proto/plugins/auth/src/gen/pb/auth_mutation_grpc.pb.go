@@ -56,6 +56,12 @@ const (
 	AuthMutation_UpdateUserPassword_FullMethodName         = "/w17.contrib.auth.AuthMutation/UpdateUserPassword"
 	AuthMutation_RehashUserPassword_FullMethodName         = "/w17.contrib.auth.AuthMutation/RehashUserPassword"
 	AuthMutation_ClaimBootstrapAdmin_FullMethodName        = "/w17.contrib.auth.AuthMutation/ClaimBootstrapAdmin"
+	AuthMutation_CreateOrganization_FullMethodName         = "/w17.contrib.auth.AuthMutation/CreateOrganization"
+	AuthMutation_AddOrgMembership_FullMethodName           = "/w17.contrib.auth.AuthMutation/AddOrgMembership"
+	AuthMutation_UpdateOrganization_FullMethodName         = "/w17.contrib.auth.AuthMutation/UpdateOrganization"
+	AuthMutation_DeleteOrganization_FullMethodName         = "/w17.contrib.auth.AuthMutation/DeleteOrganization"
+	AuthMutation_UpdateOrgMembership_FullMethodName        = "/w17.contrib.auth.AuthMutation/UpdateOrgMembership"
+	AuthMutation_MarkOrgMembershipRemoved_FullMethodName   = "/w17.contrib.auth.AuthMutation/MarkOrgMembershipRemoved"
 	AuthMutation_CreateOAuthClient_FullMethodName          = "/w17.contrib.auth.AuthMutation/CreateOAuthClient"
 	AuthMutation_RefreshOAuthClientMetadata_FullMethodName = "/w17.contrib.auth.AuthMutation/RefreshOAuthClientMetadata"
 	AuthMutation_CreateOAuthAuthorization_FullMethodName   = "/w17.contrib.auth.AuthMutation/CreateOAuthAuthorization"
@@ -70,6 +76,10 @@ const (
 	AuthMutation_RevokeOAuthGrant_FullMethodName           = "/w17.contrib.auth.AuthMutation/RevokeOAuthGrant"
 	AuthMutation_RevokeUserOAuthGrants_FullMethodName      = "/w17.contrib.auth.AuthMutation/RevokeUserOAuthGrants"
 	AuthMutation_IssueOAuthAccessToken_FullMethodName      = "/w17.contrib.auth.AuthMutation/IssueOAuthAccessToken"
+	AuthMutation_BindOrgHostRow_FullMethodName             = "/w17.contrib.auth.AuthMutation/BindOrgHostRow"
+	AuthMutation_EndOrgHostRow_FullMethodName              = "/w17.contrib.auth.AuthMutation/EndOrgHostRow"
+	AuthMutation_SetOrgSignUpPolicyRow_FullMethodName      = "/w17.contrib.auth.AuthMutation/SetOrgSignUpPolicyRow"
+	AuthMutation_EndOrgSignUpPolicyRow_FullMethodName      = "/w17.contrib.auth.AuthMutation/EndOrgSignUpPolicyRow"
 )
 
 // AuthMutationClient is the client API for AuthMutation service.
@@ -330,6 +340,61 @@ type AuthMutationClient interface {
 	// one sign-up that took it and 0 for every other: a concurrent sign-up
 	// waits on the key and then conflicts. See BootstrapClaim.
 	ClaimBootstrapAdmin(ctx context.Context, in *ClaimBootstrapAdminReq, opts ...grpc.CallOption) (*ClaimBootstrapAdminResp, error)
+	// CreateOrganization — INSERT Organization. Refuses a duplicate slug
+	// (unique violation → AlreadyExists via the storage DB-error
+	// classification). Emits OrganizationCreated — the keystone
+	// provisioning hook (a subscriber seeds the org's default data off
+	// org_id) so a project never has to INSERT into this plugin's tables
+	// directly.
+	CreateOrganization(ctx context.Context, in *CreateOrganizationReq, opts ...grpc.CallOption) (*CreateOrganizationResp, error)
+	// AddOrgMembership — INSERT OrgMembership linking a user to an org
+	// with a role. A live duplicate (same user and org, ended_key ”) is
+	// refused by the unique index with AlreadyExists; a REMOVED membership does
+	// not block it, so a removed member can be added again (a new row). Emits OrgMembershipAdded (fires for
+	// the creator's membership + every later invite accept). Mirrors
+	// AssignRoleToUser.
+	AddOrgMembership(ctx context.Context, in *AddOrgMembershipReq, opts ...grpc.CallOption) (*AddOrgMembershipResp, error)
+	// UpdateOrganization — the admin Organizations page detail `update`.
+	// Gated org_membership.
+	UpdateOrganization(ctx context.Context, in *UpdateOrganizationReq, opts ...grpc.CallOption) (*UpdateOrganizationResp, error)
+	// DeleteOrganization — the admin Organizations page delete. Nothing is
+	// deleted, in one transaction:
+	//
+	//	memberships  every live membership of the org is removed (removed_at,
+	//	             ended_key);
+	//	grants       every live grant scoped to the org is revoked, for the
+	//	             reason MarkOrgMembershipRemoved gives;
+	//	main         the org is stamped deleted_at, and ended_key takes its id,
+	//	             which frees its slug for a new organization.
+	//
+	// Every organization reader reads live rows only, so the org disappears
+	// from every list and lookup and cannot be selected. Its invitations are not touched here — org_invite is a feature
+	// of its own, and a statement cannot name a table its activation may not
+	// have — so AuthService.RemoveOrganization (which the admin page binds)
+	// closes them first, in the same transaction (CloseOrgInvitesOfOrg); and
+	// every statement that reads, binds or accepts an invitation requires its
+	// organization to be live, so one called directly leaves none usable either.
+	// Guarded on
+	// `deleted_at IS NULL`: a second delete matches nothing (NotFound), as it
+	// did. removed_by / revoked_by stay NULL: the admin page binds this
+	// mutation directly. Emits OrganizationDeleted for downstream per-org
+	// cleanup. Gated org_membership.
+	DeleteOrganization(ctx context.Context, in *DeleteOrganizationReq, opts ...grpc.CallOption) (*DeleteOrganizationResp, error)
+	UpdateOrgMembership(ctx context.Context, in *UpdateOrgMembershipReq, opts ...grpc.CallOption) (*UpdateOrgMembershipResp, error)
+	// MarkOrgMembershipRemoved — remove a member (AuthService.RemoveOrgMembership,
+	// the OrgMemberships page's delete). Was DeleteOrgMembership; nothing is
+	// deleted: the membership is stamped removed_at / removed_by and its
+	// ended_key takes its id, so the person can be added again as a new row.
+	//
+	// A membership leaves WITH its org-scoped grants. Left live, the grants
+	// would keep counting — permissions read UserRole by (user, org) and join no
+	// membership — so a member re-invited at a LESSER role would come back with
+	// their old one, and one re-invited at the same role would hit the unique
+	// grant and could never accept. They are revoked (revoked_at, the same
+	// actor as revoked_by), not deleted. The request names only the membership,
+	// so the first op reads whose it is; a removed membership matches nothing
+	// (NotFound), as a deleted one did.
+	MarkOrgMembershipRemoved(ctx context.Context, in *MarkOrgMembershipRemovedReq, opts ...grpc.CallOption) (*MarkOrgMembershipRemovedResp, error)
 	CreateOAuthClient(ctx context.Context, in *CreateOAuthClientReq, opts ...grpc.CallOption) (*CreateOAuthClientResp, error)
 	RefreshOAuthClientMetadata(ctx context.Context, in *RefreshOAuthClientMetadataReq, opts ...grpc.CallOption) (*RefreshOAuthClientMetadataResp, error)
 	CreateOAuthAuthorization(ctx context.Context, in *CreateOAuthAuthorizationReq, opts ...grpc.CallOption) (*CreateOAuthAuthorizationResp, error)
@@ -347,6 +412,18 @@ type AuthMutationClient interface {
 	RevokeOAuthGrant(ctx context.Context, in *RevokeOAuthGrantReq, opts ...grpc.CallOption) (*RevokeOAuthGrantResp, error)
 	RevokeUserOAuthGrants(ctx context.Context, in *RevokeUserOAuthGrantsReq, opts ...grpc.CallOption) (*RevokeUserOAuthGrantsResp, error)
 	IssueOAuthAccessToken(ctx context.Context, in *IssueOAuthAccessTokenReq, opts ...grpc.CallOption) (*IssueOAuthAccessTokenResp, error)
+	// BindOrgHostRow — a new live binding; a host already bound is refused by
+	// the unique index (the caller checks first).
+	BindOrgHostRow(ctx context.Context, in *BindOrgHostRowReq, opts ...grpc.CallOption) (*BindOrgHostRowResp, error)
+	// EndOrgHostRow — unbinds the host; nothing is deleted.
+	EndOrgHostRow(ctx context.Context, in *EndOrgHostRowReq, opts ...grpc.CallOption) (*EndOrgHostRowResp, error)
+	// SetOrgSignUpPolicyRow — a new live policy for (organization, kind); the
+	// caller ends the live one first (EndOrgSignUpPolicyRow) in the same
+	// transaction, and the unique index refuses a racing second.
+	SetOrgSignUpPolicyRow(ctx context.Context, in *SetOrgSignUpPolicyRowReq, opts ...grpc.CallOption) (*SetOrgSignUpPolicyRowResp, error)
+	// EndOrgSignUpPolicyRow — ends the live policy of (organization, kind);
+	// nothing is deleted.
+	EndOrgSignUpPolicyRow(ctx context.Context, in *EndOrgSignUpPolicyRowReq, opts ...grpc.CallOption) (*EndOrgSignUpPolicyRowResp, error)
 }
 
 type authMutationClient struct {
@@ -637,6 +714,66 @@ func (c *authMutationClient) ClaimBootstrapAdmin(ctx context.Context, in *ClaimB
 	return out, nil
 }
 
+func (c *authMutationClient) CreateOrganization(ctx context.Context, in *CreateOrganizationReq, opts ...grpc.CallOption) (*CreateOrganizationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateOrganizationResp)
+	err := c.cc.Invoke(ctx, AuthMutation_CreateOrganization_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) AddOrgMembership(ctx context.Context, in *AddOrgMembershipReq, opts ...grpc.CallOption) (*AddOrgMembershipResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddOrgMembershipResp)
+	err := c.cc.Invoke(ctx, AuthMutation_AddOrgMembership_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) UpdateOrganization(ctx context.Context, in *UpdateOrganizationReq, opts ...grpc.CallOption) (*UpdateOrganizationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateOrganizationResp)
+	err := c.cc.Invoke(ctx, AuthMutation_UpdateOrganization_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) DeleteOrganization(ctx context.Context, in *DeleteOrganizationReq, opts ...grpc.CallOption) (*DeleteOrganizationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteOrganizationResp)
+	err := c.cc.Invoke(ctx, AuthMutation_DeleteOrganization_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) UpdateOrgMembership(ctx context.Context, in *UpdateOrgMembershipReq, opts ...grpc.CallOption) (*UpdateOrgMembershipResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateOrgMembershipResp)
+	err := c.cc.Invoke(ctx, AuthMutation_UpdateOrgMembership_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) MarkOrgMembershipRemoved(ctx context.Context, in *MarkOrgMembershipRemovedReq, opts ...grpc.CallOption) (*MarkOrgMembershipRemovedResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkOrgMembershipRemovedResp)
+	err := c.cc.Invoke(ctx, AuthMutation_MarkOrgMembershipRemoved_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authMutationClient) CreateOAuthClient(ctx context.Context, in *CreateOAuthClientReq, opts ...grpc.CallOption) (*CreateOAuthClientResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateOAuthClientResp)
@@ -771,6 +908,46 @@ func (c *authMutationClient) IssueOAuthAccessToken(ctx context.Context, in *Issu
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(IssueOAuthAccessTokenResp)
 	err := c.cc.Invoke(ctx, AuthMutation_IssueOAuthAccessToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) BindOrgHostRow(ctx context.Context, in *BindOrgHostRowReq, opts ...grpc.CallOption) (*BindOrgHostRowResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BindOrgHostRowResp)
+	err := c.cc.Invoke(ctx, AuthMutation_BindOrgHostRow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) EndOrgHostRow(ctx context.Context, in *EndOrgHostRowReq, opts ...grpc.CallOption) (*EndOrgHostRowResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EndOrgHostRowResp)
+	err := c.cc.Invoke(ctx, AuthMutation_EndOrgHostRow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) SetOrgSignUpPolicyRow(ctx context.Context, in *SetOrgSignUpPolicyRowReq, opts ...grpc.CallOption) (*SetOrgSignUpPolicyRowResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetOrgSignUpPolicyRowResp)
+	err := c.cc.Invoke(ctx, AuthMutation_SetOrgSignUpPolicyRow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) EndOrgSignUpPolicyRow(ctx context.Context, in *EndOrgSignUpPolicyRowReq, opts ...grpc.CallOption) (*EndOrgSignUpPolicyRowResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EndOrgSignUpPolicyRowResp)
+	err := c.cc.Invoke(ctx, AuthMutation_EndOrgSignUpPolicyRow_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1035,6 +1212,61 @@ type AuthMutationServer interface {
 	// one sign-up that took it and 0 for every other: a concurrent sign-up
 	// waits on the key and then conflicts. See BootstrapClaim.
 	ClaimBootstrapAdmin(context.Context, *ClaimBootstrapAdminReq) (*ClaimBootstrapAdminResp, error)
+	// CreateOrganization — INSERT Organization. Refuses a duplicate slug
+	// (unique violation → AlreadyExists via the storage DB-error
+	// classification). Emits OrganizationCreated — the keystone
+	// provisioning hook (a subscriber seeds the org's default data off
+	// org_id) so a project never has to INSERT into this plugin's tables
+	// directly.
+	CreateOrganization(context.Context, *CreateOrganizationReq) (*CreateOrganizationResp, error)
+	// AddOrgMembership — INSERT OrgMembership linking a user to an org
+	// with a role. A live duplicate (same user and org, ended_key ”) is
+	// refused by the unique index with AlreadyExists; a REMOVED membership does
+	// not block it, so a removed member can be added again (a new row). Emits OrgMembershipAdded (fires for
+	// the creator's membership + every later invite accept). Mirrors
+	// AssignRoleToUser.
+	AddOrgMembership(context.Context, *AddOrgMembershipReq) (*AddOrgMembershipResp, error)
+	// UpdateOrganization — the admin Organizations page detail `update`.
+	// Gated org_membership.
+	UpdateOrganization(context.Context, *UpdateOrganizationReq) (*UpdateOrganizationResp, error)
+	// DeleteOrganization — the admin Organizations page delete. Nothing is
+	// deleted, in one transaction:
+	//
+	//	memberships  every live membership of the org is removed (removed_at,
+	//	             ended_key);
+	//	grants       every live grant scoped to the org is revoked, for the
+	//	             reason MarkOrgMembershipRemoved gives;
+	//	main         the org is stamped deleted_at, and ended_key takes its id,
+	//	             which frees its slug for a new organization.
+	//
+	// Every organization reader reads live rows only, so the org disappears
+	// from every list and lookup and cannot be selected. Its invitations are not touched here — org_invite is a feature
+	// of its own, and a statement cannot name a table its activation may not
+	// have — so AuthService.RemoveOrganization (which the admin page binds)
+	// closes them first, in the same transaction (CloseOrgInvitesOfOrg); and
+	// every statement that reads, binds or accepts an invitation requires its
+	// organization to be live, so one called directly leaves none usable either.
+	// Guarded on
+	// `deleted_at IS NULL`: a second delete matches nothing (NotFound), as it
+	// did. removed_by / revoked_by stay NULL: the admin page binds this
+	// mutation directly. Emits OrganizationDeleted for downstream per-org
+	// cleanup. Gated org_membership.
+	DeleteOrganization(context.Context, *DeleteOrganizationReq) (*DeleteOrganizationResp, error)
+	UpdateOrgMembership(context.Context, *UpdateOrgMembershipReq) (*UpdateOrgMembershipResp, error)
+	// MarkOrgMembershipRemoved — remove a member (AuthService.RemoveOrgMembership,
+	// the OrgMemberships page's delete). Was DeleteOrgMembership; nothing is
+	// deleted: the membership is stamped removed_at / removed_by and its
+	// ended_key takes its id, so the person can be added again as a new row.
+	//
+	// A membership leaves WITH its org-scoped grants. Left live, the grants
+	// would keep counting — permissions read UserRole by (user, org) and join no
+	// membership — so a member re-invited at a LESSER role would come back with
+	// their old one, and one re-invited at the same role would hit the unique
+	// grant and could never accept. They are revoked (revoked_at, the same
+	// actor as revoked_by), not deleted. The request names only the membership,
+	// so the first op reads whose it is; a removed membership matches nothing
+	// (NotFound), as a deleted one did.
+	MarkOrgMembershipRemoved(context.Context, *MarkOrgMembershipRemovedReq) (*MarkOrgMembershipRemovedResp, error)
 	CreateOAuthClient(context.Context, *CreateOAuthClientReq) (*CreateOAuthClientResp, error)
 	RefreshOAuthClientMetadata(context.Context, *RefreshOAuthClientMetadataReq) (*RefreshOAuthClientMetadataResp, error)
 	CreateOAuthAuthorization(context.Context, *CreateOAuthAuthorizationReq) (*CreateOAuthAuthorizationResp, error)
@@ -1052,6 +1284,18 @@ type AuthMutationServer interface {
 	RevokeOAuthGrant(context.Context, *RevokeOAuthGrantReq) (*RevokeOAuthGrantResp, error)
 	RevokeUserOAuthGrants(context.Context, *RevokeUserOAuthGrantsReq) (*RevokeUserOAuthGrantsResp, error)
 	IssueOAuthAccessToken(context.Context, *IssueOAuthAccessTokenReq) (*IssueOAuthAccessTokenResp, error)
+	// BindOrgHostRow — a new live binding; a host already bound is refused by
+	// the unique index (the caller checks first).
+	BindOrgHostRow(context.Context, *BindOrgHostRowReq) (*BindOrgHostRowResp, error)
+	// EndOrgHostRow — unbinds the host; nothing is deleted.
+	EndOrgHostRow(context.Context, *EndOrgHostRowReq) (*EndOrgHostRowResp, error)
+	// SetOrgSignUpPolicyRow — a new live policy for (organization, kind); the
+	// caller ends the live one first (EndOrgSignUpPolicyRow) in the same
+	// transaction, and the unique index refuses a racing second.
+	SetOrgSignUpPolicyRow(context.Context, *SetOrgSignUpPolicyRowReq) (*SetOrgSignUpPolicyRowResp, error)
+	// EndOrgSignUpPolicyRow — ends the live policy of (organization, kind);
+	// nothing is deleted.
+	EndOrgSignUpPolicyRow(context.Context, *EndOrgSignUpPolicyRowReq) (*EndOrgSignUpPolicyRowResp, error)
 }
 
 // UnimplementedAuthMutationServer should be embedded to have
@@ -1145,6 +1389,24 @@ func (UnimplementedAuthMutationServer) RehashUserPassword(context.Context, *Reha
 func (UnimplementedAuthMutationServer) ClaimBootstrapAdmin(context.Context, *ClaimBootstrapAdminReq) (*ClaimBootstrapAdminResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method ClaimBootstrapAdmin not implemented")
 }
+func (UnimplementedAuthMutationServer) CreateOrganization(context.Context, *CreateOrganizationReq) (*CreateOrganizationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateOrganization not implemented")
+}
+func (UnimplementedAuthMutationServer) AddOrgMembership(context.Context, *AddOrgMembershipReq) (*AddOrgMembershipResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddOrgMembership not implemented")
+}
+func (UnimplementedAuthMutationServer) UpdateOrganization(context.Context, *UpdateOrganizationReq) (*UpdateOrganizationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateOrganization not implemented")
+}
+func (UnimplementedAuthMutationServer) DeleteOrganization(context.Context, *DeleteOrganizationReq) (*DeleteOrganizationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteOrganization not implemented")
+}
+func (UnimplementedAuthMutationServer) UpdateOrgMembership(context.Context, *UpdateOrgMembershipReq) (*UpdateOrgMembershipResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateOrgMembership not implemented")
+}
+func (UnimplementedAuthMutationServer) MarkOrgMembershipRemoved(context.Context, *MarkOrgMembershipRemovedReq) (*MarkOrgMembershipRemovedResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method MarkOrgMembershipRemoved not implemented")
+}
 func (UnimplementedAuthMutationServer) CreateOAuthClient(context.Context, *CreateOAuthClientReq) (*CreateOAuthClientResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateOAuthClient not implemented")
 }
@@ -1186,6 +1448,18 @@ func (UnimplementedAuthMutationServer) RevokeUserOAuthGrants(context.Context, *R
 }
 func (UnimplementedAuthMutationServer) IssueOAuthAccessToken(context.Context, *IssueOAuthAccessTokenReq) (*IssueOAuthAccessTokenResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method IssueOAuthAccessToken not implemented")
+}
+func (UnimplementedAuthMutationServer) BindOrgHostRow(context.Context, *BindOrgHostRowReq) (*BindOrgHostRowResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method BindOrgHostRow not implemented")
+}
+func (UnimplementedAuthMutationServer) EndOrgHostRow(context.Context, *EndOrgHostRowReq) (*EndOrgHostRowResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method EndOrgHostRow not implemented")
+}
+func (UnimplementedAuthMutationServer) SetOrgSignUpPolicyRow(context.Context, *SetOrgSignUpPolicyRowReq) (*SetOrgSignUpPolicyRowResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetOrgSignUpPolicyRow not implemented")
+}
+func (UnimplementedAuthMutationServer) EndOrgSignUpPolicyRow(context.Context, *EndOrgSignUpPolicyRowReq) (*EndOrgSignUpPolicyRowResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method EndOrgSignUpPolicyRow not implemented")
 }
 func (UnimplementedAuthMutationServer) testEmbeddedByValue() {}
 
@@ -1711,6 +1985,114 @@ func _AuthMutation_ClaimBootstrapAdmin_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthMutation_CreateOrganization_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateOrganizationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).CreateOrganization(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_CreateOrganization_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).CreateOrganization(ctx, req.(*CreateOrganizationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_AddOrgMembership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddOrgMembershipReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).AddOrgMembership(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_AddOrgMembership_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).AddOrgMembership(ctx, req.(*AddOrgMembershipReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_UpdateOrganization_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateOrganizationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).UpdateOrganization(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_UpdateOrganization_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).UpdateOrganization(ctx, req.(*UpdateOrganizationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_DeleteOrganization_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteOrganizationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).DeleteOrganization(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_DeleteOrganization_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).DeleteOrganization(ctx, req.(*DeleteOrganizationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_UpdateOrgMembership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateOrgMembershipReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).UpdateOrgMembership(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_UpdateOrgMembership_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).UpdateOrgMembership(ctx, req.(*UpdateOrgMembershipReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_MarkOrgMembershipRemoved_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkOrgMembershipRemovedReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).MarkOrgMembershipRemoved(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_MarkOrgMembershipRemoved_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).MarkOrgMembershipRemoved(ctx, req.(*MarkOrgMembershipRemovedReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthMutation_CreateOAuthClient_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateOAuthClientReq)
 	if err := dec(in); err != nil {
@@ -1963,6 +2345,78 @@ func _AuthMutation_IssueOAuthAccessToken_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthMutation_BindOrgHostRow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BindOrgHostRowReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).BindOrgHostRow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_BindOrgHostRow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).BindOrgHostRow(ctx, req.(*BindOrgHostRowReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_EndOrgHostRow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EndOrgHostRowReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).EndOrgHostRow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_EndOrgHostRow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).EndOrgHostRow(ctx, req.(*EndOrgHostRowReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_SetOrgSignUpPolicyRow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetOrgSignUpPolicyRowReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).SetOrgSignUpPolicyRow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_SetOrgSignUpPolicyRow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).SetOrgSignUpPolicyRow(ctx, req.(*SetOrgSignUpPolicyRowReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_EndOrgSignUpPolicyRow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EndOrgSignUpPolicyRowReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).EndOrgSignUpPolicyRow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_EndOrgSignUpPolicyRow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).EndOrgSignUpPolicyRow(ctx, req.(*EndOrgSignUpPolicyRowReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthMutation_ServiceDesc is the grpc.ServiceDesc for AuthMutation service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2083,6 +2537,30 @@ var AuthMutation_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthMutation_ClaimBootstrapAdmin_Handler,
 		},
 		{
+			MethodName: "CreateOrganization",
+			Handler:    _AuthMutation_CreateOrganization_Handler,
+		},
+		{
+			MethodName: "AddOrgMembership",
+			Handler:    _AuthMutation_AddOrgMembership_Handler,
+		},
+		{
+			MethodName: "UpdateOrganization",
+			Handler:    _AuthMutation_UpdateOrganization_Handler,
+		},
+		{
+			MethodName: "DeleteOrganization",
+			Handler:    _AuthMutation_DeleteOrganization_Handler,
+		},
+		{
+			MethodName: "UpdateOrgMembership",
+			Handler:    _AuthMutation_UpdateOrgMembership_Handler,
+		},
+		{
+			MethodName: "MarkOrgMembershipRemoved",
+			Handler:    _AuthMutation_MarkOrgMembershipRemoved_Handler,
+		},
+		{
 			MethodName: "CreateOAuthClient",
 			Handler:    _AuthMutation_CreateOAuthClient_Handler,
 		},
@@ -2138,9 +2616,25 @@ var AuthMutation_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "IssueOAuthAccessToken",
 			Handler:    _AuthMutation_IssueOAuthAccessToken_Handler,
 		},
+		{
+			MethodName: "BindOrgHostRow",
+			Handler:    _AuthMutation_BindOrgHostRow_Handler,
+		},
+		{
+			MethodName: "EndOrgHostRow",
+			Handler:    _AuthMutation_EndOrgHostRow_Handler,
+		},
+		{
+			MethodName: "SetOrgSignUpPolicyRow",
+			Handler:    _AuthMutation_SetOrgSignUpPolicyRow_Handler,
+		},
+		{
+			MethodName: "EndOrgSignUpPolicyRow",
+			Handler:    _AuthMutation_EndOrgSignUpPolicyRow_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "mutations/auth_mutation.proto",
 }
 
-// emit-sha256: 1c9ce0d441ad6ff480518e353f5f0f69e99d808dffd1ce6e32e6cbeb7f59d384
+// emit-sha256: 3ceb1342de438796ee9fd6e5b08f987b19c44b6b795d5d7367e4bf43bf5e9706

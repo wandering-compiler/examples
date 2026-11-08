@@ -801,16 +801,6 @@ type User struct {
 	Email        string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
 	PasswordHash string                 `protobuf:"bytes,3,opt,name=password_hash,json=passwordHash,proto3" json:"password_hash,omitempty"`
 	CreatedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	// tenant_id — the owning tenant, behind `tenant_scope`. Sourced
-	// from auth (AuthQuery.GetUserTenant) into the `tenant_id` data
-	// scope; never client-set. NOT NULL so every user resolves a
-	// tenant. No DB-level FK (the activation-rename caveat that
-	// applies to every cross-table id ref in this plugin — see
-	// UserToken.user_id); referential integrity is app-enforced.
-	// Field-gated: dropped entirely when `tenant_scope` is off, and
-	// it shares the tag with the Tenant message so the FK target +
-	// the column drop atomically (no dangling reference).
-	TenantId string `protobuf:"bytes,5,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	// device_trust_revoked_at — when this account's device trust was last
 	// revoked as a whole. A Device trusted at or before this instant no longer
 	// counts as trusted (`two_factor_scope=new_devices` challenges it again).
@@ -896,13 +886,6 @@ func (x *User) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *User) GetTenantId() string {
-	if x != nil {
-		return x.TenantId
-	}
-	return ""
-}
-
 func (x *User) GetDeviceTrustRevokedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.DeviceTrustRevokedAt
@@ -920,88 +903,6 @@ func (x *User) GetSignInFailures() int64 {
 func (x *User) GetSignInWindowAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.SignInWindowAt
-	}
-	return nil
-}
-
-// Tenant — an isolation boundary (organization / workspace) that
-// owns users. Behind `tenant_scope`: present only when the
-// activation enables tenant scoping. `User.tenant_id` references a
-// row here (app-enforced; same no-DB-FK caveat as the rest of the
-// plugin). The authenticated principal's tenant becomes the
-// `tenant_id` data scope, so a project that scopes its owned rows
-// by `name: "tenant_id"` gets per-tenant isolation with no hand-
-// written facade — sourced from auth as the data-scope rule
-// requires.
-type Tenant struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// name doubles as the URL slug — SignUp resolves a tenant by it
-	// when the REST path carries `{tenant_slug}` (AuthQuery.GetTenantBySlug).
-	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	// domain — the host that maps to this tenant (e.g. `acme.example.com`),
-	// for host-based resolution at SignUp (AuthQuery.GetTenantByDomain reads
-	// the forwarded Host header). Nullable: a tenant may be slug-only.
-	Domain        string                 `protobuf:"bytes,4,opt,name=domain,proto3" json:"domain,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Tenant) Reset() {
-	*x = Tenant{}
-	mi := &file_types_models_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Tenant) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Tenant) ProtoMessage() {}
-
-func (x *Tenant) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Tenant.ProtoReflect.Descriptor instead.
-func (*Tenant) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *Tenant) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *Tenant) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *Tenant) GetDomain() string {
-	if x != nil {
-		return x.Domain
-	}
-	return ""
-}
-
-func (x *Tenant) GetCreatedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CreatedAt
 	}
 	return nil
 }
@@ -1155,7 +1056,7 @@ type UserToken struct {
 
 func (x *UserToken) Reset() {
 	*x = UserToken{}
-	mi := &file_types_models_proto_msgTypes[2]
+	mi := &file_types_models_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1167,7 +1068,7 @@ func (x *UserToken) String() string {
 func (*UserToken) ProtoMessage() {}
 
 func (x *UserToken) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[2]
+	mi := &file_types_models_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1180,7 +1081,7 @@ func (x *UserToken) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserToken.ProtoReflect.Descriptor instead.
 func (*UserToken) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{2}
+	return file_types_models_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *UserToken) GetId() string {
@@ -1390,7 +1291,7 @@ type Device struct {
 
 func (x *Device) Reset() {
 	*x = Device{}
-	mi := &file_types_models_proto_msgTypes[3]
+	mi := &file_types_models_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1402,7 +1303,7 @@ func (x *Device) String() string {
 func (*Device) ProtoMessage() {}
 
 func (x *Device) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[3]
+	mi := &file_types_models_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1415,7 +1316,7 @@ func (x *Device) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Device.ProtoReflect.Descriptor instead.
 func (*Device) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{3}
+	return file_types_models_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Device) GetId() string {
@@ -1561,7 +1462,7 @@ type SignInEvent struct {
 
 func (x *SignInEvent) Reset() {
 	*x = SignInEvent{}
-	mi := &file_types_models_proto_msgTypes[4]
+	mi := &file_types_models_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1573,7 +1474,7 @@ func (x *SignInEvent) String() string {
 func (*SignInEvent) ProtoMessage() {}
 
 func (x *SignInEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[4]
+	mi := &file_types_models_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1586,7 +1487,7 @@ func (x *SignInEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignInEvent.ProtoReflect.Descriptor instead.
 func (*SignInEvent) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{4}
+	return file_types_models_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SignInEvent) GetId() string {
@@ -1765,6 +1666,27 @@ type Role struct {
 	// technical identity from the label removes both failures, and means
 	// the seed needs no per-column upsert policy.
 	DisplayName string `protobuf:"bytes,10,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// org_scoped — TRUE when this role's grants apply only inside the
+	// organization they were assigned in (`(w17.acl_roles).scope: ORG`).
+	// FALSE = realm-wide, which is what an unset column means and what
+	// every role meant before organizations existed.
+	//
+	// Read by the two permission queries (GetUserOrgPermissions,
+	// GetUserRealmWidePermissions), which is where a grant's MEANING is
+	// decided: a UserRole row with a NULL org_id means "realm-wide", and
+	// for an org-scoped role that reading is the opposite of what the
+	// declaration asked for, so both queries ask this column before they
+	// honour a NULL.
+	//
+	// The project has no role-assignment surface that reads this column; a
+	// column written by the seed and read by nothing would make `scope: ORG`
+	// a declaration with no enforcement point anywhere. Enforcement sits
+	// on the READ side deliberately: a write-side check would only bind rows
+	// written after it, while the queries decide what every existing row
+	// means, every time they run.
+	//
+	// Gated org_membership, like the UserRole.org_id column it describes.
+	OrgScoped bool `protobuf:"varint,11,opt,name=org_scoped,json=orgScoped,proto3" json:"org_scoped,omitempty"`
 	// deleted_at — when DeleteRole retired the role. NULL = live.
 	DeletedAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
 	// ended_key — ” while the row is live, the row's own id once it has ended
@@ -1786,7 +1708,7 @@ type Role struct {
 
 func (x *Role) Reset() {
 	*x = Role{}
-	mi := &file_types_models_proto_msgTypes[5]
+	mi := &file_types_models_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1798,7 +1720,7 @@ func (x *Role) String() string {
 func (*Role) ProtoMessage() {}
 
 func (x *Role) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[5]
+	mi := &file_types_models_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1811,7 +1733,7 @@ func (x *Role) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Role.ProtoReflect.Descriptor instead.
 func (*Role) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{5}
+	return file_types_models_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Role) GetId() string {
@@ -1884,6 +1806,13 @@ func (x *Role) GetDisplayName() string {
 	return ""
 }
 
+func (x *Role) GetOrgScoped() bool {
+	if x != nil {
+		return x.OrgScoped
+	}
+	return false
+}
+
 func (x *Role) GetDeletedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.DeletedAt
@@ -1945,7 +1874,7 @@ type RolePermission struct {
 
 func (x *RolePermission) Reset() {
 	*x = RolePermission{}
-	mi := &file_types_models_proto_msgTypes[6]
+	mi := &file_types_models_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1957,7 +1886,7 @@ func (x *RolePermission) String() string {
 func (*RolePermission) ProtoMessage() {}
 
 func (x *RolePermission) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[6]
+	mi := &file_types_models_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1970,7 +1899,7 @@ func (x *RolePermission) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RolePermission.ProtoReflect.Descriptor instead.
 func (*RolePermission) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{6}
+	return file_types_models_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RolePermission) GetId() string {
@@ -2043,7 +1972,7 @@ type RolePermissionChange struct {
 
 func (x *RolePermissionChange) Reset() {
 	*x = RolePermissionChange{}
-	mi := &file_types_models_proto_msgTypes[7]
+	mi := &file_types_models_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2055,7 +1984,7 @@ func (x *RolePermissionChange) String() string {
 func (*RolePermissionChange) ProtoMessage() {}
 
 func (x *RolePermissionChange) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[7]
+	mi := &file_types_models_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2068,7 +1997,7 @@ func (x *RolePermissionChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RolePermissionChange.ProtoReflect.Descriptor instead.
 func (*RolePermissionChange) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{7}
+	return file_types_models_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RolePermissionChange) GetId() string {
@@ -2149,6 +2078,39 @@ type UserRole struct {
 	UserId    string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	RoleId    string                 `protobuf:"bytes,3,opt,name=role_id,json=roleId,proto3" json:"role_id,omitempty"`
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// org_id — WHICH organization this grant applies in.
+	//
+	//	NULL — realm-wide. The role counts in every org context (staff /
+	//	       admin roles, and every role in a project that predates
+	//	       `org_membership`). This is what an unset column means, so
+	//	       existing rows keep behaving exactly as they do today.
+	//	set  — the grant exists only while that org is the request's
+	//	       ACTIVE org (Authenticate resolves it from the validated
+	//	       membership, never from client input).
+	//
+	// Two rows differing only in `role_id` for the same (user, org) is
+	// the ROLE-COMPOSITION shape — "accountant + worker" for someone who
+	// does both. It falls out of the M2M rather than needing a feature.
+	//
+	// Field-gated: dropped entirely when `org_membership` is off, exactly
+	// like `User.tenant_id` under `tenant_scope` — which is why the index
+	// entries above are gated in step with it.
+	//
+	// The gate is why NO permission-resolving query mentions this column.
+	// Putting `(ur.org_id IS NULL OR ur.org_id = :org_id)` into their DQL
+	// would need a second variant of each, and `api_token` already owns a
+	// realm-aware variant of the same queries — the two features would
+	// then require a THIRD variant for the build where both are on, owned
+	// and stageable by neither. Instead the queries project `role_id` and
+	// the org narrowing happens in Go against the role ids
+	// `GetUserOrgRoleIds` reports as applicable (see handlers/
+	// org_membership.go). One gated query, no matrix, and the realm axis
+	// keeps its own queries untouched.
+	//
+	// `tenant_scope` deliberately gets nothing here: it is 1:1
+	// user↔tenant, so a per-user role is ALREADY a per-tenant role there
+	// and an org axis would be a second name for the same thing.
+	OrgId string `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	// revoked_at / revoked_by — the grant was revoked, and by whom (NULL when
 	// the caller named nobody: an admin binding, a cascade, project code).
 	RevokedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
@@ -2161,7 +2123,7 @@ type UserRole struct {
 
 func (x *UserRole) Reset() {
 	*x = UserRole{}
-	mi := &file_types_models_proto_msgTypes[8]
+	mi := &file_types_models_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2173,7 +2135,7 @@ func (x *UserRole) String() string {
 func (*UserRole) ProtoMessage() {}
 
 func (x *UserRole) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[8]
+	mi := &file_types_models_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2186,7 +2148,7 @@ func (x *UserRole) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserRole.ProtoReflect.Descriptor instead.
 func (*UserRole) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{8}
+	return file_types_models_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *UserRole) GetId() string {
@@ -2215,6 +2177,13 @@ func (x *UserRole) GetCreatedAt() *timestamppb.Timestamp {
 		return x.CreatedAt
 	}
 	return nil
+}
+
+func (x *UserRole) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
 }
 
 func (x *UserRole) GetRevokedAt() *timestamppb.Timestamp {
@@ -2257,7 +2226,7 @@ type TokenPermission struct {
 
 func (x *TokenPermission) Reset() {
 	*x = TokenPermission{}
-	mi := &file_types_models_proto_msgTypes[9]
+	mi := &file_types_models_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2269,7 +2238,7 @@ func (x *TokenPermission) String() string {
 func (*TokenPermission) ProtoMessage() {}
 
 func (x *TokenPermission) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[9]
+	mi := &file_types_models_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2282,7 +2251,7 @@ func (x *TokenPermission) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenPermission.ProtoReflect.Descriptor instead.
 func (*TokenPermission) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{9}
+	return file_types_models_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *TokenPermission) GetId() string {
@@ -2336,7 +2305,7 @@ type BootstrapClaim struct {
 
 func (x *BootstrapClaim) Reset() {
 	*x = BootstrapClaim{}
-	mi := &file_types_models_proto_msgTypes[10]
+	mi := &file_types_models_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2348,7 +2317,7 @@ func (x *BootstrapClaim) String() string {
 func (*BootstrapClaim) ProtoMessage() {}
 
 func (x *BootstrapClaim) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[10]
+	mi := &file_types_models_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2361,7 +2330,7 @@ func (x *BootstrapClaim) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapClaim.ProtoReflect.Descriptor instead.
 func (*BootstrapClaim) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{10}
+	return file_types_models_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *BootstrapClaim) GetSlot() string {
@@ -2422,7 +2391,7 @@ type OAuthClient struct {
 
 func (x *OAuthClient) Reset() {
 	*x = OAuthClient{}
-	mi := &file_types_models_proto_msgTypes[11]
+	mi := &file_types_models_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2434,7 +2403,7 @@ func (x *OAuthClient) String() string {
 func (*OAuthClient) ProtoMessage() {}
 
 func (x *OAuthClient) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[11]
+	mi := &file_types_models_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2447,7 +2416,7 @@ func (x *OAuthClient) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OAuthClient.ProtoReflect.Descriptor instead.
 func (*OAuthClient) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{11}
+	return file_types_models_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *OAuthClient) GetId() string {
@@ -2590,7 +2559,7 @@ type OAuthAuthorization struct {
 
 func (x *OAuthAuthorization) Reset() {
 	*x = OAuthAuthorization{}
-	mi := &file_types_models_proto_msgTypes[12]
+	mi := &file_types_models_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2602,7 +2571,7 @@ func (x *OAuthAuthorization) String() string {
 func (*OAuthAuthorization) ProtoMessage() {}
 
 func (x *OAuthAuthorization) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[12]
+	mi := &file_types_models_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2615,7 +2584,7 @@ func (x *OAuthAuthorization) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OAuthAuthorization.ProtoReflect.Descriptor instead.
 func (*OAuthAuthorization) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{12}
+	return file_types_models_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *OAuthAuthorization) GetId() string {
@@ -2807,7 +2776,7 @@ type OAuthGrant struct {
 
 func (x *OAuthGrant) Reset() {
 	*x = OAuthGrant{}
-	mi := &file_types_models_proto_msgTypes[13]
+	mi := &file_types_models_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2819,7 +2788,7 @@ func (x *OAuthGrant) String() string {
 func (*OAuthGrant) ProtoMessage() {}
 
 func (x *OAuthGrant) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[13]
+	mi := &file_types_models_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2832,7 +2801,7 @@ func (x *OAuthGrant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OAuthGrant.ProtoReflect.Descriptor instead.
 func (*OAuthGrant) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{13}
+	return file_types_models_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *OAuthGrant) GetId() string {
@@ -2950,7 +2919,7 @@ type OAuthRefreshToken struct {
 
 func (x *OAuthRefreshToken) Reset() {
 	*x = OAuthRefreshToken{}
-	mi := &file_types_models_proto_msgTypes[14]
+	mi := &file_types_models_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2962,7 +2931,7 @@ func (x *OAuthRefreshToken) String() string {
 func (*OAuthRefreshToken) ProtoMessage() {}
 
 func (x *OAuthRefreshToken) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[14]
+	mi := &file_types_models_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2975,7 +2944,7 @@ func (x *OAuthRefreshToken) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OAuthRefreshToken.ProtoReflect.Descriptor instead.
 func (*OAuthRefreshToken) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{14}
+	return file_types_models_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *OAuthRefreshToken) GetId() string {
@@ -3020,29 +2989,484 @@ func (x *OAuthRefreshToken) GetUsedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// Organization is a GitHub-style org — a membership boundary an identity
+// can belong to MANY of (a private personal org + a company org + …). The
+// `org_membership` feature's generalization of single-tenant tenant_scope:
+// where Tenant is 1:1 with a User, an Organization is M2M via OrgMembership.
+//
+// An organization is never deleted. DeleteOrganization stamps deleted_at,
+// removes every membership and revokes every grant scoped to it, and releases
+// its slug (ended_key, see Role.ended_key) so a new organization may take it.
+// Every organization reader reads live organizations only, so a deleted one is
+// invisible and cannot be selected.
+//
+// An organization has no owner. Who administers it is decided by roles alone:
+// the person who creates one is made its administrator by an org-scoped role
+// granted on their membership, like anybody they later promote.
+type Organization struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Slug  string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	Name  string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	// kind groups the org for the CLI's picker: "private" (personal) or
+	// "company". Free-form (not an enum) so a project can add its own kinds.
+	Kind      string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// deleted_at — when DeleteOrganization retired it. NULL = live.
+	DeletedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
+	// ended_key — ” while live, the row's own id once deleted (Role.ended_key).
+	EndedKey      string `protobuf:"bytes,8,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Organization) Reset() {
+	*x = Organization{}
+	mi := &file_types_models_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Organization) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Organization) ProtoMessage() {}
+
+func (x *Organization) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Organization.ProtoReflect.Descriptor instead.
+func (*Organization) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *Organization) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Organization) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *Organization) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Organization) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *Organization) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *Organization) GetDeletedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DeletedAt
+	}
+	return nil
+}
+
+func (x *Organization) GetEndedKey() string {
+	if x != nil {
+		return x.EndedKey
+	}
+	return ""
+}
+
+// OrgMembership is the M2M link between a User and an Organization, with
+// the user's role in that org. Unique per (user_id, org_id). Mirrors the
+// OAuthIdentity user↔external link shape. The plugin stamps the active
+// org's id into scopes[org_id] (Authenticate decorator) after validating
+// the principal's membership — so per-org data isolation reuses the
+// existing (w17.db.scope) machinery with no client-trusted org input.
+//
+// A membership is never deleted. Removing one stamps removed_at (and
+// removed_by) and moves ended_key to the row's own id, so the person can be
+// added again — a new row, by the same INSERT — while the removed row stays as
+// the record (see Role.ended_key). Every membership reader reads live rows
+// only.
+type OrgMembership struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	OrgId  string                 `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// role: a label (admin | member, a Role.name). Free-form CHAR — project
+	// policy owns the vocabulary; the plugin only passes it through, and it
+	// grants nothing: authority comes from the roles granted on the membership. An accepted invitation and
+	// the admin's role edit write a Role.name here, so it is as wide as one.
+	Role      string                 `protobuf:"bytes,4,opt,name=role,proto3" json:"role,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// removed_at / removed_by — the membership was removed, and by whom (NULL
+	// when nobody is known: an admin binding, an organization's deletion).
+	RemovedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	RemovedBy string                 `protobuf:"bytes,7,opt,name=removed_by,json=removedBy,proto3" json:"removed_by,omitempty"`
+	// ended_key — ” while live, the row's own id once removed (Role.ended_key).
+	EndedKey      string `protobuf:"bytes,8,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrgMembership) Reset() {
+	*x = OrgMembership{}
+	mi := &file_types_models_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrgMembership) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrgMembership) ProtoMessage() {}
+
+func (x *OrgMembership) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrgMembership.ProtoReflect.Descriptor instead.
+func (*OrgMembership) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *OrgMembership) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OrgMembership) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *OrgMembership) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *OrgMembership) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *OrgMembership) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *OrgMembership) GetRemovedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RemovedAt
+	}
+	return nil
+}
+
+func (x *OrgMembership) GetRemovedBy() string {
+	if x != nil {
+		return x.RemovedBy
+	}
+	return ""
+}
+
+func (x *OrgMembership) GetEndedKey() string {
+	if x != nil {
+		return x.EndedKey
+	}
+	return ""
+}
+
+// OrgHost — a host (white-label or co-brand) bound to the organization it
+// serves (org_hosts). An audience that takes the tenant from the host
+// (w17/audience.proto TENANT_SOURCE_HOST) acts in this organization on a
+// request arriving on it. One live binding per host; unbinding ends the row
+// (ended_at, ended_key = id), and nothing is deleted.
+type OrgHost struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// host — lower-case, no port and no trailing dot: as the gateway reports it.
+	Host    string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	OrgId   string                 `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	BoundBy string                 `protobuf:"bytes,4,opt,name=bound_by,json=boundBy,proto3" json:"bound_by,omitempty"`
+	BoundAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=bound_at,json=boundAt,proto3" json:"bound_at,omitempty"`
+	EndedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
+	EndedBy string                 `protobuf:"bytes,7,opt,name=ended_by,json=endedBy,proto3" json:"ended_by,omitempty"`
+	// ended_key — ” while live, the row's own id once unbound (Role.ended_key).
+	EndedKey      string `protobuf:"bytes,8,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrgHost) Reset() {
+	*x = OrgHost{}
+	mi := &file_types_models_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrgHost) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrgHost) ProtoMessage() {}
+
+func (x *OrgHost) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrgHost.ProtoReflect.Descriptor instead.
+func (*OrgHost) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *OrgHost) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OrgHost) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *OrgHost) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *OrgHost) GetBoundBy() string {
+	if x != nil {
+		return x.BoundBy
+	}
+	return ""
+}
+
+func (x *OrgHost) GetBoundAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.BoundAt
+	}
+	return nil
+}
+
+func (x *OrgHost) GetEndedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndedAt
+	}
+	return nil
+}
+
+func (x *OrgHost) GetEndedBy() string {
+	if x != nil {
+		return x.EndedBy
+	}
+	return ""
+}
+
+func (x *OrgHost) GetEndedKey() string {
+	if x != nil {
+		return x.EndedKey
+	}
+	return ""
+}
+
+// OrgSignUpPolicy — whether an organization takes people who register
+// without an invitation, per kind of membership, and the role they get
+// (org_signup). A registration arriving on a host bound to the organization
+// (org_hosts), through an audience of that kind, becomes a member at once
+// when the policy is open; a closed one (or none, under invite_only) needs
+// an invitation. One live row per (organization, kind); replacing or
+// clearing it ends the row, and nothing is deleted.
+type OrgSignUpPolicy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	OrgId string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// kind — the membership kind it is for (” without membership_kinds).
+	Kind string `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	// open — a registration of this kind joins without an invitation.
+	Open bool `protobuf:"varint,4,opt,name=open,proto3" json:"open,omitempty"`
+	// role — the org-scoped role an open registration is given.
+	Role    string                 `protobuf:"bytes,5,opt,name=role,proto3" json:"role,omitempty"`
+	SetBy   string                 `protobuf:"bytes,6,opt,name=set_by,json=setBy,proto3" json:"set_by,omitempty"`
+	SetAt   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=set_at,json=setAt,proto3" json:"set_at,omitempty"`
+	EndedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
+	EndedBy string                 `protobuf:"bytes,9,opt,name=ended_by,json=endedBy,proto3" json:"ended_by,omitempty"`
+	// ended_key — ” while live, the row's own id once replaced or cleared.
+	EndedKey      string `protobuf:"bytes,10,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrgSignUpPolicy) Reset() {
+	*x = OrgSignUpPolicy{}
+	mi := &file_types_models_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrgSignUpPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrgSignUpPolicy) ProtoMessage() {}
+
+func (x *OrgSignUpPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrgSignUpPolicy.ProtoReflect.Descriptor instead.
+func (*OrgSignUpPolicy) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *OrgSignUpPolicy) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OrgSignUpPolicy) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *OrgSignUpPolicy) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *OrgSignUpPolicy) GetOpen() bool {
+	if x != nil {
+		return x.Open
+	}
+	return false
+}
+
+func (x *OrgSignUpPolicy) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *OrgSignUpPolicy) GetSetBy() string {
+	if x != nil {
+		return x.SetBy
+	}
+	return ""
+}
+
+func (x *OrgSignUpPolicy) GetSetAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SetAt
+	}
+	return nil
+}
+
+func (x *OrgSignUpPolicy) GetEndedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndedAt
+	}
+	return nil
+}
+
+func (x *OrgSignUpPolicy) GetEndedBy() string {
+	if x != nil {
+		return x.EndedBy
+	}
+	return ""
+}
+
+func (x *OrgSignUpPolicy) GetEndedKey() string {
+	if x != nil {
+		return x.EndedKey
+	}
+	return ""
+}
+
 var File_types_models_proto protoreflect.FileDescriptor
 
 const file_types_models_proto_rawDesc = "" +
 	"\n" +
-	"\x12types/models.proto\x12\x10w17.contrib.auth\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11w17/contrib.proto\x1a\fw17/db.proto\x1a\x0fw17/field.proto\"\xdf\x03\n" +
+	"\x12types/models.proto\x12\x10w17.contrib.auth\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11w17/contrib.proto\x1a\fw17/db.proto\x1a\x0fw17/field.proto\"\xa4\x03\n" +
 	"\x04User\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12!\n" +
 	"\x05email\x18\x02 \x01(\tB\v\xca\xf3\x18\a\b\x048\x01@\xc0\x02R\x05email\x12+\n" +
 	"\rpassword_hash\x18\x03 \x01(\tB\x06\xca\xf3\x18\x02\bBR\fpasswordHash\x12F\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x129\n" +
-	"\ttenant_id\x18\x05 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01\x92\xf5\x18\ftenant_scopeR\btenantId\x12[\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12[\n" +
 	"\x17device_trust_revoked_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x14deviceTrustRevokedAt\x123\n" +
 	"\x10sign_in_failures\x18\x0f \x01(\x03B\t\xca\xf3\x18\x05\b\f\xa8\x01\x00R\x0esignInFailures\x12O\n" +
-	"\x11sign_in_window_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x0esignInWindowAt:\x04\xc2\xf3\x18\x00\"\xd0\x01\n" +
-	"\x06Tenant\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\x1e\n" +
-	"\x04name\x18\x02 \x01(\tB\n" +
-	"\xca\xf3\x18\x06\b\x068\x01@dR\x04name\x12+\n" +
-	"\x06domain\x18\x04 \x01(\tB\x13\xca\xf3\x18\t\b\x01(\x018\x01@\xfd\x01\xd2\xf3\x18\x02\b\x01R\x06domain\x12F\n" +
-	"\n" +
-	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\ftenant_scope\"\xc6\b\n" +
+	"\x11sign_in_window_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x0esignInWindowAt:\x04\xc2\xf3\x18\x00\"\xc6\b\n" +
 	"\tUserToken\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\"\n" +
 	"\x05token\x18\x02 \x01(\tB\f\xca\xf3\x18\b\bC(\x018\x01@@R\x05token\x12%\n" +
@@ -3129,7 +3553,7 @@ const file_types_models_proto_rawDesc = "" +
 	"\aaddress\n" +
 	"\f\n" +
 	"\n" +
-	"created_at\"\x97\x05\n" +
+	"created_at\"\xd1\x05\n" +
 	"\x04Role\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\x1c\n" +
 	"\x04name\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x06@dR\x04name\x12-\n" +
@@ -3145,7 +3569,9 @@ const file_types_models_proto_rawDesc = "" +
 	"preset_key\x18\t \x01(\tB\f\xca\xf3\x18\b\b\x06(\x018\x01@dR\tpresetKey\x12-\n" +
 	"\fdisplay_name\x18\n" +
 	" \x01(\tB\n" +
-	"\xca\xf3\x18\x06\b\x010\x01@dR\vdisplayName\x12C\n" +
+	"\xca\xf3\x18\x06\b\x010\x01@dR\vdisplayName\x128\n" +
+	"\n" +
+	"org_scoped\x18\v \x01(\bB\x19\xca\xf3\x18\x03\xb8\x01\x1f\x92\xf5\x18\x0eorg_membershipR\torgScoped\x12C\n" +
 	"\n" +
 	"deleted_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\tdeletedAt\x12*\n" +
 	"\tended_key\x18\r \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@$\xa2\x01\x00R\bendedKey:%\xc2\xf3\x18\x19\x12\x17\n" +
@@ -3177,24 +3603,33 @@ const file_types_models_proto_rawDesc = "" +
 	"\n" +
 	"changed_by\x18\x05 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\tchangedBy\x12F\n" +
 	"\n" +
-	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\f\xc2\xf3\x18\x00\xfa\xf4\x18\x04rbac\"\x9c\x03\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\f\xc2\xf3\x18\x00\xfa\xf4\x18\x04rbac\"\xbc\x04\n" +
 	"\bUserRole\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12%\n" +
 	"\auser_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06userId\x12%\n" +
 	"\arole_id\x18\x03 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06roleId\x12F\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12C\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x127\n" +
+	"\x06org_id\x18\x05 \x01(\tB \xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x02\b\x01\x92\xf5\x18\x0eorg_membershipR\x05orgId\x12C\n" +
 	"\n" +
 	"revoked_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\trevokedAt\x12'\n" +
 	"\n" +
 	"revoked_by\x18\a \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\trevokedBy\x12*\n" +
-	"\tended_key\x18\b \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@$\xa2\x01\x00R\bendedKey:C\xc2\xf3\x187\x125\n" +
+	"\tended_key\x18\b \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@$\xa2\x01\x00R\bendedKey:\xa9\x01\xc2\xf3\x18\x9c\x01\x12E\n" +
 	"\t\n" +
 	"\auser_id\n" +
 	"\t\n" +
 	"\arole_id\n" +
 	"\v\n" +
-	"\tended_key\x10\x01R\x0eorg_membership\xfa\xf4\x18\x04rbac\"\x89\x02\n" +
+	"\tended_key\x10\x01B\x0eorg_id IS NULLJ\x0eorg_membership\x12S\n" +
+	"\t\n" +
+	"\auser_id\n" +
+	"\t\n" +
+	"\arole_id\n" +
+	"\b\n" +
+	"\x06org_id\n" +
+	"\v\n" +
+	"\tended_key\x10\x01B\x12org_id IS NOT NULLJ\x0eorg_membership\xfa\xf4\x18\x04rbac\"\x89\x02\n" +
 	"\x0fTokenPermission\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12'\n" +
 	"\btoken_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\atokenId\x124\n" +
@@ -3308,7 +3743,73 @@ const file_types_models_proto_rawDesc = "" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12A\n" +
 	"\n" +
 	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\texpiresAt\x12=\n" +
-	"\aused_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x06usedAt:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\foauth_server*g\n" +
+	"\aused_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x06usedAt:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\foauth_server\"\x82\x03\n" +
+	"\fOrganization\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\x1c\n" +
+	"\x04slug\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x06@@R\x04slug\x12\x1d\n" +
+	"\x04name\x18\x03 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x01R\x04name\x12\x1e\n" +
+	"\x04kind\x18\x04 \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x010\x01@ R\x04kind\x12F\n" +
+	"\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12C\n" +
+	"\n" +
+	"deleted_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\tdeletedAt\x12*\n" +
+	"\tended_key\x18\b \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@$\xa2\x01\x00R\bendedKey:/\xc2\xf3\x18\x19\x12\x17\n" +
+	"\x06\n" +
+	"\x04slug\n" +
+	"\v\n" +
+	"\tended_key\x10\x01\xfa\xf4\x18\x0eorg_membershipJ\x04\b\x06\x10\aR\bowner_id\"\xb6\x03\n" +
+	"\rOrgMembership\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12%\n" +
+	"\auser_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06userId\x12#\n" +
+	"\x06org_id\x18\x03 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x05orgId\x12\x1c\n" +
+	"\x04role\x18\x04 \x01(\tB\b\xca\xf3\x18\x04\b\x01@dR\x04role\x12F\n" +
+	"\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12C\n" +
+	"\n" +
+	"removed_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\tremovedAt\x12'\n" +
+	"\n" +
+	"removed_by\x18\a \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\tremovedBy\x12*\n" +
+	"\tended_key\x18\b \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@$\xa2\x01\x00R\bendedKey:<\xc2\xf3\x18&\x12$\n" +
+	"\t\n" +
+	"\auser_id\n" +
+	"\b\n" +
+	"\x06org_id\n" +
+	"\v\n" +
+	"\tended_key\x10\x01\xfa\xf4\x18\x0eorg_membership\"\x91\x03\n" +
+	"\aOrgHost\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\x1d\n" +
+	"\x04host\x18\x02 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\xfd\x01R\x04host\x12#\n" +
+	"\x06org_id\x18\x03 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x05orgId\x12#\n" +
+	"\bbound_by\x18\x04 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\aboundBy\x12B\n" +
+	"\bbound_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\aboundAt\x12?\n" +
+	"\bended_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\aendedAt\x12#\n" +
+	"\bended_by\x18\a \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\aendedBy\x12*\n" +
+	"\tended_key\x18\b \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@$\xa2\x01\x00R\bendedKey:*\xc2\xf3\x18\x19\x12\x17\n" +
+	"\x06\n" +
+	"\x04host\n" +
+	"\v\n" +
+	"\tended_key\x10\x01\xfa\xf4\x18\torg_hosts\"\xd8\x03\n" +
+	"\x0fOrgSignUpPolicy\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12#\n" +
+	"\x06org_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x05orgId\x12!\n" +
+	"\x04kind\x18\x03 \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@ \xa2\x01\x00R\x04kind\x12\x12\n" +
+	"\x04open\x18\x04 \x01(\bR\x04open\x12\"\n" +
+	"\x04role\x18\x05 \x01(\tB\x0e\xca\xf3\x18\n" +
+	"\b\x010\x01@\x80\x01\xa2\x01\x00R\x04role\x12\x1f\n" +
+	"\x06set_by\x18\x06 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05setBy\x12>\n" +
+	"\x06set_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\x05setAt\x12?\n" +
+	"\bended_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\aendedAt\x12#\n" +
+	"\bended_by\x18\t \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\aendedBy\x12*\n" +
+	"\tended_key\x18\n" +
+	" \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@$\xa2\x01\x00R\bendedKey:5\xc2\xf3\x18#\x12!\n" +
+	"\b\n" +
+	"\x06org_id\n" +
+	"\x06\n" +
+	"\x04kind\n" +
+	"\v\n" +
+	"\tended_key\x10\x01\xfa\xf4\x18\n" +
+	"org_signup*g\n" +
 	"\tTokenType\x12\x1a\n" +
 	"\x16TOKEN_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12TOKEN_TYPE_SESSION\x10\x01\x12\x12\n" +
@@ -3404,7 +3905,7 @@ func file_types_models_proto_rawDescGZIP() []byte {
 }
 
 var file_types_models_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_types_models_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_types_models_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_types_models_proto_goTypes = []any{
 	(TokenType)(0),                // 0: w17.contrib.auth.TokenType
 	(RevokeReason)(0),             // 1: w17.contrib.auth.RevokeReason
@@ -3417,77 +3918,87 @@ var file_types_models_proto_goTypes = []any{
 	(OAuthGrantKind)(0),           // 8: w17.contrib.auth.OAuthGrantKind
 	(OAuthDecision)(0),            // 9: w17.contrib.auth.OAuthDecision
 	(*User)(nil),                  // 10: w17.contrib.auth.User
-	(*Tenant)(nil),                // 11: w17.contrib.auth.Tenant
-	(*UserToken)(nil),             // 12: w17.contrib.auth.UserToken
-	(*Device)(nil),                // 13: w17.contrib.auth.Device
-	(*SignInEvent)(nil),           // 14: w17.contrib.auth.SignInEvent
-	(*Role)(nil),                  // 15: w17.contrib.auth.Role
-	(*RolePermission)(nil),        // 16: w17.contrib.auth.RolePermission
-	(*RolePermissionChange)(nil),  // 17: w17.contrib.auth.RolePermissionChange
-	(*UserRole)(nil),              // 18: w17.contrib.auth.UserRole
-	(*TokenPermission)(nil),       // 19: w17.contrib.auth.TokenPermission
-	(*BootstrapClaim)(nil),        // 20: w17.contrib.auth.BootstrapClaim
-	(*OAuthClient)(nil),           // 21: w17.contrib.auth.OAuthClient
-	(*OAuthAuthorization)(nil),    // 22: w17.contrib.auth.OAuthAuthorization
-	(*OAuthGrant)(nil),            // 23: w17.contrib.auth.OAuthGrant
-	(*OAuthRefreshToken)(nil),     // 24: w17.contrib.auth.OAuthRefreshToken
-	(*timestamppb.Timestamp)(nil), // 25: google.protobuf.Timestamp
+	(*UserToken)(nil),             // 11: w17.contrib.auth.UserToken
+	(*Device)(nil),                // 12: w17.contrib.auth.Device
+	(*SignInEvent)(nil),           // 13: w17.contrib.auth.SignInEvent
+	(*Role)(nil),                  // 14: w17.contrib.auth.Role
+	(*RolePermission)(nil),        // 15: w17.contrib.auth.RolePermission
+	(*RolePermissionChange)(nil),  // 16: w17.contrib.auth.RolePermissionChange
+	(*UserRole)(nil),              // 17: w17.contrib.auth.UserRole
+	(*TokenPermission)(nil),       // 18: w17.contrib.auth.TokenPermission
+	(*BootstrapClaim)(nil),        // 19: w17.contrib.auth.BootstrapClaim
+	(*OAuthClient)(nil),           // 20: w17.contrib.auth.OAuthClient
+	(*OAuthAuthorization)(nil),    // 21: w17.contrib.auth.OAuthAuthorization
+	(*OAuthGrant)(nil),            // 22: w17.contrib.auth.OAuthGrant
+	(*OAuthRefreshToken)(nil),     // 23: w17.contrib.auth.OAuthRefreshToken
+	(*Organization)(nil),          // 24: w17.contrib.auth.Organization
+	(*OrgMembership)(nil),         // 25: w17.contrib.auth.OrgMembership
+	(*OrgHost)(nil),               // 26: w17.contrib.auth.OrgHost
+	(*OrgSignUpPolicy)(nil),       // 27: w17.contrib.auth.OrgSignUpPolicy
+	(*timestamppb.Timestamp)(nil), // 28: google.protobuf.Timestamp
 }
 var file_types_models_proto_depIdxs = []int32{
-	25, // 0: w17.contrib.auth.User.created_at:type_name -> google.protobuf.Timestamp
-	25, // 1: w17.contrib.auth.User.device_trust_revoked_at:type_name -> google.protobuf.Timestamp
-	25, // 2: w17.contrib.auth.User.sign_in_window_at:type_name -> google.protobuf.Timestamp
-	25, // 3: w17.contrib.auth.Tenant.created_at:type_name -> google.protobuf.Timestamp
-	25, // 4: w17.contrib.auth.UserToken.created_at:type_name -> google.protobuf.Timestamp
-	25, // 5: w17.contrib.auth.UserToken.expires_at:type_name -> google.protobuf.Timestamp
-	0,  // 6: w17.contrib.auth.UserToken.token_type:type_name -> w17.contrib.auth.TokenType
-	25, // 7: w17.contrib.auth.UserToken.last_used_at:type_name -> google.protobuf.Timestamp
-	25, // 8: w17.contrib.auth.UserToken.revoked_at:type_name -> google.protobuf.Timestamp
-	1,  // 9: w17.contrib.auth.UserToken.revoke_reason:type_name -> w17.contrib.auth.RevokeReason
-	25, // 10: w17.contrib.auth.Device.trusted_at:type_name -> google.protobuf.Timestamp
-	25, // 11: w17.contrib.auth.Device.last_seen_at:type_name -> google.protobuf.Timestamp
-	25, // 12: w17.contrib.auth.Device.created_at:type_name -> google.protobuf.Timestamp
-	25, // 13: w17.contrib.auth.Device.revoked_at:type_name -> google.protobuf.Timestamp
-	25, // 14: w17.contrib.auth.Device.sign_in_window_at:type_name -> google.protobuf.Timestamp
-	25, // 15: w17.contrib.auth.SignInEvent.created_at:type_name -> google.protobuf.Timestamp
-	4,  // 16: w17.contrib.auth.SignInEvent.method:type_name -> w17.contrib.auth.SignInMethod
-	5,  // 17: w17.contrib.auth.SignInEvent.outcome:type_name -> w17.contrib.auth.SignInOutcome
-	25, // 18: w17.contrib.auth.Role.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 19: w17.contrib.auth.Role.token_type:type_name -> w17.contrib.auth.TokenType
-	25, // 20: w17.contrib.auth.Role.deleted_at:type_name -> google.protobuf.Timestamp
-	25, // 21: w17.contrib.auth.RolePermission.created_at:type_name -> google.protobuf.Timestamp
-	25, // 22: w17.contrib.auth.RolePermission.removed_at:type_name -> google.protobuf.Timestamp
-	6,  // 23: w17.contrib.auth.RolePermissionChange.kind:type_name -> w17.contrib.auth.RolePermissionChangeKind
-	25, // 24: w17.contrib.auth.RolePermissionChange.created_at:type_name -> google.protobuf.Timestamp
-	25, // 25: w17.contrib.auth.UserRole.created_at:type_name -> google.protobuf.Timestamp
-	25, // 26: w17.contrib.auth.UserRole.revoked_at:type_name -> google.protobuf.Timestamp
-	25, // 27: w17.contrib.auth.TokenPermission.created_at:type_name -> google.protobuf.Timestamp
-	25, // 28: w17.contrib.auth.BootstrapClaim.created_at:type_name -> google.protobuf.Timestamp
-	7,  // 29: w17.contrib.auth.OAuthClient.kind:type_name -> w17.contrib.auth.OAuthClientKind
-	25, // 30: w17.contrib.auth.OAuthClient.created_at:type_name -> google.protobuf.Timestamp
-	25, // 31: w17.contrib.auth.OAuthClient.metadata_fetched_at:type_name -> google.protobuf.Timestamp
-	25, // 32: w17.contrib.auth.OAuthClient.disabled_at:type_name -> google.protobuf.Timestamp
-	8,  // 33: w17.contrib.auth.OAuthAuthorization.kind:type_name -> w17.contrib.auth.OAuthGrantKind
-	25, // 34: w17.contrib.auth.OAuthAuthorization.created_at:type_name -> google.protobuf.Timestamp
-	25, // 35: w17.contrib.auth.OAuthAuthorization.expires_at:type_name -> google.protobuf.Timestamp
-	25, // 36: w17.contrib.auth.OAuthAuthorization.decided_at:type_name -> google.protobuf.Timestamp
-	9,  // 37: w17.contrib.auth.OAuthAuthorization.decision:type_name -> w17.contrib.auth.OAuthDecision
-	25, // 38: w17.contrib.auth.OAuthAuthorization.session_expires_at:type_name -> google.protobuf.Timestamp
-	25, // 39: w17.contrib.auth.OAuthAuthorization.code_expires_at:type_name -> google.protobuf.Timestamp
-	25, // 40: w17.contrib.auth.OAuthAuthorization.code_consumed_at:type_name -> google.protobuf.Timestamp
-	25, // 41: w17.contrib.auth.OAuthGrant.created_at:type_name -> google.protobuf.Timestamp
-	25, // 42: w17.contrib.auth.OAuthGrant.expires_at:type_name -> google.protobuf.Timestamp
-	25, // 43: w17.contrib.auth.OAuthGrant.last_used_at:type_name -> google.protobuf.Timestamp
-	25, // 44: w17.contrib.auth.OAuthGrant.revoked_at:type_name -> google.protobuf.Timestamp
-	1,  // 45: w17.contrib.auth.OAuthGrant.revoke_reason:type_name -> w17.contrib.auth.RevokeReason
-	25, // 46: w17.contrib.auth.OAuthRefreshToken.created_at:type_name -> google.protobuf.Timestamp
-	25, // 47: w17.contrib.auth.OAuthRefreshToken.expires_at:type_name -> google.protobuf.Timestamp
-	25, // 48: w17.contrib.auth.OAuthRefreshToken.used_at:type_name -> google.protobuf.Timestamp
-	49, // [49:49] is the sub-list for method output_type
-	49, // [49:49] is the sub-list for method input_type
-	49, // [49:49] is the sub-list for extension type_name
-	49, // [49:49] is the sub-list for extension extendee
-	0,  // [0:49] is the sub-list for field type_name
+	28, // 0: w17.contrib.auth.User.created_at:type_name -> google.protobuf.Timestamp
+	28, // 1: w17.contrib.auth.User.device_trust_revoked_at:type_name -> google.protobuf.Timestamp
+	28, // 2: w17.contrib.auth.User.sign_in_window_at:type_name -> google.protobuf.Timestamp
+	28, // 3: w17.contrib.auth.UserToken.created_at:type_name -> google.protobuf.Timestamp
+	28, // 4: w17.contrib.auth.UserToken.expires_at:type_name -> google.protobuf.Timestamp
+	0,  // 5: w17.contrib.auth.UserToken.token_type:type_name -> w17.contrib.auth.TokenType
+	28, // 6: w17.contrib.auth.UserToken.last_used_at:type_name -> google.protobuf.Timestamp
+	28, // 7: w17.contrib.auth.UserToken.revoked_at:type_name -> google.protobuf.Timestamp
+	1,  // 8: w17.contrib.auth.UserToken.revoke_reason:type_name -> w17.contrib.auth.RevokeReason
+	28, // 9: w17.contrib.auth.Device.trusted_at:type_name -> google.protobuf.Timestamp
+	28, // 10: w17.contrib.auth.Device.last_seen_at:type_name -> google.protobuf.Timestamp
+	28, // 11: w17.contrib.auth.Device.created_at:type_name -> google.protobuf.Timestamp
+	28, // 12: w17.contrib.auth.Device.revoked_at:type_name -> google.protobuf.Timestamp
+	28, // 13: w17.contrib.auth.Device.sign_in_window_at:type_name -> google.protobuf.Timestamp
+	28, // 14: w17.contrib.auth.SignInEvent.created_at:type_name -> google.protobuf.Timestamp
+	4,  // 15: w17.contrib.auth.SignInEvent.method:type_name -> w17.contrib.auth.SignInMethod
+	5,  // 16: w17.contrib.auth.SignInEvent.outcome:type_name -> w17.contrib.auth.SignInOutcome
+	28, // 17: w17.contrib.auth.Role.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 18: w17.contrib.auth.Role.token_type:type_name -> w17.contrib.auth.TokenType
+	28, // 19: w17.contrib.auth.Role.deleted_at:type_name -> google.protobuf.Timestamp
+	28, // 20: w17.contrib.auth.RolePermission.created_at:type_name -> google.protobuf.Timestamp
+	28, // 21: w17.contrib.auth.RolePermission.removed_at:type_name -> google.protobuf.Timestamp
+	6,  // 22: w17.contrib.auth.RolePermissionChange.kind:type_name -> w17.contrib.auth.RolePermissionChangeKind
+	28, // 23: w17.contrib.auth.RolePermissionChange.created_at:type_name -> google.protobuf.Timestamp
+	28, // 24: w17.contrib.auth.UserRole.created_at:type_name -> google.protobuf.Timestamp
+	28, // 25: w17.contrib.auth.UserRole.revoked_at:type_name -> google.protobuf.Timestamp
+	28, // 26: w17.contrib.auth.TokenPermission.created_at:type_name -> google.protobuf.Timestamp
+	28, // 27: w17.contrib.auth.BootstrapClaim.created_at:type_name -> google.protobuf.Timestamp
+	7,  // 28: w17.contrib.auth.OAuthClient.kind:type_name -> w17.contrib.auth.OAuthClientKind
+	28, // 29: w17.contrib.auth.OAuthClient.created_at:type_name -> google.protobuf.Timestamp
+	28, // 30: w17.contrib.auth.OAuthClient.metadata_fetched_at:type_name -> google.protobuf.Timestamp
+	28, // 31: w17.contrib.auth.OAuthClient.disabled_at:type_name -> google.protobuf.Timestamp
+	8,  // 32: w17.contrib.auth.OAuthAuthorization.kind:type_name -> w17.contrib.auth.OAuthGrantKind
+	28, // 33: w17.contrib.auth.OAuthAuthorization.created_at:type_name -> google.protobuf.Timestamp
+	28, // 34: w17.contrib.auth.OAuthAuthorization.expires_at:type_name -> google.protobuf.Timestamp
+	28, // 35: w17.contrib.auth.OAuthAuthorization.decided_at:type_name -> google.protobuf.Timestamp
+	9,  // 36: w17.contrib.auth.OAuthAuthorization.decision:type_name -> w17.contrib.auth.OAuthDecision
+	28, // 37: w17.contrib.auth.OAuthAuthorization.session_expires_at:type_name -> google.protobuf.Timestamp
+	28, // 38: w17.contrib.auth.OAuthAuthorization.code_expires_at:type_name -> google.protobuf.Timestamp
+	28, // 39: w17.contrib.auth.OAuthAuthorization.code_consumed_at:type_name -> google.protobuf.Timestamp
+	28, // 40: w17.contrib.auth.OAuthGrant.created_at:type_name -> google.protobuf.Timestamp
+	28, // 41: w17.contrib.auth.OAuthGrant.expires_at:type_name -> google.protobuf.Timestamp
+	28, // 42: w17.contrib.auth.OAuthGrant.last_used_at:type_name -> google.protobuf.Timestamp
+	28, // 43: w17.contrib.auth.OAuthGrant.revoked_at:type_name -> google.protobuf.Timestamp
+	1,  // 44: w17.contrib.auth.OAuthGrant.revoke_reason:type_name -> w17.contrib.auth.RevokeReason
+	28, // 45: w17.contrib.auth.OAuthRefreshToken.created_at:type_name -> google.protobuf.Timestamp
+	28, // 46: w17.contrib.auth.OAuthRefreshToken.expires_at:type_name -> google.protobuf.Timestamp
+	28, // 47: w17.contrib.auth.OAuthRefreshToken.used_at:type_name -> google.protobuf.Timestamp
+	28, // 48: w17.contrib.auth.Organization.created_at:type_name -> google.protobuf.Timestamp
+	28, // 49: w17.contrib.auth.Organization.deleted_at:type_name -> google.protobuf.Timestamp
+	28, // 50: w17.contrib.auth.OrgMembership.created_at:type_name -> google.protobuf.Timestamp
+	28, // 51: w17.contrib.auth.OrgMembership.removed_at:type_name -> google.protobuf.Timestamp
+	28, // 52: w17.contrib.auth.OrgHost.bound_at:type_name -> google.protobuf.Timestamp
+	28, // 53: w17.contrib.auth.OrgHost.ended_at:type_name -> google.protobuf.Timestamp
+	28, // 54: w17.contrib.auth.OrgSignUpPolicy.set_at:type_name -> google.protobuf.Timestamp
+	28, // 55: w17.contrib.auth.OrgSignUpPolicy.ended_at:type_name -> google.protobuf.Timestamp
+	56, // [56:56] is the sub-list for method output_type
+	56, // [56:56] is the sub-list for method input_type
+	56, // [56:56] is the sub-list for extension type_name
+	56, // [56:56] is the sub-list for extension extendee
+	0,  // [0:56] is the sub-list for field type_name
 }
 
 func init() { file_types_models_proto_init() }
@@ -3501,7 +4012,7 @@ func file_types_models_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_types_models_proto_rawDesc), len(file_types_models_proto_rawDesc)),
 			NumEnums:      10,
-			NumMessages:   15,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
@@ -3515,4 +4026,4 @@ func file_types_models_proto_init() {
 	file_types_models_proto_depIdxs = nil
 }
 
-// emit-sha256: 2e58edec2a5be3b96c3007a5138b81f5a8facb5b00282c3d8d114de8709515bc
+// emit-sha256: 1024817146a41836a4be8940512d9013d95b887389c1dc2cc84c8a04481f8b66

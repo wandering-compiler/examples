@@ -38,8 +38,13 @@ const (
 	AuthQuery_GetUserRoleGrants_FullMethodName             = "/w17.contrib.auth.AuthQuery/GetUserRoleGrants"
 	AuthQuery_ListRoleGrants_FullMethodName                = "/w17.contrib.auth.AuthQuery/ListRoleGrants"
 	AuthQuery_CountUsers_FullMethodName                    = "/w17.contrib.auth.AuthQuery/CountUsers"
+	AuthQuery_ListOrgMemberAccounts_FullMethodName         = "/w17.contrib.auth.AuthQuery/ListOrgMemberAccounts"
+	AuthQuery_GetOrgMember_FullMethodName                  = "/w17.contrib.auth.AuthQuery/GetOrgMember"
 	AuthQuery_GetFirstUserRoles_FullMethodName             = "/w17.contrib.auth.AuthQuery/GetFirstUserRoles"
 	AuthQuery_GetDefaultRoles_FullMethodName               = "/w17.contrib.auth.AuthQuery/GetDefaultRoles"
+	AuthQuery_ListOrgScopedRoles_FullMethodName            = "/w17.contrib.auth.AuthQuery/ListOrgScopedRoles"
+	AuthQuery_LockOrganization_FullMethodName              = "/w17.contrib.auth.AuthQuery/LockOrganization"
+	AuthQuery_ListOrgSuperadmins_FullMethodName            = "/w17.contrib.auth.AuthQuery/ListOrgSuperadmins"
 	AuthQuery_ListRealmSuperadmins_FullMethodName          = "/w17.contrib.auth.AuthQuery/ListRealmSuperadmins"
 	AuthQuery_ListRoles_FullMethodName                     = "/w17.contrib.auth.AuthQuery/ListRoles"
 	AuthQuery_GetRole_FullMethodName                       = "/w17.contrib.auth.AuthQuery/GetRole"
@@ -50,12 +55,19 @@ const (
 	AuthQuery_ListApiTokensByUser_FullMethodName           = "/w17.contrib.auth.AuthQuery/ListApiTokensByUser"
 	AuthQuery_GetUserDeviceByThumbprint_FullMethodName     = "/w17.contrib.auth.AuthQuery/GetUserDeviceByThumbprint"
 	AuthQuery_GetSessionApprover_FullMethodName            = "/w17.contrib.auth.AuthQuery/GetSessionApprover"
-	AuthQuery_GetUserTenant_FullMethodName                 = "/w17.contrib.auth.AuthQuery/GetUserTenant"
-	AuthQuery_GetTenantBySlug_FullMethodName               = "/w17.contrib.auth.AuthQuery/GetTenantBySlug"
-	AuthQuery_GetTenantByDomain_FullMethodName             = "/w17.contrib.auth.AuthQuery/GetTenantByDomain"
 	AuthQuery_GetUserById_FullMethodName                   = "/w17.contrib.auth.AuthQuery/GetUserById"
 	AuthQuery_GetDeviceTrustRevokedAt_FullMethodName       = "/w17.contrib.auth.AuthQuery/GetDeviceTrustRevokedAt"
+	AuthQuery_ListUserOrgs_FullMethodName                  = "/w17.contrib.auth.AuthQuery/ListUserOrgs"
+	AuthQuery_ListUserOrgGrants_FullMethodName             = "/w17.contrib.auth.AuthQuery/ListUserOrgGrants"
+	AuthQuery_GetUserOrgPermissions_FullMethodName         = "/w17.contrib.auth.AuthQuery/GetUserOrgPermissions"
+	AuthQuery_GetUserRealmWidePermissions_FullMethodName   = "/w17.contrib.auth.AuthQuery/GetUserRealmWidePermissions"
+	AuthQuery_GetUserOrgBySlug_FullMethodName              = "/w17.contrib.auth.AuthQuery/GetUserOrgBySlug"
+	AuthQuery_ListOrganizations_FullMethodName             = "/w17.contrib.auth.AuthQuery/ListOrganizations"
+	AuthQuery_GetOrganization_FullMethodName               = "/w17.contrib.auth.AuthQuery/GetOrganization"
+	AuthQuery_ListOrgMemberships_FullMethodName            = "/w17.contrib.auth.AuthQuery/ListOrgMemberships"
+	AuthQuery_GetOrgMembership_FullMethodName              = "/w17.contrib.auth.AuthQuery/GetOrgMembership"
 	AuthQuery_ListUserSignInEvents_FullMethodName          = "/w17.contrib.auth.AuthQuery/ListUserSignInEvents"
+	AuthQuery_ListOrgMembersByOrg_FullMethodName           = "/w17.contrib.auth.AuthQuery/ListOrgMembersByOrg"
 	AuthQuery_GetOAuthClientByHash_FullMethodName          = "/w17.contrib.auth.AuthQuery/GetOAuthClientByHash"
 	AuthQuery_GetOAuthClientByRowID_FullMethodName         = "/w17.contrib.auth.AuthQuery/GetOAuthClientByRowID"
 	AuthQuery_GetPendingOAuthAuthorization_FullMethodName  = "/w17.contrib.auth.AuthQuery/GetPendingOAuthAuthorization"
@@ -68,6 +80,9 @@ const (
 	AuthQuery_ListUserOAuthGrants_FullMethodName           = "/w17.contrib.auth.AuthQuery/ListUserOAuthGrants"
 	AuthQuery_GetOAuthCodeUse_FullMethodName               = "/w17.contrib.auth.AuthQuery/GetOAuthCodeUse"
 	AuthQuery_GetOAuthGrantByAuthorization_FullMethodName  = "/w17.contrib.auth.AuthQuery/GetOAuthGrantByAuthorization"
+	AuthQuery_GetOrgOfHost_FullMethodName                  = "/w17.contrib.auth.AuthQuery/GetOrgOfHost"
+	AuthQuery_ListOrgHostRows_FullMethodName               = "/w17.contrib.auth.AuthQuery/ListOrgHostRows"
+	AuthQuery_ListOrgSignUpPolicyRows_FullMethodName       = "/w17.contrib.auth.AuthQuery/ListOrgSignUpPolicyRows"
 )
 
 // AuthQueryClient is the client API for AuthQuery service.
@@ -115,6 +130,28 @@ type AuthQueryClient interface {
 	// user ⇒ assign the bootstrap-admin (first_user) roles. rbac-gated
 	// (only the role-assignment path calls it).
 	CountUsers(ctx context.Context, in *CountUsersReq, opts ...grpc.CallOption) (*CountUsersResp, error)
+	// ListOrgMemberAccounts — every account that is a member of THIS
+	// organization, with its kind when `service_account` is on.
+	//
+	// The org-scoped half of the machine-account directory (ListBots): the
+	// handler keeps the BOT rows. It is gated `org_membership` and not
+	// `service_account` because the JOIN needs the membership table, and a
+	// query staged with service_account alone broke a realm WITHOUT orgs at
+	// codegen — one organization, no membership table, and machine accounts
+	// that are the realm's (the platform's own backoffice). The kind filter
+	// moved to Go for the same reason: `User.kind` exists only with
+	// service_account, and an rpc carries one gate. `kind` and `disabled_at`
+	// ride feature-gated projections.
+	ListOrgMemberAccounts(ctx context.Context, in *ListOrgMemberAccountsReq, opts ...grpc.CallOption) (*ListOrgMemberAccountsResp, error)
+	// GetOrgMember — is this account a member of THIS organization?
+	//
+	// Empty user_id = no. An endpoint acting on a machine account by id must
+	// ask, because the id arrives on the wire: without it an operator in one
+	// company could name a machine account in another and be served. Whether
+	// the member is a BOT is the caller's second question, asked of the
+	// account itself (IssueBotToken reads it before minting) — gated
+	// `org_membership` for the reason ListOrgMemberAccounts is.
+	GetOrgMember(ctx context.Context, in *GetOrgMemberReq, opts ...grpc.CallOption) (*GetOrgMemberResp, error)
 	// GetFirstUserRoles — role ids flagged assign_first_user (seeded from
 	// `(w17.acl_roles) { first_user: true }`). The bootstrap-admin set the
 	// SignUp handler grants the first user.
@@ -123,6 +160,31 @@ type AuthQueryClient interface {
 	// `(w17.acl_roles) { default: true }`). Granted to every signup after
 	// the first.
 	GetDefaultRoles(ctx context.Context, in *GetDefaultRolesReq, opts ...grpc.CallOption) (*GetDefaultRolesResp, error)
+	// ListOrgScopedRoles — the role catalogue restricted to roles that mean
+	// something INSIDE an organization.
+	//
+	// Separate from ListRoles rather than a flag on it, and the comment above
+	// that RPC is the reason: `org_scoped` only exists as a column when the
+	// `org_membership` feature is on, so naming it in the shared query fails
+	// the typecheck for every project without that feature. This one is GATED
+	// on org_membership, so the column is guaranteed to be there — the same
+	// shape GetUserOrgPermissions already uses.
+	//
+	// Exists so an invitation UI can offer choices instead of asking a person
+	// to type a role name and find out afterwards whether it was one.
+	ListOrgScopedRoles(ctx context.Context, in *ListOrgScopedRolesReq, opts ...grpc.CallOption) (*ListOrgScopedRolesResp, error)
+	// LockOrganization — SELECT … FOR UPDATE on the organization's row, read
+	// inside the transaction of a change that can take a superadmin away; see
+	// the request.
+	LockOrganization(ctx context.Context, in *LockOrganizationReq, opts ...grpc.CallOption) (*LockOrganizationResp, error)
+	// ListOrgSuperadmins — see its request message. Only grants of a live
+	// membership count: a removed member's grants are revoked with it, but the
+	// join says so rather than relying on it. The account's disabled_at and
+	// erased_at exist only with user_admin, so they are PROJECTED behind a gate
+	// (a SELECT's WHERE conjunct cannot be gated: dropping one would return more
+	// rows) and orgSuperadmins drops a disabled or erased account's rows;
+	// without user_admin no account can be disabled or erased.
+	ListOrgSuperadmins(ctx context.Context, in *ListOrgSuperadminsReq, opts ...grpc.CallOption) (*ListOrgSuperadminsResp, error)
 	// ListRealmSuperadmins — see its request message.
 	ListRealmSuperadmins(ctx context.Context, in *ListRealmSuperadminsReq, opts ...grpc.CallOption) (*ListRealmSuperadminsResp, error)
 	ListRoles(ctx context.Context, in *ListRolesReq, opts ...grpc.CallOption) (*ListRolesResp, error)
@@ -163,20 +225,6 @@ type AuthQueryClient interface {
 	// GetSessionApprover — the caller's session's approver; see the request.
 	// Gated api_token.
 	GetSessionApprover(ctx context.Context, in *GetSessionApproverReq, opts ...grpc.CallOption) (*GetSessionApproverResp, error)
-	// GetUserTenant — resolves the principal's tenant_id (the
-	// tenant data scope) by user id. The gated tenant.go handler
-	// calls this from Authenticate's scope decorator to stamp
-	// scopes["tenant_id"]. Tagged `tenant_scope`: the User.tenant_id
-	// column it reads is gated by the same feature, so the query
-	// and its column appear / disappear together. tenant_id is
-	// NOT NULL on User, so a resolved principal always yields one.
-	GetUserTenant(ctx context.Context, in *GetUserTenantReq, opts ...grpc.CallOption) (*GetUserTenantResp, error)
-	// GetTenantBySlug — resolve a tenant id from its slug (Tenant.name).
-	// Used by SignUp for URL-based tenancy (`/t/{tenant_slug}/...`).
-	GetTenantBySlug(ctx context.Context, in *GetTenantBySlugReq, opts ...grpc.CallOption) (*GetTenantBySlugResp, error)
-	// GetTenantByDomain — resolve a tenant id from its host domain.
-	// Used by SignUp for host-based tenancy (the forwarded Host header).
-	GetTenantByDomain(ctx context.Context, in *GetTenantByDomainReq, opts ...grpc.CallOption) (*GetTenantByDomainResp, error)
 	// GetUserById — resolve a user by id, password_hash included. Callers
 	// include ResolveUser (the account a principal is answered for), the
 	// EnrollTotp otpauth label (which wants the email) and ChangePassword (which must verify the CURRENT password of the
@@ -188,11 +236,103 @@ type AuthQueryClient interface {
 	// and ListDevices count a device as trusted only when its trusted_at is
 	// later. Base tier, like the Device table.
 	GetDeviceTrustRevokedAt(ctx context.Context, in *GetDeviceTrustRevokedAtReq, opts ...grpc.CallOption) (*GetDeviceTrustRevokedAtResp, error)
+	// ListUserOrgs — the organizations a user belongs to, with their role
+	// in each (join OrgMembership → Organization).
+	ListUserOrgs(ctx context.Context, in *ListUserOrgsReq, opts ...grpc.CallOption) (*ListUserOrgsResp, error)
+	// ListUserOrgGrants — the role ids a user holds INSIDE one organization
+	// (see its request message).
+	ListUserOrgGrants(ctx context.Context, in *ListUserOrgGrantsReq, opts ...grpc.CallOption) (*ListUserOrgGrantsResp, error)
+	// GetUserOrgPermissions — the permissions the user holds IN A GIVEN
+	// ORGANIZATION: the union of every role assigned to them realm-wide
+	// (`UserRole.org_id IS NULL`) and every role assigned inside that org.
+	// The Authenticate org-narrowing step calls it after the scope
+	// decorator has validated membership and resolved the active org, and
+	// its answer REPLACES the unfiltered set — the unfiltered set is the
+	// union across every org the user belongs to, which is precisely what
+	// must not leak between tenants.
+	//
+	// This is the ONLY query that names `UserRole.org_id`, which is why it
+	// is the only one that had to be gated: the column is dropped when
+	// `org_membership` is off.
+	//
+	// Notes on the DQL, both of which are load-bearing:
+	//
+	//   - the org predicate sits in the LEFT JOIN's ON clause, NOT in
+	//     WHERE. In WHERE it would discard every row of a user whose roles
+	//     are all assigned in OTHER organizations, taking the user's own
+	//     row with them — the query would answer NotFound where the right
+	//     answer is "no permissions here". In ON, those roles simply fail
+	//     to join and the aggregate yields an empty list.
+	//   - the wildcard EXISTS repeats the same predicate. A superadmin
+	//     role assigned inside org A must not pass checks in org B, and a
+	//     wildcard carries no RolePermission rows to filter, so the org
+	//     test has to happen in the probe itself.
+	//   - the NULL-org leg asks the ROLE whether it is org-scoped, which is
+	//     why Role joins before the predicate rather than after it. A NULL
+	//     `org_id` means "realm-wide", deliberately and load-bearing for the
+	//     roles that are — but `(w17.acl_roles).scope: ORG` says this role's
+	//     grants live in the organization they were assigned in, and those
+	//     two readings collide on exactly the row the declaration exists to
+	//     prevent. Unless a read enforces it, `org_scoped` is written by the
+	//     seed and read by nobody, and an org-scoped role assigned without an
+	//     organization grants itself in every one of them. Enforced HERE
+	//     rather than on the write side, because the read decides what an
+	//     existing row MEANS — whatever wrote it, and whenever.
+	GetUserOrgPermissions(ctx context.Context, in *GetUserOrgPermissionsReq, opts ...grpc.CallOption) (*GetUserOrgPermissionsResp, error)
+	// GetUserRealmWidePermissions — what the caller holds when NO active
+	// organization could be resolved (they belong to none, or to several
+	// and sent no `W17-Org` header). Only realm-wide grants count; every
+	// org-scoped role is out of context — which this now ASKS, rather than
+	// inferring it from a NULL `org_id`. A role declared `scope: ORG` and
+	// assigned with no organization wrote exactly that NULL, so the
+	// inference answered "realm-wide" for the one role that must never be
+	// (GetUserOrgPermissions carries the reasoning). Without this the request would
+	// fall back to the unfiltered set, which is the union across every org
+	// the user belongs to — the leak this whole feature exists to close.
+	GetUserRealmWidePermissions(ctx context.Context, in *GetUserRealmWidePermissionsReq, opts ...grpc.CallOption) (*GetUserRealmWidePermissionsResp, error)
+	// GetUserOrgBySlug — resolve an org slug to its id AND validate the
+	// caller's membership in one shot (the join requires a membership row).
+	// Empty org_id = not a member. Backs the active-org scope decorator.
+	GetUserOrgBySlug(ctx context.Context, in *GetUserOrgBySlugReq, opts ...grpc.CallOption) (*GetUserOrgBySlugResp, error)
+	// ListOrganizations — the org catalogue for the admin Organizations
+	// page list `source`. Projects the Organization columns; newest orgs
+	// are found by name (a stable, human-scannable order). Gated
+	// org_membership.
+	ListOrganizations(ctx context.Context, in *ListOrganizationsReq, opts ...grpc.CallOption) (*ListOrganizationsResp, error)
+	// GetOrganization — one org for the admin detail view. Returns the
+	// Organization model DIRECTLY (readonly_fields resolve against its
+	// top-level fields). Gated org_membership.
+	GetOrganization(ctx context.Context, in *GetOrganizationReq, opts ...grpc.CallOption) (*Organization, error)
+	// ListOrgMemberships — every membership row for the admin
+	// OrgMemberships page list `source`; newest first. Projects into
+	// OrgMembershipAdminRow (ADMIN-FK): the member's EMAIL (LEFT JOIN
+	// User) + the org's NAME (LEFT JOIN Organization, linked to the
+	// Organizations page by the page's AdminColumnRef) instead of the two
+	// raw UUIDs the link table stores. LEFT JOINs + COALESCE so a membership
+	// whose user or org was hard-deleted (no DB-level FK) still lists with an
+	// empty handle instead of erroring the whole page (a NULL join scanned
+	// into a Go string is a scan error). Gated org_membership.
+	ListOrgMemberships(ctx context.Context, in *ListOrgMembershipsReq, opts ...grpc.CallOption) (*ListOrgMembershipsResp, error)
+	// GetOrgMembership — one membership for the admin detail view. Returns
+	// the OrgMembership model DIRECTLY. Gated org_membership.
+	GetOrgMembership(ctx context.Context, in *GetOrgMembershipReq, opts ...grpc.CallOption) (*OrgMembership, error)
 	// ListUserSignInEvents — one account's own sign-in history, newest first,
 	// the latest 100 (AuthService.ListMySignInEvents, which passes the
 	// caller's id). Served by the (user_id, created_at) index. Gated
 	// authenticate_turnkey, the feature that knows the caller.
 	ListUserSignInEvents(ctx context.Context, in *ListUserSignInEventsReq, opts ...grpc.CallOption) (*ListUserSignInEventsResp, error)
+	// ListOrgMembersByOrg — ONE organization's members, a page at a time
+	// (keyset on the address, which is unique). The ByOrg
+	// suffix is not decoration: every proto in this plugin generates into
+	// ONE Go package, so a query message may not share a name with the
+	// business message that wraps it — and the business RPC is the one
+	// callers see, so it keeps the plain name., with the address that
+	// identifies them. Distinct from ListOrgMemberships, which is the
+	// admin preset's paged list across EVERY org and carries no org filter:
+	// a member list scoped to the caller's active org is a different
+	// question, and answering it by filtering the admin list in a handler
+	// would mean reading every organization's rows to return one's.
+	ListOrgMembersByOrg(ctx context.Context, in *ListOrgMembersByOrgReq, opts ...grpc.CallOption) (*ListOrgMembersByOrgResp, error)
 	GetOAuthClientByHash(ctx context.Context, in *GetOAuthClientByHashReq, opts ...grpc.CallOption) (*GetOAuthClientByHashResp, error)
 	GetOAuthClientByRowID(ctx context.Context, in *GetOAuthClientByRowIDReq, opts ...grpc.CallOption) (*GetOAuthClientByRowIDResp, error)
 	GetPendingOAuthAuthorization(ctx context.Context, in *GetPendingOAuthAuthorizationReq, opts ...grpc.CallOption) (*GetPendingOAuthAuthorizationResp, error)
@@ -205,6 +345,17 @@ type AuthQueryClient interface {
 	ListUserOAuthGrants(ctx context.Context, in *ListUserOAuthGrantsReq, opts ...grpc.CallOption) (*ListUserOAuthGrantsResp, error)
 	GetOAuthCodeUse(ctx context.Context, in *GetOAuthCodeUseReq, opts ...grpc.CallOption) (*GetOAuthCodeUseResp, error)
 	GetOAuthGrantByAuthorization(ctx context.Context, in *GetOAuthGrantByAuthorizationReq, opts ...grpc.CallOption) (*GetOAuthGrantByAuthorizationResp, error)
+	// GetOrgOfHost — the live organization a host is bound to (org_hosts);
+	// NotFound when the host is unbound or its organization deleted. Read on
+	// every Authenticate through an audience that takes the tenant from the
+	// host.
+	GetOrgOfHost(ctx context.Context, in *GetOrgOfHostReq, opts ...grpc.CallOption) (*OrgHostRow, error)
+	// ListOrgHostRows — every live binding, by host.
+	ListOrgHostRows(ctx context.Context, in *ListOrgHostRowsReq, opts ...grpc.CallOption) (*ListOrgHostRowsResp, error)
+	// ListOrgSignUpPolicyRows — an organization's live registration
+	// policies, by kind. Read on a registration without an invitation that
+	// arrives on the organization's host.
+	ListOrgSignUpPolicyRows(ctx context.Context, in *ListOrgSignUpPolicyRowsReq, opts ...grpc.CallOption) (*ListOrgSignUpPolicyRowsResp, error)
 }
 
 type authQueryClient struct {
@@ -295,6 +446,26 @@ func (c *authQueryClient) CountUsers(ctx context.Context, in *CountUsersReq, opt
 	return out, nil
 }
 
+func (c *authQueryClient) ListOrgMemberAccounts(ctx context.Context, in *ListOrgMemberAccountsReq, opts ...grpc.CallOption) (*ListOrgMemberAccountsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOrgMemberAccountsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListOrgMemberAccounts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOrgMember(ctx context.Context, in *GetOrgMemberReq, opts ...grpc.CallOption) (*GetOrgMemberResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetOrgMemberResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOrgMember_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authQueryClient) GetFirstUserRoles(ctx context.Context, in *GetFirstUserRolesReq, opts ...grpc.CallOption) (*GetFirstUserRolesResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetFirstUserRolesResp)
@@ -309,6 +480,36 @@ func (c *authQueryClient) GetDefaultRoles(ctx context.Context, in *GetDefaultRol
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetDefaultRolesResp)
 	err := c.cc.Invoke(ctx, AuthQuery_GetDefaultRoles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) ListOrgScopedRoles(ctx context.Context, in *ListOrgScopedRolesReq, opts ...grpc.CallOption) (*ListOrgScopedRolesResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOrgScopedRolesResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListOrgScopedRoles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) LockOrganization(ctx context.Context, in *LockOrganizationReq, opts ...grpc.CallOption) (*LockOrganizationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LockOrganizationResp)
+	err := c.cc.Invoke(ctx, AuthQuery_LockOrganization_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) ListOrgSuperadmins(ctx context.Context, in *ListOrgSuperadminsReq, opts ...grpc.CallOption) (*ListOrgSuperadminsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOrgSuperadminsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListOrgSuperadmins_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -415,36 +616,6 @@ func (c *authQueryClient) GetSessionApprover(ctx context.Context, in *GetSession
 	return out, nil
 }
 
-func (c *authQueryClient) GetUserTenant(ctx context.Context, in *GetUserTenantReq, opts ...grpc.CallOption) (*GetUserTenantResp, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetUserTenantResp)
-	err := c.cc.Invoke(ctx, AuthQuery_GetUserTenant_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *authQueryClient) GetTenantBySlug(ctx context.Context, in *GetTenantBySlugReq, opts ...grpc.CallOption) (*GetTenantBySlugResp, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetTenantBySlugResp)
-	err := c.cc.Invoke(ctx, AuthQuery_GetTenantBySlug_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *authQueryClient) GetTenantByDomain(ctx context.Context, in *GetTenantByDomainReq, opts ...grpc.CallOption) (*GetTenantByDomainResp, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetTenantByDomainResp)
-	err := c.cc.Invoke(ctx, AuthQuery_GetTenantByDomain_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *authQueryClient) GetUserById(ctx context.Context, in *GetUserByIdReq, opts ...grpc.CallOption) (*GetUserByIdResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetUserByIdResp)
@@ -465,10 +636,110 @@ func (c *authQueryClient) GetDeviceTrustRevokedAt(ctx context.Context, in *GetDe
 	return out, nil
 }
 
+func (c *authQueryClient) ListUserOrgs(ctx context.Context, in *ListUserOrgsReq, opts ...grpc.CallOption) (*ListUserOrgsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListUserOrgsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListUserOrgs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) ListUserOrgGrants(ctx context.Context, in *ListUserOrgGrantsReq, opts ...grpc.CallOption) (*ListUserOrgGrantsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListUserOrgGrantsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListUserOrgGrants_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetUserOrgPermissions(ctx context.Context, in *GetUserOrgPermissionsReq, opts ...grpc.CallOption) (*GetUserOrgPermissionsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserOrgPermissionsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetUserOrgPermissions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetUserRealmWidePermissions(ctx context.Context, in *GetUserRealmWidePermissionsReq, opts ...grpc.CallOption) (*GetUserRealmWidePermissionsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserRealmWidePermissionsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetUserRealmWidePermissions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetUserOrgBySlug(ctx context.Context, in *GetUserOrgBySlugReq, opts ...grpc.CallOption) (*GetUserOrgBySlugResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserOrgBySlugResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetUserOrgBySlug_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) ListOrganizations(ctx context.Context, in *ListOrganizationsReq, opts ...grpc.CallOption) (*ListOrganizationsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOrganizationsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListOrganizations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOrganization(ctx context.Context, in *GetOrganizationReq, opts ...grpc.CallOption) (*Organization, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Organization)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOrganization_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) ListOrgMemberships(ctx context.Context, in *ListOrgMembershipsReq, opts ...grpc.CallOption) (*ListOrgMembershipsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOrgMembershipsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListOrgMemberships_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetOrgMembership(ctx context.Context, in *GetOrgMembershipReq, opts ...grpc.CallOption) (*OrgMembership, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OrgMembership)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOrgMembership_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authQueryClient) ListUserSignInEvents(ctx context.Context, in *ListUserSignInEventsReq, opts ...grpc.CallOption) (*ListUserSignInEventsResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListUserSignInEventsResp)
 	err := c.cc.Invoke(ctx, AuthQuery_ListUserSignInEvents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) ListOrgMembersByOrg(ctx context.Context, in *ListOrgMembersByOrgReq, opts ...grpc.CallOption) (*ListOrgMembersByOrgResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOrgMembersByOrgResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListOrgMembersByOrg_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -595,6 +866,36 @@ func (c *authQueryClient) GetOAuthGrantByAuthorization(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *authQueryClient) GetOrgOfHost(ctx context.Context, in *GetOrgOfHostReq, opts ...grpc.CallOption) (*OrgHostRow, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OrgHostRow)
+	err := c.cc.Invoke(ctx, AuthQuery_GetOrgOfHost_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) ListOrgHostRows(ctx context.Context, in *ListOrgHostRowsReq, opts ...grpc.CallOption) (*ListOrgHostRowsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOrgHostRowsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListOrgHostRows_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) ListOrgSignUpPolicyRows(ctx context.Context, in *ListOrgSignUpPolicyRowsReq, opts ...grpc.CallOption) (*ListOrgSignUpPolicyRowsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOrgSignUpPolicyRowsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListOrgSignUpPolicyRows_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthQueryServer is the server API for AuthQuery service.
 // All implementations should embed UnimplementedAuthQueryServer
 // for forward compatibility.
@@ -640,6 +941,28 @@ type AuthQueryServer interface {
 	// user ⇒ assign the bootstrap-admin (first_user) roles. rbac-gated
 	// (only the role-assignment path calls it).
 	CountUsers(context.Context, *CountUsersReq) (*CountUsersResp, error)
+	// ListOrgMemberAccounts — every account that is a member of THIS
+	// organization, with its kind when `service_account` is on.
+	//
+	// The org-scoped half of the machine-account directory (ListBots): the
+	// handler keeps the BOT rows. It is gated `org_membership` and not
+	// `service_account` because the JOIN needs the membership table, and a
+	// query staged with service_account alone broke a realm WITHOUT orgs at
+	// codegen — one organization, no membership table, and machine accounts
+	// that are the realm's (the platform's own backoffice). The kind filter
+	// moved to Go for the same reason: `User.kind` exists only with
+	// service_account, and an rpc carries one gate. `kind` and `disabled_at`
+	// ride feature-gated projections.
+	ListOrgMemberAccounts(context.Context, *ListOrgMemberAccountsReq) (*ListOrgMemberAccountsResp, error)
+	// GetOrgMember — is this account a member of THIS organization?
+	//
+	// Empty user_id = no. An endpoint acting on a machine account by id must
+	// ask, because the id arrives on the wire: without it an operator in one
+	// company could name a machine account in another and be served. Whether
+	// the member is a BOT is the caller's second question, asked of the
+	// account itself (IssueBotToken reads it before minting) — gated
+	// `org_membership` for the reason ListOrgMemberAccounts is.
+	GetOrgMember(context.Context, *GetOrgMemberReq) (*GetOrgMemberResp, error)
 	// GetFirstUserRoles — role ids flagged assign_first_user (seeded from
 	// `(w17.acl_roles) { first_user: true }`). The bootstrap-admin set the
 	// SignUp handler grants the first user.
@@ -648,6 +971,31 @@ type AuthQueryServer interface {
 	// `(w17.acl_roles) { default: true }`). Granted to every signup after
 	// the first.
 	GetDefaultRoles(context.Context, *GetDefaultRolesReq) (*GetDefaultRolesResp, error)
+	// ListOrgScopedRoles — the role catalogue restricted to roles that mean
+	// something INSIDE an organization.
+	//
+	// Separate from ListRoles rather than a flag on it, and the comment above
+	// that RPC is the reason: `org_scoped` only exists as a column when the
+	// `org_membership` feature is on, so naming it in the shared query fails
+	// the typecheck for every project without that feature. This one is GATED
+	// on org_membership, so the column is guaranteed to be there — the same
+	// shape GetUserOrgPermissions already uses.
+	//
+	// Exists so an invitation UI can offer choices instead of asking a person
+	// to type a role name and find out afterwards whether it was one.
+	ListOrgScopedRoles(context.Context, *ListOrgScopedRolesReq) (*ListOrgScopedRolesResp, error)
+	// LockOrganization — SELECT … FOR UPDATE on the organization's row, read
+	// inside the transaction of a change that can take a superadmin away; see
+	// the request.
+	LockOrganization(context.Context, *LockOrganizationReq) (*LockOrganizationResp, error)
+	// ListOrgSuperadmins — see its request message. Only grants of a live
+	// membership count: a removed member's grants are revoked with it, but the
+	// join says so rather than relying on it. The account's disabled_at and
+	// erased_at exist only with user_admin, so they are PROJECTED behind a gate
+	// (a SELECT's WHERE conjunct cannot be gated: dropping one would return more
+	// rows) and orgSuperadmins drops a disabled or erased account's rows;
+	// without user_admin no account can be disabled or erased.
+	ListOrgSuperadmins(context.Context, *ListOrgSuperadminsReq) (*ListOrgSuperadminsResp, error)
 	// ListRealmSuperadmins — see its request message.
 	ListRealmSuperadmins(context.Context, *ListRealmSuperadminsReq) (*ListRealmSuperadminsResp, error)
 	ListRoles(context.Context, *ListRolesReq) (*ListRolesResp, error)
@@ -688,20 +1036,6 @@ type AuthQueryServer interface {
 	// GetSessionApprover — the caller's session's approver; see the request.
 	// Gated api_token.
 	GetSessionApprover(context.Context, *GetSessionApproverReq) (*GetSessionApproverResp, error)
-	// GetUserTenant — resolves the principal's tenant_id (the
-	// tenant data scope) by user id. The gated tenant.go handler
-	// calls this from Authenticate's scope decorator to stamp
-	// scopes["tenant_id"]. Tagged `tenant_scope`: the User.tenant_id
-	// column it reads is gated by the same feature, so the query
-	// and its column appear / disappear together. tenant_id is
-	// NOT NULL on User, so a resolved principal always yields one.
-	GetUserTenant(context.Context, *GetUserTenantReq) (*GetUserTenantResp, error)
-	// GetTenantBySlug — resolve a tenant id from its slug (Tenant.name).
-	// Used by SignUp for URL-based tenancy (`/t/{tenant_slug}/...`).
-	GetTenantBySlug(context.Context, *GetTenantBySlugReq) (*GetTenantBySlugResp, error)
-	// GetTenantByDomain — resolve a tenant id from its host domain.
-	// Used by SignUp for host-based tenancy (the forwarded Host header).
-	GetTenantByDomain(context.Context, *GetTenantByDomainReq) (*GetTenantByDomainResp, error)
 	// GetUserById — resolve a user by id, password_hash included. Callers
 	// include ResolveUser (the account a principal is answered for), the
 	// EnrollTotp otpauth label (which wants the email) and ChangePassword (which must verify the CURRENT password of the
@@ -713,11 +1047,103 @@ type AuthQueryServer interface {
 	// and ListDevices count a device as trusted only when its trusted_at is
 	// later. Base tier, like the Device table.
 	GetDeviceTrustRevokedAt(context.Context, *GetDeviceTrustRevokedAtReq) (*GetDeviceTrustRevokedAtResp, error)
+	// ListUserOrgs — the organizations a user belongs to, with their role
+	// in each (join OrgMembership → Organization).
+	ListUserOrgs(context.Context, *ListUserOrgsReq) (*ListUserOrgsResp, error)
+	// ListUserOrgGrants — the role ids a user holds INSIDE one organization
+	// (see its request message).
+	ListUserOrgGrants(context.Context, *ListUserOrgGrantsReq) (*ListUserOrgGrantsResp, error)
+	// GetUserOrgPermissions — the permissions the user holds IN A GIVEN
+	// ORGANIZATION: the union of every role assigned to them realm-wide
+	// (`UserRole.org_id IS NULL`) and every role assigned inside that org.
+	// The Authenticate org-narrowing step calls it after the scope
+	// decorator has validated membership and resolved the active org, and
+	// its answer REPLACES the unfiltered set — the unfiltered set is the
+	// union across every org the user belongs to, which is precisely what
+	// must not leak between tenants.
+	//
+	// This is the ONLY query that names `UserRole.org_id`, which is why it
+	// is the only one that had to be gated: the column is dropped when
+	// `org_membership` is off.
+	//
+	// Notes on the DQL, both of which are load-bearing:
+	//
+	//   - the org predicate sits in the LEFT JOIN's ON clause, NOT in
+	//     WHERE. In WHERE it would discard every row of a user whose roles
+	//     are all assigned in OTHER organizations, taking the user's own
+	//     row with them — the query would answer NotFound where the right
+	//     answer is "no permissions here". In ON, those roles simply fail
+	//     to join and the aggregate yields an empty list.
+	//   - the wildcard EXISTS repeats the same predicate. A superadmin
+	//     role assigned inside org A must not pass checks in org B, and a
+	//     wildcard carries no RolePermission rows to filter, so the org
+	//     test has to happen in the probe itself.
+	//   - the NULL-org leg asks the ROLE whether it is org-scoped, which is
+	//     why Role joins before the predicate rather than after it. A NULL
+	//     `org_id` means "realm-wide", deliberately and load-bearing for the
+	//     roles that are — but `(w17.acl_roles).scope: ORG` says this role's
+	//     grants live in the organization they were assigned in, and those
+	//     two readings collide on exactly the row the declaration exists to
+	//     prevent. Unless a read enforces it, `org_scoped` is written by the
+	//     seed and read by nobody, and an org-scoped role assigned without an
+	//     organization grants itself in every one of them. Enforced HERE
+	//     rather than on the write side, because the read decides what an
+	//     existing row MEANS — whatever wrote it, and whenever.
+	GetUserOrgPermissions(context.Context, *GetUserOrgPermissionsReq) (*GetUserOrgPermissionsResp, error)
+	// GetUserRealmWidePermissions — what the caller holds when NO active
+	// organization could be resolved (they belong to none, or to several
+	// and sent no `W17-Org` header). Only realm-wide grants count; every
+	// org-scoped role is out of context — which this now ASKS, rather than
+	// inferring it from a NULL `org_id`. A role declared `scope: ORG` and
+	// assigned with no organization wrote exactly that NULL, so the
+	// inference answered "realm-wide" for the one role that must never be
+	// (GetUserOrgPermissions carries the reasoning). Without this the request would
+	// fall back to the unfiltered set, which is the union across every org
+	// the user belongs to — the leak this whole feature exists to close.
+	GetUserRealmWidePermissions(context.Context, *GetUserRealmWidePermissionsReq) (*GetUserRealmWidePermissionsResp, error)
+	// GetUserOrgBySlug — resolve an org slug to its id AND validate the
+	// caller's membership in one shot (the join requires a membership row).
+	// Empty org_id = not a member. Backs the active-org scope decorator.
+	GetUserOrgBySlug(context.Context, *GetUserOrgBySlugReq) (*GetUserOrgBySlugResp, error)
+	// ListOrganizations — the org catalogue for the admin Organizations
+	// page list `source`. Projects the Organization columns; newest orgs
+	// are found by name (a stable, human-scannable order). Gated
+	// org_membership.
+	ListOrganizations(context.Context, *ListOrganizationsReq) (*ListOrganizationsResp, error)
+	// GetOrganization — one org for the admin detail view. Returns the
+	// Organization model DIRECTLY (readonly_fields resolve against its
+	// top-level fields). Gated org_membership.
+	GetOrganization(context.Context, *GetOrganizationReq) (*Organization, error)
+	// ListOrgMemberships — every membership row for the admin
+	// OrgMemberships page list `source`; newest first. Projects into
+	// OrgMembershipAdminRow (ADMIN-FK): the member's EMAIL (LEFT JOIN
+	// User) + the org's NAME (LEFT JOIN Organization, linked to the
+	// Organizations page by the page's AdminColumnRef) instead of the two
+	// raw UUIDs the link table stores. LEFT JOINs + COALESCE so a membership
+	// whose user or org was hard-deleted (no DB-level FK) still lists with an
+	// empty handle instead of erroring the whole page (a NULL join scanned
+	// into a Go string is a scan error). Gated org_membership.
+	ListOrgMemberships(context.Context, *ListOrgMembershipsReq) (*ListOrgMembershipsResp, error)
+	// GetOrgMembership — one membership for the admin detail view. Returns
+	// the OrgMembership model DIRECTLY. Gated org_membership.
+	GetOrgMembership(context.Context, *GetOrgMembershipReq) (*OrgMembership, error)
 	// ListUserSignInEvents — one account's own sign-in history, newest first,
 	// the latest 100 (AuthService.ListMySignInEvents, which passes the
 	// caller's id). Served by the (user_id, created_at) index. Gated
 	// authenticate_turnkey, the feature that knows the caller.
 	ListUserSignInEvents(context.Context, *ListUserSignInEventsReq) (*ListUserSignInEventsResp, error)
+	// ListOrgMembersByOrg — ONE organization's members, a page at a time
+	// (keyset on the address, which is unique). The ByOrg
+	// suffix is not decoration: every proto in this plugin generates into
+	// ONE Go package, so a query message may not share a name with the
+	// business message that wraps it — and the business RPC is the one
+	// callers see, so it keeps the plain name., with the address that
+	// identifies them. Distinct from ListOrgMemberships, which is the
+	// admin preset's paged list across EVERY org and carries no org filter:
+	// a member list scoped to the caller's active org is a different
+	// question, and answering it by filtering the admin list in a handler
+	// would mean reading every organization's rows to return one's.
+	ListOrgMembersByOrg(context.Context, *ListOrgMembersByOrgReq) (*ListOrgMembersByOrgResp, error)
 	GetOAuthClientByHash(context.Context, *GetOAuthClientByHashReq) (*GetOAuthClientByHashResp, error)
 	GetOAuthClientByRowID(context.Context, *GetOAuthClientByRowIDReq) (*GetOAuthClientByRowIDResp, error)
 	GetPendingOAuthAuthorization(context.Context, *GetPendingOAuthAuthorizationReq) (*GetPendingOAuthAuthorizationResp, error)
@@ -730,6 +1156,17 @@ type AuthQueryServer interface {
 	ListUserOAuthGrants(context.Context, *ListUserOAuthGrantsReq) (*ListUserOAuthGrantsResp, error)
 	GetOAuthCodeUse(context.Context, *GetOAuthCodeUseReq) (*GetOAuthCodeUseResp, error)
 	GetOAuthGrantByAuthorization(context.Context, *GetOAuthGrantByAuthorizationReq) (*GetOAuthGrantByAuthorizationResp, error)
+	// GetOrgOfHost — the live organization a host is bound to (org_hosts);
+	// NotFound when the host is unbound or its organization deleted. Read on
+	// every Authenticate through an audience that takes the tenant from the
+	// host.
+	GetOrgOfHost(context.Context, *GetOrgOfHostReq) (*OrgHostRow, error)
+	// ListOrgHostRows — every live binding, by host.
+	ListOrgHostRows(context.Context, *ListOrgHostRowsReq) (*ListOrgHostRowsResp, error)
+	// ListOrgSignUpPolicyRows — an organization's live registration
+	// policies, by kind. Read on a registration without an invitation that
+	// arrives on the organization's host.
+	ListOrgSignUpPolicyRows(context.Context, *ListOrgSignUpPolicyRowsReq) (*ListOrgSignUpPolicyRowsResp, error)
 }
 
 // UnimplementedAuthQueryServer should be embedded to have
@@ -763,11 +1200,26 @@ func (UnimplementedAuthQueryServer) ListRoleGrants(context.Context, *ListRoleGra
 func (UnimplementedAuthQueryServer) CountUsers(context.Context, *CountUsersReq) (*CountUsersResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method CountUsers not implemented")
 }
+func (UnimplementedAuthQueryServer) ListOrgMemberAccounts(context.Context, *ListOrgMemberAccountsReq) (*ListOrgMemberAccountsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOrgMemberAccounts not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOrgMember(context.Context, *GetOrgMemberReq) (*GetOrgMemberResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOrgMember not implemented")
+}
 func (UnimplementedAuthQueryServer) GetFirstUserRoles(context.Context, *GetFirstUserRolesReq) (*GetFirstUserRolesResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetFirstUserRoles not implemented")
 }
 func (UnimplementedAuthQueryServer) GetDefaultRoles(context.Context, *GetDefaultRolesReq) (*GetDefaultRolesResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDefaultRoles not implemented")
+}
+func (UnimplementedAuthQueryServer) ListOrgScopedRoles(context.Context, *ListOrgScopedRolesReq) (*ListOrgScopedRolesResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOrgScopedRoles not implemented")
+}
+func (UnimplementedAuthQueryServer) LockOrganization(context.Context, *LockOrganizationReq) (*LockOrganizationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method LockOrganization not implemented")
+}
+func (UnimplementedAuthQueryServer) ListOrgSuperadmins(context.Context, *ListOrgSuperadminsReq) (*ListOrgSuperadminsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOrgSuperadmins not implemented")
 }
 func (UnimplementedAuthQueryServer) ListRealmSuperadmins(context.Context, *ListRealmSuperadminsReq) (*ListRealmSuperadminsResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListRealmSuperadmins not implemented")
@@ -799,23 +1251,44 @@ func (UnimplementedAuthQueryServer) GetUserDeviceByThumbprint(context.Context, *
 func (UnimplementedAuthQueryServer) GetSessionApprover(context.Context, *GetSessionApproverReq) (*GetSessionApproverResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSessionApprover not implemented")
 }
-func (UnimplementedAuthQueryServer) GetUserTenant(context.Context, *GetUserTenantReq) (*GetUserTenantResp, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetUserTenant not implemented")
-}
-func (UnimplementedAuthQueryServer) GetTenantBySlug(context.Context, *GetTenantBySlugReq) (*GetTenantBySlugResp, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetTenantBySlug not implemented")
-}
-func (UnimplementedAuthQueryServer) GetTenantByDomain(context.Context, *GetTenantByDomainReq) (*GetTenantByDomainResp, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetTenantByDomain not implemented")
-}
 func (UnimplementedAuthQueryServer) GetUserById(context.Context, *GetUserByIdReq) (*GetUserByIdResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserById not implemented")
 }
 func (UnimplementedAuthQueryServer) GetDeviceTrustRevokedAt(context.Context, *GetDeviceTrustRevokedAtReq) (*GetDeviceTrustRevokedAtResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDeviceTrustRevokedAt not implemented")
 }
+func (UnimplementedAuthQueryServer) ListUserOrgs(context.Context, *ListUserOrgsReq) (*ListUserOrgsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListUserOrgs not implemented")
+}
+func (UnimplementedAuthQueryServer) ListUserOrgGrants(context.Context, *ListUserOrgGrantsReq) (*ListUserOrgGrantsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListUserOrgGrants not implemented")
+}
+func (UnimplementedAuthQueryServer) GetUserOrgPermissions(context.Context, *GetUserOrgPermissionsReq) (*GetUserOrgPermissionsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUserOrgPermissions not implemented")
+}
+func (UnimplementedAuthQueryServer) GetUserRealmWidePermissions(context.Context, *GetUserRealmWidePermissionsReq) (*GetUserRealmWidePermissionsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUserRealmWidePermissions not implemented")
+}
+func (UnimplementedAuthQueryServer) GetUserOrgBySlug(context.Context, *GetUserOrgBySlugReq) (*GetUserOrgBySlugResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUserOrgBySlug not implemented")
+}
+func (UnimplementedAuthQueryServer) ListOrganizations(context.Context, *ListOrganizationsReq) (*ListOrganizationsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOrganizations not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOrganization(context.Context, *GetOrganizationReq) (*Organization, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOrganization not implemented")
+}
+func (UnimplementedAuthQueryServer) ListOrgMemberships(context.Context, *ListOrgMembershipsReq) (*ListOrgMembershipsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOrgMemberships not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOrgMembership(context.Context, *GetOrgMembershipReq) (*OrgMembership, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOrgMembership not implemented")
+}
 func (UnimplementedAuthQueryServer) ListUserSignInEvents(context.Context, *ListUserSignInEventsReq) (*ListUserSignInEventsResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListUserSignInEvents not implemented")
+}
+func (UnimplementedAuthQueryServer) ListOrgMembersByOrg(context.Context, *ListOrgMembersByOrgReq) (*ListOrgMembersByOrgResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOrgMembersByOrg not implemented")
 }
 func (UnimplementedAuthQueryServer) GetOAuthClientByHash(context.Context, *GetOAuthClientByHashReq) (*GetOAuthClientByHashResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOAuthClientByHash not implemented")
@@ -852,6 +1325,15 @@ func (UnimplementedAuthQueryServer) GetOAuthCodeUse(context.Context, *GetOAuthCo
 }
 func (UnimplementedAuthQueryServer) GetOAuthGrantByAuthorization(context.Context, *GetOAuthGrantByAuthorizationReq) (*GetOAuthGrantByAuthorizationResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOAuthGrantByAuthorization not implemented")
+}
+func (UnimplementedAuthQueryServer) GetOrgOfHost(context.Context, *GetOrgOfHostReq) (*OrgHostRow, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOrgOfHost not implemented")
+}
+func (UnimplementedAuthQueryServer) ListOrgHostRows(context.Context, *ListOrgHostRowsReq) (*ListOrgHostRowsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOrgHostRows not implemented")
+}
+func (UnimplementedAuthQueryServer) ListOrgSignUpPolicyRows(context.Context, *ListOrgSignUpPolicyRowsReq) (*ListOrgSignUpPolicyRowsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOrgSignUpPolicyRows not implemented")
 }
 func (UnimplementedAuthQueryServer) testEmbeddedByValue() {}
 
@@ -1017,6 +1499,42 @@ func _AuthQuery_CountUsers_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthQuery_ListOrgMemberAccounts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOrgMemberAccountsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListOrgMemberAccounts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListOrgMemberAccounts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListOrgMemberAccounts(ctx, req.(*ListOrgMemberAccountsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOrgMember_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOrgMemberReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOrgMember(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOrgMember_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOrgMember(ctx, req.(*GetOrgMemberReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthQuery_GetFirstUserRoles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetFirstUserRolesReq)
 	if err := dec(in); err != nil {
@@ -1049,6 +1567,60 @@ func _AuthQuery_GetDefaultRoles_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthQueryServer).GetDefaultRoles(ctx, req.(*GetDefaultRolesReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_ListOrgScopedRoles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOrgScopedRolesReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListOrgScopedRoles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListOrgScopedRoles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListOrgScopedRoles(ctx, req.(*ListOrgScopedRolesReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_LockOrganization_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LockOrganizationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).LockOrganization(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_LockOrganization_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).LockOrganization(ctx, req.(*LockOrganizationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_ListOrgSuperadmins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOrgSuperadminsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListOrgSuperadmins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListOrgSuperadmins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListOrgSuperadmins(ctx, req.(*ListOrgSuperadminsReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1233,60 +1805,6 @@ func _AuthQuery_GetSessionApprover_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthQuery_GetUserTenant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetUserTenantReq)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AuthQueryServer).GetUserTenant(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthQuery_GetUserTenant_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthQueryServer).GetUserTenant(ctx, req.(*GetUserTenantReq))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AuthQuery_GetTenantBySlug_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetTenantBySlugReq)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AuthQueryServer).GetTenantBySlug(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthQuery_GetTenantBySlug_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthQueryServer).GetTenantBySlug(ctx, req.(*GetTenantBySlugReq))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AuthQuery_GetTenantByDomain_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetTenantByDomainReq)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AuthQueryServer).GetTenantByDomain(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthQuery_GetTenantByDomain_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthQueryServer).GetTenantByDomain(ctx, req.(*GetTenantByDomainReq))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _AuthQuery_GetUserById_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetUserByIdReq)
 	if err := dec(in); err != nil {
@@ -1323,6 +1841,168 @@ func _AuthQuery_GetDeviceTrustRevokedAt_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthQuery_ListUserOrgs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListUserOrgsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListUserOrgs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListUserOrgs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListUserOrgs(ctx, req.(*ListUserOrgsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_ListUserOrgGrants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListUserOrgGrantsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListUserOrgGrants(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListUserOrgGrants_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListUserOrgGrants(ctx, req.(*ListUserOrgGrantsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetUserOrgPermissions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserOrgPermissionsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetUserOrgPermissions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetUserOrgPermissions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetUserOrgPermissions(ctx, req.(*GetUserOrgPermissionsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetUserRealmWidePermissions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserRealmWidePermissionsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetUserRealmWidePermissions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetUserRealmWidePermissions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetUserRealmWidePermissions(ctx, req.(*GetUserRealmWidePermissionsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetUserOrgBySlug_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserOrgBySlugReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetUserOrgBySlug(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetUserOrgBySlug_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetUserOrgBySlug(ctx, req.(*GetUserOrgBySlugReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_ListOrganizations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOrganizationsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListOrganizations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListOrganizations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListOrganizations(ctx, req.(*ListOrganizationsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOrganization_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOrganizationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOrganization(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOrganization_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOrganization(ctx, req.(*GetOrganizationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_ListOrgMemberships_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOrgMembershipsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListOrgMemberships(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListOrgMemberships_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListOrgMemberships(ctx, req.(*ListOrgMembershipsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetOrgMembership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOrgMembershipReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOrgMembership(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOrgMembership_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOrgMembership(ctx, req.(*GetOrgMembershipReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthQuery_ListUserSignInEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListUserSignInEventsReq)
 	if err := dec(in); err != nil {
@@ -1337,6 +2017,24 @@ func _AuthQuery_ListUserSignInEvents_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthQueryServer).ListUserSignInEvents(ctx, req.(*ListUserSignInEventsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_ListOrgMembersByOrg_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOrgMembersByOrgReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListOrgMembersByOrg(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListOrgMembersByOrg_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListOrgMembersByOrg(ctx, req.(*ListOrgMembersByOrgReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1557,6 +2255,60 @@ func _AuthQuery_GetOAuthGrantByAuthorization_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthQuery_GetOrgOfHost_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOrgOfHostReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetOrgOfHost(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetOrgOfHost_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetOrgOfHost(ctx, req.(*GetOrgOfHostReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_ListOrgHostRows_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOrgHostRowsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListOrgHostRows(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListOrgHostRows_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListOrgHostRows(ctx, req.(*ListOrgHostRowsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_ListOrgSignUpPolicyRows_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOrgSignUpPolicyRowsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListOrgSignUpPolicyRows(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListOrgSignUpPolicyRows_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListOrgSignUpPolicyRows(ctx, req.(*ListOrgSignUpPolicyRowsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthQuery_ServiceDesc is the grpc.ServiceDesc for AuthQuery service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1597,12 +2349,32 @@ var AuthQuery_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthQuery_CountUsers_Handler,
 		},
 		{
+			MethodName: "ListOrgMemberAccounts",
+			Handler:    _AuthQuery_ListOrgMemberAccounts_Handler,
+		},
+		{
+			MethodName: "GetOrgMember",
+			Handler:    _AuthQuery_GetOrgMember_Handler,
+		},
+		{
 			MethodName: "GetFirstUserRoles",
 			Handler:    _AuthQuery_GetFirstUserRoles_Handler,
 		},
 		{
 			MethodName: "GetDefaultRoles",
 			Handler:    _AuthQuery_GetDefaultRoles_Handler,
+		},
+		{
+			MethodName: "ListOrgScopedRoles",
+			Handler:    _AuthQuery_ListOrgScopedRoles_Handler,
+		},
+		{
+			MethodName: "LockOrganization",
+			Handler:    _AuthQuery_LockOrganization_Handler,
+		},
+		{
+			MethodName: "ListOrgSuperadmins",
+			Handler:    _AuthQuery_ListOrgSuperadmins_Handler,
 		},
 		{
 			MethodName: "ListRealmSuperadmins",
@@ -1645,18 +2417,6 @@ var AuthQuery_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthQuery_GetSessionApprover_Handler,
 		},
 		{
-			MethodName: "GetUserTenant",
-			Handler:    _AuthQuery_GetUserTenant_Handler,
-		},
-		{
-			MethodName: "GetTenantBySlug",
-			Handler:    _AuthQuery_GetTenantBySlug_Handler,
-		},
-		{
-			MethodName: "GetTenantByDomain",
-			Handler:    _AuthQuery_GetTenantByDomain_Handler,
-		},
-		{
 			MethodName: "GetUserById",
 			Handler:    _AuthQuery_GetUserById_Handler,
 		},
@@ -1665,8 +2425,48 @@ var AuthQuery_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthQuery_GetDeviceTrustRevokedAt_Handler,
 		},
 		{
+			MethodName: "ListUserOrgs",
+			Handler:    _AuthQuery_ListUserOrgs_Handler,
+		},
+		{
+			MethodName: "ListUserOrgGrants",
+			Handler:    _AuthQuery_ListUserOrgGrants_Handler,
+		},
+		{
+			MethodName: "GetUserOrgPermissions",
+			Handler:    _AuthQuery_GetUserOrgPermissions_Handler,
+		},
+		{
+			MethodName: "GetUserRealmWidePermissions",
+			Handler:    _AuthQuery_GetUserRealmWidePermissions_Handler,
+		},
+		{
+			MethodName: "GetUserOrgBySlug",
+			Handler:    _AuthQuery_GetUserOrgBySlug_Handler,
+		},
+		{
+			MethodName: "ListOrganizations",
+			Handler:    _AuthQuery_ListOrganizations_Handler,
+		},
+		{
+			MethodName: "GetOrganization",
+			Handler:    _AuthQuery_GetOrganization_Handler,
+		},
+		{
+			MethodName: "ListOrgMemberships",
+			Handler:    _AuthQuery_ListOrgMemberships_Handler,
+		},
+		{
+			MethodName: "GetOrgMembership",
+			Handler:    _AuthQuery_GetOrgMembership_Handler,
+		},
+		{
 			MethodName: "ListUserSignInEvents",
 			Handler:    _AuthQuery_ListUserSignInEvents_Handler,
+		},
+		{
+			MethodName: "ListOrgMembersByOrg",
+			Handler:    _AuthQuery_ListOrgMembersByOrg_Handler,
 		},
 		{
 			MethodName: "GetOAuthClientByHash",
@@ -1716,9 +2516,21 @@ var AuthQuery_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetOAuthGrantByAuthorization",
 			Handler:    _AuthQuery_GetOAuthGrantByAuthorization_Handler,
 		},
+		{
+			MethodName: "GetOrgOfHost",
+			Handler:    _AuthQuery_GetOrgOfHost_Handler,
+		},
+		{
+			MethodName: "ListOrgHostRows",
+			Handler:    _AuthQuery_ListOrgHostRows_Handler,
+		},
+		{
+			MethodName: "ListOrgSignUpPolicyRows",
+			Handler:    _AuthQuery_ListOrgSignUpPolicyRows_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "queries/auth_query.proto",
 }
 
-// emit-sha256: f59b1a40bb3b4426d8cb06497534e633a1e83453735711086b7d5caf90662190
+// emit-sha256: aa9825a654ae4bb53df1aa48cfac1ef190b9b336e21607e0b59400ed170789ca

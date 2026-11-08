@@ -68,6 +68,18 @@ func init() {
 		"w17.contrib.auth.RemovePermissionFromRoleResp":   {},
 		"w17.contrib.auth.ClaimBootstrapAdminReq":         {},
 		"w17.contrib.auth.ClaimBootstrapAdminResp":        {},
+		"w17.contrib.auth.CreateOrganizationReq":          {},
+		"w17.contrib.auth.CreateOrganizationResp":         {},
+		"w17.contrib.auth.AddOrgMembershipReq":            {},
+		"w17.contrib.auth.AddOrgMembershipResp":           {},
+		"w17.contrib.auth.DeleteOrganizationReq":          {},
+		"w17.contrib.auth.DeleteOrganizationResp":         {},
+		"w17.contrib.auth.MarkOrgMembershipRemovedReq":    {},
+		"w17.contrib.auth.MarkOrgMembershipRemovedResp":   {},
+		"w17.contrib.auth.UpdateOrganizationReq":          {},
+		"w17.contrib.auth.UpdateOrganizationResp":         {},
+		"w17.contrib.auth.UpdateOrgMembershipReq":         {},
+		"w17.contrib.auth.UpdateOrgMembershipResp":        {},
 		"w17.contrib.auth.CreateOAuthClientReq":           {},
 		"w17.contrib.auth.CreateOAuthClientResp":          {},
 		"w17.contrib.auth.RefreshOAuthClientMetadataReq":  {},
@@ -96,7 +108,15 @@ func init() {
 		"w17.contrib.auth.RevokeUserOAuthGrantsResp":      {},
 		"w17.contrib.auth.IssueOAuthAccessTokenReq":       {},
 		"w17.contrib.auth.IssueOAuthAccessTokenResp":      {},
+		"w17.contrib.auth.SetOrgSignUpPolicyRowReq":       {},
+		"w17.contrib.auth.SetOrgSignUpPolicyRowResp":      {},
+		"w17.contrib.auth.EndOrgSignUpPolicyRowReq":       {},
+		"w17.contrib.auth.EndOrgSignUpPolicyRowResp":      {},
+		"w17.contrib.auth.BindOrgHostRowReq":              {},
+		"w17.contrib.auth.BindOrgHostRowResp":             {},
+		"w17.contrib.auth.EndOrgHostRowReq":               {},
+		"w17.contrib.auth.EndOrgHostRowResp":              {},
 	})
 }
 
-// emit-sha256: 89633449e52af04ba67369f577bc0506e49cac164d043f5377067cf11e04b5a7
+// emit-sha256: 1b90a65f30480eea363623d04845a25c49d5b122159f54b5b275b94d753213ad
