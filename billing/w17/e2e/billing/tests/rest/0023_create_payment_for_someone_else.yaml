@@ -4,7 +4,7 @@ method: payment.PaymentService.CreatePayment
 pre: [fixtures/someone_else.yaml, auth/auth.yaml]
 input:
     user_id: ${other.user_id}
-    amount: "5.00"
+    amount: "50000"
     currency: eur
     idempotency_key: order-${seq}
 expect_error:

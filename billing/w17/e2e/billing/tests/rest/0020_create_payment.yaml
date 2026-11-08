@@ -3,14 +3,14 @@
 method: payment.PaymentService.CreatePayment
 pre: [auth/auth.yaml]
 input:
-    amount: "19.99"
+    amount: "199900"
     currency: eur
     description: A year of the newsletter
     idempotency_key: order-${seq}
 expect:
     payment:
         id: {matcher: not_empty}
-        amount: {matcher: eq, value: "19.9900"}
+        amount: {matcher: eq, value: "199900"}
         currency: {matcher: eq, value: eur}
         provider_payment_id: {matcher: not_empty}
     client_secret: {matcher: not_empty}

@@ -21,7 +21,7 @@ func succeededTaking(t *testing.T, providerPaymentID string, received int64) []b
 // amount — and a copy of the event changes nothing.
 func TestWebhook_ASuccessForAnotherAmountIsHeld(t *testing.T) {
 	a := signUp(t)
-	p := pay(t, a, "19.99")
+	p := pay(t, a, "199900")
 	body := succeededTaking(t, p.ProviderPaymentID, 1899)
 	for i := 0; i < 2; i++ {
 		if got := deliverSigned(t, body); got != http.StatusOK {
@@ -31,7 +31,7 @@ func TestWebhook_ASuccessForAnotherAmountIsHeld(t *testing.T) {
 	if got := paymentOf(t, a, p.ID).Status; got != statusAmountMismatch {
 		t.Fatalf("payment is %d, want %d (held)", got, statusAmountMismatch)
 	}
-	if got := count(t, `SELECT count(*) FROM payment_payment WHERE id = $1 AND received_amount = 18.99 AND received_currency = 'eur'`, p.ID); got != 1 {
+	if got := count(t, `SELECT count(*) FROM payment_payment WHERE id = $1 AND received_amount = 189900 AND received_currency = 'eur'`, p.ID); got != 1 {
 		t.Errorf("the held payment does not record what it took (18.99 eur)")
 	}
 	// A later, matching success moves nothing: the hold is the operator's.
@@ -50,7 +50,7 @@ func TestTopUp_AHeldTopUpGrantsNothing(t *testing.T) {
 		Payment payment `json:"payment"`
 	}
 	call(t, a.token, http.MethodPost, "/api/v1/credit/top-ups", map[string]any{
-		"amount": "100.00", "currency": "usd", "idempotency_key": "top-up-" + randomHex(6),
+		"amount": "1000000", "currency": "usd", "idempotency_key": "top-up-" + randomHex(6),
 	}, http.StatusOK, &resp)
 	if got := deliverSigned(t, succeededTaking(t, resp.Payment.ProviderPaymentID, 100)); got != http.StatusOK {
 		t.Fatalf("delivery answered %d", got)

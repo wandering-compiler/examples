@@ -38,9 +38,13 @@ type Event struct {
 	// ObjectStatus is data.object.status — the subscription status on
 	// customer.subscription.* events (active / past_due / canceled / …).
 	ObjectStatus string
-	// CurrentPeriodEnd is data.object.current_period_end (Unix seconds)
-	// on subscription events; 0 otherwise.
+	// CurrentPeriodEnd is data.object.current_period_end (Unix seconds) on
+	// customer.subscription.* events — on the subscription, or (API version
+	// 2025-03-31 on) on its first item; 0 when neither carries it.
 	CurrentPeriodEnd int64
+	// APIVersion is the version the event was rendered in (the webhook
+	// endpoint's).
+	APIVersion string
 	// Created is the event's own creation time (Unix seconds) — the
 	// provider's order of events, which delivery order is not.
 	Created int64
@@ -57,15 +61,23 @@ type Event struct {
 	// charge: whether it is fully refunded.
 	ChargePaymentIntent string
 	ChargeRefunded      bool
-	// Amount is data.object.amount with data.object.currency, as a decimal
-	// of the currency (a dispute's disputed amount, a refund's amount);
-	// empty when the object carries no currency.
+	// Amount is data.object.amount with data.object.currency, in
+	// ten-thousandths of the major unit (a dispute's disputed amount, a
+	// refund's amount); empty (no Currency) when the object carries no
+	// currency.
 	Amount backend.Money
 	// Received is data.object.amount_received with data.object.currency on a
 	// payment intent: what the payment took. Empty (no Currency) when the
 	// object carries none.
 	Received backend.Money
-	Raw      []byte
+	// AmountErr is why data.object's amount or amount_received did not
+	// convert to ten-thousandths exactly (Amount and Received are then
+	// empty). It is not a parse failure: the event is authentic, and one
+	// whose amount the plugin never reads must still be acknowledged, not
+	// refused as unsigned and redelivered for days. A reconciliation that
+	// needs the amount refuses the event with it instead.
+	AmountErr error
+	Raw       []byte
 }
 
 // ErrBadSignature is returned when the Stripe-Signature HMAC does not
@@ -138,21 +150,30 @@ func VerifyAndParse(payload []byte, sigHeader, secret string) (Event, error) {
 		return Event{}, fmt.Errorf("stripe: malformed webhook body: missing event id or type")
 	}
 	var amount, received backend.Money
+	var amountErr error
 	if cur := strings.ToLower(raw.Data.Object.Currency); cur != "" {
-		amount = backend.Money{Amount: fromMinorUnits(raw.Data.Object.Amount, cur), Currency: cur}
-		if r := raw.Data.Object.AmountReceived; r != nil {
-			received = backend.Money{Amount: fromMinorUnits(*r, cur), Currency: cur}
+		a, err := moneyFrom(raw.Data.Object.Amount, cur)
+		r := backend.Money{}
+		if err == nil && raw.Data.Object.AmountReceived != nil {
+			r, err = moneyFrom(*raw.Data.Object.AmountReceived, cur)
+		}
+		if err != nil {
+			amountErr = fmt.Errorf("stripe: webhook %s: %w", raw.ID, err)
+		} else {
+			amount, received = a, r
 		}
 	}
 	return Event{
 		Amount:              amount,
 		Received:            received,
+		AmountErr:           amountErr,
 		ID:                  raw.ID,
 		Type:                raw.Type,
 		ObjectID:            raw.Data.Object.ID,
 		PaymentIntentID:     raw.Data.Object.ID,
 		ObjectStatus:        raw.Data.Object.Status,
-		CurrentPeriodEnd:    raw.Data.Object.CurrentPeriodEnd,
+		CurrentPeriodEnd:    periodEnd(raw.Data.Object.CurrentPeriodEnd, raw.Data.Object.Items),
+		APIVersion:          raw.APIVersion,
 		Created:             raw.Created,
 		Origin:              raw.Data.Object.Metadata[backend.OriginMetadataKey],
 		Install:             raw.Data.Object.Metadata[backend.InstallMetadataKey],

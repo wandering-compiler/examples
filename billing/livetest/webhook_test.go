@@ -11,7 +11,7 @@ import (
 // A signed payment_intent.succeeded settles the payment.
 func TestWebhook_SettlesThePayment(t *testing.T) {
 	a := signUp(t)
-	p := pay(t, a, "19.99")
+	p := pay(t, a, "199900")
 	if p.Status != statusRequiresAction {
 		t.Fatalf("a new payment is %d, want %d (awaiting confirmation)", p.Status, statusRequiresAction)
 	}
@@ -28,7 +28,7 @@ func TestWebhook_SettlesThePayment(t *testing.T) {
 // recorded once. The provider retries, and two of its retries can overlap.
 func TestWebhook_ConcurrentRedeliveryHasOneEffect(t *testing.T) {
 	a := signUp(t)
-	p := pay(t, a, "5.00")
+	p := pay(t, a, "50000")
 	body := succeeded(t, p.ProviderPaymentID)
 
 	const n = 8
@@ -57,7 +57,7 @@ func TestWebhook_ConcurrentRedeliveryHasOneEffect(t *testing.T) {
 // A failure after a success is stale: the payment stays succeeded.
 func TestWebhook_LateFailureDoesNotUndoASuccess(t *testing.T) {
 	a := signUp(t)
-	p := pay(t, a, "7.00")
+	p := pay(t, a, "70000")
 	if got := deliverSigned(t, succeeded(t, p.ProviderPaymentID)); got != http.StatusOK {
 		t.Fatalf("success answered %d", got)
 	}
@@ -76,7 +76,7 @@ func TestWebhook_LateFailureDoesNotUndoASuccess(t *testing.T) {
 // refused and changes nothing.
 func TestWebhook_UnauthenticDeliveriesChangeNothing(t *testing.T) {
 	a := signUp(t)
-	p := pay(t, a, "3.00")
+	p := pay(t, a, "30000")
 	body := succeeded(t, p.ProviderPaymentID)
 	now := time.Now().Unix()
 
@@ -105,7 +105,7 @@ func TestWebhook_UnauthenticDeliveriesChangeNothing(t *testing.T) {
 // non-ASCII text included.
 func TestWebhook_BodyArrivesByteForByte(t *testing.T) {
 	a := signUp(t)
-	p := pay(t, a, "4.00")
+	p := pay(t, a, "40000")
 	compact := succeeded(t, p.ProviderPaymentID)
 	var spaced bytes.Buffer
 	spaced.WriteString("{\n  \"note\": \"Zaplaceno ✓ — děkujeme\",\n")
@@ -124,7 +124,7 @@ func TestWebhook_BodyArrivesByteForByte(t *testing.T) {
 // instead of the event being lost.
 func TestWebhook_EventBeforeItsRowIsRetried(t *testing.T) {
 	a := signUp(t)
-	p := pay(t, a, "2.00")
+	p := pay(t, a, "20000")
 	// A second intent with this installation's marks, which no local row
 	// names yet: what the provider would deliver if its event outran the
 	// plugin's insert.
