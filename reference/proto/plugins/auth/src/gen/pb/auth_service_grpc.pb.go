@@ -84,6 +84,7 @@ const (
 	AuthService_CreateApiToken_FullMethodName            = "/w17.contrib.auth.AuthService/CreateApiToken"
 	AuthService_ListApiTokens_FullMethodName             = "/w17.contrib.auth.AuthService/ListApiTokens"
 	AuthService_RevokeApiToken_FullMethodName            = "/w17.contrib.auth.AuthService/RevokeApiToken"
+	AuthService_ListMyOrgs_FullMethodName                = "/w17.contrib.auth.AuthService/ListMyOrgs"
 	AuthService_GetOAuthServerSettings_FullMethodName    = "/w17.contrib.auth.AuthService/GetOAuthServerSettings"
 	AuthService_RegisterOAuthClient_FullMethodName       = "/w17.contrib.auth.AuthService/RegisterOAuthClient"
 	AuthService_BeginOAuthAuthorization_FullMethodName   = "/w17.contrib.auth.AuthService/BeginOAuthAuthorization"
@@ -94,6 +95,17 @@ const (
 	AuthService_RevokeOAuthToken_FullMethodName          = "/w17.contrib.auth.AuthService/RevokeOAuthToken"
 	AuthService_ListMyOAuthGrants_FullMethodName         = "/w17.contrib.auth.AuthService/ListMyOAuthGrants"
 	AuthService_RevokeMyOAuthGrant_FullMethodName        = "/w17.contrib.auth.AuthService/RevokeMyOAuthGrant"
+	AuthService_ListOrgMembers_FullMethodName            = "/w17.contrib.auth.AuthService/ListOrgMembers"
+	AuthService_UpdateOrgMembershipRole_FullMethodName   = "/w17.contrib.auth.AuthService/UpdateOrgMembershipRole"
+	AuthService_RemoveOrgMembership_FullMethodName       = "/w17.contrib.auth.AuthService/RemoveOrgMembership"
+	AuthService_RemoveOrganization_FullMethodName        = "/w17.contrib.auth.AuthService/RemoveOrganization"
+	AuthService_BindOrgHost_FullMethodName               = "/w17.contrib.auth.AuthService/BindOrgHost"
+	AuthService_UnbindOrgHost_FullMethodName             = "/w17.contrib.auth.AuthService/UnbindOrgHost"
+	AuthService_ListOrgHosts_FullMethodName              = "/w17.contrib.auth.AuthService/ListOrgHosts"
+	AuthService_GetHostOrg_FullMethodName                = "/w17.contrib.auth.AuthService/GetHostOrg"
+	AuthService_SetOrgSignUpPolicy_FullMethodName        = "/w17.contrib.auth.AuthService/SetOrgSignUpPolicy"
+	AuthService_ClearOrgSignUpPolicy_FullMethodName      = "/w17.contrib.auth.AuthService/ClearOrgSignUpPolicy"
+	AuthService_ListOrgSignUpPolicies_FullMethodName     = "/w17.contrib.auth.AuthService/ListOrgSignUpPolicies"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -155,6 +167,12 @@ type AuthServiceClient interface {
 	// RevokeApiToken — revoke the caller's own API token (revoked_at; the
 	// row and its subset rows stay).
 	RevokeApiToken(ctx context.Context, in *RevokeApiTokenReq, opts ...grpc.CallOption) (*RevokeApiTokenResp, error)
+	// ── org_membership — list the caller's organizations ───────
+	// ListMyOrgs returns the orgs the bearer-authenticated caller belongs to
+	// (for the CLI's `org list` + the login-time membership cache + the init
+	// org picker). The principal is the gateway-resolved caller (never a
+	// client-sent user_id). Gated `org_membership`.
+	ListMyOrgs(ctx context.Context, in *ListMyOrgsReq, opts ...grpc.CallOption) (*ListMyOrgsResp, error)
 	// ── oauth_server — the OAuth 2.1 authorization server ───────
 	// The wire (SDK lib/oauthas, mounted by the REST gateway) calls
 	// GetOAuthServerSettings, RegisterOAuthClient, BeginOAuthAuthorization,
@@ -172,6 +190,33 @@ type AuthServiceClient interface {
 	RevokeOAuthToken(ctx context.Context, in *RevokeOAuthTokenReq, opts ...grpc.CallOption) (*RevokeOAuthTokenResp, error)
 	ListMyOAuthGrants(ctx context.Context, in *ListMyOAuthGrantsReq, opts ...grpc.CallOption) (*ListMyOAuthGrantsResp, error)
 	RevokeMyOAuthGrant(ctx context.Context, in *RevokeMyOAuthGrantReq, opts ...grpc.CallOption) (*RevokeMyOAuthGrantResp, error)
+	// ListOrgMembers — who is in the caller's active organization.
+	ListOrgMembers(ctx context.Context, in *ListOrgMembersReq, opts ...grpc.CallOption) (*ListOrgMembersResp, error)
+	// UpdateOrgMembershipRole — change a member's role, held to the role
+	// ceiling both ways (handlers/org_membership_role.go): the caller must hold
+	// every permission the NEW role carries, and cover every role the member
+	// holds in that organization now, since the change revokes them. The
+	// membership must be in the caller's active organization when there is
+	// one. The admin's OrgMemberships page edits through it;
+	// AuthMutation.UpdateOrgMembership, which it calls, checks nothing about
+	// the caller, so binding the page to it let anyone who could edit a
+	// membership grant any org role — their own included.
+	UpdateOrgMembershipRole(ctx context.Context, in *UpdateOrgMembershipRoleReq, opts ...grpc.CallOption) (*UpdateOrgMembershipRoleResp, error)
+	RemoveOrgMembership(ctx context.Context, in *RemoveOrgMembershipReq, opts ...grpc.CallOption) (*RemoveOrgMembershipResp, error)
+	// RemoveOrganization — the Organizations page's delete: closes the
+	// organization's pending invitations (org_invite) and deletes it
+	// (AuthMutation.DeleteOrganization) in one transaction, the caller recorded
+	// as who closed them.
+	RemoveOrganization(ctx context.Context, in *RemoveOrganizationReq, opts ...grpc.CallOption) (*RemoveOrganizationResp, error)
+	// The hosts bound to organizations (handlers/org_hosts.go).
+	BindOrgHost(ctx context.Context, in *BindOrgHostReq, opts ...grpc.CallOption) (*BindOrgHostResp, error)
+	UnbindOrgHost(ctx context.Context, in *UnbindOrgHostReq, opts ...grpc.CallOption) (*UnbindOrgHostResp, error)
+	ListOrgHosts(ctx context.Context, in *ListOrgHostsReq, opts ...grpc.CallOption) (*ListOrgHostsResp, error)
+	GetHostOrg(ctx context.Context, in *GetHostOrgReq, opts ...grpc.CallOption) (*HostOrgResp, error)
+	// An organization's registration policies (handlers/org_signup.go).
+	SetOrgSignUpPolicy(ctx context.Context, in *SetOrgSignUpPolicyReq, opts ...grpc.CallOption) (*SetOrgSignUpPolicyResp, error)
+	ClearOrgSignUpPolicy(ctx context.Context, in *ClearOrgSignUpPolicyReq, opts ...grpc.CallOption) (*ClearOrgSignUpPolicyResp, error)
+	ListOrgSignUpPolicies(ctx context.Context, in *ListOrgSignUpPoliciesReq, opts ...grpc.CallOption) (*ListOrgSignUpPoliciesResp, error)
 }
 
 type authServiceClient struct {
@@ -292,6 +337,16 @@ func (c *authServiceClient) RevokeApiToken(ctx context.Context, in *RevokeApiTok
 	return out, nil
 }
 
+func (c *authServiceClient) ListMyOrgs(ctx context.Context, in *ListMyOrgsReq, opts ...grpc.CallOption) (*ListMyOrgsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMyOrgsResp)
+	err := c.cc.Invoke(ctx, AuthService_ListMyOrgs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authServiceClient) GetOAuthServerSettings(ctx context.Context, in *GetOAuthServerSettingsReq, opts ...grpc.CallOption) (*GetOAuthServerSettingsResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetOAuthServerSettingsResp)
@@ -392,6 +447,116 @@ func (c *authServiceClient) RevokeMyOAuthGrant(ctx context.Context, in *RevokeMy
 	return out, nil
 }
 
+func (c *authServiceClient) ListOrgMembers(ctx context.Context, in *ListOrgMembersReq, opts ...grpc.CallOption) (*ListOrgMembersResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOrgMembersResp)
+	err := c.cc.Invoke(ctx, AuthService_ListOrgMembers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) UpdateOrgMembershipRole(ctx context.Context, in *UpdateOrgMembershipRoleReq, opts ...grpc.CallOption) (*UpdateOrgMembershipRoleResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateOrgMembershipRoleResp)
+	err := c.cc.Invoke(ctx, AuthService_UpdateOrgMembershipRole_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) RemoveOrgMembership(ctx context.Context, in *RemoveOrgMembershipReq, opts ...grpc.CallOption) (*RemoveOrgMembershipResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveOrgMembershipResp)
+	err := c.cc.Invoke(ctx, AuthService_RemoveOrgMembership_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) RemoveOrganization(ctx context.Context, in *RemoveOrganizationReq, opts ...grpc.CallOption) (*RemoveOrganizationResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveOrganizationResp)
+	err := c.cc.Invoke(ctx, AuthService_RemoveOrganization_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) BindOrgHost(ctx context.Context, in *BindOrgHostReq, opts ...grpc.CallOption) (*BindOrgHostResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BindOrgHostResp)
+	err := c.cc.Invoke(ctx, AuthService_BindOrgHost_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) UnbindOrgHost(ctx context.Context, in *UnbindOrgHostReq, opts ...grpc.CallOption) (*UnbindOrgHostResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnbindOrgHostResp)
+	err := c.cc.Invoke(ctx, AuthService_UnbindOrgHost_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ListOrgHosts(ctx context.Context, in *ListOrgHostsReq, opts ...grpc.CallOption) (*ListOrgHostsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOrgHostsResp)
+	err := c.cc.Invoke(ctx, AuthService_ListOrgHosts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) GetHostOrg(ctx context.Context, in *GetHostOrgReq, opts ...grpc.CallOption) (*HostOrgResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HostOrgResp)
+	err := c.cc.Invoke(ctx, AuthService_GetHostOrg_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) SetOrgSignUpPolicy(ctx context.Context, in *SetOrgSignUpPolicyReq, opts ...grpc.CallOption) (*SetOrgSignUpPolicyResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetOrgSignUpPolicyResp)
+	err := c.cc.Invoke(ctx, AuthService_SetOrgSignUpPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ClearOrgSignUpPolicy(ctx context.Context, in *ClearOrgSignUpPolicyReq, opts ...grpc.CallOption) (*ClearOrgSignUpPolicyResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClearOrgSignUpPolicyResp)
+	err := c.cc.Invoke(ctx, AuthService_ClearOrgSignUpPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ListOrgSignUpPolicies(ctx context.Context, in *ListOrgSignUpPoliciesReq, opts ...grpc.CallOption) (*ListOrgSignUpPoliciesResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOrgSignUpPoliciesResp)
+	err := c.cc.Invoke(ctx, AuthService_ListOrgSignUpPolicies_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthServiceServer is the server API for AuthService service.
 // All implementations should embed UnimplementedAuthServiceServer
 // for forward compatibility.
@@ -451,6 +616,12 @@ type AuthServiceServer interface {
 	// RevokeApiToken — revoke the caller's own API token (revoked_at; the
 	// row and its subset rows stay).
 	RevokeApiToken(context.Context, *RevokeApiTokenReq) (*RevokeApiTokenResp, error)
+	// ── org_membership — list the caller's organizations ───────
+	// ListMyOrgs returns the orgs the bearer-authenticated caller belongs to
+	// (for the CLI's `org list` + the login-time membership cache + the init
+	// org picker). The principal is the gateway-resolved caller (never a
+	// client-sent user_id). Gated `org_membership`.
+	ListMyOrgs(context.Context, *ListMyOrgsReq) (*ListMyOrgsResp, error)
 	// ── oauth_server — the OAuth 2.1 authorization server ───────
 	// The wire (SDK lib/oauthas, mounted by the REST gateway) calls
 	// GetOAuthServerSettings, RegisterOAuthClient, BeginOAuthAuthorization,
@@ -468,6 +639,33 @@ type AuthServiceServer interface {
 	RevokeOAuthToken(context.Context, *RevokeOAuthTokenReq) (*RevokeOAuthTokenResp, error)
 	ListMyOAuthGrants(context.Context, *ListMyOAuthGrantsReq) (*ListMyOAuthGrantsResp, error)
 	RevokeMyOAuthGrant(context.Context, *RevokeMyOAuthGrantReq) (*RevokeMyOAuthGrantResp, error)
+	// ListOrgMembers — who is in the caller's active organization.
+	ListOrgMembers(context.Context, *ListOrgMembersReq) (*ListOrgMembersResp, error)
+	// UpdateOrgMembershipRole — change a member's role, held to the role
+	// ceiling both ways (handlers/org_membership_role.go): the caller must hold
+	// every permission the NEW role carries, and cover every role the member
+	// holds in that organization now, since the change revokes them. The
+	// membership must be in the caller's active organization when there is
+	// one. The admin's OrgMemberships page edits through it;
+	// AuthMutation.UpdateOrgMembership, which it calls, checks nothing about
+	// the caller, so binding the page to it let anyone who could edit a
+	// membership grant any org role — their own included.
+	UpdateOrgMembershipRole(context.Context, *UpdateOrgMembershipRoleReq) (*UpdateOrgMembershipRoleResp, error)
+	RemoveOrgMembership(context.Context, *RemoveOrgMembershipReq) (*RemoveOrgMembershipResp, error)
+	// RemoveOrganization — the Organizations page's delete: closes the
+	// organization's pending invitations (org_invite) and deletes it
+	// (AuthMutation.DeleteOrganization) in one transaction, the caller recorded
+	// as who closed them.
+	RemoveOrganization(context.Context, *RemoveOrganizationReq) (*RemoveOrganizationResp, error)
+	// The hosts bound to organizations (handlers/org_hosts.go).
+	BindOrgHost(context.Context, *BindOrgHostReq) (*BindOrgHostResp, error)
+	UnbindOrgHost(context.Context, *UnbindOrgHostReq) (*UnbindOrgHostResp, error)
+	ListOrgHosts(context.Context, *ListOrgHostsReq) (*ListOrgHostsResp, error)
+	GetHostOrg(context.Context, *GetHostOrgReq) (*HostOrgResp, error)
+	// An organization's registration policies (handlers/org_signup.go).
+	SetOrgSignUpPolicy(context.Context, *SetOrgSignUpPolicyReq) (*SetOrgSignUpPolicyResp, error)
+	ClearOrgSignUpPolicy(context.Context, *ClearOrgSignUpPolicyReq) (*ClearOrgSignUpPolicyResp, error)
+	ListOrgSignUpPolicies(context.Context, *ListOrgSignUpPoliciesReq) (*ListOrgSignUpPoliciesResp, error)
 }
 
 // UnimplementedAuthServiceServer should be embedded to have
@@ -510,6 +708,9 @@ func (UnimplementedAuthServiceServer) ListApiTokens(context.Context, *ListApiTok
 func (UnimplementedAuthServiceServer) RevokeApiToken(context.Context, *RevokeApiTokenReq) (*RevokeApiTokenResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method RevokeApiToken not implemented")
 }
+func (UnimplementedAuthServiceServer) ListMyOrgs(context.Context, *ListMyOrgsReq) (*ListMyOrgsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMyOrgs not implemented")
+}
 func (UnimplementedAuthServiceServer) GetOAuthServerSettings(context.Context, *GetOAuthServerSettingsReq) (*GetOAuthServerSettingsResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOAuthServerSettings not implemented")
 }
@@ -539,6 +740,39 @@ func (UnimplementedAuthServiceServer) ListMyOAuthGrants(context.Context, *ListMy
 }
 func (UnimplementedAuthServiceServer) RevokeMyOAuthGrant(context.Context, *RevokeMyOAuthGrantReq) (*RevokeMyOAuthGrantResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method RevokeMyOAuthGrant not implemented")
+}
+func (UnimplementedAuthServiceServer) ListOrgMembers(context.Context, *ListOrgMembersReq) (*ListOrgMembersResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOrgMembers not implemented")
+}
+func (UnimplementedAuthServiceServer) UpdateOrgMembershipRole(context.Context, *UpdateOrgMembershipRoleReq) (*UpdateOrgMembershipRoleResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateOrgMembershipRole not implemented")
+}
+func (UnimplementedAuthServiceServer) RemoveOrgMembership(context.Context, *RemoveOrgMembershipReq) (*RemoveOrgMembershipResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveOrgMembership not implemented")
+}
+func (UnimplementedAuthServiceServer) RemoveOrganization(context.Context, *RemoveOrganizationReq) (*RemoveOrganizationResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveOrganization not implemented")
+}
+func (UnimplementedAuthServiceServer) BindOrgHost(context.Context, *BindOrgHostReq) (*BindOrgHostResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method BindOrgHost not implemented")
+}
+func (UnimplementedAuthServiceServer) UnbindOrgHost(context.Context, *UnbindOrgHostReq) (*UnbindOrgHostResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method UnbindOrgHost not implemented")
+}
+func (UnimplementedAuthServiceServer) ListOrgHosts(context.Context, *ListOrgHostsReq) (*ListOrgHostsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOrgHosts not implemented")
+}
+func (UnimplementedAuthServiceServer) GetHostOrg(context.Context, *GetHostOrgReq) (*HostOrgResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetHostOrg not implemented")
+}
+func (UnimplementedAuthServiceServer) SetOrgSignUpPolicy(context.Context, *SetOrgSignUpPolicyReq) (*SetOrgSignUpPolicyResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetOrgSignUpPolicy not implemented")
+}
+func (UnimplementedAuthServiceServer) ClearOrgSignUpPolicy(context.Context, *ClearOrgSignUpPolicyReq) (*ClearOrgSignUpPolicyResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClearOrgSignUpPolicy not implemented")
+}
+func (UnimplementedAuthServiceServer) ListOrgSignUpPolicies(context.Context, *ListOrgSignUpPoliciesReq) (*ListOrgSignUpPoliciesResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOrgSignUpPolicies not implemented")
 }
 func (UnimplementedAuthServiceServer) testEmbeddedByValue() {}
 
@@ -758,6 +992,24 @@ func _AuthService_RevokeApiToken_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_ListMyOrgs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMyOrgsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ListMyOrgs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ListMyOrgs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ListMyOrgs(ctx, req.(*ListMyOrgsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthService_GetOAuthServerSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetOAuthServerSettingsReq)
 	if err := dec(in); err != nil {
@@ -938,6 +1190,204 @@ func _AuthService_RevokeMyOAuthGrant_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_ListOrgMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOrgMembersReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ListOrgMembers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ListOrgMembers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ListOrgMembers(ctx, req.(*ListOrgMembersReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_UpdateOrgMembershipRole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateOrgMembershipRoleReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).UpdateOrgMembershipRole(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_UpdateOrgMembershipRole_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).UpdateOrgMembershipRole(ctx, req.(*UpdateOrgMembershipRoleReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_RemoveOrgMembership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveOrgMembershipReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).RemoveOrgMembership(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_RemoveOrgMembership_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).RemoveOrgMembership(ctx, req.(*RemoveOrgMembershipReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_RemoveOrganization_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveOrganizationReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).RemoveOrganization(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_RemoveOrganization_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).RemoveOrganization(ctx, req.(*RemoveOrganizationReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_BindOrgHost_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BindOrgHostReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).BindOrgHost(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_BindOrgHost_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).BindOrgHost(ctx, req.(*BindOrgHostReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_UnbindOrgHost_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnbindOrgHostReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).UnbindOrgHost(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_UnbindOrgHost_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).UnbindOrgHost(ctx, req.(*UnbindOrgHostReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ListOrgHosts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOrgHostsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ListOrgHosts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ListOrgHosts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ListOrgHosts(ctx, req.(*ListOrgHostsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_GetHostOrg_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetHostOrgReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).GetHostOrg(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_GetHostOrg_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).GetHostOrg(ctx, req.(*GetHostOrgReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_SetOrgSignUpPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetOrgSignUpPolicyReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).SetOrgSignUpPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_SetOrgSignUpPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).SetOrgSignUpPolicy(ctx, req.(*SetOrgSignUpPolicyReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ClearOrgSignUpPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearOrgSignUpPolicyReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ClearOrgSignUpPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ClearOrgSignUpPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ClearOrgSignUpPolicy(ctx, req.(*ClearOrgSignUpPolicyReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ListOrgSignUpPolicies_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOrgSignUpPoliciesReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ListOrgSignUpPolicies(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ListOrgSignUpPolicies_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ListOrgSignUpPolicies(ctx, req.(*ListOrgSignUpPoliciesReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -990,6 +1440,10 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthService_RevokeApiToken_Handler,
 		},
 		{
+			MethodName: "ListMyOrgs",
+			Handler:    _AuthService_ListMyOrgs_Handler,
+		},
+		{
 			MethodName: "GetOAuthServerSettings",
 			Handler:    _AuthService_GetOAuthServerSettings_Handler,
 		},
@@ -1029,9 +1483,53 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "RevokeMyOAuthGrant",
 			Handler:    _AuthService_RevokeMyOAuthGrant_Handler,
 		},
+		{
+			MethodName: "ListOrgMembers",
+			Handler:    _AuthService_ListOrgMembers_Handler,
+		},
+		{
+			MethodName: "UpdateOrgMembershipRole",
+			Handler:    _AuthService_UpdateOrgMembershipRole_Handler,
+		},
+		{
+			MethodName: "RemoveOrgMembership",
+			Handler:    _AuthService_RemoveOrgMembership_Handler,
+		},
+		{
+			MethodName: "RemoveOrganization",
+			Handler:    _AuthService_RemoveOrganization_Handler,
+		},
+		{
+			MethodName: "BindOrgHost",
+			Handler:    _AuthService_BindOrgHost_Handler,
+		},
+		{
+			MethodName: "UnbindOrgHost",
+			Handler:    _AuthService_UnbindOrgHost_Handler,
+		},
+		{
+			MethodName: "ListOrgHosts",
+			Handler:    _AuthService_ListOrgHosts_Handler,
+		},
+		{
+			MethodName: "GetHostOrg",
+			Handler:    _AuthService_GetHostOrg_Handler,
+		},
+		{
+			MethodName: "SetOrgSignUpPolicy",
+			Handler:    _AuthService_SetOrgSignUpPolicy_Handler,
+		},
+		{
+			MethodName: "ClearOrgSignUpPolicy",
+			Handler:    _AuthService_ClearOrgSignUpPolicy_Handler,
+		},
+		{
+			MethodName: "ListOrgSignUpPolicies",
+			Handler:    _AuthService_ListOrgSignUpPolicies_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "business/auth_service.proto",
 }
 
-// emit-sha256: c580577f113633660eef39cda80b8a4acaf9fc533149afae07ac56a868927413
+// emit-sha256: c3a3bb6066325c7811a213164d799a6089c81870b9c37f63116e76de2d3fe361
