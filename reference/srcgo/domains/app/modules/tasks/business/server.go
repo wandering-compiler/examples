@@ -19,6 +19,7 @@ package business
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"google.golang.org/grpc/codes"
@@ -161,6 +162,26 @@ func (s *TasksServer) StreamTasks(req *taskspb.StreamTasksReq, stream taskspb.Ta
 			return err
 		}
 	}
+}
+
+// AskAboutTasks — the server-stream a POST opens. It answers with what
+// reached it: the question, then how many earlier turns came with it, so a
+// caller can tell the body arrived whole and nothing was read from a URL.
+func (s *TasksServer) AskAboutTasks(req *taskspb.AskAboutTasksReq, stream taskspb.TasksService_AskAboutTasksServer) error {
+	if req.GetQuestion() == "" {
+		return grpcerr.ForUser(stream.Context(), codes.InvalidArgument,
+			"TasksService.AskAboutTasks", "question is required",
+			"ASK_QUESTION_REQUIRED", "Ask a question.")
+	}
+	for _, text := range []string{
+		"heard: " + req.GetQuestion(),
+		fmt.Sprintf("after %d earlier turn(s)", len(req.GetHistory())),
+	} {
+		if err := stream.Send(&taskspb.AskAboutTasksChunk{Text: text}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // LiveSearch — bidi pump. Queries flow client → facade →

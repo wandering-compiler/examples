@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-11-08 12:38+0000\n"
+"POT-Creation-Date: 2026-11-09 23:43+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -147,6 +147,9 @@ msgstr "An organization's plan is changed by the platform, not from inside the o
 
 msgid "Another change reached this first. Please try again."
 msgstr "Another change reached this first. Please try again."
+
+msgid "Ask a question."
+msgstr "Ask a question."
 
 msgid "Auth · Auth Service · Approve Oauth Authorization"
 msgstr "Auth · Auth Service · Approve Oauth Authorization"
@@ -552,6 +555,9 @@ msgstr "Tasks · Task · Add"
 
 msgid "Tasks · Task · View"
 msgstr "Tasks · Task · View"
+
+msgid "Tasks · Tasks Service · Ask About Tasks"
+msgstr "Tasks · Tasks Service · Ask About Tasks"
 
 msgid "Tasks · Tasks Service · Bulk Create Tasks"
 msgstr "Tasks · Tasks Service · Bulk Create Tasks"

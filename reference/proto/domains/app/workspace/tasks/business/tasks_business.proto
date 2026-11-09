@@ -58,6 +58,18 @@ message StreamTasksReq {
   int64 user_id = 1;
 }
 
+// AskAboutTasksReq — a chat turn: the question and the turns before it. It
+// rides a POST body, never the URL (rest.proto: method POST on the stream).
+message AskAboutTasksReq {
+  string question = 1;
+  repeated string history = 2;
+}
+
+// AskAboutTasksChunk — one piece of the answer, streamed as it is written.
+message AskAboutTasksChunk {
+  string text = 1;
+}
+
 // LiveSearchReq/Hit + GetTaskWithCategoryReq/Resp +
 // GetTaskWithCommentsReq/Resp live in the storage queries
 // layer (queries/task_query.proto) — same import pattern as
@@ -123,6 +135,12 @@ service TasksService {
   // StreamTasks — server-stream of every task for a user.
   // REST mapping (B4): SSE.
   rpc StreamTasks(StreamTasksReq) returns (stream Task) {
+  }
+
+  // AskAboutTasks — a server-stream opened by a POST whose body is the
+  // request (REST: SSE over POST). The answer repeats what reached the
+  // handler, so the live suite can tell the body arrived whole.
+  rpc AskAboutTasks(AskAboutTasksReq) returns (stream AskAboutTasksChunk) {
   }
 
   // LiveSearch — bidi-stream. Each Recv carries a search

@@ -1,0 +1,21 @@
+# The stream a POST opens (rest.proto: `method: POST` on AskAboutTasks).
+#
+# The request is a JSON body, not a URL: a chat turn's question would
+# otherwise land in every proxy's access log, and its history does not fit a
+# query string. The handler answers with what reached it, so the two frames
+# are the proof that the body arrived whole — the question verbatim, and the
+# number of earlier turns that came with it. `frames` is ORDERED and
+# EXHAUSTIVE: a stream that sends one frame and hangs, or reads the question
+# and drops the history, fails here.
+method: tasks.TasksService.AskAboutTasks
+pre:
+    - auth/auth.yaml
+input:
+    question: which of my tasks are due this week?
+    history:
+        - what is on my list?
+        - and the overdue ones?
+expect_stream:
+    frames:
+        - text: {matcher: eq, value: "heard: which of my tasks are due this week?"}
+        - text: {matcher: eq, value: "after 2 earlier turn(s)"}
