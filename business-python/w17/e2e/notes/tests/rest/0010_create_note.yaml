@@ -5,7 +5,9 @@
 # mutation and publishes NoteCreated (the method's `(w17.event_emit)`). The
 # subscriber — the generated eventbus runner calling the same Python tier's
 # NotesEvents.OnNoteCreated — records a `delivered` mark and publishes
-# NoteDelivered, so both events arriving prove the whole loop:
+# NoteDelivered. Both events carry THIS note's id (the capture interpolates
+# into the await), so they prove the whole loop for this write, not for
+# whichever note another step created:
 # Python emit → NATS → Go subscriber runner → Python handler → Python emit.
 method: board.NotesService.CreateNote
 input:
@@ -22,10 +24,10 @@ await_events:
     - topic: note.created
       timeout_ms: 15000
       match:
-        note_id: {matcher: not_empty}
+        note_id: {matcher: eq, value: "${note.id}"}
         batch: {matcher: eq, value: single}
         title: {matcher: eq, value: written by the python tier}
     - topic: note.delivered
       timeout_ms: 30000
       match:
-        note_id: {matcher: not_empty}
+        note_id: {matcher: eq, value: "${note.id}"}
