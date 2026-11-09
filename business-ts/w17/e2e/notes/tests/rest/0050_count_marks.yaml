@@ -1,0 +1,12 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The subscriber's effect: exactly one `delivered` mark for 0010's note
+# (0010 waited for NoteDelivered, which the handler publishes after the
+# mark is written). One, not two: a single durable consumer.
+method: board.NoteQuery.CountMarks
+input:
+    note_id: ${note.id}
+    mark: delivered
+expect:
+    marks: {matcher: eq, value: "1"}

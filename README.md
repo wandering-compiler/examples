@@ -16,6 +16,7 @@ tests.
 | [`databases`](databases) | one project on Postgres, MySQL and SQLite: hstore, ltree and PostGIS columns, MySQL and SQLite column types, and the same DQL queries compiled for each database; an end-to-end suite against the Postgres domain |
 | [`single-binary`](single-binary) | all five components of a domain built into one binary: REST, a hand-written business tier, events on NATS, uploads and an admin with the `auth` plugin's login; an end-to-end suite and a live suite |
 | [`business-python`](business-python) | a business tier written in Python on the Python business SDK, over a generated storage tier: an event and its subscriber, a transaction's commit and rollback, `on_commit`, and a list paged through the Python tier; an end-to-end suite |
+| [`business-ts`](business-ts) | the same business tier written in TypeScript on the TypeScript business SDK (Node 24, no build step): an event and its subscriber, a transaction's commit and rollback, `onCommit`, and a list paged through the TypeScript tier; an end-to-end suite |
 | [`rpc-cli`](rpc-cli) | a public gRPC surface, curated from picked methods, with reflection and a second service name, and two generated command-line binaries, one dialing the backend and one only the public surface; a live suite |
 | [`reference`](reference) | the widest one: two domains on Postgres and Redis, REST with cursor paging, uploads and streams, an MCP server, an admin with an ACL, events on NATS, a hand-written business tier and a capability link; an end-to-end suite of a few hundred cases |
 

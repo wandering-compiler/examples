@@ -1,0 +1,18 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# Page 1 through the TYPESCRIPT business method: the gateway hands the page
+# (size 2, no cursor) to NotesService.ListNotes as metadata, the handler
+# forwards it to the storage query with paging.forward(ctx) and copies the
+# storage response's w17.Paging into its own. Without the forward, storage
+# would answer every row of the batch.
+method: board.NotesService.ListNotes
+input:
+    batch: paged
+    limit: 2
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    items.0.title: {matcher: eq, value: page note 1}
+    items.1.title: {matcher: eq, value: page note 2}
+    paging.total: {matcher: eq, value: "3"}
+    paging.next_cursor: {capture: notes_page.next_cursor, match: {matcher: not_empty}}
