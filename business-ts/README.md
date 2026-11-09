@@ -62,8 +62,8 @@ to TypeScript: the same protos, the same suite.
     placement of the `writer: BUSINESS` field `NoteExport.file`) and
     records the handle through a storage mutation. The gateway serves it
     back through the `/files` download route. Gateway and companion are
-    separate containers, so `compose.yaml` mounts one `notes-exports`
-    volume into both: one connection is one store.
+    separate containers, so the generated composes mount one volume,
+    `notes-uploads-notes-exports`, into both: one connection is one store.
 - **REST** for all of it (`proto/domains/notes/rest.proto`), without
   authentication.
 

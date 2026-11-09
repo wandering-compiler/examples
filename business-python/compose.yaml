@@ -17,7 +17,9 @@ include:
   - compose.w17.yaml
 
 # What this example adds to the generated stack: the third-party API the
-# egress client calls, and the one store of notes-exports.
+# egress client calls. (The one store of notes-exports is the generated
+# composes': the companion writes it, the gateway reads it back for the
+# download route, and both mount the volume notes-uploads-notes-exports.)
 services:
   # The business companion serves the Python tier's egress clients and file
   # stores. Its egress client proto/clients/quotes calls the stand-in below:
@@ -26,23 +28,10 @@ services:
   notes-business-companion:
     environment:
       W17_CLIENT_QUOTES_DSN: http://quotestub:8080?auth=bearer&token=test-token
-    volumes:
-      - notes-exports:/var/lib/w17/uploads/notes-exports
     depends_on:
       quotestub: { condition: service_started }
-
-  # One connection is one store: the companion writes notes-exports (the
-  # Python tier's ExportNote) and the gateway reads it back for the download
-  # route, so both mount the same volume at the root both default to
-  # (NOTES_GATEWAY_UPLOAD_NOTES_EXPORTS_ROOT).
-  notes-gateway:
-    volumes:
-      - notes-exports:/var/lib/w17/uploads/notes-exports
 
   # The third-party Quotes API, stood in for by quotestub/ (its openapi.yaml
   # is what the client was generated from).
   quotestub:
     build: { context: quotestub, args: [GOPROXY, GOSUMDB, GODEBUG] }
-
-volumes:
-  notes-exports:
