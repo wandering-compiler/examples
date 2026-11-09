@@ -41,6 +41,24 @@ which is what `w17ctl target business add --domain notes --language python
   `subscribers.proto`): the generated eventbus runner delivers every
   `NoteCreated` to it; it records a `delivered` mark and publishes
   `NoteDelivered`.
+- **The business companion** (`w17/services/notes-business-companion/`,
+  generated): what a Go tier runs in-process — the egress clients of
+  `proto/clients/` and the upload file stores — served over gRPC to the
+  Python tier by the same Go code. Its own container here; folded into the
+  domain's binary when the domain is composed.
+  - `Quote` calls the third-party Quotes API through the generated egress
+    client `proto/clients/quotes` (`clients.egress("quotes")`). The
+    companion makes the HTTP request with the credential from
+    `W17_CLIENT_QUOTES_DSN` and codes the API's errors for the caller: an
+    unknown quote is `NOT_FOUND`. `quotestub/` stands in for the API in
+    `compose.yaml`.
+  - `ExportNote` renders a note as a text file, puts it on its own
+    connection `notes-exports` (`clients.store("notes-exports")`, the
+    placement of the `writer: BUSINESS` field `NoteExport.file`) and
+    records the handle through a storage mutation. The gateway serves it
+    back through the `/files` download route. Gateway and companion are
+    separate containers, so `compose.yaml` mounts one `notes-exports`
+    volume into both: one connection is one store.
 - **REST** for all of it (`proto/domains/notes/rest.proto`), without
   authentication.
 
@@ -55,6 +73,8 @@ which is what `w17ctl target business add --domain notes --language python
 | `0022`, `0024` | the rolled-back write is refused, no `note.created` arrives, and the batch it wrote into is empty |
 | `0030` → `0032` → `0034` | page 1, page 2 and back to page 1 of `ListNotes`, through the Python tier |
 | `0040`, `0050`, `0060` | the note is stored, the subscriber marked it exactly once, the storage query pages the same |
+| `0070` → `0072` | `ExportNote` stores a file through the companion; downloaded through the gateway, it holds the bytes the Python tier rendered |
+| `0080`, `0082` | a quote from the Quotes stand-in through the egress client; an unknown one is a 404 |
 
 ## Running it
 

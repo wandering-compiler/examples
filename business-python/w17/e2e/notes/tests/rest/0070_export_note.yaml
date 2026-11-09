@@ -1,0 +1,17 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The Python business tier renders 0010's note as a text file and puts it on
+# its own connection (notes-exports) through the business companion, which
+# stores it with the Go code a Go tier runs in-process (kvfs.Put, the
+# placement of NoteExport.file). The tier records the handle through the
+# storage mutation; the answer carries the download URL the gateway rewrote
+# that handle into.
+method: board.NotesService.ExportNote
+input:
+    note_id: ${note.id}
+expect:
+    id: {matcher: not_empty}
+    note_id: {matcher: eq, value: "${note.id}"}
+    file: {capture: export.file, match: {matcher: regex, pattern: "/files/note-exports/"}}
+    created_at: {matcher: not_empty}

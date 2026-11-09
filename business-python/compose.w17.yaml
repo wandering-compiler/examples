@@ -99,6 +99,7 @@ volumes:
 # Each per-bundle compose.yaml declares JUST the binary;
 # infrastructure (DBs, queue) lives above.
 include:
+  - w17/services/notes-business-companion/compose.yaml
   - w17/services/notes-business/compose.yaml
   - w17/services/notes-eventbus/compose.yaml
   - w17/services/notes-gateway/compose.yaml

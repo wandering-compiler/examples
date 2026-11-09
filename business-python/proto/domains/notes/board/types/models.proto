@@ -44,3 +44,34 @@ message NoteMark {
 
   google.protobuf.Timestamp created_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
 }
+
+// NoteExport — a file the Python business tier made from a note
+// (NotesService.ExportNote) and put on its own connection, notes-exports,
+// through the business companion.
+//
+// `file` is the handle the companion's put returned — byte for byte what a
+// Go tier's kvfs.Put returns. `writer: BUSINESS` is what gives the business
+// tier a WRITABLE store for notes-exports and the placement it puts with,
+// and what keeps the gateway from ever writing the connection. The download
+// route serves it like an upload.
+message NoteExport {
+  option (w17.db.table) = { name: "note_exports" };
+
+  int64 id = 1 [(w17.field) = { pk: true, default_auto: IDENTITY }];
+
+  int64 note_id = 2;
+
+  string file = 3 [(w17.field) = {
+    type: UPLOADED_FILE,
+    upload: {
+      connection:       "notes-exports",
+      bucket_path:      "/note-exports",
+      expected_objects: 10000,
+      max_per_bucket:   100,
+      max_size_bytes:   65536,
+      writer:           BUSINESS
+    }
+  }];
+
+  google.protobuf.Timestamp created_at = 4 [(w17.field) = { default_auto: NOW, immutable: true }];
+}

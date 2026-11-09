@@ -3,6 +3,7 @@ go 1.26.1
 use (
 	./srcgo
 	./w17/services/e2erunner
+	./w17/services/notes-business-companion
 	./w17/services/notes-eventbus
 	./w17/services/notes-gateway
 	./w17/services/notes-storage
