@@ -55,10 +55,12 @@ to TypeScript: the same protos, the same suite.
 
 - `package.json` has `"type": "module"` and no `@w17/business` dependency:
   the image builds the SDK and installs it where `import … from
-  "@w17/business"` resolves. List it under `devDependencies` (for the
-  editor) if you install it locally, never under `dependencies` — the image
-  installs those with `npm ci --omit=dev` and would look for the SDK on the
-  npm registry, where it is not. A dependency of your own goes under
+  "@w17/business"` resolves. Leave it out of `package.json`. For editor
+  types, the only safe entry is a `file:` link to a local checkout,
+  `"devDependencies": { "@w17/business": "file:../path/to/sdk/ts/business" }`;
+  a registry version spec breaks the image build, under `devDependencies`
+  too, because npm resolves it on the npm registry, where the SDK is not
+  published. A dependency of your own goes under
   `dependencies` as usual (commit the `package-lock.json`).
 - `tsconfig.json` holds the code to what Node can run without compiling:
   `erasableSyntaxOnly` (no `enum`, no `namespace`, no constructor parameter
