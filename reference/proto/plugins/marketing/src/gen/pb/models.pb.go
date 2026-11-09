@@ -279,6 +279,84 @@ func (x *Reconciliation) GetFinishedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// Activity is when a user last made each request the brevo_attributes
+// feature writes to their contact: one row per (user, attribute). The
+// contact attribute is written from the row as stored, and a row only ever
+// moves forward (BumpActivity), so a record redelivered after a newer one —
+// or two replicas at once — never writes an older date over a newer one.
+// Deleted with the account (UserDeleted).
+type Activity struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// user_id — auth's user id: the contact's ext_id in the tool.
+	UserId string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// attribute — the contact attribute the request is written to
+	// (W17_<SERVICE>_<METHOD>).
+	Attribute string `protobuf:"bytes,3,opt,name=attribute,proto3" json:"attribute,omitempty"`
+	// last_at — when the user last made it (the record's start).
+	LastAt        *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_at,json=lastAt,proto3" json:"last_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Activity) Reset() {
+	*x = Activity{}
+	mi := &file_types_models_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Activity) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Activity) ProtoMessage() {}
+
+func (x *Activity) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Activity.ProtoReflect.Descriptor instead.
+func (*Activity) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Activity) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Activity) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *Activity) GetAttribute() string {
+	if x != nil {
+		return x.Attribute
+	}
+	return ""
+}
+
+func (x *Activity) GetLastAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastAt
+	}
+	return nil
+}
+
 var File_types_models_proto protoreflect.FileDescriptor
 
 const file_types_models_proto_rawDesc = "" +
@@ -305,7 +383,16 @@ const file_types_models_proto_rawDesc = "" +
 	"\n" +
 	"claimed_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\tclaimedAt\x12E\n" +
 	"\vfinished_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\n" +
-	"finishedAt:\r\xc2\xf3\x18\x00\xfa\xf4\x18\x05brevoB\xd6\x01\n" +
+	"finishedAt:\r\xc2\xf3\x18\x00\xfa\xf4\x18\x05brevo\"\xe4\x01\n" +
+	"\bActivity\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\x1f\n" +
+	"\auser_id\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12'\n" +
+	"\tattribute\x18\x03 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\xff\x01R\tattribute\x12;\n" +
+	"\alast_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\x06lastAt:4\xc2\xf3\x18\x1c\x12\x1a\n" +
+	"\t\n" +
+	"\auser_id\n" +
+	"\v\n" +
+	"\tattribute\x10\x01\xfa\xf4\x18\x10brevo_attributesB\xd6\x01\n" +
 	"\x19com.w17.contrib.marketingB\vModelsProtoP\x01Z6github.com/wandering-compiler/plugins/marketing/gen/pb\xa2\x02\x03WCM\xaa\x02\x15W17.Contrib.Marketing\xca\x02\x15W17\\Contrib\\Marketing\xe2\x02!W17\\Contrib\\Marketing\\GPBMetadata\xea\x02\x17W17::Contrib::Marketingb\x06proto3"
 
 var (
@@ -320,25 +407,27 @@ func file_types_models_proto_rawDescGZIP() []byte {
 	return file_types_models_proto_rawDescData
 }
 
-var file_types_models_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_types_models_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_types_models_proto_goTypes = []any{
 	(*SentEvent)(nil),             // 0: w17.contrib.marketing.SentEvent
 	(*Contact)(nil),               // 1: w17.contrib.marketing.Contact
 	(*Reconciliation)(nil),        // 2: w17.contrib.marketing.Reconciliation
-	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
+	(*Activity)(nil),              // 3: w17.contrib.marketing.Activity
+	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
 }
 var file_types_models_proto_depIdxs = []int32{
-	3, // 0: w17.contrib.marketing.SentEvent.sent_at:type_name -> google.protobuf.Timestamp
-	3, // 1: w17.contrib.marketing.Contact.consent_at:type_name -> google.protobuf.Timestamp
-	3, // 2: w17.contrib.marketing.Contact.unsubscribed_at:type_name -> google.protobuf.Timestamp
-	3, // 3: w17.contrib.marketing.Contact.erased_at:type_name -> google.protobuf.Timestamp
-	3, // 4: w17.contrib.marketing.Reconciliation.claimed_at:type_name -> google.protobuf.Timestamp
-	3, // 5: w17.contrib.marketing.Reconciliation.finished_at:type_name -> google.protobuf.Timestamp
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	4, // 0: w17.contrib.marketing.SentEvent.sent_at:type_name -> google.protobuf.Timestamp
+	4, // 1: w17.contrib.marketing.Contact.consent_at:type_name -> google.protobuf.Timestamp
+	4, // 2: w17.contrib.marketing.Contact.unsubscribed_at:type_name -> google.protobuf.Timestamp
+	4, // 3: w17.contrib.marketing.Contact.erased_at:type_name -> google.protobuf.Timestamp
+	4, // 4: w17.contrib.marketing.Reconciliation.claimed_at:type_name -> google.protobuf.Timestamp
+	4, // 5: w17.contrib.marketing.Reconciliation.finished_at:type_name -> google.protobuf.Timestamp
+	4, // 6: w17.contrib.marketing.Activity.last_at:type_name -> google.protobuf.Timestamp
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_types_models_proto_init() }
@@ -352,7 +441,7 @@ func file_types_models_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_types_models_proto_rawDesc), len(file_types_models_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
@@ -365,4 +454,4 @@ func file_types_models_proto_init() {
 	file_types_models_proto_depIdxs = nil
 }
 
-// emit-sha256: 4a4ea2347c203043899b8d7fcaa3c7cd44a3ec98f464d13f61b9e84568cf8483
+// emit-sha256: 78a2887cd74033e7ece99c5cd438f2b8bbc5b40102eb80c4e4937e342560a7dc

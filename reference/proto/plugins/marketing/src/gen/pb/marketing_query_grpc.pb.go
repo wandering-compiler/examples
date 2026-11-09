@@ -25,6 +25,7 @@ const (
 	MarketingQuery_ListContacts_FullMethodName        = "/w17.contrib.marketing.MarketingQuery/ListContacts"
 	MarketingQuery_ListContactsByEmail_FullMethodName = "/w17.contrib.marketing.MarketingQuery/ListContactsByEmail"
 	MarketingQuery_GetReconciliation_FullMethodName   = "/w17.contrib.marketing.MarketingQuery/GetReconciliation"
+	MarketingQuery_ListActivity_FullMethodName        = "/w17.contrib.marketing.MarketingQuery/ListActivity"
 )
 
 // MarketingQueryClient is the client API for MarketingQuery service.
@@ -43,6 +44,9 @@ type MarketingQueryClient interface {
 	// GetReconciliation — a one-time job's record; NotFound when it never
 	// started. Gated brevo.
 	GetReconciliation(ctx context.Context, in *GetReconciliationReq, opts ...grpc.CallOption) (*GetReconciliationResp, error)
+	// ListActivity — every attribute's last date of these users. Gated
+	// brevo_attributes.
+	ListActivity(ctx context.Context, in *ListActivityReq, opts ...grpc.CallOption) (*ListActivityResp, error)
 }
 
 type marketingQueryClient struct {
@@ -93,6 +97,16 @@ func (c *marketingQueryClient) GetReconciliation(ctx context.Context, in *GetRec
 	return out, nil
 }
 
+func (c *marketingQueryClient) ListActivity(ctx context.Context, in *ListActivityReq, opts ...grpc.CallOption) (*ListActivityResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListActivityResp)
+	err := c.cc.Invoke(ctx, MarketingQuery_ListActivity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MarketingQueryServer is the server API for MarketingQuery service.
 // All implementations should embed UnimplementedMarketingQueryServer
 // for forward compatibility.
@@ -109,6 +123,9 @@ type MarketingQueryServer interface {
 	// GetReconciliation — a one-time job's record; NotFound when it never
 	// started. Gated brevo.
 	GetReconciliation(context.Context, *GetReconciliationReq) (*GetReconciliationResp, error)
+	// ListActivity — every attribute's last date of these users. Gated
+	// brevo_attributes.
+	ListActivity(context.Context, *ListActivityReq) (*ListActivityResp, error)
 }
 
 // UnimplementedMarketingQueryServer should be embedded to have
@@ -129,6 +146,9 @@ func (UnimplementedMarketingQueryServer) ListContactsByEmail(context.Context, *L
 }
 func (UnimplementedMarketingQueryServer) GetReconciliation(context.Context, *GetReconciliationReq) (*GetReconciliationResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetReconciliation not implemented")
+}
+func (UnimplementedMarketingQueryServer) ListActivity(context.Context, *ListActivityReq) (*ListActivityResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListActivity not implemented")
 }
 func (UnimplementedMarketingQueryServer) testEmbeddedByValue() {}
 
@@ -222,6 +242,24 @@ func _MarketingQuery_GetReconciliation_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MarketingQuery_ListActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListActivityReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingQueryServer).ListActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingQuery_ListActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingQueryServer).ListActivity(ctx, req.(*ListActivityReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MarketingQuery_ServiceDesc is the grpc.ServiceDesc for MarketingQuery service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -245,9 +283,13 @@ var MarketingQuery_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetReconciliation",
 			Handler:    _MarketingQuery_GetReconciliation_Handler,
 		},
+		{
+			MethodName: "ListActivity",
+			Handler:    _MarketingQuery_ListActivity_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "queries/marketing_query.proto",
 }
 
-// emit-sha256: 839d63399f7586741afc02dc48ee72380d5705724b8cbe45bcead54705a74c7e
+// emit-sha256: 3b2fb47bc94f8c89629eb0eab4ad9b931b375a83242a51ad2fc9f39691a09439

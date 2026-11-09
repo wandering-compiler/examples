@@ -788,6 +788,192 @@ func (x *ReconciliationResp) GetName() string {
 	return ""
 }
 
+type ActivityReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Attribute     string                 `protobuf:"bytes,2,opt,name=attribute,proto3" json:"attribute,omitempty"`
+	LastAt        *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_at,json=lastAt,proto3" json:"last_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ActivityReq) Reset() {
+	*x = ActivityReq{}
+	mi := &file_mutations_marketing_mutation_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ActivityReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActivityReq) ProtoMessage() {}
+
+func (x *ActivityReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_marketing_mutation_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActivityReq.ProtoReflect.Descriptor instead.
+func (*ActivityReq) Descriptor() ([]byte, []int) {
+	return file_mutations_marketing_mutation_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ActivityReq) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ActivityReq) GetAttribute() string {
+	if x != nil {
+		return x.Attribute
+	}
+	return ""
+}
+
+func (x *ActivityReq) GetLastAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastAt
+	}
+	return nil
+}
+
+type ActivityWriteResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ActivityWriteResp) Reset() {
+	*x = ActivityWriteResp{}
+	mi := &file_mutations_marketing_mutation_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ActivityWriteResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActivityWriteResp) ProtoMessage() {}
+
+func (x *ActivityWriteResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_marketing_mutation_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActivityWriteResp.ProtoReflect.Descriptor instead.
+func (*ActivityWriteResp) Descriptor() ([]byte, []int) {
+	return file_mutations_marketing_mutation_proto_rawDescGZIP(), []int{17}
+}
+
+// ActivityMovedResp — a BumpActivity that moved the row; NotFound when the
+// row holds the same date or a later one.
+type ActivityMovedResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ActivityMovedResp) Reset() {
+	*x = ActivityMovedResp{}
+	mi := &file_mutations_marketing_mutation_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ActivityMovedResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActivityMovedResp) ProtoMessage() {}
+
+func (x *ActivityMovedResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_marketing_mutation_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActivityMovedResp.ProtoReflect.Descriptor instead.
+func (*ActivityMovedResp) Descriptor() ([]byte, []int) {
+	return file_mutations_marketing_mutation_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ActivityMovedResp) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type EraseActivityReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EraseActivityReq) Reset() {
+	*x = EraseActivityReq{}
+	mi := &file_mutations_marketing_mutation_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EraseActivityReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EraseActivityReq) ProtoMessage() {}
+
+func (x *EraseActivityReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_marketing_mutation_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EraseActivityReq.ProtoReflect.Descriptor instead.
+func (*EraseActivityReq) Descriptor() ([]byte, []int) {
+	return file_mutations_marketing_mutation_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *EraseActivityReq) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
 var File_mutations_marketing_mutation_proto protoreflect.FileDescriptor
 
 const file_mutations_marketing_mutation_proto_rawDesc = "" +
@@ -832,7 +1018,16 @@ const file_mutations_marketing_mutation_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\x04name\x12\x1e\n" +
 	"\x05owner\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x01@@R\x05owner:\t\xfa\xf4\x18\x05brevo\"3\n" +
 	"\x12ReconciliationResp\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name:\t\xfa\xf4\x18\x05brevo2\x8b\x19\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name:\t\xfa\xf4\x18\x05brevo\"\xaa\x01\n" +
+	"\vActivityReq\x12\x1f\n" +
+	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12'\n" +
+	"\tattribute\x18\x02 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\xff\x01R\tattribute\x12;\n" +
+	"\alast_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\x06lastAt:\x14\xfa\xf4\x18\x10brevo_attributes\")\n" +
+	"\x11ActivityWriteResp:\x14\xfa\xf4\x18\x10brevo_attributes\"B\n" +
+	"\x11ActivityMovedResp\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId:\x14\xfa\xf4\x18\x10brevo_attributes\"I\n" +
+	"\x10EraseActivityReq\x12\x1f\n" +
+	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId:\x14\xfa\xf4\x18\x10brevo_attributes2\xfa\x1e\n" +
 	"\x11MarketingMutation\x12\xb8\x01\n" +
 	"\x0fRecordSentEvent\x12).w17.contrib.marketing.RecordSentEventReq\x1a*.w17.contrib.marketing.RecordSentEventResp\"N\xf2\xf3\x18AB?\n" +
 	"\x04main\x127INSERT INTO @module.SentEvent SET id = :id RETURNING id\x8a\xf5\x18\x05brevo\x12\xcb\x01\n" +
@@ -857,7 +1052,13 @@ const file_mutations_marketing_mutation_proto_rawDesc = "" +
 	"\x13RenewReconciliation\x12-.w17.contrib.marketing.ReconciliationOwnerReq\x1a).w17.contrib.marketing.ReconciliationResp\"\xa0\x01\xf2\xf3\x18\x92\x01B\x8f\x01\n" +
 	"\x04main\x12\x86\x01UPDATE @module.Reconciliation SET claimed_at = NOW() WHERE name = :name AND claimed_by = :owner AND finished_at IS NULL RETURNING name\x8a\xf5\x18\x05brevo\x12\x94\x02\n" +
 	"\x14FinishReconciliation\x12-.w17.contrib.marketing.ReconciliationOwnerReq\x1a).w17.contrib.marketing.ReconciliationResp\"\xa1\x01\xf2\xf3\x18\x93\x01B\x90\x01\n" +
-	"\x04main\x12\x87\x01UPDATE @module.Reconciliation SET finished_at = NOW() WHERE name = :name AND claimed_by = :owner AND finished_at IS NULL RETURNING name\x8a\xf5\x18\x05brevoB\xe1\x01\n" +
+	"\x04main\x12\x87\x01UPDATE @module.Reconciliation SET finished_at = NOW() WHERE name = :name AND claimed_by = :owner AND finished_at IS NULL RETURNING name\x8a\xf5\x18\x05brevo\x12\x91\x02\n" +
+	"\x0eRecordActivity\x12\".w17.contrib.marketing.ActivityReq\x1a(.w17.contrib.marketing.ActivityWriteResp\"\xb0\x01\xf2\xf3\x18\x97\x01B\x94\x01\n" +
+	"\x04main\x12\x8b\x01UPSERT INTO @module.Activity SET user_id = :user_id, attribute = :attribute, last_at = :last_at ON CONFLICT (user_id, attribute) DO NOTHING\x8a\xf5\x18\x10brevo_attributes\x12\x8f\x02\n" +
+	"\fBumpActivity\x12\".w17.contrib.marketing.ActivityReq\x1a(.w17.contrib.marketing.ActivityMovedResp\"\xb0\x01\xf2\xf3\x18\x97\x01B\x94\x01\n" +
+	"\x04main\x12\x8b\x01UPDATE @module.Activity SET last_at = :last_at WHERE user_id = :user_id AND attribute = :attribute AND last_at < :last_at RETURNING user_id\x8a\xf5\x18\x10brevo_attributes\x12\xbb\x01\n" +
+	"\rEraseActivity\x12'.w17.contrib.marketing.EraseActivityReq\x1a(.w17.contrib.marketing.ActivityWriteResp\"W\xf2\xf3\x18?B=\n" +
+	"\x04main\x125DELETE FROM @module.Activity WHERE user_id = :user_id\x8a\xf5\x18\x10brevo_attributes\x1a\t\x82\xf5\x18\x05brevoB\xe1\x01\n" +
 	"\x19com.w17.contrib.marketingB\x16MarketingMutationProtoP\x01Z6github.com/wandering-compiler/plugins/marketing/gen/pb\xa2\x02\x03WCM\xaa\x02\x15W17.Contrib.Marketing\xca\x02\x15W17\\Contrib\\Marketing\xe2\x02!W17\\Contrib\\Marketing\\GPBMetadata\xea\x02\x17W17::Contrib::Marketingb\x06proto3"
 
 var (
@@ -872,7 +1073,7 @@ func file_mutations_marketing_mutation_proto_rawDescGZIP() []byte {
 	return file_mutations_marketing_mutation_proto_rawDescData
 }
 
-var file_mutations_marketing_mutation_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_mutations_marketing_mutation_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_mutations_marketing_mutation_proto_goTypes = []any{
 	(*RecordSentEventReq)(nil),           // 0: w17.contrib.marketing.RecordSentEventReq
 	(*RecordSentEventResp)(nil),          // 1: w17.contrib.marketing.RecordSentEventResp
@@ -890,42 +1091,53 @@ var file_mutations_marketing_mutation_proto_goTypes = []any{
 	(*TakeOverReconciliationReq)(nil),    // 13: w17.contrib.marketing.TakeOverReconciliationReq
 	(*ReconciliationOwnerReq)(nil),       // 14: w17.contrib.marketing.ReconciliationOwnerReq
 	(*ReconciliationResp)(nil),           // 15: w17.contrib.marketing.ReconciliationResp
-	(*timestamppb.Timestamp)(nil),        // 16: google.protobuf.Timestamp
+	(*ActivityReq)(nil),                  // 16: w17.contrib.marketing.ActivityReq
+	(*ActivityWriteResp)(nil),            // 17: w17.contrib.marketing.ActivityWriteResp
+	(*ActivityMovedResp)(nil),            // 18: w17.contrib.marketing.ActivityMovedResp
+	(*EraseActivityReq)(nil),             // 19: w17.contrib.marketing.EraseActivityReq
+	(*timestamppb.Timestamp)(nil),        // 20: google.protobuf.Timestamp
 }
 var file_mutations_marketing_mutation_proto_depIdxs = []int32{
-	16, // 0: w17.contrib.marketing.ForgetSentEventsBeforeReq.before:type_name -> google.protobuf.Timestamp
-	16, // 1: w17.contrib.marketing.SetContactConsentReq.consent_at:type_name -> google.protobuf.Timestamp
-	16, // 2: w17.contrib.marketing.SetContactUnsubscribedReq.unsubscribed_at:type_name -> google.protobuf.Timestamp
-	16, // 3: w17.contrib.marketing.TakeOverReconciliationReq.stale_before:type_name -> google.protobuf.Timestamp
-	0,  // 4: w17.contrib.marketing.MarketingMutation.RecordSentEvent:input_type -> w17.contrib.marketing.RecordSentEventReq
-	2,  // 5: w17.contrib.marketing.MarketingMutation.ForgetSentEventsBefore:input_type -> w17.contrib.marketing.ForgetSentEventsBeforeReq
-	4,  // 6: w17.contrib.marketing.MarketingMutation.SetContactEmail:input_type -> w17.contrib.marketing.SetContactEmailReq
-	9,  // 7: w17.contrib.marketing.MarketingMutation.EnsureContact:input_type -> w17.contrib.marketing.EnsureContactReq
-	5,  // 8: w17.contrib.marketing.MarketingMutation.SetContactConsent:input_type -> w17.contrib.marketing.SetContactConsentReq
-	6,  // 9: w17.contrib.marketing.MarketingMutation.SetContactUnsubscribed:input_type -> w17.contrib.marketing.SetContactUnsubscribedReq
-	10, // 10: w17.contrib.marketing.MarketingMutation.SetContactSentBlacklisted:input_type -> w17.contrib.marketing.SetContactSentBlacklistedReq
-	7,  // 11: w17.contrib.marketing.MarketingMutation.EraseContact:input_type -> w17.contrib.marketing.EraseContactReq
-	12, // 12: w17.contrib.marketing.MarketingMutation.ClaimReconciliation:input_type -> w17.contrib.marketing.ClaimReconciliationReq
-	13, // 13: w17.contrib.marketing.MarketingMutation.TakeOverReconciliation:input_type -> w17.contrib.marketing.TakeOverReconciliationReq
-	14, // 14: w17.contrib.marketing.MarketingMutation.RenewReconciliation:input_type -> w17.contrib.marketing.ReconciliationOwnerReq
-	14, // 15: w17.contrib.marketing.MarketingMutation.FinishReconciliation:input_type -> w17.contrib.marketing.ReconciliationOwnerReq
-	1,  // 16: w17.contrib.marketing.MarketingMutation.RecordSentEvent:output_type -> w17.contrib.marketing.RecordSentEventResp
-	3,  // 17: w17.contrib.marketing.MarketingMutation.ForgetSentEventsBefore:output_type -> w17.contrib.marketing.ForgetSentEventsBeforeResp
-	8,  // 18: w17.contrib.marketing.MarketingMutation.SetContactEmail:output_type -> w17.contrib.marketing.ContactWriteResp
-	8,  // 19: w17.contrib.marketing.MarketingMutation.EnsureContact:output_type -> w17.contrib.marketing.ContactWriteResp
-	11, // 20: w17.contrib.marketing.MarketingMutation.SetContactConsent:output_type -> w17.contrib.marketing.ContactUpdatedResp
-	11, // 21: w17.contrib.marketing.MarketingMutation.SetContactUnsubscribed:output_type -> w17.contrib.marketing.ContactUpdatedResp
-	8,  // 22: w17.contrib.marketing.MarketingMutation.SetContactSentBlacklisted:output_type -> w17.contrib.marketing.ContactWriteResp
-	8,  // 23: w17.contrib.marketing.MarketingMutation.EraseContact:output_type -> w17.contrib.marketing.ContactWriteResp
-	15, // 24: w17.contrib.marketing.MarketingMutation.ClaimReconciliation:output_type -> w17.contrib.marketing.ReconciliationResp
-	15, // 25: w17.contrib.marketing.MarketingMutation.TakeOverReconciliation:output_type -> w17.contrib.marketing.ReconciliationResp
-	15, // 26: w17.contrib.marketing.MarketingMutation.RenewReconciliation:output_type -> w17.contrib.marketing.ReconciliationResp
-	15, // 27: w17.contrib.marketing.MarketingMutation.FinishReconciliation:output_type -> w17.contrib.marketing.ReconciliationResp
-	16, // [16:28] is the sub-list for method output_type
-	4,  // [4:16] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	20, // 0: w17.contrib.marketing.ForgetSentEventsBeforeReq.before:type_name -> google.protobuf.Timestamp
+	20, // 1: w17.contrib.marketing.SetContactConsentReq.consent_at:type_name -> google.protobuf.Timestamp
+	20, // 2: w17.contrib.marketing.SetContactUnsubscribedReq.unsubscribed_at:type_name -> google.protobuf.Timestamp
+	20, // 3: w17.contrib.marketing.TakeOverReconciliationReq.stale_before:type_name -> google.protobuf.Timestamp
+	20, // 4: w17.contrib.marketing.ActivityReq.last_at:type_name -> google.protobuf.Timestamp
+	0,  // 5: w17.contrib.marketing.MarketingMutation.RecordSentEvent:input_type -> w17.contrib.marketing.RecordSentEventReq
+	2,  // 6: w17.contrib.marketing.MarketingMutation.ForgetSentEventsBefore:input_type -> w17.contrib.marketing.ForgetSentEventsBeforeReq
+	4,  // 7: w17.contrib.marketing.MarketingMutation.SetContactEmail:input_type -> w17.contrib.marketing.SetContactEmailReq
+	9,  // 8: w17.contrib.marketing.MarketingMutation.EnsureContact:input_type -> w17.contrib.marketing.EnsureContactReq
+	5,  // 9: w17.contrib.marketing.MarketingMutation.SetContactConsent:input_type -> w17.contrib.marketing.SetContactConsentReq
+	6,  // 10: w17.contrib.marketing.MarketingMutation.SetContactUnsubscribed:input_type -> w17.contrib.marketing.SetContactUnsubscribedReq
+	10, // 11: w17.contrib.marketing.MarketingMutation.SetContactSentBlacklisted:input_type -> w17.contrib.marketing.SetContactSentBlacklistedReq
+	7,  // 12: w17.contrib.marketing.MarketingMutation.EraseContact:input_type -> w17.contrib.marketing.EraseContactReq
+	12, // 13: w17.contrib.marketing.MarketingMutation.ClaimReconciliation:input_type -> w17.contrib.marketing.ClaimReconciliationReq
+	13, // 14: w17.contrib.marketing.MarketingMutation.TakeOverReconciliation:input_type -> w17.contrib.marketing.TakeOverReconciliationReq
+	14, // 15: w17.contrib.marketing.MarketingMutation.RenewReconciliation:input_type -> w17.contrib.marketing.ReconciliationOwnerReq
+	14, // 16: w17.contrib.marketing.MarketingMutation.FinishReconciliation:input_type -> w17.contrib.marketing.ReconciliationOwnerReq
+	16, // 17: w17.contrib.marketing.MarketingMutation.RecordActivity:input_type -> w17.contrib.marketing.ActivityReq
+	16, // 18: w17.contrib.marketing.MarketingMutation.BumpActivity:input_type -> w17.contrib.marketing.ActivityReq
+	19, // 19: w17.contrib.marketing.MarketingMutation.EraseActivity:input_type -> w17.contrib.marketing.EraseActivityReq
+	1,  // 20: w17.contrib.marketing.MarketingMutation.RecordSentEvent:output_type -> w17.contrib.marketing.RecordSentEventResp
+	3,  // 21: w17.contrib.marketing.MarketingMutation.ForgetSentEventsBefore:output_type -> w17.contrib.marketing.ForgetSentEventsBeforeResp
+	8,  // 22: w17.contrib.marketing.MarketingMutation.SetContactEmail:output_type -> w17.contrib.marketing.ContactWriteResp
+	8,  // 23: w17.contrib.marketing.MarketingMutation.EnsureContact:output_type -> w17.contrib.marketing.ContactWriteResp
+	11, // 24: w17.contrib.marketing.MarketingMutation.SetContactConsent:output_type -> w17.contrib.marketing.ContactUpdatedResp
+	11, // 25: w17.contrib.marketing.MarketingMutation.SetContactUnsubscribed:output_type -> w17.contrib.marketing.ContactUpdatedResp
+	8,  // 26: w17.contrib.marketing.MarketingMutation.SetContactSentBlacklisted:output_type -> w17.contrib.marketing.ContactWriteResp
+	8,  // 27: w17.contrib.marketing.MarketingMutation.EraseContact:output_type -> w17.contrib.marketing.ContactWriteResp
+	15, // 28: w17.contrib.marketing.MarketingMutation.ClaimReconciliation:output_type -> w17.contrib.marketing.ReconciliationResp
+	15, // 29: w17.contrib.marketing.MarketingMutation.TakeOverReconciliation:output_type -> w17.contrib.marketing.ReconciliationResp
+	15, // 30: w17.contrib.marketing.MarketingMutation.RenewReconciliation:output_type -> w17.contrib.marketing.ReconciliationResp
+	15, // 31: w17.contrib.marketing.MarketingMutation.FinishReconciliation:output_type -> w17.contrib.marketing.ReconciliationResp
+	17, // 32: w17.contrib.marketing.MarketingMutation.RecordActivity:output_type -> w17.contrib.marketing.ActivityWriteResp
+	18, // 33: w17.contrib.marketing.MarketingMutation.BumpActivity:output_type -> w17.contrib.marketing.ActivityMovedResp
+	17, // 34: w17.contrib.marketing.MarketingMutation.EraseActivity:output_type -> w17.contrib.marketing.ActivityWriteResp
+	20, // [20:35] is the sub-list for method output_type
+	5,  // [5:20] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_mutations_marketing_mutation_proto_init() }
@@ -940,7 +1152,7 @@ func file_mutations_marketing_mutation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mutations_marketing_mutation_proto_rawDesc), len(file_mutations_marketing_mutation_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
@@ -953,4 +1165,4 @@ func file_mutations_marketing_mutation_proto_init() {
 	file_mutations_marketing_mutation_proto_depIdxs = nil
 }
 
-// emit-sha256: bd7f7c5cfe1806eee2879f5188f9498f073cf1724a16d02a6fb9cf83d01575c8
+// emit-sha256: 70d0299fe624ca1af5548bc3b9477584c7f65fc010060d778614a1a8f98fe6fb

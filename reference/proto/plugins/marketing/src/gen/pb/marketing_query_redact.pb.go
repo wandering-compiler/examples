@@ -19,7 +19,10 @@ func init() {
 		"w17.contrib.marketing.ListContactsByEmailReq": {},
 		"w17.contrib.marketing.GetReconciliationReq":   {},
 		"w17.contrib.marketing.GetReconciliationResp":  {},
+		"w17.contrib.marketing.ActivityRow":            {},
+		"w17.contrib.marketing.ListActivityReq":        {},
+		"w17.contrib.marketing.ListActivityResp":       {},
 	})
 }
 
-// emit-sha256: 95e4c4b572497b81003ab6c6866de8489c10693f2bffd771178b855defbc91b9
+// emit-sha256: 2b6cb8119c5378a69bceb681b601dd30c33f876ee1908734369199f7e62989e4

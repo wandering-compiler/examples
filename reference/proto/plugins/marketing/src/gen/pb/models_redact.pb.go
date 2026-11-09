@@ -14,7 +14,8 @@ func init() {
 		"w17.contrib.marketing.SentEvent":      {},
 		"w17.contrib.marketing.Contact":        {},
 		"w17.contrib.marketing.Reconciliation": {},
+		"w17.contrib.marketing.Activity":       {},
 	})
 }
 
-// emit-sha256: 4efe346513755710869b16b40e64d5a87fb5eef7e219ecd05d3b8b6b0d6e1f1e
+// emit-sha256: eebe82f2b7f76c4618001ce0760bab8b8cc6cb0a2129ffdf4e4a1685ad1a7760

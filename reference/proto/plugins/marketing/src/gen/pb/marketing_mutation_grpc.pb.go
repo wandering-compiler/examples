@@ -33,6 +33,9 @@ const (
 	MarketingMutation_TakeOverReconciliation_FullMethodName    = "/w17.contrib.marketing.MarketingMutation/TakeOverReconciliation"
 	MarketingMutation_RenewReconciliation_FullMethodName       = "/w17.contrib.marketing.MarketingMutation/RenewReconciliation"
 	MarketingMutation_FinishReconciliation_FullMethodName      = "/w17.contrib.marketing.MarketingMutation/FinishReconciliation"
+	MarketingMutation_RecordActivity_FullMethodName            = "/w17.contrib.marketing.MarketingMutation/RecordActivity"
+	MarketingMutation_BumpActivity_FullMethodName              = "/w17.contrib.marketing.MarketingMutation/BumpActivity"
+	MarketingMutation_EraseActivity_FullMethodName             = "/w17.contrib.marketing.MarketingMutation/EraseActivity"
 )
 
 // MarketingMutationClient is the client API for MarketingMutation service.
@@ -83,6 +86,16 @@ type MarketingMutationClient interface {
 	// FinishReconciliation — the job is done; it does not run again. Gated
 	// brevo.
 	FinishReconciliation(ctx context.Context, in *ReconciliationOwnerReq, opts ...grpc.CallOption) (*ReconciliationResp, error)
+	// RecordActivity — the user's row for one attribute, created with this
+	// date when there is none; an existing row is left for BumpActivity, so
+	// two deliveries at once cannot both create it. Gated brevo_attributes.
+	RecordActivity(ctx context.Context, in *ActivityReq, opts ...grpc.CallOption) (*ActivityWriteResp, error)
+	// BumpActivity — move the row to a later date, never back. NotFound = the
+	// row holds this date or a later one. Gated brevo_attributes.
+	BumpActivity(ctx context.Context, in *ActivityReq, opts ...grpc.CallOption) (*ActivityMovedResp, error)
+	// EraseActivity — the account was erased: what the user did goes with
+	// it. Gated brevo_attributes.
+	EraseActivity(ctx context.Context, in *EraseActivityReq, opts ...grpc.CallOption) (*ActivityWriteResp, error)
 }
 
 type marketingMutationClient struct {
@@ -213,6 +226,36 @@ func (c *marketingMutationClient) FinishReconciliation(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *marketingMutationClient) RecordActivity(ctx context.Context, in *ActivityReq, opts ...grpc.CallOption) (*ActivityWriteResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ActivityWriteResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_RecordActivity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketingMutationClient) BumpActivity(ctx context.Context, in *ActivityReq, opts ...grpc.CallOption) (*ActivityMovedResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ActivityMovedResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_BumpActivity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *marketingMutationClient) EraseActivity(ctx context.Context, in *EraseActivityReq, opts ...grpc.CallOption) (*ActivityWriteResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ActivityWriteResp)
+	err := c.cc.Invoke(ctx, MarketingMutation_EraseActivity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MarketingMutationServer is the server API for MarketingMutation service.
 // All implementations should embed UnimplementedMarketingMutationServer
 // for forward compatibility.
@@ -261,6 +304,16 @@ type MarketingMutationServer interface {
 	// FinishReconciliation — the job is done; it does not run again. Gated
 	// brevo.
 	FinishReconciliation(context.Context, *ReconciliationOwnerReq) (*ReconciliationResp, error)
+	// RecordActivity — the user's row for one attribute, created with this
+	// date when there is none; an existing row is left for BumpActivity, so
+	// two deliveries at once cannot both create it. Gated brevo_attributes.
+	RecordActivity(context.Context, *ActivityReq) (*ActivityWriteResp, error)
+	// BumpActivity — move the row to a later date, never back. NotFound = the
+	// row holds this date or a later one. Gated brevo_attributes.
+	BumpActivity(context.Context, *ActivityReq) (*ActivityMovedResp, error)
+	// EraseActivity — the account was erased: what the user did goes with
+	// it. Gated brevo_attributes.
+	EraseActivity(context.Context, *EraseActivityReq) (*ActivityWriteResp, error)
 }
 
 // UnimplementedMarketingMutationServer should be embedded to have
@@ -305,6 +358,15 @@ func (UnimplementedMarketingMutationServer) RenewReconciliation(context.Context,
 }
 func (UnimplementedMarketingMutationServer) FinishReconciliation(context.Context, *ReconciliationOwnerReq) (*ReconciliationResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method FinishReconciliation not implemented")
+}
+func (UnimplementedMarketingMutationServer) RecordActivity(context.Context, *ActivityReq) (*ActivityWriteResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RecordActivity not implemented")
+}
+func (UnimplementedMarketingMutationServer) BumpActivity(context.Context, *ActivityReq) (*ActivityMovedResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method BumpActivity not implemented")
+}
+func (UnimplementedMarketingMutationServer) EraseActivity(context.Context, *EraseActivityReq) (*ActivityWriteResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method EraseActivity not implemented")
 }
 func (UnimplementedMarketingMutationServer) testEmbeddedByValue() {}
 
@@ -542,6 +604,60 @@ func _MarketingMutation_FinishReconciliation_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MarketingMutation_RecordActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ActivityReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).RecordActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_RecordActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).RecordActivity(ctx, req.(*ActivityReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketingMutation_BumpActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ActivityReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).BumpActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_BumpActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).BumpActivity(ctx, req.(*ActivityReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MarketingMutation_EraseActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EraseActivityReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MarketingMutationServer).EraseActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MarketingMutation_EraseActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MarketingMutationServer).EraseActivity(ctx, req.(*EraseActivityReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MarketingMutation_ServiceDesc is the grpc.ServiceDesc for MarketingMutation service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -597,9 +713,21 @@ var MarketingMutation_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "FinishReconciliation",
 			Handler:    _MarketingMutation_FinishReconciliation_Handler,
 		},
+		{
+			MethodName: "RecordActivity",
+			Handler:    _MarketingMutation_RecordActivity_Handler,
+		},
+		{
+			MethodName: "BumpActivity",
+			Handler:    _MarketingMutation_BumpActivity_Handler,
+		},
+		{
+			MethodName: "EraseActivity",
+			Handler:    _MarketingMutation_EraseActivity_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "mutations/marketing_mutation.proto",
 }
 
-// emit-sha256: 18d783afeafa4226c6c7015cb01392e88d0ea4d35812e6fd65a96ae9ea4c8151
+// emit-sha256: 719afd80ff5c5d2a4e52e9a2c9fe8bd589dba727396e2b0e82a5b5ca489fc0fa
