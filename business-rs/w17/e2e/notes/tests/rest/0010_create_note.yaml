@@ -1,0 +1,33 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The Rust business tier writes the note through the generated storage
+# mutation and publishes NoteCreated (the method's `(w17.event_emit)`). The
+# subscriber — the generated eventbus runner calling the same Rust tier's
+# NotesEvents.OnNoteCreated — records a `delivered` mark and publishes
+# NoteDelivered. Both events carry THIS note's id (the capture interpolates
+# into the await), so they prove the whole loop for this write, not for
+# whichever note another step created:
+# Rust emit → NATS → Go subscriber runner → Rust handler → Rust emit.
+method: board.NotesService.CreateNote
+input:
+    batch: single
+    title: written by the rust tier
+    body: b
+expect:
+    id: {capture: note.id, match: {matcher: not_empty}}
+    batch: {matcher: eq, value: single}
+    title: {matcher: eq, value: written by the rust tier}
+    body: {matcher: eq, value: b}
+    created_at: {matcher: not_empty}
+await_events:
+    - topic: note.created
+      timeout_ms: 15000
+      match:
+        note_id: {matcher: eq, value: "${note.id}"}
+        batch: {matcher: eq, value: single}
+        title: {matcher: eq, value: written by the rust tier}
+    - topic: note.delivered
+      timeout_ms: 30000
+      match:
+        note_id: {matcher: eq, value: "${note.id}"}

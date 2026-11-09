@@ -1,0 +1,13 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The storage query ListNotes forwards its page to, read directly: the same
+# first page.
+method: board.NoteQuery.ListBatch
+input:
+    batch: paged
+    limit: 2
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    items.0.title: {matcher: eq, value: page note 1}
+    paging.total: {matcher: eq, value: "3"}

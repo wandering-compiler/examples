@@ -1,0 +1,13 @@
+# The Rust business tier calling a third-party REST API through a generated
+# egress client (proto/clients/quotes): clients.egress("quotes") is the
+# client's own gRPC service, served by the business companion, whose call
+# reaches the Quotes stand-in (quotestub/) as an HTTP GET carrying the bearer
+# token from W17_CLIENT_QUOTES_DSN. The stand-in answers 401 without it, so a
+# quote coming back proves the credential travelled.
+method: board.NotesService.Quote
+input:
+    id: q1
+expect:
+    id: q1
+    text: Simple things should be simple.
+    author: Alan Kay

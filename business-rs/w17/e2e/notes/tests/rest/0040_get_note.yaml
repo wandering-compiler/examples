@@ -1,0 +1,14 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The note 0010 wrote through the Rust tier is stored: read straight
+# from the generated storage tier.
+method: board.NoteQuery.GetNote
+input:
+    note_id: ${note.id}
+expect:
+    id: {matcher: eq, value: "${note.id}"}
+    batch: {matcher: eq, value: single}
+    title: {matcher: eq, value: written by the rust tier}
+    body: {matcher: eq, value: b}
+    created_at: {matcher: not_empty}

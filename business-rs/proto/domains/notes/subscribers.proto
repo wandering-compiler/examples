@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+// Subscriber registry of the notes domain: the generated eventbus runner
+// delivers every NoteCreated to the Rust business tier's
+// NotesEvents.OnNoteCreated, which records a `delivered` mark.
+
+package business_rs.notes.board;
+
+import "w17/event_subscribers.proto";
+
+option (w17.event_subscribers) = {
+  subscriptions: [
+    {
+      event:   "NoteCreated"
+      channel: "notes"
+      handler: "board.NotesEvents.OnNoteCreated"
+    }
+  ]
+};
