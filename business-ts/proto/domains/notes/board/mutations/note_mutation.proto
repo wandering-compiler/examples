@@ -17,6 +17,22 @@ message RecordMarkReq {
   string mark    = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 40 }];
 }
 
+// RecordNoteExportReq — the handle the business tier's put returned.
+message RecordNoteExportReq {
+  int64  note_id = 1;
+  string file    = 2 [(w17.field) = {
+    type: UPLOADED_FILE,
+    upload: {
+      connection:       "notes-exports",
+      bucket_path:      "/note-exports",
+      expected_objects: 10000,
+      max_per_bucket:   100,
+      max_size_bytes:   65536,
+      writer:           BUSINESS
+    }
+  }];
+}
+
 // NoteMutation — write side. Generated storage-tier SQL handlers, called by
 // the TypeScript business tier only.
 service NoteMutation {
@@ -34,6 +50,16 @@ service NoteMutation {
       ops: {
         name: "main",
         dql:  "INSERT INTO board.NoteMark SET note_id = :note_id, mark = :mark RETURNING id, note_id, mark, created_at"
+      }
+    };
+  }
+
+  // RecordNoteExport — stores the handle of a file the business tier put.
+  rpc RecordNoteExport(RecordNoteExportReq) returns (NoteExport) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO board.NoteExport SET note_id = :note_id, file = :file RETURNING id, note_id, file, created_at"
       }
     };
   }

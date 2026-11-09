@@ -21,6 +21,18 @@ message BrowseNotesResp {
   w17.Paging    paging = 2;
 }
 
+message ExportNoteReq { int64 note_id = 1; }
+
+message QuoteReq { string id = 1; }
+
+// QuoteResp — a quote as the third-party Quotes API answered it, through the
+// egress client proto/clients/quotes.
+message QuoteResp {
+  string id     = 1;
+  string text   = 2;
+  string author = 3;
+}
+
 // NotesService — the business tier, written in TypeScript
 // (business/notes/w17.ts). No `(w17.db.method)` anywhere: every body is
 // hand-written, and the TypeScript business SDK serves the service from the
@@ -54,6 +66,21 @@ service NotesService {
   // query with paging.forward(ctx) and copies its w17.Paging into the
   // answer.
   rpc ListNotes(BrowseNotesReq) returns (BrowseNotesResp);
+
+  // ExportNote — the business tier MAKING a file and storing it: it renders
+  // the note as text, puts it on notes-exports through the business
+  // companion (`clients.store("notes-exports")`, the placement of
+  // NoteExport.file) and records the handle through the storage mutation.
+  // The REST answer carries the download URL the gateway rewrote the handle
+  // into.
+  rpc ExportNote(ExportNoteReq) returns (NoteExport);
+
+  // Quote — the business tier calling a third-party REST API through the
+  // generated egress client proto/clients/quotes: `clients.egress("quotes")`
+  // is the client's own gRPC service, served by the business companion, which
+  // makes the HTTP request with the credential from W17_CLIENT_QUOTES_DSN and
+  // codes the API's errors for this caller (its 404 is NOT_FOUND).
+  rpc Quote(QuoteReq) returns (QuoteResp);
 }
 
 // HandlerAck — what the eventbus handler answers: the note it marked, which
