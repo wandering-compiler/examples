@@ -41,9 +41,12 @@ fi
 # A failing suite shows what the services said: an assertion that waits on
 # a background delivery (a Brevo contact, an error report) names only what
 # it did not see, and the stack is gone once this script exits.
+# The bus is in it because the marketing flake (a sign-up's UserCreated that
+# never reached the plugin within 30 s, app-storage silent) can only be told
+# apart there: an event never published, or published and never delivered.
 logs() {
-  echo "livetest: the suite failed — the last lines of app-storage and brevostub:" >&2
-  docker compose -p "$project" logs --no-color --tail 200 app-storage brevostub >&2 || true
+  echo "livetest: the suite failed — the last lines of app-storage, app-eventbus, nats and brevostub:" >&2
+  docker compose -p "$project" logs --no-color --timestamps --tail 200 app-storage app-eventbus nats brevostub >&2 || true
 }
 
 # The suite serves the fake Sentry the stack reports its errors to
