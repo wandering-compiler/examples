@@ -443,6 +443,155 @@ func (x *GetReconciliationResp) GetFinishedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// ActivityRow is one Activity, as ListActivity answers it.
+type ActivityRow struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Attribute     string                 `protobuf:"bytes,2,opt,name=attribute,proto3" json:"attribute,omitempty"`
+	LastAt        *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_at,json=lastAt,proto3" json:"last_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ActivityRow) Reset() {
+	*x = ActivityRow{}
+	mi := &file_queries_marketing_query_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ActivityRow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActivityRow) ProtoMessage() {}
+
+func (x *ActivityRow) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_marketing_query_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActivityRow.ProtoReflect.Descriptor instead.
+func (*ActivityRow) Descriptor() ([]byte, []int) {
+	return file_queries_marketing_query_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ActivityRow) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ActivityRow) GetAttribute() string {
+	if x != nil {
+		return x.Attribute
+	}
+	return ""
+}
+
+func (x *ActivityRow) GetLastAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastAt
+	}
+	return nil
+}
+
+type ListActivityReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserIds       []string               `protobuf:"bytes,1,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListActivityReq) Reset() {
+	*x = ListActivityReq{}
+	mi := &file_queries_marketing_query_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListActivityReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListActivityReq) ProtoMessage() {}
+
+func (x *ListActivityReq) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_marketing_query_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListActivityReq.ProtoReflect.Descriptor instead.
+func (*ListActivityReq) Descriptor() ([]byte, []int) {
+	return file_queries_marketing_query_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListActivityReq) GetUserIds() []string {
+	if x != nil {
+		return x.UserIds
+	}
+	return nil
+}
+
+type ListActivityResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rows          []*ActivityRow         `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListActivityResp) Reset() {
+	*x = ListActivityResp{}
+	mi := &file_queries_marketing_query_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListActivityResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListActivityResp) ProtoMessage() {}
+
+func (x *ListActivityResp) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_marketing_query_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListActivityResp.ProtoReflect.Descriptor instead.
+func (*ListActivityResp) Descriptor() ([]byte, []int) {
+	return file_queries_marketing_query_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ListActivityResp) GetRows() []*ActivityRow {
+	if x != nil {
+		return x.Rows
+	}
+	return nil
+}
+
 var File_queries_marketing_query_proto protoreflect.FileDescriptor
 
 const file_queries_marketing_query_proto_rawDesc = "" +
@@ -451,11 +600,11 @@ const file_queries_marketing_query_proto_rawDesc = "" +
 	"\x11ListSentEventsReq\x12\x10\n" +
 	"\x03ids\x18\x01 \x03(\tR\x03ids:\t\xfa\xf4\x18\x05brevo\"1\n" +
 	"\x12ListSentEventsResp\x12\x10\n" +
-	"\x03ids\x18\x01 \x03(\tR\x03ids:\t\xfa\xf4\x18\x05brevo\"\xe2\x02\n" +
+	"\x03ids\x18\x01 \x03(\tR\x03ids:\t\xfa\xf4\x18\x05brevo\"\xea\x02\n" +
 	"\n" +
 	"ContactRow\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
-	"\x05email\x18\x02 \x01(\tR\x05email\x12\x18\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1c\n" +
+	"\x05email\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02(\x01R\x05email\x12\x18\n" +
 	"\aconsent\x18\x03 \x01(\bR\aconsent\x12C\n" +
 	"\n" +
 	"consent_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\tconsentAt\x12M\n" +
@@ -475,8 +624,15 @@ const file_queries_marketing_query_proto_rawDesc = "" +
 	"\n" +
 	"claimed_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tclaimedAt\x12E\n" +
 	"\vfinished_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\n" +
-	"finishedAt:\t\xfa\xf4\x18\x05brevo2\x8a\n" +
-	"\n" +
+	"finishedAt:\t\xfa\xf4\x18\x05brevo\"\x97\x01\n" +
+	"\vActivityRow\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1c\n" +
+	"\tattribute\x18\x02 \x01(\tR\tattribute\x12;\n" +
+	"\alast_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\x06lastAt:\x14\xfa\xf4\x18\x10brevo_attributes\"B\n" +
+	"\x0fListActivityReq\x12\x19\n" +
+	"\buser_ids\x18\x01 \x03(\tR\auserIds:\x14\xfa\xf4\x18\x10brevo_attributes\"`\n" +
+	"\x10ListActivityResp\x126\n" +
+	"\x04rows\x18\x01 \x03(\v2\".w17.contrib.marketing.ActivityRowR\x04rows:\x14\xfa\xf4\x18\x10brevo_attributes2\xa1\f\n" +
 	"\x0eMarketingQuery\x12\xcd\x01\n" +
 	"\x0eListSentEvents\x12(.w17.contrib.marketing.ListSentEventsReq\x1a).w17.contrib.marketing.ListSentEventsResp\"f\xf2\xf3\x18YBW\n" +
 	"\x04main\x12OSELECT ROWS_TO_ARRAY(s.id) AS ids FROM @module.SentEvent s WHERE s.id IN (:ids)\x8a\xf5\x18\x05brevo\x12\x87\x03\n" +
@@ -485,7 +641,9 @@ const file_queries_marketing_query_proto_rawDesc = "" +
 	"\x13ListContactsByEmail\x12-.w17.contrib.marketing.ListContactsByEmailReq\x1a'.w17.contrib.marketing.ListContactsResp\"\x9d\x02\xf2\xf3\x18\x8f\x02B\x8c\x02\n" +
 	"\x04main\x12\x83\x02SELECT c.user_id AS user_id, c.email AS email, c.consent AS consent,        c.consent_at AS consent_at, c.unsubscribed_at AS unsubscribed_at, c.erased_at AS erased_at,        c.sent_blacklisted AS sent_blacklisted FROM @module.Contact c WHERE c.email = :email\x8a\xf5\x18\x05brevo\x12\x8d\x02\n" +
 	"\x11GetReconciliation\x12+.w17.contrib.marketing.GetReconciliationReq\x1a,.w17.contrib.marketing.GetReconciliationResp\"\x9c\x01\xf2\xf3\x18\x8e\x01B\x8b\x01\n" +
-	"\x04main\x12\x82\x01SELECT r.name AS name, r.claimed_at AS claimed_at, r.finished_at AS finished_at FROM @module.Reconciliation r WHERE r.name = :name\x8a\xf5\x18\x05brevoB\xde\x01\n" +
+	"\x04main\x12\x82\x01SELECT r.name AS name, r.claimed_at AS claimed_at, r.finished_at AS finished_at FROM @module.Reconciliation r WHERE r.name = :name\x8a\xf5\x18\x05brevo\x12\x89\x02\n" +
+	"\fListActivity\x12&.w17.contrib.marketing.ListActivityReq\x1a'.w17.contrib.marketing.ListActivityResp\"\xa7\x01\xf2\xf3\x18\x8e\x01B\x8b\x01\n" +
+	"\x04main\x12\x82\x01SELECT a.user_id AS user_id, a.attribute AS attribute, a.last_at AS last_at FROM @module.Activity a WHERE a.user_id IN (:user_ids)\x8a\xf5\x18\x10brevo_attributes\x1a\t\x82\xf5\x18\x05brevoB\xde\x01\n" +
 	"\x19com.w17.contrib.marketingB\x13MarketingQueryProtoP\x01Z6github.com/wandering-compiler/plugins/marketing/gen/pb\xa2\x02\x03WCM\xaa\x02\x15W17.Contrib.Marketing\xca\x02\x15W17\\Contrib\\Marketing\xe2\x02!W17\\Contrib\\Marketing\\GPBMetadata\xea\x02\x17W17::Contrib::Marketingb\x06proto3"
 
 var (
@@ -500,7 +658,7 @@ func file_queries_marketing_query_proto_rawDescGZIP() []byte {
 	return file_queries_marketing_query_proto_rawDescData
 }
 
-var file_queries_marketing_query_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_queries_marketing_query_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_queries_marketing_query_proto_goTypes = []any{
 	(*ListSentEventsReq)(nil),      // 0: w17.contrib.marketing.ListSentEventsReq
 	(*ListSentEventsResp)(nil),     // 1: w17.contrib.marketing.ListSentEventsResp
@@ -510,28 +668,35 @@ var file_queries_marketing_query_proto_goTypes = []any{
 	(*ListContactsByEmailReq)(nil), // 5: w17.contrib.marketing.ListContactsByEmailReq
 	(*GetReconciliationReq)(nil),   // 6: w17.contrib.marketing.GetReconciliationReq
 	(*GetReconciliationResp)(nil),  // 7: w17.contrib.marketing.GetReconciliationResp
-	(*timestamppb.Timestamp)(nil),  // 8: google.protobuf.Timestamp
+	(*ActivityRow)(nil),            // 8: w17.contrib.marketing.ActivityRow
+	(*ListActivityReq)(nil),        // 9: w17.contrib.marketing.ListActivityReq
+	(*ListActivityResp)(nil),       // 10: w17.contrib.marketing.ListActivityResp
+	(*timestamppb.Timestamp)(nil),  // 11: google.protobuf.Timestamp
 }
 var file_queries_marketing_query_proto_depIdxs = []int32{
-	8,  // 0: w17.contrib.marketing.ContactRow.consent_at:type_name -> google.protobuf.Timestamp
-	8,  // 1: w17.contrib.marketing.ContactRow.unsubscribed_at:type_name -> google.protobuf.Timestamp
-	8,  // 2: w17.contrib.marketing.ContactRow.erased_at:type_name -> google.protobuf.Timestamp
+	11, // 0: w17.contrib.marketing.ContactRow.consent_at:type_name -> google.protobuf.Timestamp
+	11, // 1: w17.contrib.marketing.ContactRow.unsubscribed_at:type_name -> google.protobuf.Timestamp
+	11, // 2: w17.contrib.marketing.ContactRow.erased_at:type_name -> google.protobuf.Timestamp
 	2,  // 3: w17.contrib.marketing.ListContactsResp.contacts:type_name -> w17.contrib.marketing.ContactRow
-	8,  // 4: w17.contrib.marketing.GetReconciliationResp.claimed_at:type_name -> google.protobuf.Timestamp
-	8,  // 5: w17.contrib.marketing.GetReconciliationResp.finished_at:type_name -> google.protobuf.Timestamp
-	0,  // 6: w17.contrib.marketing.MarketingQuery.ListSentEvents:input_type -> w17.contrib.marketing.ListSentEventsReq
-	3,  // 7: w17.contrib.marketing.MarketingQuery.ListContacts:input_type -> w17.contrib.marketing.ListContactsReq
-	5,  // 8: w17.contrib.marketing.MarketingQuery.ListContactsByEmail:input_type -> w17.contrib.marketing.ListContactsByEmailReq
-	6,  // 9: w17.contrib.marketing.MarketingQuery.GetReconciliation:input_type -> w17.contrib.marketing.GetReconciliationReq
-	1,  // 10: w17.contrib.marketing.MarketingQuery.ListSentEvents:output_type -> w17.contrib.marketing.ListSentEventsResp
-	4,  // 11: w17.contrib.marketing.MarketingQuery.ListContacts:output_type -> w17.contrib.marketing.ListContactsResp
-	4,  // 12: w17.contrib.marketing.MarketingQuery.ListContactsByEmail:output_type -> w17.contrib.marketing.ListContactsResp
-	7,  // 13: w17.contrib.marketing.MarketingQuery.GetReconciliation:output_type -> w17.contrib.marketing.GetReconciliationResp
-	10, // [10:14] is the sub-list for method output_type
-	6,  // [6:10] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	11, // 4: w17.contrib.marketing.GetReconciliationResp.claimed_at:type_name -> google.protobuf.Timestamp
+	11, // 5: w17.contrib.marketing.GetReconciliationResp.finished_at:type_name -> google.protobuf.Timestamp
+	11, // 6: w17.contrib.marketing.ActivityRow.last_at:type_name -> google.protobuf.Timestamp
+	8,  // 7: w17.contrib.marketing.ListActivityResp.rows:type_name -> w17.contrib.marketing.ActivityRow
+	0,  // 8: w17.contrib.marketing.MarketingQuery.ListSentEvents:input_type -> w17.contrib.marketing.ListSentEventsReq
+	3,  // 9: w17.contrib.marketing.MarketingQuery.ListContacts:input_type -> w17.contrib.marketing.ListContactsReq
+	5,  // 10: w17.contrib.marketing.MarketingQuery.ListContactsByEmail:input_type -> w17.contrib.marketing.ListContactsByEmailReq
+	6,  // 11: w17.contrib.marketing.MarketingQuery.GetReconciliation:input_type -> w17.contrib.marketing.GetReconciliationReq
+	9,  // 12: w17.contrib.marketing.MarketingQuery.ListActivity:input_type -> w17.contrib.marketing.ListActivityReq
+	1,  // 13: w17.contrib.marketing.MarketingQuery.ListSentEvents:output_type -> w17.contrib.marketing.ListSentEventsResp
+	4,  // 14: w17.contrib.marketing.MarketingQuery.ListContacts:output_type -> w17.contrib.marketing.ListContactsResp
+	4,  // 15: w17.contrib.marketing.MarketingQuery.ListContactsByEmail:output_type -> w17.contrib.marketing.ListContactsResp
+	7,  // 16: w17.contrib.marketing.MarketingQuery.GetReconciliation:output_type -> w17.contrib.marketing.GetReconciliationResp
+	10, // 17: w17.contrib.marketing.MarketingQuery.ListActivity:output_type -> w17.contrib.marketing.ListActivityResp
+	13, // [13:18] is the sub-list for method output_type
+	8,  // [8:13] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_queries_marketing_query_proto_init() }
@@ -546,7 +711,7 @@ func file_queries_marketing_query_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_queries_marketing_query_proto_rawDesc), len(file_queries_marketing_query_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
@@ -559,4 +724,4 @@ func file_queries_marketing_query_proto_init() {
 	file_queries_marketing_query_proto_depIdxs = nil
 }
 
-// emit-sha256: e2bf57dead96d4d3b5541d16e3dfc6f869cd4294d7ea2785c35cf6a9f01b74f2
+// emit-sha256: 42142369e43ac8b052c062e466faa59e17815740f4295704c5af375906512703

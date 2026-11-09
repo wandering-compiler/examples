@@ -36,6 +36,7 @@ type AuthUserCreated struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -82,6 +83,13 @@ func (x *AuthUserCreated) GetEmail() string {
 		return x.Email
 	}
 	return ""
+}
+
+func (x *AuthUserCreated) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
 }
 
 // auth.UserUpdated — the contact follows a changed address.
@@ -249,10 +257,12 @@ var File_types_auth_mirrors_proto protoreflect.FileDescriptor
 
 const file_types_auth_mirrors_proto_rawDesc = "" +
 	"\n" +
-	"\x18types/auth_mirrors.proto\x12\x15w17.contrib.marketing\x1a\x1fgoogle/protobuf/timestamp.proto\"@\n" +
+	"\x18types/auth_mirrors.proto\x12\x15w17.contrib.marketing\x1a\x1fgoogle/protobuf/timestamp.proto\"{\n" +
 	"\x0fAuthUserCreated\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
-	"\x05email\x18\x02 \x01(\tR\x05email\"@\n" +
+	"\x05email\x18\x02 \x01(\tR\x05email\x129\n" +
+	"\n" +
+	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"@\n" +
 	"\x0fAuthUserUpdated\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\"*\n" +
@@ -286,12 +296,13 @@ var file_types_auth_mirrors_proto_goTypes = []any{
 	(*timestamppb.Timestamp)(nil),       // 4: google.protobuf.Timestamp
 }
 var file_types_auth_mirrors_proto_depIdxs = []int32{
-	4, // 0: w17.contrib.marketing.AuthMarketingConsentChanged.decided_at:type_name -> google.protobuf.Timestamp
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	4, // 0: w17.contrib.marketing.AuthUserCreated.created_at:type_name -> google.protobuf.Timestamp
+	4, // 1: w17.contrib.marketing.AuthMarketingConsentChanged.decided_at:type_name -> google.protobuf.Timestamp
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_types_auth_mirrors_proto_init() }
@@ -318,4 +329,4 @@ func file_types_auth_mirrors_proto_init() {
 	file_types_auth_mirrors_proto_depIdxs = nil
 }
 
-// emit-sha256: e2bb6dba459a394f9531e05c8d465f2f71f812cd59823ad62333a7ea43695fc3
+// emit-sha256: b347b97e42246ae89c7ab9cb1a3e9de84a8c39e6ad715b2c6d5b47dd6edad5a2
