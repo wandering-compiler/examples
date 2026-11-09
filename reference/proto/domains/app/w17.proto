@@ -105,11 +105,13 @@ option (w17.domain) = {
 
     // **The request stream into a marketing tool.** The `marketing` plugin
     // turns every marketing record of a signed-in user (rest.proto and
-    // mcp.proto record marketing) into a Brevo event on the user's
-    // contact, and keeps the contacts in step with the `auth` activation
-    // above, whose events it subscribes to. It runs in the storage bundle;
-    // compose.reference.yaml points it at a stub of the Brevo API that the
-    // live suite reads back (livetest/marketing_test.go).
+    // mcp.proto record marketing) into a Brevo event on the user's contact
+    // (brevo_events) and the day of that method on the contact
+    // (brevo_attributes, what Brevo's automations start from), and keeps
+    // the contacts in step with the `auth` activation above, whose events
+    // it subscribes to. It runs in the storage bundle; compose.reference.yaml
+    // points it at a stub of the Brevo API that the live suite reads back
+    // (livetest/marketing_test.go).
     //
     // `auth` here declares neither user_admin nor marketing_consent, so of
     // its subscriptions only UserCreated is active: the other three are
@@ -117,7 +119,7 @@ option (w17.domain) = {
     {
       source_name:   "marketing"
       registered_as: "marketing"
-      features:      { names: [ "brevo" ] }
+      features:      { names: [ "brevo", "brevo_events", "brevo_attributes" ] }
     },
 
     // **The connection-alias fixture.** `auditsink` is TEST-ONLY and
