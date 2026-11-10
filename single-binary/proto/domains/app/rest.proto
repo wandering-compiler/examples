@@ -22,6 +22,12 @@ option (w17.rest_api) = {
   //
   // The ADMIN surface keeps its authentication, and the live suite asserts it:
   // an unauthenticated admin API call must answer 401.
+  //
+  // A public method that can change something declares how the gateway's
+  // per-address rate limit treats it (`public_limit`), or codegen refuses it:
+  // here every write spends a token of its own bucket per address. The test
+  // stack switches the limit off (compose.test.yaml); the reads declare
+  // nothing and are not limited.
   groups: [
     {
       prefix:      "/notes",
@@ -34,17 +40,17 @@ option (w17.rest_api) = {
         // polls this to assert the absorbed eventbus tier delivered
         // NoteCreated exactly once.
         { ref: "example.NoteQuery.CountNoteDeliveries", method: GET, path: "/{note_id}/deliveries", exclude_auth: true },
-        { ref: "example.NoteMutation.CreateNote", method: POST,   path: "", exclude_auth: true },
-        { ref: "example.NoteMutation.UpdateNote", method: PATCH,  path: "/{note_id}", exclude_auth: true },
-        { ref: "example.NoteMutation.DeleteNote", method: DELETE, path: "/{note_id}", exclude_auth: true },
+        { ref: "example.NoteMutation.CreateNote", method: POST,   path: "", exclude_auth: true, public_limit: PUBLIC_LIMIT_EVERY_REQUEST },
+        { ref: "example.NoteMutation.UpdateNote", method: PATCH,  path: "/{note_id}", exclude_auth: true, public_limit: PUBLIC_LIMIT_EVERY_REQUEST },
+        { ref: "example.NoteMutation.DeleteNote", method: DELETE, path: "/{note_id}", exclude_auth: true, public_limit: PUBLIC_LIMIT_EVERY_REQUEST },
 
         // Business-tier facade — the gateway routes this to the business
         // conn (in the -server: a direct in-process call into the facade,
         // which itself calls storage in-process).
-        { ref: "example.NotesFacade.CreateNoteChecked", method: POST, path: "/checked", exclude_auth: true },
+        { ref: "example.NotesFacade.CreateNoteChecked", method: POST, path: "/checked", exclude_auth: true, public_limit: PUBLIC_LIMIT_EVERY_REQUEST },
         // Business-to-business composition — see notes_facade.proto.
-        { ref: "example.NotesFacade.CreateNoteCheckedComposed", method: POST, path: "/checked-composed", exclude_auth: true },
-        { ref: "example.NotesFacade.CreateNoteCheckedInTx",     method: POST, path: "/checked-in-tx",    exclude_auth: true },
+        { ref: "example.NotesFacade.CreateNoteCheckedComposed", method: POST, path: "/checked-composed", exclude_auth: true, public_limit: PUBLIC_LIMIT_EVERY_REQUEST },
+        { ref: "example.NotesFacade.CreateNoteCheckedInTx",     method: POST, path: "/checked-in-tx",    exclude_auth: true, public_limit: PUBLIC_LIMIT_EVERY_REQUEST },
 
         // The upload half of the read-back check. `multipart: true`
         // switches the gateway off JSON-body parsing; the FILE_PART
@@ -52,6 +58,7 @@ option (w17.rest_api) = {
         // after streaming and hashing the part.
         { ref: "example.NoteMutation.AttachNote", method: POST, path: "/{note_id}/attachment",
           exclude_auth: true,
+          public_limit: PUBLIC_LIMIT_EVERY_REQUEST,
           multipart: true,
           fields: [
             { ref: "stored_path", from: FILE_PART, http_name: "file" }
@@ -74,7 +81,7 @@ option (w17.rest_api) = {
         // A file the BUSINESS tier makes and stores: the answer's `file` is
         // the download URL of what the facade put on `app-exports` — served
         // by the same download endpoint as an upload.
-        { ref: "example.NotesFacade.ExportNote", method: POST, path: "/{note_id}/export", exclude_auth: true },
+        { ref: "example.NotesFacade.ExportNote", method: POST, path: "/{note_id}/export", exclude_auth: true, public_limit: PUBLIC_LIMIT_EVERY_REQUEST },
 
         // A third-party API behind the business tier: the facade calls the
         // egress client proto/clients/quotes, which calls the Quotes API.
