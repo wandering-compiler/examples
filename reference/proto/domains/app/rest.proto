@@ -750,6 +750,9 @@ option (w17.rest_api) = {
       streams: [
         // server-stream → SSE (auto)
         { ref: "tasks.TasksService.StreamTasks",  path: "/stream" },
+        // server-stream → SSE, opened by a POST: the question and the
+        // history are a JSON body, so none of it lands in a URL
+        { ref: "tasks.TasksService.AskAboutTasks", path: "/ask", method: POST },
         // bidi-stream → WS (auto)
         { ref: "tasks.TasksService.LiveSearch",   path: "/live-search" },
         // client-stream → WS (auto)
