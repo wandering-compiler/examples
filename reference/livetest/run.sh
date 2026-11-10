@@ -56,3 +56,38 @@ docker run --rm --network "${project}_default" --network-alias livetest-sentry "
   -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOFLAGS=-buildvcs=false -e GOWORK=off \
   -v "$PWD:/w" -w /w/livetest golang:1.26 \
   go test -count=1 -race ./... || { logs; exit 1; }
+
+# Second phase: the gateway's per-address limit on, as a deployment runs it.
+# The test overlay switched it off for the suites above, which register many
+# accounts from one address. A second gateway joins the stack — the same
+# image, volumes and environment, minus the *_PUBLIC_RATELIMIT_* variables
+# that switched it off, so each endpoint runs at what it declares — and
+# TestPublicLimits_* runs against it. Beside the first rather than in its
+# place: `w17ctl test` composed the stack with an override it has removed,
+# and compose would not recreate the gateway onto the same network without it.
+limited="${project}-gateway-limits"
+limits_env="$(mktemp)"
+trap 'rm -f "$limits_env"; docker rm -f "$limited" >/dev/null 2>&1 || true; docker network disconnect -f "${project}_default" "${W17_GOPROXY_CONTAINER:-none}" >/dev/null 2>&1 || true; cleanup' EXIT
+docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$gateway" \
+  | grep -v -e '_PUBLIC_RATELIMIT_' -e '^HOSTNAME=' -e '^$' >"$limits_env"
+# How the first one runs, as `w17ctl test` started it (a test stack may run the
+# bundle from source, `go run`, in another image than the bundle's own).
+# One element a line; the last line is the one inspect ends with, not an element.
+config_list() { docker inspect -f "{{range .Config.$1}}{{println .}}{{end}}" "$gateway" | sed '${/^$/d}'; }
+mapfile -t entry < <(config_list Entrypoint)
+mapfile -t cmd < <(config_list Cmd)
+run_as=(-w "$(docker inspect -f '{{.Config.WorkingDir}}' "$gateway")")
+user="$(docker inspect -f '{{.Config.User}}' "$gateway")"
+[ -n "$user" ] && run_as+=(-u "$user")
+if [ "${#entry[@]}" -gt 0 ]; then
+  run_as+=(--entrypoint "${entry[0]}")
+  cmd=("${entry[@]:1}" "${cmd[@]}")
+fi
+docker run -d --name "$limited" --network "${project}_default" --network-alias app-gateway-limits \
+  --volumes-from "$gateway" --env-file "$limits_env" "${run_as[@]}" \
+  "$(docker inspect -f '{{.Config.Image}}' "$gateway")" "${cmd[@]}" >/dev/null
+docker run --rm --network "${project}_default" --network-alias livetest-sentry "${goproxy[@]}" \
+  -e GATEWAY_URL=http://app-gateway-limits:8080 -e GATEWAY_DPOP_ORIGIN="$dpop_origin" -e PUBLIC_LIMITS_ON=1 \
+  -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOFLAGS=-buildvcs=false -e GOWORK=off \
+  -v "$PWD:/w" -w /w/livetest golang:1.26 \
+  go test -count=1 -race -run '^TestPublicLimits_' ./... || { docker logs --tail 100 "$limited" >&2; logs; exit 1; }

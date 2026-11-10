@@ -137,12 +137,18 @@ option (w17.rest_api) = {
         // SignUp names the host the registration comes from in its body
         // (signup_host): the organization bound to that host takes the
         // new account in (org_hosts + org_signup).
-        // SignIn checks a password, so only a failed attempt spends the
-        // gateway's per-address limit; SignUp, which creates an account,
-        // spends on every request (the default). Endpoints declared here
-        // rather than through the plugin's preset carry their own mode.
+        // Each spends its own bucket of the gateway's per-address limit.
+        // SignIn checks a password, so only a failed attempt spends one
+        // (declared here); SignUp, which creates an account, spends one on
+        // every request — what the plugin's preset declares for it, 20 a
+        // minute, inherited because this endpoint declares nothing.
         { ref: "auth.AuthService.SignUp", method: POST, path: "/register", exclude_auth: true },
         { ref: "auth.AuthService.SignIn", method: POST, path: "/login",    exclude_auth: true, public_limit: PUBLIC_LIMIT_FAILED_ONLY },
+        // Which organization a host serves (org_hosts): a white-label sign-in
+        // page reads it on every load, before anyone has a token. Not limited
+        // per address — the preset declares PUBLIC_LIMIT_NONE — so an office
+        // behind one address loading the page all day is never refused.
+        { ref: "auth.AuthService.GetHostOrg", method: GET, path: "/hosts/{host}", exclude_auth: true },
         // The OAuth authorization server's consent page and the user's
         // connected apps (oauth_server): an MCP client gets its token for
         // the MCP surface through these, with the user's REST session.
@@ -928,11 +934,18 @@ option (w17.rest_api) = {
         //   exclude_auth — a browser opening a public feed carries
         //     no bearer. Without this the route 401s every consumer
         //     it exists for.
+        //   public_limit / public_rate — each feed OPENED spends a
+        //     token of this stream's own bucket per address (a stream's
+        //     outcome is not one status, so every open counts). Generous:
+        //     a page reconnecting is fine, a script opening hundreds is
+        //     not. Undeclared, a public GET stream is not limited.
         //   operation_id — same reason as the unary endpoint above:
         //     the derived name repeats the group noun.
         { ref: "users.UsersService.StreamDirectoryUpdates", path: "/directory-feed",
           transport_override: STREAM_TRANSPORT_WS,
           exclude_auth:       true,
+          public_limit:       PUBLIC_LIMIT_EVERY_REQUEST,
+          public_rate:        { per_minute: 120, burst: 60 },
           operation_id:       "watchDirectory" }
       ]
     }
