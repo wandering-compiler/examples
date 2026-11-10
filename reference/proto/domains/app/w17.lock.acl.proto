@@ -12,8 +12,8 @@ package w17lock.app.acl;
 import "w17/lock.proto";
 import "w17/field.proto";
 
-option (w17.lock_checksum) = "sha256:3af669a7e3d532b4f352e6faf598c15df82b78ebb140149e5674134931deece9";
-option (w17.lock_signature) = "ed25519/v1:cb6b042584be749d1b30fdd9d4549f23035fa02a332c0493c484562cf965d4fdf89d18a4eacab6bd525adbab05b73e7b1a810ba3f55418a9bb9073783806e10e";
+option (w17.lock_checksum) = "sha256:f6d2f9e5efcdbd23917986810a4b7739f24b8098d8658d8c47cbad9fe9ba1f18";
+option (w17.lock_signature) = "ed25519/v1:6290d64e729b150dcb84b83613d149a13267b11fc9e4052186782e782e625fa98e623a8591f568968a93919587a047454f31152c620aa4b6824333cb3efebd0d";
 option (w17.lock_derivation) = 1;
 
 // AclPermission — every permission allocated by the cascade for
@@ -113,6 +113,7 @@ enum AclPermission {
   TASKS_MILESTONE_MUTATION_UPDATE_MILESTONE = 64 [(w17.value_display) = { label: "Tasks · Milestone Mutation · Update Milestone" }];
   TASKS_MILESTONE_VIEW = 65 [(w17.value_display) = { label: "Tasks · Milestone · View" }];
   TASKS_ORG_OPS_QUERY_COUNT_ALL_ORG_NOTES = 192 [(w17.value_display) = { label: "Tasks · Org Ops Query · Count All Org Notes" }];
+  TASKS_TASKS_SERVICE_ASK_ABOUT_TASKS = 210 [(w17.value_display) = { label: "Tasks · Tasks Service · Ask About Tasks" }];
   TASKS_TASKS_SERVICE_BULK_CREATE_TASKS = 66 [(w17.value_display) = { label: "Tasks · Tasks Service · Bulk Create Tasks" }];
   TASKS_TASKS_SERVICE_CREATE_ORG_NOTE_VIA_SERVICE = 193 [(w17.value_display) = { label: "Tasks · Tasks Service · Create Org Note Via Service" }];
   TASKS_TASKS_SERVICE_CREATE_TASK = 67 [(w17.value_display) = { label: "Tasks · Tasks Service · Create Task" }];

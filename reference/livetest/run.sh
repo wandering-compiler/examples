@@ -38,10 +38,21 @@ if [ -n "${W17_GOPROXY_CONTAINER:-}" ]; then
   ip="$(docker inspect -f "{{(index .NetworkSettings.Networks \"${project}_default\").IPAddress}}" "$W17_GOPROXY_CONTAINER")"
   goproxy=(-e "GOPROXY=http://$ip,https://proxy.golang.org,direct" -e GODEBUG=http2client=0)
 fi
+# A failing suite shows what the services said: an assertion that waits on
+# a background delivery (a Brevo contact, an error report) names only what
+# it did not see, and the stack is gone once this script exits.
+# The bus is in it because the marketing flake (a sign-up's UserCreated that
+# never reached the plugin within 30 s, app-storage silent) can only be told
+# apart there: an event never published, or published and never delivered.
+logs() {
+  echo "livetest: the suite failed — the last lines of app-storage, app-eventbus, nats and brevostub:" >&2
+  docker compose -p "$project" logs --no-color --timestamps --tail 200 app-storage app-eventbus nats brevostub >&2 || true
+}
+
 # The suite serves the fake Sentry the stack reports its errors to
 # (compose.yaml: W17_SENTRY_DSN names livetest-sentry).
 docker run --rm --network "${project}_default" --network-alias livetest-sentry "${goproxy[@]}" \
   -e GATEWAY_DPOP_ORIGIN="$dpop_origin" \
   -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOFLAGS=-buildvcs=false -e GOWORK=off \
   -v "$PWD:/w" -w /w/livetest golang:1.26 \
-  go test -count=1 -race ./...
+  go test -count=1 -race ./... || { logs; exit 1; }

@@ -27,7 +27,11 @@ func init() {
 		"w17.contrib.marketing.TakeOverReconciliationReq":    {},
 		"w17.contrib.marketing.ReconciliationOwnerReq":       {},
 		"w17.contrib.marketing.ReconciliationResp":           {},
+		"w17.contrib.marketing.ActivityReq":                  {},
+		"w17.contrib.marketing.ActivityWriteResp":            {},
+		"w17.contrib.marketing.ActivityMovedResp":            {},
+		"w17.contrib.marketing.EraseActivityReq":             {},
 	})
 }
 
-// emit-sha256: b8131f0f3c00c77116cd49d4b51cd7fa43949358884937e5c969a5c1e3bb4ed1
+// emit-sha256: 7d9b30ab17499c2e0ea44000fb8f438e58ba38efdca10f198b4cad45f56ce2ef

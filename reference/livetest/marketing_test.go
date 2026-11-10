@@ -115,3 +115,37 @@ func TestMarketing_ASignUpAndAMutationReachBrevo(t *testing.T) {
 		assertAbsent(t, "the Brevo event", raw, append(f.decoys(), f.Message, f.ContactEmail))
 	}
 }
+
+// With brevo_attributes the same request also dates the contact: the method's
+// attribute holds the day (a Brevo date), W17_LAST_ACTIVITY_AT the exact time,
+// and the sign-up dates it too (W17_SIGNED_UP_AT, from auth's UserCreated).
+// Brevo drops an attribute the account has not created, and so does the
+// stub: the attributes being there proves the plugin created them at boot.
+func TestMarketing_AMutationDatesTheContact(t *testing.T) {
+	email := fmt.Sprintf("live-mkt-attr-%d@reference.example", time.Now().UnixNano())
+	before := time.Now().UTC().Add(-time.Minute)
+	token := signUpAs(t, email)
+	report := reportFault(t, token, newFault(nonce()))
+	ev, envelope := sentry.eventFor(t, report)
+	user := ev.Tags["user_id"]
+	if user == "" {
+		t.Fatalf("the error report names no user_id: %.600s", envelope)
+	}
+
+	const attr = "W17_USERSSERVICE_REPORTCLIENTFAULT"
+	c := contactUntil(t, user, func(c stubContact) bool {
+		return c.Attributes[attr] != nil && c.Attributes["W17_LAST_ACTIVITY_AT"] != nil && c.Attributes["W17_SIGNED_UP_AT"] != nil
+	})
+	after := time.Now().UTC().Add(time.Minute)
+	for _, name := range []string{attr, "W17_SIGNED_UP_AT"} {
+		day, _ := c.Attributes[name].(string)
+		d, err := time.Parse("2006-01-02", day)
+		if err != nil || d.After(after) || d.Before(before.Truncate(24*time.Hour)) {
+			t.Errorf("contact %s: %s = %v, want today's date as YYYY-MM-DD", user, name, c.Attributes[name])
+		}
+	}
+	last, _ := c.Attributes["W17_LAST_ACTIVITY_AT"].(string)
+	if at, err := time.Parse(time.RFC3339, last); err != nil || at.Before(before) || at.After(after) {
+		t.Errorf("contact %s: W17_LAST_ACTIVITY_AT = %v, want the time of the request (RFC 3339)", user, c.Attributes["W17_LAST_ACTIVITY_AT"])
+	}
+}
