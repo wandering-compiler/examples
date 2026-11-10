@@ -3718,7 +3718,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "w17-business"
 version = "0.1.0"
-source = "git+https://github.com/wandering-compiler/sdk?tag=rs%2Fv0.1.0-rc.69#8aa2210d4ad49e6a4144921d703eb9269d451315"
+source = "git+https://github.com/wandering-compiler/sdk?tag=rs%2Fv0.1.0-rc.70#5a42e0c43f7a55a39b43cd67adde8244b8d92482"
 dependencies = [
  "age",
  "async-nats",
@@ -3763,8 +3763,9 @@ dependencies = [
 [[package]]
 name = "w17-business-build"
 version = "0.1.0"
-source = "git+https://github.com/wandering-compiler/sdk?tag=rs%2Fv0.1.0-rc.69#8aa2210d4ad49e6a4144921d703eb9269d451315"
+source = "git+https://github.com/wandering-compiler/sdk?tag=rs%2Fv0.1.0-rc.70#5a42e0c43f7a55a39b43cd67adde8244b8d92482"
 dependencies = [
+ "heck",
  "hex",
  "prost",
  "prost-types",
