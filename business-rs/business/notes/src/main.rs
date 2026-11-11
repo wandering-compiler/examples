@@ -132,9 +132,13 @@ impl NotesService for Notes {
                     note_id: note.id,
                     mark: "committed".into(),
                 };
+                // Inside the transaction this parks the work (Deferred) and
+                // returns at once; an Err is only possible outside one.
                 on_commit(&tx_ctx, async move {
                     mutation.clone().record_mark(detached.request(mark)).await
-                });
+                })
+                .await
+                .map_err(Status::internal)?;
 
                 if r.title.starts_with(ROLLBACK_PREFIX) {
                     // After the write: the rollback is what removes it.
