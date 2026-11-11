@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-11-09 23:43+0000\n"
+"POT-Creation-Date: 2026-11-11 22:45+0000\n"
 "Language: cs\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -229,10 +229,13 @@ msgstr "Cache · User Session Query · Get User Session"
 msgid "Choose at least one permission for the role."
 msgstr ""
 
+msgid "Choose none, derived or full."
+msgstr ""
+
 msgid "Choose one of your organizations for this application."
 msgstr ""
 
-msgid "Choose required, optional or disabled."
+msgid "Choose required, enrol, optional or disabled."
 msgstr ""
 
 msgid "Choose the organization to act in: name it in the W17-Org header (the organization's slug) and try again."
@@ -254,6 +257,9 @@ msgid "Confirm your email address before accepting this invitation."
 msgstr ""
 
 msgid "Every organization has this package; it is not given or taken."
+msgstr ""
+
+msgid "From inside an organization, change its email verification in the organization's own settings."
 msgstr ""
 
 msgid "From inside an organization, change its two-step sign-in in the organization's own settings."
@@ -295,6 +301,9 @@ msgstr ""
 msgid "Registration here is not set up correctly. Contact the organization."
 msgstr ""
 
+msgid "Registration here is paused until the organization confirms its settings again. Contact the organization."
+msgstr ""
+
 msgid "Registration is by invitation only. Ask the organization you are joining to invite you."
 msgstr ""
 
@@ -307,10 +316,16 @@ msgstr ""
 msgid "Set up an authenticator app first. Recovery codes belong to it."
 msgstr ""
 
+msgid "Setting up an authenticator at sign-in is not available here."
+msgstr ""
+
 msgid "Sign in to do this. An API token cannot create credentials."
 msgstr ""
 
 msgid "Signing in with the provider did not complete. Please start again."
+msgstr ""
+
+msgid "Someone holds no other administrator role than this one. Give them another administrator role before retiring it."
 msgstr ""
 
 msgid "Someone still holds this role, directly or through a team. Give them another role first."
@@ -628,6 +643,12 @@ msgstr ""
 msgid "That role is not one of this organization's own roles, so it cannot be changed here."
 msgstr ""
 
+msgid "The captcha could not be checked. Try again later."
+msgstr ""
+
+msgid "The captcha was not accepted. Solve it again."
+msgstr ""
+
 msgid "The file is too large."
 msgstr ""
 
@@ -680,9 +701,6 @@ msgid "This account has been disabled."
 msgstr ""
 
 msgid "This address belongs to another organization than the one you chose."
-msgstr ""
-
-msgid "This address does not belong to any organization here. Check the address you registered on."
 msgstr ""
 
 msgid "This app did not prove which device it runs on. Reload or update it, then sign in again."
@@ -742,7 +760,13 @@ msgstr ""
 msgid "This membership belongs to another organization."
 msgstr ""
 
+msgid "This organization admits only a confirmed email address, and this registration cannot confirm one."
+msgstr ""
+
 msgid "This organization already has a team named {name}."
+msgstr ""
+
+msgid "This organization is suspended by the operators of the service. Contact them to have it restored."
 msgstr ""
 
 msgid "This part of the service is not open to you: none of your memberships is of a kind it admits."
@@ -764,6 +788,9 @@ msgid "This registration names another address than the one it arrived on."
 msgstr ""
 
 msgid "This request names two different organizations. Name one."
+msgstr ""
+
+msgid "This request needs a solved captcha."
 msgstr ""
 
 msgid "This role is held across the whole platform, not in one organization."

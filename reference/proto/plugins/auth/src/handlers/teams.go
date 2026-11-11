@@ -20,7 +20,7 @@ import (
 // product defines what one means (the seed, org_roles), the organization
 // decides who holds it — directly, or through a team. That is why a team is
 // its own table rather than a role made of roles: the catalogue belongs to the
-// product and teams to the tenant, and the resolver stays a union instead of a
+// product and teams to the organization, and the resolver stays a union instead of a
 // walk over a role graph.
 //
 // Where the roles count. Authenticate adds a member's team roles for a SESSION
@@ -137,7 +137,8 @@ func countTeamRoleHolders(ctx context.Context, h *AuthServiceHandler, roleID str
 
 // ListOrgTeams returns the organization's teams with their members and roles,
 // and whether the caller may manage each.
-func (h *AuthServiceHandler) ListOrgTeams(ctx context.Context, req *pb.ListOrgTeamsReq) (*pb.ListOrgTeamsResp, error) {
+func (h *AuthServiceHandler) ListOrgTeams(ctx context.Context, req *pb.ListOrgTeamsReq) (_ *pb.ListOrgTeamsResp, err error) {
+	defer markReplaySafe(&err)
 	if _, err := callerUserID(ctx); err != nil {
 		return nil, Unauthenticated(err)
 	}

@@ -122,7 +122,7 @@ message AuthResp {
   // backend handler. Empty when the auth backend can't resolve an id.
   string              session_token_id = 4 [(w17.field) = { type: UUID }];
 
-  // `labels` is the BROADCAST tenancy key, and it is deliberately NOT
+  // `labels` is the BROADCAST organization isolation key, and it is deliberately NOT
   // `scopes` under another name.
   //
   // A scope filters ROWS. A label decides who an EVENT reaches: the
@@ -140,7 +140,7 @@ message AuthResp {
   //
   // Empty (the default, and every project that publishes no label) means
   // events go out unlabelled and every authenticated client receives them
-  // — the single-tenant posture, unchanged.
+  // — the single-organization posture, unchanged.
   map<string, string> labels = 5;
 
   // device_id — the RFC 7638 key thumbprint the resolved token is BOUND to,
@@ -227,6 +227,13 @@ message SignInResp {
   // public_computer — echoes the request's choice on a response that carries
   // a token: the client keeps a public-computer token in session storage only.
   bool public_computer = 6;
+
+  // enrolment_required — with mfa_required: the account has no authenticator
+  // and two_factor_policy is enrol, so no code was sent. The client sets one
+  // up on the challenge (EnrollTotpAtSignIn) and completes the sign-in with
+  // VerifyMfa and that authenticator's first code; VerifyMfa then answers the
+  // recovery codes too.
+  bool enrolment_required = 7 [(w17.contrib.plugin_feature_field) = "two_factor_enrolment"];
 }
 
 // SignUpReq / SignUpResp — canonical register-and-issue-token
@@ -253,16 +260,7 @@ message SignUpReq {
   // link. Empty is normal — a bound invitation still matches by address, and a
   // deployment with `invite_only` off asks nothing at all.
   string invite_token = 4 [(w17.field) = { type: CHAR, max_len: 128, null: true, sensitive: true }];
-  // tenant_slug — the URL-based tenant identifier, bound at the
-  // gateway from a `{tenant_slug}` path placeholder (PATH_VAR). Field-
-  // gated by `tenant_scope`: present only when BOTH sign_up_turnkey
-  // (the message) and tenant_scope are on. The handler resolves it to
-  // a tenant id; host-based tenancy reads the forwarded Host header
-  // instead, so this stays empty there.
-  string tenant_slug = 3 [
-    (w17.field) = { type: SLUG, max_len: 100, null: true },
-    (w17.contrib.plugin_feature_field) = "tenant_scope"
-  ];
+  reserved 3;
   // public_computer — "this is a public computer" (an internet café, a
   // shared PC). The session gets the public lifetime
   // (public_session_ttl_seconds, shorter than the normal one) and the device
@@ -274,7 +272,7 @@ message SignUpReq {
   // signup_host — the host this registration comes from, named by a
   // registration page on the identity's own host (one that serves several
   // organizations' sign-ups and is bound to none of them). Without a gateway
-  // host (an audience taking the tenant from the host), org_signup decides on
+  // host (an audience taking the organization from the host), org_signup decides on
   // it exactly as for a registration arriving on that host: the organization
   // bound to it (org_hosts) and its policies. A gateway host bound to an
   // organization is the request's own and wins; a body host naming another
@@ -356,9 +354,10 @@ message WhoAmIResp {
   // `authenticate_turnkey`; organizations exist only under `org_membership`,
   // and most activations enable the first without the second. A field named
   // here unconditionally and left empty there is the shape that has bitten
-  // this plugin twice — ListRoles cannot return `org_scoped` for exactly this
-  // reason, and a handler that filtered on it in Go got an empty list from a
-  // column nothing populated. Gated, the fields are DROPPED from the message
+  // this plugin twice — ListRoles once could not return `org_scoped` for
+  // exactly this reason (it projects it with `?feature` now), and a handler
+  // that filtered on it in Go got an empty list from a column nothing
+  // populated. Gated, the fields are DROPPED from the message
   // when the feature is off, so nothing can read a zero value as an answer.
   repeated UserOrg orgs = 2 [(w17.contrib.plugin_feature_field) = "org_membership"];
   // Empty when the request resolved no organization — the caller belongs to
@@ -668,7 +667,7 @@ message OAuthExchangeReq {
   // signup_host — the host this registration comes from, named by a
   // registration page on the identity's own host (one that serves several
   // organizations' sign-ups and is bound to none of them). Without a gateway
-  // host (an audience taking the tenant from the host), org_signup decides on
+  // host (an audience taking the organization from the host), org_signup decides on
   // it exactly as for a registration arriving on that host: the organization
   // bound to it (org_hosts) and its policies. A gateway host bound to an
   // organization is the request's own and wins; a body host naming another
@@ -719,6 +718,17 @@ message EnrollTotpResp {
   // Render it as-is (an <img> data URI or inline). Generating it here keeps
   // the seed out of third-party QR libraries and online QR services.
   string qr_svg      = 3;
+}
+
+// EnrollTotpAtSignInReq — an authenticator set up on a sign-in's enrolment
+// challenge (SignInResp.enrolment_required), before the person has a session.
+// Unauthenticated like VerifyMfa: the challenge stands in for the token, and
+// the request must be signed by the key that passed the password. Answers
+// EnrollTotpResp; calling it again replaces the authenticator not yet
+// confirmed.
+message EnrollTotpAtSignInReq {
+  option (w17.contrib.plugin_feature) = "two_factor_enrolment";
+  string challenge_id = 1 [(w17.field) = { type: UUID }];
 }
 
 message ConfirmTotpReq {
@@ -787,6 +797,10 @@ message VerifyMfaResp {
   // The challenged SignIn's public_computer, which this completion honoured
   // (VerifyMfa takes it from the challenge, never from its own request).
   bool   public_computer = 4;
+  // recovery_codes — on an enrolment challenge (SignInResp.enrolment_required)
+  // only: the code confirmed the authenticator set up on it, and these are its
+  // ten one-time recovery codes, shown ONCE (as ConfirmTotpResp's).
+  repeated string recovery_codes = 5 [(w17.field) = { sensitive: true }, (w17.contrib.plugin_feature_field) = "two_factor_enrolment"];
 }
 
 // ── devices: device/session management business surface ─────
@@ -1091,7 +1105,7 @@ message InviteToOrgReq {
   string role  = 2 [(w17.field) = { type: SLUG, max_len: 100 }];
   // Opaque, consumer-owned, and the reason this field exists: the caller pins
   // whatever their own system needs paired with this invitation — for example a
-  // tenant plus one object in their engine — and gets it back at acceptance out
+  // organization plus one object in their engine — and gets it back at acceptance out
   // of the same statement that spends the invitation. See OrgInvite.metadata.
   string metadata = 3 [(w17.field) = { type: JSON, blank: true }];
   // org — the organization's slug, as the REST path names it
@@ -1179,6 +1193,20 @@ message RevokeOrgInviteReq {
   string org = 2 [(w17.field) = { type: SLUG, max_len: 64, blank: true }];
 }
 message RevokeOrgInviteResp { option (w17.contrib.plugin_feature) = "org_invite"; }
+
+// RevokeOrgInvitesReq — the backoffice withdrawing invitations it picked
+// from the realm-wide OrgInvites list, in any organization: each is closed
+// under its organization's lock and held to the role ceiling, as
+// RevokeOrgInvite holds a member's withdrawal. Realm-wide only.
+message RevokeOrgInvitesReq {
+  option (w17.contrib.plugin_feature) = "backoffice_invites";
+  repeated string ids = 1 [(w17.field) = { type: UUID }];
+}
+message RevokeOrgInvitesResp {
+  option (w17.contrib.plugin_feature) = "backoffice_invites";
+  // How many were withdrawn; an id already accepted or closed counts none.
+  int32 revoked = 1;
+}
 
 // MyInvite — an invitation addressed to the CALLER, named by the
 // organization rather than by its id, because this is the list a person
@@ -1822,6 +1850,15 @@ message OrgProductPlanLineReq {
   // role_key — '' = the whole product.
   string role_key = 3 [(w17.field) = { type: CHAR, max_len: 64, blank: true }];
 }
+// DisallowOrgProductsReq — the backoffice ending plan lines it picked by
+// their row ids (OrgProductAllowance.id), in whatever organizations: what an
+// admin row action sends. DisallowOrgProduct takes one line by (org, product,
+// role) — a key an admin delete cannot stamp, so a page could not bind it.
+message DisallowOrgProductsReq {
+  option (w17.contrib.plugin_feature) = "product_plans";
+  repeated string ids = 1 [(w17.field) = { type: UUID }];
+}
+
 message OrgProductPlanChangeResp {
   option (w17.contrib.plugin_feature) = "product_plans";
 }
@@ -1923,6 +1960,54 @@ message ClearMyOrgTwoFactorPolicyReq {
 }
 message ListMyOrgTwoFactorPoliciesReq {
   option (w17.contrib.plugin_feature) = "org_two_factor_policy";
+  string org = 1 [(w17.field) = { type: SLUG, max_len: 64, blank: true }];
+}
+
+// An organization's address-proof floor (org_email_proof_policy): none |
+// derived | full, over the activation's email_proof_required. The backoffice
+// sets it realm-wide (…OrgEmailProof, org_id), the organization its own
+// (…MyOrg…, acting inside it).
+message SetOrgEmailProofReq {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+  string floor  = 2 [(w17.field) = { type: CHAR, max_len: 16 }];
+}
+message SetOrgEmailProofResp {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+}
+message ClearOrgEmailProofReq {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ClearOrgEmailProofResp {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+}
+message GetOrgEmailProofReq {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message GetOrgEmailProofResp {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  // floor — the organization's own, '' when it has none.
+  string floor = 1 [(w17.field) = { blank: true }];
+  google.protobuf.Timestamp set_at = 2 [(w17.field) = { null: true }];
+  // default_floor — the activation's email_proof_required, which decides
+  // while the organization has no floor of its own.
+  string default_floor = 3;
+}
+// The organization's own, acting inside it: `org` is its slug (the W17-Org
+// header), refused when it names another.
+message SetMyOrgEmailProofReq {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  string org   = 1 [(w17.field) = { type: SLUG, max_len: 64, blank: true }];
+  string floor = 2 [(w17.field) = { type: CHAR, max_len: 16 }];
+}
+message ClearMyOrgEmailProofReq {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  string org = 1 [(w17.field) = { type: SLUG, max_len: 64, blank: true }];
+}
+message GetMyOrgEmailProofReq {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
   string org = 1 [(w17.field) = { type: SLUG, max_len: 64, blank: true }];
 }
 
@@ -2313,9 +2398,9 @@ service AuthService {
 
   // ── two_factor — enrollment + challenge verification ────────
   // EnrollTotp / ConfirmTotp / DisableTotp / GetMfaStatus ride the bearer
-  // middleware (manage your own factor). VerifyMfa is unauthenticated
-  // (challenge_id stands in for the not-yet-issued token). All gated
-  // two_factor.
+  // middleware (manage your own factor). VerifyMfa and EnrollTotpAtSignIn
+  // are unauthenticated (challenge_id stands in for the not-yet-issued
+  // token). All gated two_factor; EnrollTotpAtSignIn two_factor_enrolment.
   rpc EnrollTotp(EnrollTotpReq) returns (EnrollTotpResp) {
     option (w17.contrib.plugin_feature_rpc) = "two_factor";
   }
@@ -2333,6 +2418,11 @@ service AuthService {
   }
   rpc VerifyMfa(VerifyMfaReq) returns (VerifyMfaResp) {
     option (w17.contrib.plugin_feature_rpc) = "two_factor";
+  }
+  // EnrollTotpAtSignIn — the authenticator of an account that enrols at
+  // sign-in (two_factor_policy=enrol); unauthenticated like VerifyMfa.
+  rpc EnrollTotpAtSignIn(EnrollTotpAtSignInReq) returns (EnrollTotpResp) {
+    option (w17.contrib.plugin_feature_rpc) = "two_factor_enrolment";
   }
 
   // ── devices management — list + log out one/others/all ──────
@@ -2520,6 +2610,20 @@ service AuthService {
     option (w17.contrib.plugin_feature_rpc) = "org_invite";
   }
 
+  // InviteToOrgAdmin — the backoffice's invitation into the organization
+  // the request names by its slug (`org`), which its operator is usually no
+  // member of. Realm-wide, gated by the endpoint ACL; the role ceiling holds
+  // against what the caller holds.
+  rpc InviteToOrgAdmin(InviteToOrgReq) returns (InviteToOrgResp) {
+    option (w17.contrib.plugin_feature_rpc) = "backoffice_invites";
+  }
+
+  // RevokeOrgInvites — the backoffice's withdrawal of picked invitations,
+  // in any organization (realm-wide, gated by the endpoint ACL).
+  rpc RevokeOrgInvites(RevokeOrgInvitesReq) returns (RevokeOrgInvitesResp) {
+    option (w17.contrib.plugin_feature_rpc) = "backoffice_invites";
+  }
+
   // ListMyInvites — invitations addressed to the CALLER, in every org.
   // Not scoped to an active org, and could not be: the point is that the
   // caller is not a member of those organizations yet.
@@ -2668,6 +2772,11 @@ service AuthService {
   rpc DisallowOrgProduct(OrgProductPlanLineReq) returns (OrgProductPlanChangeResp) {
     option (w17.contrib.plugin_feature_rpc) = "product_plans";
   }
+  // DisallowOrgProducts — the plan lines picked by their row ids, ended
+  // (realm-wide, the endpoint ACL gates it; bind it as a row action).
+  rpc DisallowOrgProducts(DisallowOrgProductsReq) returns (OrgProductPlanChangeResp) {
+    option (w17.contrib.plugin_feature_rpc) = "product_plans";
+  }
 
   // Named plans (handlers/named_product_plans.go): realm-wide, under the
   // endpoint ACL.
@@ -2736,6 +2845,26 @@ service AuthService {
   }
   rpc ListMyOrgTwoFactorPolicies(ListMyOrgTwoFactorPoliciesReq) returns (ListOrgTwoFactorPoliciesResp) {
     option (w17.contrib.plugin_feature_rpc) = "org_two_factor_policy";
+  }
+
+  // An organization's address-proof floor (handlers/org_email_proof_policy.go).
+  rpc SetOrgEmailProof(SetOrgEmailProofReq) returns (SetOrgEmailProofResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_email_proof_policy";
+  }
+  rpc ClearOrgEmailProof(ClearOrgEmailProofReq) returns (ClearOrgEmailProofResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_email_proof_policy";
+  }
+  rpc GetOrgEmailProof(GetOrgEmailProofReq) returns (GetOrgEmailProofResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_email_proof_policy";
+  }
+  rpc SetMyOrgEmailProof(SetMyOrgEmailProofReq) returns (SetOrgEmailProofResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_email_proof_policy";
+  }
+  rpc ClearMyOrgEmailProof(ClearMyOrgEmailProofReq) returns (ClearOrgEmailProofResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_email_proof_policy";
+  }
+  rpc GetMyOrgEmailProof(GetMyOrgEmailProofReq) returns (GetOrgEmailProofResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_email_proof_policy";
   }
 
   // An organization's registration policies (handlers/org_signup.go).

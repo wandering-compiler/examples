@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/protoadapt"
 
+	"github.com/wandering-compiler/sdk/go/core/grpcerr"
 	"github.com/wandering-compiler/sdk/go/lib/i18n"
 	"github.com/wandering-compiler/sdk/go/lib/principal"
 	w17pb "github.com/wandering-compiler/sdk/go/pb/w17"
@@ -44,6 +45,9 @@ type authnError struct {
 	// UNAUTHENTICATED — a client that signs out on 401 must not sign out a
 	// valid session over an organization it named.
 	denied bool
+	// deniedMessage is a denied refusal's status message when it is not
+	// ORG_NOT_MEMBER's (DeniedOrgSuspended).
+	deniedMessage string
 }
 
 // orgNotMemberMessage is the status message of DeniedOrgNotMember: the same
@@ -58,6 +62,9 @@ const authnErrorMessage = "invalid credentials"
 // returned error AND the unwrapped cause.
 func (e *authnError) Error() string {
 	if e.denied {
+		if e.deniedMessage != "" {
+			return e.deniedMessage
+		}
 		return orgNotMemberMessage
 	}
 	return authnErrorMessage
@@ -91,7 +98,7 @@ func (e *authnError) GRPCStatus() *status.Status {
 			CodeAuthUnavailable, MsgAuthUnavailable)
 	}
 	if e.denied {
-		return withUserDetail(status.New(codes.PermissionDenied, orgNotMemberMessage), e.userCode, e.userMsg)
+		return withUserDetail(status.New(codes.PermissionDenied, e.Error()), e.userCode, e.userMsg)
 	}
 	st := status.New(codes.Unauthenticated, authnErrorMessage)
 	if e.userCode == "" {
@@ -138,6 +145,14 @@ const (
 	// exist and one the caller is not in answer the same.
 	CodeOrgNotMember = "ORG_NOT_MEMBER"
 
+	// CodeOrgSuspended: the credential was accepted and the caller belongs to
+	// the organization the request acts in, but the realm's operators have
+	// suspended it (org_suspension). PERMISSION_DENIED, as ORG_NOT_MEMBER:
+	// the session is fine, and a client must not sign the person out over it.
+	// Said only to a member — the check runs after the membership was
+	// resolved — so it reveals nothing to anybody else.
+	CodeOrgSuspended = "ORG_SUSPENDED"
+
 	// CodeMfaCodeRefused: a second-factor code (an authenticator code, an
 	// emailed code, a recovery code) was refused — wrong, expired, already
 	// used, out of attempts, or raised for another device. ONE code for every
@@ -178,12 +193,6 @@ const (
 	// on — and without it they read the generic "You do not have access to
 	// this." about an endpoint they DO have access to.
 	CodeRoleAboveCaller = "ROLE_ABOVE_CALLER"
-
-	// CodeTenantUnknown: under tenant_scope, a registration whose host (or
-	// {tenant_slug}) names no tenant. Not a credential refusal and not the
-	// server's fault — the request came in on an address this deployment
-	// does not serve.
-	CodeTenantUnknown = "TENANT_UNKNOWN"
 
 	// CodeTotpUnavailable: this deployment offers no authenticator app
 	// (two_factor_totp=false, or no seed key configured).
@@ -255,9 +264,9 @@ const (
 	CodeHostsRealmOnly = "HOSTS_REALM_ONLY"
 	CodeHostTaken      = "HOST_TAKEN"
 	CodeHostInvalid    = "HOST_INVALID"
-	// An audience taking the tenant from the host: a W17-Org selector naming
+	// An audience taking the organization from the host: a W17-Org selector naming
 	// another organization than the host's, or a selector on an audience
-	// that does not take the tenant from it (its tenant_from omits DEFAULT).
+	// that does not take the organization from it (its org_from omits DEFAULT).
 	CodeOrgHostConflict        = "ORG_HOST_CONFLICT"
 	CodeOrgSelectorNotAccepted = "ORG_SELECTOR_NOT_ACCEPTED"
 	// org_signup: a policy call from inside an organization; a policy that
@@ -268,11 +277,24 @@ const (
 	CodeSignUpPolicyInvalid     = "SIGNUP_POLICY_INVALID"
 	CodeSignUpKindAmbiguous     = "SIGNUP_KIND_AMBIGUOUS"
 	CodeSignUpHostConflict      = "SIGNUP_HOST_CONFLICT"
+	// CodeSignUpPolicyStale: a registration an open policy admits whose role
+	// is no longer the one the operator setting the policy was checked
+	// against (widened, another role under the name), or whose policy holds
+	// no such check (set before it was stored, or no longer open).
+	CodeSignUpPolicyStale = "SIGNUP_POLICY_STALE"
 	// org_two_factor_policy: the backoffice's policy calls from inside an
 	// organization; a policy value that is none of the three, or a kind the
 	// deployment's memberships do not have.
 	CodeTwoFactorPoliciesRealmOnly = "TWO_FACTOR_POLICIES_REALM_ONLY"
 	CodeTwoFactorPolicyInvalid     = "TWO_FACTOR_POLICY_INVALID"
+	// org_email_proof_policy: the backoffice's floor calls from inside an
+	// organization; a floor that is none of the three.
+	CodeEmailProofPoliciesRealmOnly = "EMAIL_PROOF_POLICIES_REALM_ONLY"
+	CodeEmailProofPolicyInvalid     = "EMAIL_PROOF_POLICY_INVALID"
+	// CodeSignUpEmailProofRequired: a registration on an organization's host
+	// whose floor asks a proof the registration does not make (no
+	// sign_up_confirmation code, no provider's email_verified).
+	CodeSignUpEmailProofRequired = "SIGNUP_EMAIL_PROOF_REQUIRED"
 	// product_roles: a product or a role the catalogue does not name; an
 	// org-held grant of a role the product holds realm-wide only; a grant
 	// above what the caller holds; one for someone outside the organization;
@@ -417,6 +439,8 @@ const (
 
 	MsgOrgMismatch = "This request names two different organizations. Name one."
 
+	MsgOrgSuspended = "This organization is suspended by the operators of the service. Contact them to have it restored."
+
 	// About the CODE, and the same for every cause: naming the cause would
 	// tell a guesser which half of the attempt was wrong.
 	MsgMfaCodeRefused = "That code is not valid. Check it and try again, or request a new one."
@@ -449,8 +473,6 @@ const (
 	// Minting for a machine account whose role the operator could not grant —
 	// the token would act beyond the operator's own permissions.
 	MsgBotAboveCaller = "This machine account holds a role with permissions you do not hold, so you cannot issue a token for it."
-
-	MsgTenantUnknown = "This address does not belong to any organization here. Check the address you registered on."
 
 	MsgTotpUnavailable = "Authenticator apps are not available here. Your sign-in codes arrive by message instead."
 
@@ -498,40 +520,45 @@ const (
 	MsgClientKeySignsIn = "That key belongs to a device you sign in with. Generate a separate key for the program."
 	MsgBotKeyMismatch   = "This machine account already has a different key. Use that key, or revoke the account's device to replace it."
 
-	MsgOAuthRequestGone           = "This sign-in request has expired or was already answered. Start again from the application."
-	MsgOAuthAppUnknown            = "This connected app is not one of yours, or was already disconnected."
-	MsgOAuthOrgRequired           = "Choose one of your organizations for this application."
-	MsgMembershipNotAdmitted      = "This part of the service is not open to you: none of your memberships is of a kind it admits."
-	MsgInviteKindNotAllowed       = "You cannot invite someone as this kind of member."
-	MsgPackageAudienceOff         = "Your organization's plan does not include this part of the service."
-	MsgPackagesRealmOnly          = "An organization's plan is changed by the platform, not from inside the organization."
-	MsgPackageUnknown             = "There is no such package."
-	MsgPackageDefault             = "Every organization has this package; it is not given or taken."
-	MsgHostsRealmOnly             = "Which organization a host serves is set by the platform, not from inside an organization."
-	MsgHostTaken                  = "This host already serves another organization."
-	MsgHostInvalid                = "This is not a host name."
-	MsgOrgHostConflict            = "This address belongs to another organization than the one you chose."
-	MsgOrgSelectorNotAccepted     = "The organization is taken from the address here, not chosen."
-	MsgSignUpPoliciesRealmOnly    = "Who may register into an organization is set by the platform, not from inside the organization."
-	MsgSignUpPolicyKind           = "Name the kind of membership this applies to."
-	MsgSignUpPolicyNoKind         = "This deployment has no kinds of membership; leave the kind empty."
-	MsgSignUpPolicyRole           = "Choose the role people get when they register."
-	MsgSignUpKindAmbiguous        = "Registration here is not set up correctly. Contact the organization."
-	MsgSignUpHostConflict         = "This registration names another address than the one it arrived on."
-	MsgTwoFactorPoliciesRealmOnly = "From inside an organization, change its two-step sign-in in the organization's own settings."
-	MsgTwoFactorPolicyValue       = "Choose required, optional or disabled."
-	MsgProductUnknown             = "There is no such product."
-	MsgProductRoleUnknown         = "The product has no such role."
-	MsgProductRoleRealmHeld       = "This role is held across the whole platform, not in one organization."
-	MsgProductRoleAbove           = "You can only give a role that your own role includes."
-	MsgProductRoleNotMember       = "This person is not a member of the organization."
-	MsgProductRolesRealmOnly      = "This is managed by the platform, not from inside an organization."
-	MsgProductPermissionUnknown   = "No product has this permission."
-	MsgProductRoleNotInPlan       = "Your organization's plan does not include this role."
-	MsgProductPlansRealmOnly      = "An organization's plan is changed by the platform, not from inside the organization."
-	MsgProductPlanUnknown         = "There is no such plan."
-	MsgProductPlanNameTaken       = "A plan with this name already exists. Choose another name."
-	MsgProductPlanInUse           = "Organizations are on this plan. Move them to another plan first."
+	MsgOAuthRequestGone            = "This sign-in request has expired or was already answered. Start again from the application."
+	MsgOAuthAppUnknown             = "This connected app is not one of yours, or was already disconnected."
+	MsgOAuthOrgRequired            = "Choose one of your organizations for this application."
+	MsgMembershipNotAdmitted       = "This part of the service is not open to you: none of your memberships is of a kind it admits."
+	MsgInviteKindNotAllowed        = "You cannot invite someone as this kind of member."
+	MsgPackageAudienceOff          = "Your organization's plan does not include this part of the service."
+	MsgPackagesRealmOnly           = "An organization's plan is changed by the platform, not from inside the organization."
+	MsgPackageUnknown              = "There is no such package."
+	MsgPackageDefault              = "Every organization has this package; it is not given or taken."
+	MsgHostsRealmOnly              = "Which organization a host serves is set by the platform, not from inside an organization."
+	MsgHostTaken                   = "This host already serves another organization."
+	MsgHostInvalid                 = "This is not a host name."
+	MsgOrgHostConflict             = "This address belongs to another organization than the one you chose."
+	MsgOrgSelectorNotAccepted      = "The organization is taken from the address here, not chosen."
+	MsgSignUpPoliciesRealmOnly     = "Who may register into an organization is set by the platform, not from inside the organization."
+	MsgSignUpPolicyKind            = "Name the kind of membership this applies to."
+	MsgSignUpPolicyNoKind          = "This deployment has no kinds of membership; leave the kind empty."
+	MsgSignUpPolicyRole            = "Choose the role people get when they register."
+	MsgSignUpKindAmbiguous         = "Registration here is not set up correctly. Contact the organization."
+	MsgSignUpHostConflict          = "This registration names another address than the one it arrived on."
+	MsgSignUpPolicyStale           = "Registration here is paused until the organization confirms its settings again. Contact the organization."
+	MsgTwoFactorPoliciesRealmOnly  = "From inside an organization, change its two-step sign-in in the organization's own settings."
+	MsgTwoFactorPolicyValue        = "Choose required, enrol, optional or disabled."
+	MsgTwoFactorEnrolUnavailable   = "Setting up an authenticator at sign-in is not available here."
+	MsgEmailProofPoliciesRealmOnly = "From inside an organization, change its email verification in the organization's own settings."
+	MsgEmailProofPolicyValue       = "Choose none, derived or full."
+	MsgSignUpEmailProofRequired    = "This organization admits only a confirmed email address, and this registration cannot confirm one."
+	MsgProductUnknown              = "There is no such product."
+	MsgProductRoleUnknown          = "The product has no such role."
+	MsgProductRoleRealmHeld        = "This role is held across the whole platform, not in one organization."
+	MsgProductRoleAbove            = "You can only give a role that your own role includes."
+	MsgProductRoleNotMember        = "This person is not a member of the organization."
+	MsgProductRolesRealmOnly       = "This is managed by the platform, not from inside an organization."
+	MsgProductPermissionUnknown    = "No product has this permission."
+	MsgProductRoleNotInPlan        = "Your organization's plan does not include this role."
+	MsgProductPlansRealmOnly       = "An organization's plan is changed by the platform, not from inside the organization."
+	MsgProductPlanUnknown          = "There is no such plan."
+	MsgProductPlanNameTaken        = "A plan with this name already exists. Choose another name."
+	MsgProductPlanInUse            = "Organizations are on this plan. Move them to another plan first."
 )
 
 // isUniqueConflict is a write refused by a unique index: storage reports it as
@@ -564,8 +591,8 @@ func isUniqueConflict(err error) bool {
 // reads "The request could not be accepted as sent.". AlreadyExists is still
 // accepted, for a store that answers that way.
 //
-// The field is the address — or, under tenant_scope, the composite that
-// includes it; a unique violation on some other column is not this refusal.
+// The field is the address; a unique violation on some other column is not
+// this refusal.
 func isEmailTaken(err error) bool {
 	st, ok := status.FromError(err)
 	if !ok {
@@ -809,6 +836,14 @@ func DeniedOrgNotMember(cause error) error {
 	return &authnError{cause: cause, userCode: CodeOrgNotMember, userMsg: MsgOrgNotMember, denied: true}
 }
 
+// DeniedOrgSuspended is the ORG_SUSPENDED refusal (org_suspension.go): a
+// PERMISSION_DENIED, like DeniedOrgNotMember, because the credential was
+// accepted. Here because this file is staged with every feature.
+func DeniedOrgSuspended(cause error) error {
+	return &authnError{cause: cause, userCode: CodeOrgSuspended, userMsg: MsgOrgSuspended, denied: true,
+		deniedMessage: "the organization this request acts in is suspended"}
+}
+
 // refusal is a status whose message is the operator's copy and whose
 // ErrorDetail is the person's. Here, not beside its first caller, because this
 // file is staged with every feature and its callers are not — translated through the project's catalog, with
@@ -860,4 +895,25 @@ func hashPasswordErr(ctx context.Context, err error, field string) error {
 			CodePasswordTooLong, field, MsgPasswordTooLong, nil)
 	}
 	return err
+}
+
+// markReplaySafe marks the UNAVAILABLE a call that changes nothing answers
+// with (grpcerr.ReplaySafe), so a w17 client sends it again.
+//
+// A w17 server tells its clients not to replay an UNAVAILABLE a handler
+// returned (grpcerr.AnsweredHeader): the handler may have committed a write
+// or called out before the outage it reports, and running it again would do
+// that twice. That holds for a method that writes; one that only reads — a
+// list, a status, Authenticate on every request — did nothing, and a replay
+// is what turns a store's momentary outage into no answer at all for the
+// person. Each such method defers this as its first statement; a method that
+// writes anything, before or after the read that failed, must not (its
+// outage stays answered, and its caller decides).
+//
+// Here, beside the error constructors, because every feature's read-only
+// methods use it and this file is staged with every feature.
+func markReplaySafe(err *error) {
+	if *err != nil && status.Code(*err) == codes.Unavailable && !grpcerr.IsReplaySafe(*err) {
+		*err = grpcerr.ReplaySafe(*err)
+	}
 }

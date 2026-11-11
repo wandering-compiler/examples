@@ -28,64 +28,71 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthMutation_CreateUser_FullMethodName                 = "/w17.contrib.auth.AuthMutation/CreateUser"
-	AuthMutation_IssueToken_FullMethodName                 = "/w17.contrib.auth.AuthMutation/IssueToken"
-	AuthMutation_RevokeToken_FullMethodName                = "/w17.contrib.auth.AuthMutation/RevokeToken"
-	AuthMutation_UpgradeTokenHash_FullMethodName           = "/w17.contrib.auth.AuthMutation/UpgradeTokenHash"
-	AuthMutation_TouchTokenLastUsed_FullMethodName         = "/w17.contrib.auth.AuthMutation/TouchTokenLastUsed"
-	AuthMutation_RevokeSessionToken_FullMethodName         = "/w17.contrib.auth.AuthMutation/RevokeSessionToken"
-	AuthMutation_IssueApiToken_FullMethodName              = "/w17.contrib.auth.AuthMutation/IssueApiToken"
-	AuthMutation_AddTokenPermission_FullMethodName         = "/w17.contrib.auth.AuthMutation/AddTokenPermission"
-	AuthMutation_MarkApiTokenRevoked_FullMethodName        = "/w17.contrib.auth.AuthMutation/MarkApiTokenRevoked"
-	AuthMutation_RevokeApprovedApiTokens_FullMethodName    = "/w17.contrib.auth.AuthMutation/RevokeApprovedApiTokens"
-	AuthMutation_CountSignInAttempt_FullMethodName         = "/w17.contrib.auth.AuthMutation/CountSignInAttempt"
-	AuthMutation_CountDeviceSignInAttempt_FullMethodName   = "/w17.contrib.auth.AuthMutation/CountDeviceSignInAttempt"
-	AuthMutation_ResetSignInAttempts_FullMethodName        = "/w17.contrib.auth.AuthMutation/ResetSignInAttempts"
-	AuthMutation_RegisterDevice_FullMethodName             = "/w17.contrib.auth.AuthMutation/RegisterDevice"
-	AuthMutation_RecordSignInEvent_FullMethodName          = "/w17.contrib.auth.AuthMutation/RecordSignInEvent"
-	AuthMutation_TrustDevice_FullMethodName                = "/w17.contrib.auth.AuthMutation/TrustDevice"
-	AuthMutation_RevokeDeviceTokens_FullMethodName         = "/w17.contrib.auth.AuthMutation/RevokeDeviceTokens"
-	AuthMutation_MarkDeviceRevoked_FullMethodName          = "/w17.contrib.auth.AuthMutation/MarkDeviceRevoked"
-	AuthMutation_CreateRole_FullMethodName                 = "/w17.contrib.auth.AuthMutation/CreateRole"
-	AuthMutation_UpdateRole_FullMethodName                 = "/w17.contrib.auth.AuthMutation/UpdateRole"
-	AuthMutation_DeleteRole_FullMethodName                 = "/w17.contrib.auth.AuthMutation/DeleteRole"
-	AuthMutation_AssignRoleToUser_FullMethodName           = "/w17.contrib.auth.AuthMutation/AssignRoleToUser"
-	AuthMutation_RevokeRoleFromUser_FullMethodName         = "/w17.contrib.auth.AuthMutation/RevokeRoleFromUser"
-	AuthMutation_AddPermissionToRole_FullMethodName        = "/w17.contrib.auth.AuthMutation/AddPermissionToRole"
-	AuthMutation_RemovePermissionFromRole_FullMethodName   = "/w17.contrib.auth.AuthMutation/RemovePermissionFromRole"
-	AuthMutation_UpdateUserPassword_FullMethodName         = "/w17.contrib.auth.AuthMutation/UpdateUserPassword"
-	AuthMutation_RehashUserPassword_FullMethodName         = "/w17.contrib.auth.AuthMutation/RehashUserPassword"
-	AuthMutation_ClaimBootstrapAdmin_FullMethodName        = "/w17.contrib.auth.AuthMutation/ClaimBootstrapAdmin"
-	AuthMutation_CreateOrganization_FullMethodName         = "/w17.contrib.auth.AuthMutation/CreateOrganization"
-	AuthMutation_AddOrgMembership_FullMethodName           = "/w17.contrib.auth.AuthMutation/AddOrgMembership"
-	AuthMutation_UpdateOrganization_FullMethodName         = "/w17.contrib.auth.AuthMutation/UpdateOrganization"
-	AuthMutation_DeleteOrganization_FullMethodName         = "/w17.contrib.auth.AuthMutation/DeleteOrganization"
-	AuthMutation_UpdateOrgMembership_FullMethodName        = "/w17.contrib.auth.AuthMutation/UpdateOrgMembership"
-	AuthMutation_MarkOrgMembershipRemoved_FullMethodName   = "/w17.contrib.auth.AuthMutation/MarkOrgMembershipRemoved"
-	AuthMutation_CreateOAuthClient_FullMethodName          = "/w17.contrib.auth.AuthMutation/CreateOAuthClient"
-	AuthMutation_RefreshOAuthClientMetadata_FullMethodName = "/w17.contrib.auth.AuthMutation/RefreshOAuthClientMetadata"
-	AuthMutation_CreateOAuthAuthorization_FullMethodName   = "/w17.contrib.auth.AuthMutation/CreateOAuthAuthorization"
-	AuthMutation_DecideOAuthAuthorization_FullMethodName   = "/w17.contrib.auth.AuthMutation/DecideOAuthAuthorization"
-	AuthMutation_ConsumeOAuthCode_FullMethodName           = "/w17.contrib.auth.AuthMutation/ConsumeOAuthCode"
-	AuthMutation_CreateOAuthGrant_FullMethodName           = "/w17.contrib.auth.AuthMutation/CreateOAuthGrant"
-	AuthMutation_CreateOAuthRefreshToken_FullMethodName    = "/w17.contrib.auth.AuthMutation/CreateOAuthRefreshToken"
-	AuthMutation_UseOAuthRefreshToken_FullMethodName       = "/w17.contrib.auth.AuthMutation/UseOAuthRefreshToken"
-	AuthMutation_LinkOAuthSession_FullMethodName           = "/w17.contrib.auth.AuthMutation/LinkOAuthSession"
-	AuthMutation_RevokeOAuthCodeSession_FullMethodName     = "/w17.contrib.auth.AuthMutation/RevokeOAuthCodeSession"
-	AuthMutation_TouchOAuthGrant_FullMethodName            = "/w17.contrib.auth.AuthMutation/TouchOAuthGrant"
-	AuthMutation_RevokeOAuthGrant_FullMethodName           = "/w17.contrib.auth.AuthMutation/RevokeOAuthGrant"
-	AuthMutation_RevokeUserOAuthGrants_FullMethodName      = "/w17.contrib.auth.AuthMutation/RevokeUserOAuthGrants"
-	AuthMutation_IssueOAuthAccessToken_FullMethodName      = "/w17.contrib.auth.AuthMutation/IssueOAuthAccessToken"
-	AuthMutation_BindOrgHostRow_FullMethodName             = "/w17.contrib.auth.AuthMutation/BindOrgHostRow"
-	AuthMutation_EndOrgHostRow_FullMethodName              = "/w17.contrib.auth.AuthMutation/EndOrgHostRow"
-	AuthMutation_SetOrgSignUpPolicyRow_FullMethodName      = "/w17.contrib.auth.AuthMutation/SetOrgSignUpPolicyRow"
-	AuthMutation_EndOrgSignUpPolicyRow_FullMethodName      = "/w17.contrib.auth.AuthMutation/EndOrgSignUpPolicyRow"
+	AuthMutation_CreateUser_FullMethodName                    = "/w17.contrib.auth.AuthMutation/CreateUser"
+	AuthMutation_IssueToken_FullMethodName                    = "/w17.contrib.auth.AuthMutation/IssueToken"
+	AuthMutation_RevokeToken_FullMethodName                   = "/w17.contrib.auth.AuthMutation/RevokeToken"
+	AuthMutation_UpgradeTokenHash_FullMethodName              = "/w17.contrib.auth.AuthMutation/UpgradeTokenHash"
+	AuthMutation_TouchTokenLastUsed_FullMethodName            = "/w17.contrib.auth.AuthMutation/TouchTokenLastUsed"
+	AuthMutation_RevokeSessionToken_FullMethodName            = "/w17.contrib.auth.AuthMutation/RevokeSessionToken"
+	AuthMutation_IssueApiToken_FullMethodName                 = "/w17.contrib.auth.AuthMutation/IssueApiToken"
+	AuthMutation_AddTokenPermission_FullMethodName            = "/w17.contrib.auth.AuthMutation/AddTokenPermission"
+	AuthMutation_MarkApiTokenRevoked_FullMethodName           = "/w17.contrib.auth.AuthMutation/MarkApiTokenRevoked"
+	AuthMutation_RevokeApprovedApiTokens_FullMethodName       = "/w17.contrib.auth.AuthMutation/RevokeApprovedApiTokens"
+	AuthMutation_CountSignInAttempt_FullMethodName            = "/w17.contrib.auth.AuthMutation/CountSignInAttempt"
+	AuthMutation_CountDeviceSignInAttempt_FullMethodName      = "/w17.contrib.auth.AuthMutation/CountDeviceSignInAttempt"
+	AuthMutation_ResetSignInAttempts_FullMethodName           = "/w17.contrib.auth.AuthMutation/ResetSignInAttempts"
+	AuthMutation_RegisterDevice_FullMethodName                = "/w17.contrib.auth.AuthMutation/RegisterDevice"
+	AuthMutation_RecordSignInEvent_FullMethodName             = "/w17.contrib.auth.AuthMutation/RecordSignInEvent"
+	AuthMutation_TrustDevice_FullMethodName                   = "/w17.contrib.auth.AuthMutation/TrustDevice"
+	AuthMutation_RevokeDeviceTokens_FullMethodName            = "/w17.contrib.auth.AuthMutation/RevokeDeviceTokens"
+	AuthMutation_MarkDeviceRevoked_FullMethodName             = "/w17.contrib.auth.AuthMutation/MarkDeviceRevoked"
+	AuthMutation_CreateRole_FullMethodName                    = "/w17.contrib.auth.AuthMutation/CreateRole"
+	AuthMutation_UpdateRole_FullMethodName                    = "/w17.contrib.auth.AuthMutation/UpdateRole"
+	AuthMutation_DeleteRole_FullMethodName                    = "/w17.contrib.auth.AuthMutation/DeleteRole"
+	AuthMutation_AssignRoleToUser_FullMethodName              = "/w17.contrib.auth.AuthMutation/AssignRoleToUser"
+	AuthMutation_RevokeRoleFromUser_FullMethodName            = "/w17.contrib.auth.AuthMutation/RevokeRoleFromUser"
+	AuthMutation_AddPermissionToRole_FullMethodName           = "/w17.contrib.auth.AuthMutation/AddPermissionToRole"
+	AuthMutation_RemovePermissionFromRole_FullMethodName      = "/w17.contrib.auth.AuthMutation/RemovePermissionFromRole"
+	AuthMutation_UpdateUserPassword_FullMethodName            = "/w17.contrib.auth.AuthMutation/UpdateUserPassword"
+	AuthMutation_RehashUserPassword_FullMethodName            = "/w17.contrib.auth.AuthMutation/RehashUserPassword"
+	AuthMutation_ClaimBootstrapAdmin_FullMethodName           = "/w17.contrib.auth.AuthMutation/ClaimBootstrapAdmin"
+	AuthMutation_CreateOrganization_FullMethodName            = "/w17.contrib.auth.AuthMutation/CreateOrganization"
+	AuthMutation_AddOrgMembership_FullMethodName              = "/w17.contrib.auth.AuthMutation/AddOrgMembership"
+	AuthMutation_UpdateOrganization_FullMethodName            = "/w17.contrib.auth.AuthMutation/UpdateOrganization"
+	AuthMutation_DeleteOrganization_FullMethodName            = "/w17.contrib.auth.AuthMutation/DeleteOrganization"
+	AuthMutation_UpdateOrgMembership_FullMethodName           = "/w17.contrib.auth.AuthMutation/UpdateOrgMembership"
+	AuthMutation_MarkOrgMembershipRemoved_FullMethodName      = "/w17.contrib.auth.AuthMutation/MarkOrgMembershipRemoved"
+	AuthMutation_CreateOAuthClient_FullMethodName             = "/w17.contrib.auth.AuthMutation/CreateOAuthClient"
+	AuthMutation_RefreshOAuthClientMetadata_FullMethodName    = "/w17.contrib.auth.AuthMutation/RefreshOAuthClientMetadata"
+	AuthMutation_CreateOAuthAuthorization_FullMethodName      = "/w17.contrib.auth.AuthMutation/CreateOAuthAuthorization"
+	AuthMutation_DecideOAuthAuthorization_FullMethodName      = "/w17.contrib.auth.AuthMutation/DecideOAuthAuthorization"
+	AuthMutation_ConsumeOAuthCode_FullMethodName              = "/w17.contrib.auth.AuthMutation/ConsumeOAuthCode"
+	AuthMutation_CreateOAuthGrant_FullMethodName              = "/w17.contrib.auth.AuthMutation/CreateOAuthGrant"
+	AuthMutation_CreateOAuthRefreshToken_FullMethodName       = "/w17.contrib.auth.AuthMutation/CreateOAuthRefreshToken"
+	AuthMutation_UseOAuthRefreshToken_FullMethodName          = "/w17.contrib.auth.AuthMutation/UseOAuthRefreshToken"
+	AuthMutation_LinkOAuthSession_FullMethodName              = "/w17.contrib.auth.AuthMutation/LinkOAuthSession"
+	AuthMutation_RevokeOAuthCodeSession_FullMethodName        = "/w17.contrib.auth.AuthMutation/RevokeOAuthCodeSession"
+	AuthMutation_TouchOAuthGrant_FullMethodName               = "/w17.contrib.auth.AuthMutation/TouchOAuthGrant"
+	AuthMutation_RevokeOAuthGrant_FullMethodName              = "/w17.contrib.auth.AuthMutation/RevokeOAuthGrant"
+	AuthMutation_RevokeUserOAuthGrants_FullMethodName         = "/w17.contrib.auth.AuthMutation/RevokeUserOAuthGrants"
+	AuthMutation_IssueOAuthAccessToken_FullMethodName         = "/w17.contrib.auth.AuthMutation/IssueOAuthAccessToken"
+	AuthMutation_BindOrgHostRow_FullMethodName                = "/w17.contrib.auth.AuthMutation/BindOrgHostRow"
+	AuthMutation_EndOrgHostRow_FullMethodName                 = "/w17.contrib.auth.AuthMutation/EndOrgHostRow"
+	AuthMutation_SetOrgSignUpPolicyRow_FullMethodName         = "/w17.contrib.auth.AuthMutation/SetOrgSignUpPolicyRow"
+	AuthMutation_PinOrgSignUpPolicySnapshotRow_FullMethodName = "/w17.contrib.auth.AuthMutation/PinOrgSignUpPolicySnapshotRow"
+	AuthMutation_EndOrgSignUpPolicyRow_FullMethodName         = "/w17.contrib.auth.AuthMutation/EndOrgSignUpPolicyRow"
 )
 
 // AuthMutationClient is the client API for AuthMutation service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AuthMutationClient interface {
+	// CreateUser — INSERT User. The `password_hash` request
+	// field carries the already-encoded hash — the plugin's
+	// AuthService.SignUp handler computes it via
+	// passwordhash.Settings.Hash() before calling. Refuses on
+	// duplicate email (unique violation surfaces as
+	// AlreadyExists via the storage DB-error classification).
 	CreateUser(ctx context.Context, in *CreateUserReq, opts ...grpc.CallOption) (*CreateUserResp, error)
 	// IssueToken — INSERT UserToken. The handler mints the token and
 	// passes only its sha256 (token_hash); the token itself is never
@@ -293,6 +300,23 @@ type AuthMutationClient interface {
 	// (NotFound), as deleting a missing one did. revoked_by stays NULL: the
 	// admin page binds this mutation directly, and a statement cannot name its
 	// caller.
+	//
+	// No administrator is stranded (rbac/no-admin-lockout-by-role-deletion).
+	// Retiring a live WILDCARD role (all_permissions) is refused —
+	// LAST_ADMIN_ROLE, before anything is written — while one of its live
+	// holders holds no live grant of another live wildcard role: the "grants"
+	// op would revoke the last administrator grant that account has. For the
+	// realm's last administrators that was a lockout nothing in the product
+	// could undo: the BootstrapClaim stays taken, the page cannot create or
+	// widen a role, and a re-seed brings a preset back to nobody. The rule is
+	// per holder, not "is someone else still an administrator", because the
+	// statement is the only place the admin page reaches and the account
+	// stamps that say whether someone else can act (disabled_at, erased_at)
+	// exist only with user_admin, which a statement's subquery cannot gate on.
+	// To retire a wildcard its holders rely on, give them the replacement
+	// first. Every live wildcard row is locked first ("lock"), so two
+	// retirements of two wildcards that someone holds both of run one after
+	// the other, and the second one's guard sees the first.
 	DeleteRole(ctx context.Context, in *DeleteRoleReq, opts ...grpc.CallOption) (*DeleteRoleResp, error)
 	// AssignRoleToUser — INSERT UserRole linking a user to a
 	// role. A live duplicate (same user, role and org, ended_key ”) is refused
@@ -421,6 +445,11 @@ type AuthMutationClient interface {
 	// caller ends the live one first (EndOrgSignUpPolicyRow) in the same
 	// transaction, and the unique index refuses a racing second.
 	SetOrgSignUpPolicyRow(ctx context.Context, in *SetOrgSignUpPolicyRowReq, opts ...grpc.CallOption) (*SetOrgSignUpPolicyRowResp, error)
+	// PinOrgSignUpPolicySnapshotRow — stores the role snapshot on the live open
+	// policy of (organization, kind) that has none: a policy seeded by fixtures
+	// or set before snapshots were stored, pinned by its first registration
+	// (writeSignUpJoin) as the role reads then. A policy that has one keeps it.
+	PinOrgSignUpPolicySnapshotRow(ctx context.Context, in *PinOrgSignUpPolicySnapshotRowReq, opts ...grpc.CallOption) (*PinOrgSignUpPolicySnapshotRowResp, error)
 	// EndOrgSignUpPolicyRow — ends the live policy of (organization, kind);
 	// nothing is deleted.
 	EndOrgSignUpPolicyRow(ctx context.Context, in *EndOrgSignUpPolicyRowReq, opts ...grpc.CallOption) (*EndOrgSignUpPolicyRowResp, error)
@@ -944,6 +973,16 @@ func (c *authMutationClient) SetOrgSignUpPolicyRow(ctx context.Context, in *SetO
 	return out, nil
 }
 
+func (c *authMutationClient) PinOrgSignUpPolicySnapshotRow(ctx context.Context, in *PinOrgSignUpPolicySnapshotRowReq, opts ...grpc.CallOption) (*PinOrgSignUpPolicySnapshotRowResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PinOrgSignUpPolicySnapshotRowResp)
+	err := c.cc.Invoke(ctx, AuthMutation_PinOrgSignUpPolicySnapshotRow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authMutationClient) EndOrgSignUpPolicyRow(ctx context.Context, in *EndOrgSignUpPolicyRowReq, opts ...grpc.CallOption) (*EndOrgSignUpPolicyRowResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(EndOrgSignUpPolicyRowResp)
@@ -958,6 +997,12 @@ func (c *authMutationClient) EndOrgSignUpPolicyRow(ctx context.Context, in *EndO
 // All implementations should embed UnimplementedAuthMutationServer
 // for forward compatibility.
 type AuthMutationServer interface {
+	// CreateUser — INSERT User. The `password_hash` request
+	// field carries the already-encoded hash — the plugin's
+	// AuthService.SignUp handler computes it via
+	// passwordhash.Settings.Hash() before calling. Refuses on
+	// duplicate email (unique violation surfaces as
+	// AlreadyExists via the storage DB-error classification).
 	CreateUser(context.Context, *CreateUserReq) (*CreateUserResp, error)
 	// IssueToken — INSERT UserToken. The handler mints the token and
 	// passes only its sha256 (token_hash); the token itself is never
@@ -1165,6 +1210,23 @@ type AuthMutationServer interface {
 	// (NotFound), as deleting a missing one did. revoked_by stays NULL: the
 	// admin page binds this mutation directly, and a statement cannot name its
 	// caller.
+	//
+	// No administrator is stranded (rbac/no-admin-lockout-by-role-deletion).
+	// Retiring a live WILDCARD role (all_permissions) is refused —
+	// LAST_ADMIN_ROLE, before anything is written — while one of its live
+	// holders holds no live grant of another live wildcard role: the "grants"
+	// op would revoke the last administrator grant that account has. For the
+	// realm's last administrators that was a lockout nothing in the product
+	// could undo: the BootstrapClaim stays taken, the page cannot create or
+	// widen a role, and a re-seed brings a preset back to nobody. The rule is
+	// per holder, not "is someone else still an administrator", because the
+	// statement is the only place the admin page reaches and the account
+	// stamps that say whether someone else can act (disabled_at, erased_at)
+	// exist only with user_admin, which a statement's subquery cannot gate on.
+	// To retire a wildcard its holders rely on, give them the replacement
+	// first. Every live wildcard row is locked first ("lock"), so two
+	// retirements of two wildcards that someone holds both of run one after
+	// the other, and the second one's guard sees the first.
 	DeleteRole(context.Context, *DeleteRoleReq) (*DeleteRoleResp, error)
 	// AssignRoleToUser — INSERT UserRole linking a user to a
 	// role. A live duplicate (same user, role and org, ended_key ”) is refused
@@ -1293,6 +1355,11 @@ type AuthMutationServer interface {
 	// caller ends the live one first (EndOrgSignUpPolicyRow) in the same
 	// transaction, and the unique index refuses a racing second.
 	SetOrgSignUpPolicyRow(context.Context, *SetOrgSignUpPolicyRowReq) (*SetOrgSignUpPolicyRowResp, error)
+	// PinOrgSignUpPolicySnapshotRow — stores the role snapshot on the live open
+	// policy of (organization, kind) that has none: a policy seeded by fixtures
+	// or set before snapshots were stored, pinned by its first registration
+	// (writeSignUpJoin) as the role reads then. A policy that has one keeps it.
+	PinOrgSignUpPolicySnapshotRow(context.Context, *PinOrgSignUpPolicySnapshotRowReq) (*PinOrgSignUpPolicySnapshotRowResp, error)
 	// EndOrgSignUpPolicyRow — ends the live policy of (organization, kind);
 	// nothing is deleted.
 	EndOrgSignUpPolicyRow(context.Context, *EndOrgSignUpPolicyRowReq) (*EndOrgSignUpPolicyRowResp, error)
@@ -1457,6 +1524,9 @@ func (UnimplementedAuthMutationServer) EndOrgHostRow(context.Context, *EndOrgHos
 }
 func (UnimplementedAuthMutationServer) SetOrgSignUpPolicyRow(context.Context, *SetOrgSignUpPolicyRowReq) (*SetOrgSignUpPolicyRowResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetOrgSignUpPolicyRow not implemented")
+}
+func (UnimplementedAuthMutationServer) PinOrgSignUpPolicySnapshotRow(context.Context, *PinOrgSignUpPolicySnapshotRowReq) (*PinOrgSignUpPolicySnapshotRowResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method PinOrgSignUpPolicySnapshotRow not implemented")
 }
 func (UnimplementedAuthMutationServer) EndOrgSignUpPolicyRow(context.Context, *EndOrgSignUpPolicyRowReq) (*EndOrgSignUpPolicyRowResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method EndOrgSignUpPolicyRow not implemented")
@@ -2399,6 +2469,24 @@ func _AuthMutation_SetOrgSignUpPolicyRow_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthMutation_PinOrgSignUpPolicySnapshotRow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PinOrgSignUpPolicySnapshotRowReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).PinOrgSignUpPolicySnapshotRow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_PinOrgSignUpPolicySnapshotRow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).PinOrgSignUpPolicySnapshotRow(ctx, req.(*PinOrgSignUpPolicySnapshotRowReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthMutation_EndOrgSignUpPolicyRow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EndOrgSignUpPolicyRowReq)
 	if err := dec(in); err != nil {
@@ -2629,6 +2717,10 @@ var AuthMutation_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthMutation_SetOrgSignUpPolicyRow_Handler,
 		},
 		{
+			MethodName: "PinOrgSignUpPolicySnapshotRow",
+			Handler:    _AuthMutation_PinOrgSignUpPolicySnapshotRow_Handler,
+		},
+		{
 			MethodName: "EndOrgSignUpPolicyRow",
 			Handler:    _AuthMutation_EndOrgSignUpPolicyRow_Handler,
 		},
@@ -2637,4 +2729,4 @@ var AuthMutation_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "mutations/auth_mutation.proto",
 }
 
-// emit-sha256: 3ceb1342de438796ee9fd6e5b08f987b19c44b6b795d5d7367e4bf43bf5e9706
+// emit-sha256: 68753d8c2303541e0c58155bec51f99a87fd71282492a39a25d4f6415b662881

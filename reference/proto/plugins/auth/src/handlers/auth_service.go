@@ -415,7 +415,7 @@ var configChecks []func(h *AuthServiceHandler) error
 // authenticated principal. Feature-gated handler files register
 // decorators via init(); Authenticate runs them after stamping the
 // canonical user_id scope, so each opt-in feature can publish its
-// own scope (e.g. tenant_scope → scopes["tenant_id"]) without the
+// own scope (e.g. org_membership → scopes["org_id"]) without the
 // base handler knowing about it. Declared here (always-present) so
 // Authenticate compiles with zero feature files staged — an empty
 // slice is a no-op. A decorator returning an error fails
@@ -439,6 +439,13 @@ var configChecks []func(h *AuthServiceHandler) error
 type scopeDecorator func(ctx context.Context, h *AuthServiceHandler, userID string, headers, scopes, labels map[string]string) error
 
 var scopeDecorators []scopeDecorator
+
+// scopeChecks run after EVERY scope decorator, over the scope they settled —
+// a check on the organization a request acts in (org_suspension) must see
+// the organization whichever decorator chose it, which an append to
+// scopeDecorators would leave to the order the files' init functions run in.
+// They refuse; they never add a scope.
+var scopeChecks []scopeDecorator
 
 // notAdmittedError is a decorator's refusal of an AUTHENTICATED caller the
 // surface does not admit (membership_kinds: no membership of a kind the
@@ -500,7 +507,7 @@ func kindsFromHeaders(headers map[string]string) []string {
 // context can restrict the grants to it. `org_membership` registers one:
 // the unfiltered set is the union of every role the user holds in every
 // organization, and serving that inside one org is exactly the
-// cross-tenant leak the feature exists to close.
+// cross-organization leak the feature exists to close.
 //
 // APPENDED, never assigned — that is the whole point of it being a
 // separate seam. `resolvePrincipal` is a single var that the realm axis
@@ -941,12 +948,26 @@ func normalizedFloor(h *AuthServiceHandler) string {
 	return strings.TrimSpace(strings.ToLower(h.EmailProofRequired))
 }
 
+// emailProofFloorOf is the floor an address must reach to become a member of
+// orgID: the activation's email_proof_required, or with
+// org_email_proof_policy the organization's own (org_email_proof_policy.go).
+// Every way into an organization reads it — an invitation's acceptance and a
+// registration on the organization's host — so the two cannot disagree.
+var emailProofFloorOf = func(_ context.Context, h *AuthServiceHandler, _ string) (string, error) {
+	return normalizedFloor(h), nil
+}
+
+// floorAsksProof reports whether a floor asks anything at all.
+func floorAsksProof(floor string) bool {
+	return floor != "" && floor != emailProofNone
+}
+
 // emailProofEnforced is set when the gate above is the real one
 // (email_verification staged). Without it the floor cannot be read — the
 // column it reads does not exist — so a floor above `none` refuses to boot.
 var emailProofEnforced bool
 
-var inviteVerifiedEmailGate = func(_ context.Context, _ *AuthServiceHandler, _ string, _ bool) error {
+var inviteVerifiedEmailGate = func(_ context.Context, _ *AuthServiceHandler, _, _ string, _ bool) error {
 	return nil
 }
 
@@ -1057,17 +1078,41 @@ var signupOrgJoin func(txCtx context.Context, h *AuthServiceHandler, userID stri
 // refuse it, or say nothing — and only when it says nothing does
 // invite_only decide. The join it returns is written by the caller inside
 // the account's transaction (joinSignedUpOrg).
-func signupGates(ctx context.Context, h *AuthServiceHandler, email, inviteToken, bodyHost string) (*orgJoin, error) {
+//
+// proves says the registration proves the address itself — a
+// sign_up_confirmation code before the account exists, an OAuth provider's
+// email_verified. A host's organization whose floor asks a proof takes a
+// registration only with one: an open registration says anybody may join,
+// not that the address is theirs, and no invitation derived anything here.
+func signupGates(ctx context.Context, h *AuthServiceHandler, email, inviteToken, bodyHost string, proves bool) (*orgJoin, error) {
 	if inviteToken == "" && signupOrgDecide != nil {
 		join, err := signupOrgDecide(ctx, h, bodyHost)
 		if err != nil {
 			return nil, err
 		}
 		if join != nil {
+			if err := signupJoinFloorGate(ctx, h, join.orgID, proves); err != nil {
+				return nil, err
+			}
 			return join, nil
 		}
 	}
 	return nil, signupInviteGate(ctx, h, email, inviteToken)
+}
+
+// signupJoinFloorGate refuses a registration the host's organization would
+// take openly when its floor asks a proof the registration does not make.
+// Before anything is written: the account is not created half-admitted.
+func signupJoinFloorGate(ctx context.Context, h *AuthServiceHandler, orgID string, proves bool) error {
+	floor, err := emailProofFloorOf(ctx, h, orgID)
+	if err != nil {
+		return err
+	}
+	if !floorAsksProof(floor) || proves {
+		return nil
+	}
+	return refusal(ctx, codes.FailedPrecondition, "sign up: the organization's email proof floor is "+floor+" and this registration proves no address",
+		CodeSignUpEmailProofRequired, "", MsgSignUpEmailProofRequired, nil)
 }
 
 // joinSignedUpOrg writes signupGates' join, if any, for the new account.
@@ -1177,7 +1222,8 @@ func (h *AuthServiceHandler) Shutdown(ctx context.Context) error {
 //     per handler against this slice.
 //
 // Every failure mode returns the same Unauthenticated status.
-func (h *AuthServiceHandler) Authenticate(ctx context.Context, req *pb.AuthReq) (*pb.AuthResp, error) {
+func (h *AuthServiceHandler) Authenticate(ctx context.Context, req *pb.AuthReq) (_ *pb.AuthResp, err error) {
+	defer markReplaySafe(&err)
 	return h.authenticate(ctx, req)
 }
 
@@ -1199,13 +1245,13 @@ func (h *AuthServiceHandler) Authenticate(ctx context.Context, req *pb.AuthReq) 
 //     a model scoped by name: "org_id" is refused ("missing required scope:
 //     org_id") for every caller. Before, it served the one organization the
 //     sole-org inference happened to pick, which was never the whole console.
-//   - the other decorators still run. Under tenant_scope the caller's tenant_id
-//     is still stamped, so the admin stays inside the caller's tenant.
+//   - the other decorators still run.
 //
 // The mark is a context value of an unexported type, set only here: nothing a
 // caller sends can put a request on the admin plane, and the mark only ever
 // removes an organization, never adds one.
-func (h *AuthServiceHandler) AuthenticateAdmin(ctx context.Context, req *pb.AuthReq) (*pb.AuthResp, error) {
+func (h *AuthServiceHandler) AuthenticateAdmin(ctx context.Context, req *pb.AuthReq) (_ *pb.AuthResp, err error) {
+	defer markReplaySafe(&err)
 	return h.authenticate(context.WithValue(ctx, adminPlaneKey{}, true), req)
 }
 
@@ -1329,7 +1375,7 @@ func (h *AuthServiceHandler) principalResp(ctx context.Context, prin *authPrinci
 	// written facade.
 	scopes := map[string]string{"user_id": userID}
 
-	// Feature-gated scope decorators (e.g. tenant_scope) append
+	// Feature-gated scope decorators (e.g. org_membership) append
 	// their own scopes here. Empty when no feature file is staged.
 	labels := map[string]string{}
 	// The request's headers ride the context too, for the narrowers below:
@@ -1459,6 +1505,14 @@ func (h *AuthServiceHandler) SignIn(ctx context.Context, req *pb.SignInReq) (_ *
 	if err := spendSignInBudget(ctx, h, user.GetId(), thumbprint); err != nil {
 		signInDummyVerify(h, req.GetPassword())
 		return nil, UnauthenticatedSignIn(err)
+	}
+	// A stored hash no algorithm can verify — a machine account's "!", an
+	// erased account's placeholder — is refused by Verify at once, without a
+	// derivation. Pay one anyway, so the time of the refusal does not tell
+	// such an account's address apart from an unknown one or a wrong password.
+	if !passwordhash.Verifiable(user.GetPasswordHash()) {
+		signInDummyVerify(h, req.GetPassword())
+		return nil, UnauthenticatedSignIn(errAuthnPasswordMismatch)
 	}
 	ok, _, _ := h.PasswordHash.VerifyAndRotate(user.GetPasswordHash(), req.GetPassword(), h.rehashOnSignIn(ctx, user))
 	if !ok {
@@ -1656,7 +1710,8 @@ var signInDummyVerify = func(h *AuthServiceHandler, plain string) {
 // The fail-closed guard covers direct gRPC callers that bypass the
 // gateway (no metadata at all) — same opaque Unauthenticated as the
 // rest of the surface.
-func (h *AuthServiceHandler) WhoAmI(ctx context.Context, req *pb.WhoAmIReq) (*pb.WhoAmIResp, error) {
+func (h *AuthServiceHandler) WhoAmI(ctx context.Context, req *pb.WhoAmIReq) (_ *pb.WhoAmIResp, err error) {
+	defer markReplaySafe(&err)
 	userID, err := callerUserID(ctx)
 	if err != nil {
 		return nil, Unauthenticated(err)
@@ -1860,17 +1915,19 @@ func intersectInt32(a, b []int32) []int32 {
 // already said what kind of refusal it is (DeniedOrgNotMember) keeps
 // its words; wrapping it again would drop them back to the generic answer.
 func runScopeDecorators(ctx context.Context, h *AuthServiceHandler, userID string, headers, scopes, labels map[string]string) error {
-	for _, dec := range scopeDecorators {
-		if err := dec(ctx, h, userID, headers, scopes, labels); err != nil {
-			var classified *authnError
-			if errors.As(err, &classified) {
-				return classified
+	for _, decs := range [2][]scopeDecorator{scopeDecorators, scopeChecks} {
+		for _, dec := range decs {
+			if err := dec(ctx, h, userID, headers, scopes, labels); err != nil {
+				var classified *authnError
+				if errors.As(err, &classified) {
+					return classified
+				}
+				var refused *notAdmittedError
+				if errors.As(err, &refused) {
+					return refused
+				}
+				return Unauthenticated(err)
 			}
-			var refused *notAdmittedError
-			if errors.As(err, &refused) {
-				return refused
-			}
-			return Unauthenticated(err)
 		}
 	}
 	return nil

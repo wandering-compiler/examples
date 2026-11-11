@@ -219,7 +219,7 @@ type AuthResp struct {
 	// exactly the current session — without the raw bearer ever reaching a
 	// backend handler. Empty when the auth backend can't resolve an id.
 	SessionTokenId string `protobuf:"bytes,4,opt,name=session_token_id,json=sessionTokenId,proto3" json:"session_token_id,omitempty"`
-	// `labels` is the BROADCAST tenancy key, and it is deliberately NOT
+	// `labels` is the BROADCAST organization isolation key, and it is deliberately NOT
 	// `scopes` under another name.
 	//
 	// A scope filters ROWS. A label decides who an EVENT reaches: the
@@ -237,7 +237,7 @@ type AuthResp struct {
 	//
 	// Empty (the default, and every project that publishes no label) means
 	// events go out unlabelled and every authenticated client receives them
-	// — the single-tenant posture, unchanged.
+	// — the single-organization posture, unchanged.
 	Labels map[string]string `protobuf:"bytes,5,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// device_id — the RFC 7638 key thumbprint the resolved token is BOUND to,
 	// which Authenticate checked against the request's proof of possession
@@ -507,7 +507,7 @@ type SignUpReq struct {
 	// signup_host — the host this registration comes from, named by a
 	// registration page on the identity's own host (one that serves several
 	// organizations' sign-ups and is bound to none of them). Without a gateway
-	// host (an audience taking the tenant from the host), org_signup decides on
+	// host (an audience taking the organization from the host), org_signup decides on
 	// it exactly as for a registration arriving on that host: the organization
 	// bound to it (org_hosts) and its policies. A gateway host bound to an
 	// organization is the request's own and wins; a body host naming another
@@ -706,9 +706,10 @@ type WhoAmIResp struct {
 	// `authenticate_turnkey`; organizations exist only under `org_membership`,
 	// and most activations enable the first without the second. A field named
 	// here unconditionally and left empty there is the shape that has bitten
-	// this plugin twice — ListRoles cannot return `org_scoped` for exactly this
-	// reason, and a handler that filtered on it in Go got an empty list from a
-	// column nothing populated. Gated, the fields are DROPPED from the message
+	// this plugin twice — ListRoles once could not return `org_scoped` for
+	// exactly this reason (it projects it with `?feature` now), and a handler
+	// that filtered on it in Go got an empty list from a column nothing
+	// populated. Gated, the fields are DROPPED from the message
 	// when the feature is off, so nothing can read a zero value as an answer.
 	Orgs []*UserOrg `protobuf:"bytes,2,rep,name=orgs,proto3" json:"orgs,omitempty"`
 	// Empty when the request resolved no organization — the caller belongs to
@@ -4124,7 +4125,7 @@ const file_business_auth_service_proto_rawDesc = "" +
 	"SignInResp\x12\x1f\n" +
 	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12\x1f\n" +
 	"\x05token\x18\x02 \x01(\tB\t\xca\xf3\x18\x050\x01\xa0\x02\x01R\x05token\x12'\n" +
-	"\x0fpublic_computer\x18\x06 \x01(\bR\x0epublicComputer:\x13\xfa\xf4\x18\x0fsign_in_turnkeyJ\x04\b\x05\x10\x06R\x12device_trust_token\"\xfd\x01\n" +
+	"\x0fpublic_computer\x18\x06 \x01(\bR\x0epublicComputer:\x13\xfa\xf4\x18\x0fsign_in_turnkeyJ\x04\b\x05\x10\x06R\x12device_trust_token\"\x83\x02\n" +
 	"\tSignUpReq\x12\x1f\n" +
 	"\x05email\x18\x01 \x01(\tB\t\xca\xf3\x18\x05\b\x04@\xc0\x02R\x05email\x12\"\n" +
 	"\bpassword\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\bBR\bpassword\x121\n" +
@@ -4133,7 +4134,7 @@ const file_business_auth_service_proto_rawDesc = "" +
 	"\x0fpublic_computer\x18\x05 \x01(\bR\x0epublicComputer\x12:\n" +
 	"\vsignup_host\x18\x06 \x01(\tB\x19\xca\xf3\x18\a\b\x01(\x01@\xfd\x01\x92\xf5\x18\n" +
 	"org_signupR\n" +
-	"signupHost:\x13\xfa\xf4\x18\x0fsign_up_turnkey\"\x8c\x01\n" +
+	"signupHost:\x13\xfa\xf4\x18\x0fsign_up_turnkeyJ\x04\b\x03\x10\x04\"\x8c\x01\n" +
 	"\n" +
 	"SignUpResp\x12\x1f\n" +
 	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12\x1f\n" +
@@ -4647,4 +4648,4 @@ func file_business_auth_service_proto_init() {
 	file_business_auth_service_proto_depIdxs = nil
 }
 
-// emit-sha256: 51c2d7a7332161ebf5e7a2f18cfa25c3095680e5dd8a552bf0ca44456fd15451
+// emit-sha256: f20299dce9e5149f2f6f0ed9152d1de1a8e1cbbdca56c2e260ad4c86140948d3

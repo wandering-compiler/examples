@@ -42,19 +42,7 @@ message CreateBotUserReq {
   // so they carry the same identity column and the same uniqueness — which is
   // what lets one answer for what a machine did.
   string email = 1 [(w17.field) = { type: EMAIL, max_len: 320 }];
-  // tenant_id — the tenant the machine account belongs to, required by
-  // `tenant_scope` (the column is NOT NULL). It is the tenant the minting
-  // operator is acting in, read off their authenticated scope by
-  // handlers/service_account_tenant.go — never taken from the wire, or an
-  // operator could provision a bot into a tenant they are not in.
-  //
-  // Gated the way CreateUserReq.tenant_id is, and staged by a file that
-  // exists only when BOTH features are on (`go_files_combined`): the field
-  // is tenant_scope's and the rpc is service_account's.
-  string tenant_id = 2 [
-    (w17.field) = { type: UUID },
-    (w17.contrib.plugin_feature_field) = "tenant_scope"
-  ];
+  reserved 2;
   // event-only (no w17.field: not persisted, not validated): the operator
   // who created the machine account and the key thumbprint of their device,
   // BotCreated's created_by and device_id.
@@ -75,19 +63,7 @@ message CreateUserReq {
   // kept for migrator semantics (TEXT column emit, refuses
   // PK + unique).
   string password_hash = 2 [(w17.field) = { type: PASSWORD }];
-  // tenant_id — the owning tenant, required by `tenant_scope` (the
-  // column it writes is NOT NULL). handlers/tenant.go resolves it from
-  // the request's slug or forwarded Host; it is never client-set.
-  //
-  // Field-gated in step with the column and with the SET assignment
-  // that writes it, so an activation without the feature has none of
-  // the three. This is what retired CreateUserWithTenant: the twin
-  // rpcs existed only because the feature filter could not splice a
-  // column into a fixed INSERT.
-  string tenant_id     = 3 [
-    (w17.field) = { type: UUID },
-    (w17.contrib.plugin_feature_field) = "tenant_scope"
-  ];
+  reserved 3;
 }
 message CreateUserResp { User user = 1; }
 
@@ -242,9 +218,9 @@ message IssueApiTokenReq {
   string    created_by     = 10;
   // bearer — a machine account's bearer token (UserToken.bearer,
   // device/bot-bearer), bound to no device. Field-gated in step with the
-  // column and with the SET assignment that writes it, as
-  // CreateUserReq.tenant_id is: only service_account.go sets it, and one
-  // INSERT keeps ApiTokenCreated's one emit site.
+  // column and with the SET assignment that writes it: only
+  // service_account.go sets it, and one INSERT keeps ApiTokenCreated's one
+  // emit site.
   bool      bearer         = 11 [(w17.contrib.plugin_feature_field) = "service_account"];
 }
 message IssueApiTokenResp {
@@ -351,10 +327,9 @@ message ConfirmTotpSecretResp {
 // `enabled` left unset writes false, which turns the provider off. A change
 // made on the admin page is overwritten by the next call. A new secret takes
 // effect on the next sign-in; one already at the provider fails its callback
-// and starts again. The row keeps the tenant it was created with, and names
-// are unique across tenants, so a call naming another tenant's provider
+// and starts again. Names are unique, so a call naming another provider
 // rewrites that provider: the name is the caller's to own, and this is a
-// storage method for the project's own trusted code, not for a tenant's
+// storage method for the project's own trusted code, not for a caller's
 // input.
 message UpsertOAuthProviderReq {
   option (w17.contrib.plugin_feature) = "oauth";
@@ -369,12 +344,7 @@ message UpsertOAuthProviderReq {
   string subject_path  = 9 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
   string email_path    = 10 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
   bool   enabled       = 11;
-  // The owning tenant under `tenant_scope`, written when the provider is
-  // created. A provider's name is unique across tenants.
-  string tenant_id     = 12 [
-    (w17.field) = { type: UUID },
-    (w17.contrib.plugin_feature_field) = "tenant_scope"
-  ];
+  reserved 12;
   // How the provider returns and how its client secret is made — see
   // OAuthProvider.response_mode / team_id / key_id (Sign in with Apple:
   // form_post, and `secret` is the .p8 key the secret is signed with).
@@ -549,6 +519,18 @@ message CreateMfaChallengeResp {
   MfaChallenge challenge = 1;
 }
 
+// CreateEnrolmentChallengeReq — the challenge of an account that enrols at
+// sign-in (two_factor_policy=enrol): no code, so nothing to hash or deliver.
+message CreateEnrolmentChallengeReq {
+  option (w17.contrib.plugin_feature) = "two_factor_enrolment";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+  // The key that signed the sign-in; EnrollTotpAtSignIn and VerifyMfa must
+  // be signed by the same one.
+  string thumbprint = 2 [(w17.field) = { type: CHAR, max_len: 43 }];
+  // The sign-in asked for a public-computer session; VerifyMfa honours it.
+  bool public_computer = 3;
+}
+
 // SupersedePendingMfaChallengesReq — the user whose still-pending
 // challenges the issuer retires before minting a new one, so at most ONE
 // code is live at a time. The response is deliberately EMPTY: see the RPC.
@@ -600,10 +582,7 @@ message CreatePendingSignUpReq {
   google.protobuf.Timestamp expires_at = 4 [(w17.field) = { type: DATETIME }];
   // event-only (no w17.field → not persisted, not validated):
   string code = 5 [(w17.field) = { blank: true, sensitive: true }];
-  string tenant_id = 6 [
-    (w17.field) = { type: UUID, null: true },
-    (w17.contrib.plugin_feature_field) = "tenant_scope"
-  ];
+  reserved 6;
   string join_org_id = 7 [
     (w17.field) = { type: UUID, null: true },
     (w17.contrib.plugin_feature_field) = "org_signup"
@@ -650,8 +629,8 @@ message ClaimPendingSignUpResp {
   option (w17.contrib.plugin_feature) = "sign_up_confirmation";
   string email         = 1;
   string password_hash = 2 [(w17.field) = { blank: true, sensitive: true }];
-  string tenant_id     = 3 [(w17.contrib.plugin_feature_field) = "tenant_scope"];
-  string join_org_id   = 4 [(w17.contrib.plugin_feature_field) = "org_signup"];
+  reserved 3;
+  string join_org_id   = 4 [(w17.field) = { null: true }, (w17.contrib.plugin_feature_field) = "org_signup"];
   string join_kind     = 5 [(w17.contrib.plugin_feature_field) = "org_signup"];
   string join_role     = 6 [(w17.contrib.plugin_feature_field) = "org_signup"];
 }
@@ -1309,6 +1288,23 @@ message EnableUsersReq {
 message EnableUsersResp {
   option (w17.contrib.plugin_feature) = "user_admin";
 }
+// Suspend/ResumeOrganizations — the backoffice's switch over whole
+// organizations (org_suspension). Bulk and fire-and-forget, as Disable/
+// EnableUsers: the admin renders only success or failure.
+message SuspendOrganizationsReq {
+  option (w17.contrib.plugin_feature) = "org_suspension";
+  repeated string ids = 1;
+}
+message SuspendOrganizationsResp {
+  option (w17.contrib.plugin_feature) = "org_suspension";
+}
+message ResumeOrganizationsReq {
+  option (w17.contrib.plugin_feature) = "org_suspension";
+  repeated string ids = 1;
+}
+message ResumeOrganizationsResp {
+  option (w17.contrib.plugin_feature) = "org_suspension";
+}
 // DisableUser / EnableUser — one account, for AuthService.DisableAccounts /
 // EnableAccounts, which check the operator against the last-admin rule and
 // emit an event per account.
@@ -1809,7 +1805,7 @@ message ConsumeOrgInviteByTokenResp {
   string role   = 2;
   // NULL/empty = the invitation was OPEN. This is the fact the acceptance cannot
   // ask for afterwards, and the only one that licenses a derived email proof.
-  string email  = 3;
+  string email  = 3 [(w17.field) = { null: true }];
   // Handed back out of the SAME statement that spends the invitation, which is the
   // half a side table joined on the e-mail cannot give: the consumer's pairing and
   // the acceptance either both happen or neither does.
@@ -2295,6 +2291,25 @@ message EndOrgProductPlanAssignmentRowResp {
   string id = 1;
 }
 
+message SetOrgEmailProofPolicyRowReq {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+  string floor  = 2 [(w17.field) = { type: CHAR, max_len: 16 }];
+  string set_by = 3 [(w17.field) = { type: UUID, null: true }];
+}
+message SetOrgEmailProofPolicyRowResp {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  string id = 1;
+}
+message EndOrgEmailProofPolicyRowReq {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  string org_id   = 1 [(w17.field) = { type: UUID }];
+  string ended_by = 2 [(w17.field) = { type: UUID, null: true }];
+}
+message EndOrgEmailProofPolicyRowResp {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  string id = 1;
+}
 message SetOrgTwoFactorPolicyRowReq {
   option (w17.contrib.plugin_feature) = "org_two_factor_policy";
   string org_id = 1 [(w17.field) = { type: UUID }];
@@ -2330,8 +2345,20 @@ message SetOrgSignUpPolicyRowReq {
     (w17.field) = { type: TEXT, blank: true },
     (w17.contrib.plugin_feature_field) = "product_roles"
   ];
+  // See OrgSignUpPolicy.role_snapshot ('' on a closed policy).
+  string role_snapshot = 7 [(w17.field) = { type: TEXT, blank: true }];
 }
 message SetOrgSignUpPolicyRowResp {
+  option (w17.contrib.plugin_feature) = "org_signup";
+  string id = 1;
+}
+message PinOrgSignUpPolicySnapshotRowReq {
+  option (w17.contrib.plugin_feature) = "org_signup";
+  string org_id        = 1 [(w17.field) = { type: UUID }];
+  string kind          = 2 [(w17.field) = { type: CHAR, max_len: 32, blank: true }];
+  string role_snapshot = 3 [(w17.field) = { type: TEXT }];
+}
+message PinOrgSignUpPolicySnapshotRowResp {
   option (w17.contrib.plugin_feature) = "org_signup";
   string id = 1;
 }
@@ -2442,25 +2469,6 @@ message EndTeamsOfOrgResp {
 }
 
 service AuthMutation {
-  // CreateUser — INSERT User. The `password_hash` request
-  // field carries the already-encoded hash — the plugin's
-  // AuthService.SignUp handler computes it via
-  // passwordhash.Settings.Hash() before calling. Refuses on
-  // duplicate email (unique violation surfaces as
-  // AlreadyExists via the storage DB-error classification).
-  //
-  // ONE create for every activation. `tenant_scope` adds a NOT NULL
-  // `User.tenant_id`, and the gated SET assignment below writes it, so
-  // the feature no longer has to REPLACE this method.
-  //
-  // It used to. The feature filter could not splice a column into a
-  // fixed INSERT, so `tenant_scope` gated this rpc OUT
-  // (`plugin_feature_rpc_unless`) and a twin — CreateUserWithTenant —
-  // took over. That duplication cost an event: an event has exactly one
-  // emit site, the baseline owned it, and the baseline was the one being
-  // filtered away, so with `tenant_scope` on `UserCreated` had NO
-  // emitter and every subscriber to auth.user.created silently never
-  // fired.
   // CreateBot — insert a machine account. kind = BOT (1), no password.
   rpc CreateBotUser(CreateBotUserReq) returns (CreateBotUserResp) {
     option (w17.db.method) = {
@@ -2470,15 +2478,13 @@ service AuthMutation {
           "INSERT INTO @module.User SET "
           "email = :email, "
           "password_hash = \'!\', "
-          "kind = 1, "
-          "?feature(tenant_scope) tenant_id = :tenant_id "
+          "kind = 1 "
           "RETURNING id AS user.id, "
           "          email AS user.email, "
           "          created_at AS user.created_at, "
           "          password_hash AS user.password_hash, "
           "          ?feature(email_verification) email_verified_at AS user.email_verified_at, "
           "          ?feature(email_verification) email_proof AS user.email_proof, "
-          "          ?feature(tenant_scope) tenant_id AS user.tenant_id, "
           "          ?feature(user_admin) disabled_at AS user.disabled_at, "
           "          ?feature(service_account) kind AS user.kind, "
           "          device_trust_revoked_at AS user.device_trust_revoked_at, "
@@ -2504,6 +2510,12 @@ service AuthMutation {
     };
   }
 
+  // CreateUser — INSERT User. The `password_hash` request
+  // field carries the already-encoded hash — the plugin's
+  // AuthService.SignUp handler computes it via
+  // passwordhash.Settings.Hash() before calling. Refuses on
+  // duplicate email (unique violation surfaces as
+  // AlreadyExists via the storage DB-error classification).
   rpc CreateUser(CreateUserReq) returns (CreateUserResp) {
     option (w17.db.method) = {
       ops: {
@@ -2511,15 +2523,13 @@ service AuthMutation {
         dql:
           "INSERT INTO @module.User SET "
           "email = :email, "
-          "password_hash = :password_hash, "
-          "?feature(tenant_scope) tenant_id = :tenant_id "
+          "password_hash = :password_hash "
           "RETURNING id AS user.id, "
           "          email AS user.email, "
           "          password_hash AS user.password_hash, "
           "          created_at AS user.created_at, "
           "          ?feature(email_verification) email_verified_at AS user.email_verified_at, "
           "          ?feature(email_verification) email_proof AS user.email_proof, "
-          "          ?feature(tenant_scope) tenant_id AS user.tenant_id, "
           "          ?feature(user_admin) disabled_at AS user.disabled_at, "
           "          ?feature(service_account) kind AS user.kind, "
           "          device_trust_revoked_at AS user.device_trust_revoked_at, "
@@ -3026,8 +3036,7 @@ service AuthMutation {
           "enabled = :enabled, "
           "response_mode = :response_mode, "
           "team_id = :team_id, "
-          "key_id = :key_id, "
-          "?feature(tenant_scope) tenant_id = :tenant_id "
+          "key_id = :key_id "
           "ON CONFLICT (name) DO UPDATE SET "
           "display_name = :display_name, "
           "client_id = :client_id, "
@@ -3269,7 +3278,8 @@ service AuthMutation {
           "          created_at AS challenge.created_at, "
           "          attempts AS challenge.attempts, "
           "          thumbprint AS challenge.thumbprint, "
-          "          public_computer AS challenge.public_computer"
+          "          public_computer AS challenge.public_computer, "
+          "          enrol AS challenge.enrol"
       }
     };
     option (w17.event_emit) = {
@@ -3289,6 +3299,35 @@ service AuthMutation {
     };
   }
 
+  // CreateEnrolmentChallenge — INSERT the challenge of an account that sets
+  // up its authenticator at sign-in (enrol = TRUE, no code_hash). No
+  // MfaChallengeRequested: there is no code for a channel to deliver, and a
+  // subscriber reading totp_enrolled=false would send an empty one.
+  rpc CreateEnrolmentChallenge(CreateEnrolmentChallengeReq) returns (CreateMfaChallengeResp) {
+    option (w17.contrib.plugin_feature_rpc) = "two_factor_enrolment";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "INSERT INTO @module.MfaChallenge SET "
+          "user_id = :user_id, "
+          "code_hash = '', "
+          "thumbprint = :thumbprint, "
+          "public_computer = :public_computer, "
+          "enrol = TRUE "
+          "RETURNING id AS challenge.id, "
+          "          user_id AS challenge.user_id, "
+          "          code_hash AS challenge.code_hash, "
+          "          consumed_at AS challenge.consumed_at, "
+          "          created_at AS challenge.created_at, "
+          "          attempts AS challenge.attempts, "
+          "          thumbprint AS challenge.thumbprint, "
+          "          public_computer AS challenge.public_computer, "
+          "          enrol AS challenge.enrol"
+      }
+    };
+  }
+
   // ── sign_up_confirmation ─────────────────────────────────────
   //
   // CreatePendingSignUp parks a registration and emits the code for delivery.
@@ -3303,7 +3342,6 @@ service AuthMutation {
           "password_hash = :password_hash, "
           "code_hash = :code_hash, "
           "expires_at = :expires_at, "
-          "?feature(tenant_scope) tenant_id = :tenant_id, "
           "?feature(org_signup) join_org_id = :join_org_id, "
           "?feature(org_signup) join_kind = :join_kind, "
           "?feature(org_signup) join_role = :join_role "
@@ -3314,7 +3352,6 @@ service AuthMutation {
           "          password_hash AS pending.password_hash, "
           "          code_hash AS pending.code_hash, "
           "          attempts AS pending.attempts, "
-          "          ?feature(tenant_scope) tenant_id AS pending.tenant_id, "
           "          claimed_at AS pending.claimed_at, "
           "          superseded_at AS pending.superseded_at, "
           "          ?feature(org_signup) join_org_id AS pending.join_org_id, "
@@ -3366,7 +3403,6 @@ service AuthMutation {
           "UPDATE @module.PendingSignUp SET claimed_at = NOW() "
           "WHERE id = :pending_id AND claimed_at IS NULL AND superseded_at IS NULL AND expires_at > NOW() "
           "RETURNING email AS email, password_hash AS password_hash, "
-          "?feature(tenant_scope) tenant_id AS tenant_id, "
           "?feature(org_signup) join_org_id AS join_org_id, "
           "?feature(org_signup) join_kind AS join_kind, "
           "?feature(org_signup) join_role AS join_role"
@@ -3904,9 +3940,44 @@ service AuthMutation {
   // (NotFound), as deleting a missing one did. revoked_by stays NULL: the
   // admin page binds this mutation directly, and a statement cannot name its
   // caller.
+  //
+  // No administrator is stranded (rbac/no-admin-lockout-by-role-deletion).
+  // Retiring a live WILDCARD role (all_permissions) is refused —
+  // LAST_ADMIN_ROLE, before anything is written — while one of its live
+  // holders holds no live grant of another live wildcard role: the "grants"
+  // op would revoke the last administrator grant that account has. For the
+  // realm's last administrators that was a lockout nothing in the product
+  // could undo: the BootstrapClaim stays taken, the page cannot create or
+  // widen a role, and a re-seed brings a preset back to nobody. The rule is
+  // per holder, not "is someone else still an administrator", because the
+  // statement is the only place the admin page reaches and the account
+  // stamps that say whether someone else can act (disabled_at, erased_at)
+  // exist only with user_admin, which a statement's subquery cannot gate on.
+  // To retire a wildcard its holders rely on, give them the replacement
+  // first. Every live wildcard row is locked first ("lock"), so two
+  // retirements of two wildcards that someone holds both of run one after
+  // the other, and the second one's guard sees the first.
   rpc DeleteRole(DeleteRoleReq) returns (DeleteRoleResp) {
     option (w17.contrib.plugin_feature_rpc) = "rbac";
     option (w17.db.method) = {
+      ops: {
+        name: "lock"
+        dql:  "UPDATE @module.Role SET id = id WHERE all_permissions = TRUE AND deleted_at IS NULL"
+      }
+      ops: {
+        name: "last_admin"
+        dql:
+          "SELECT h.id AS id FROM @module.UserRole h JOIN @module.Role r ON r.id = h.role_id "
+          "WHERE h.role_id = :role_id AND h.revoked_at IS NULL AND r.all_permissions = TRUE AND r.deleted_at IS NULL "
+          "AND NOT EXISTS (SELECT o.id FROM @module.UserRole o JOIN @module.Role w ON w.id = o.role_id "
+          "WHERE o.user_id = h.user_id AND o.role_id <> :role_id AND o.revoked_at IS NULL "
+          "AND w.all_permissions = TRUE AND w.deleted_at IS NULL) LIMIT 1"
+        on_present: {
+          code:       ON_PRESENT_FAILED_PRECONDITION
+          error_code: "LAST_ADMIN_ROLE"
+          message:    "Someone holds no other administrator role than this one. Give them another administrator role before retiring it."
+        }
+      }
       ops: {
         name: "grants"
         dql:  "UPDATE @module.UserRole SET revoked_at = NOW(), ended_key = id WHERE role_id = :role_id AND revoked_at IS NULL"
@@ -4105,6 +4176,35 @@ service AuthMutation {
         name: "main"
         dql:  "UPDATE @module.User SET disabled_at = NULL "
               "WHERE id IN (:ids) AND disabled_at IS NOT NULL AND erased_at IS NULL"
+      }
+    };
+  }
+
+  // SuspendOrganizations — stamp suspended_at on live organizations not yet
+  // suspended. From the next request on, Authenticate refuses every
+  // principal acting in them (ORG_SUSPENDED). Nothing is revoked: a session
+  // or a token of a member is refused while the stamp is there and works
+  // again once it is cleared. Gated org_suspension; the project's endpoint
+  // ACL decides who may call it (the console's backoffice operators).
+  rpc SuspendOrganizations(SuspendOrganizationsReq) returns (SuspendOrganizationsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_suspension";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:  "UPDATE @module.Organization SET suspended_at = NOW() "
+              "WHERE id IN (:ids) AND suspended_at IS NULL AND deleted_at IS NULL"
+      }
+    };
+  }
+
+  // ResumeOrganizations — clear suspended_at. Gated org_suspension.
+  rpc ResumeOrganizations(ResumeOrganizationsReq) returns (ResumeOrganizationsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_suspension";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:  "UPDATE @module.Organization SET suspended_at = NULL "
+              "WHERE id IN (:ids) AND suspended_at IS NOT NULL"
       }
     };
   }
@@ -4997,6 +5097,7 @@ service AuthMutation {
           "          kind AS organization.kind, "
           "          created_at AS organization.created_at, "
           "          deleted_at AS organization.deleted_at, "
+          "          ?feature(org_suspension) suspended_at AS organization.suspended_at, "
           "          ended_key AS organization.ended_key"
       }
     };
@@ -6225,6 +6326,40 @@ service AuthMutation {
     };
   }
 
+  // SetOrgEmailProofPolicyRow — a new live address-proof floor for an
+  // organization; the caller ends the live one first
+  // (EndOrgEmailProofPolicyRow) in the same transaction, and the unique index
+  // refuses a racing second.
+  rpc SetOrgEmailProofPolicyRow(SetOrgEmailProofPolicyRowReq) returns (SetOrgEmailProofPolicyRowResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_email_proof_policy";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "INSERT INTO @module.OrgEmailProofPolicy SET "
+          "org_id = :org_id, "
+          "floor = :floor, "
+          "set_by = :set_by "
+          "RETURNING id AS id"
+      }
+    };
+  }
+
+  // EndOrgEmailProofPolicyRow — ends an organization's live address-proof
+  // floor; nothing is deleted.
+  rpc EndOrgEmailProofPolicyRow(EndOrgEmailProofPolicyRowReq) returns (EndOrgEmailProofPolicyRowResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_email_proof_policy";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "UPDATE @module.OrgEmailProofPolicy SET ended_at = NOW(), ended_by = :ended_by, ended_key = id "
+          "WHERE org_id = :org_id AND ended_at IS NULL "
+          "RETURNING id AS id"
+      }
+    };
+  }
+
   // SetOrgSignUpPolicyRow — a new live policy for (organization, kind); the
   // caller ends the live one first (EndOrgSignUpPolicyRow) in the same
   // transaction, and the unique index refuses a racing second.
@@ -6240,7 +6375,25 @@ service AuthMutation {
           "open = :open, "
           "role = :role, "
           "set_by = :set_by, "
+          "role_snapshot = :role_snapshot, "
           "?feature(product_roles) product_roles = :product_roles "
+          "RETURNING id AS id"
+      }
+    };
+  }
+
+  // PinOrgSignUpPolicySnapshotRow — stores the role snapshot on the live open
+  // policy of (organization, kind) that has none: a policy seeded by fixtures
+  // or set before snapshots were stored, pinned by its first registration
+  // (writeSignUpJoin) as the role reads then. A policy that has one keeps it.
+  rpc PinOrgSignUpPolicySnapshotRow(PinOrgSignUpPolicySnapshotRowReq) returns (PinOrgSignUpPolicySnapshotRowResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_signup";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "UPDATE @module.OrgSignUpPolicy SET role_snapshot = :role_snapshot "
+          "WHERE org_id = :org_id AND kind = :kind AND ended_at IS NULL AND open = TRUE AND role_snapshot = '' "
           "RETURNING id AS id"
       }
     };
