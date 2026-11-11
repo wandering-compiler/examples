@@ -11,7 +11,7 @@ import "w17/egress.proto";
 import "w17/lock.proto";
 
 option (w17.lock_checksum) = "sha256:70a8fe5100879d92e2122e1e8b1a2d0f6dcfe5f8ad6b18caa5416f54b5956095";
-option (w17.lock_signature) = "ed25519/v1:f06c0acc3a7c45aa1e0dc7fb190df24bcf79877fcec9541163627eaacd6fafd015dc87ae928a4339d45d6a9009b1bfff6534e0d958e54ec09ced935ec4af0a0b";
+option (w17.lock_signature) = "ed25519/v1:ed9f2417fce7fcc109e756d75d7351b671b583da54215e58e6de330e0944d36fd187a8754856080c0862cd8f90a145b6dfb7df3fcec6d504b69d00f2d6bc0e02";
 option (w17.egress_client) = {
   name: "quotes"
   title: "Quotes"
