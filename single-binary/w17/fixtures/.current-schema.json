@@ -1,18 +1,6 @@
 {
   "version": 1,
   "seeds": {
-    "app/acl-roles": {
-      "schema": {
-        "renderer": "1",
-        "tables": {
-          "admin_auth.Role": "73ac172b8750e83e2d89bb7b851c68187ee74d0b5d56d33d69f0615b20509a26",
-          "admin_auth.RolePermission": "a84b0b8f688a053d0b699ecedf8225cbc96f2ec0f71f69d98a43a49e1a6c22c9",
-          "admin_auth.RolePermissionChange": "a63e0ce01df92798bb7b24b4e81bf6c38f36a9871832a837c88a579f41dc1c8d",
-          "admin_auth.User": "f6c8ed5d8cce7011e0f17a0f3b98572ed04c1a17ad53ec4b7d12c095b5e68408",
-          "admin_auth.UserRole": "5ab3b510199994b801a42f1437b02325ee6b3c5a073367792ff18a40c4e248af"
-        }
-      }
-    },
     "app/test": {
       "schema": {
         "renderer": "1",
