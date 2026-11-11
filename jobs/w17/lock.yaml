@@ -1,5 +1,6 @@
 admin_languages: []
 admin_wire: CLIENT_WIRE_UNSPECIFIED
+codegen_version: ""
 connections:
     - default: true
       name: jobs-postgres
@@ -11,6 +12,7 @@ generated_code:
     business_bundles:
         - domain: jobs
           env: []
+          language: ""
           register: domains/jobs/work/business
     ci_configs: []
     clients: []
@@ -49,10 +51,10 @@ plugins:
       version: 0.1.0-rc.13
 project: examples-jobs
 project_id: 0e9d85e2-b985-4fea-9297-e721e9d2e520
-sdk_version: v0.1.0-rc.64
+sdk_version: v0.1.0-rc.77
 secrets: null
 signature:
     alg: ed25519/v1
-    body: dfca486b68b0d900c5d631fdf38638afaee64d0eb826381966aca3ede3748fccc9e34f6978177b2e10206794eeb51d9b31f8a0854ff08e31f5536eb14aec4802
+    body: 3d61c84e8f22dc8442f022c77d1532d12eda496fa59a4393557219feaca98275dbc85293d47965fbfaa76ef7d13b0e676777e738b63a376d0fa2fc6a0563f301
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

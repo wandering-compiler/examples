@@ -2,6 +2,7 @@ admin_languages:
     - cs
     - en
 admin_wire: CLIENT_WIRE_UNSPECIFIED
+codegen_version: ""
 connections:
     - default: true
       name: app-postgres
@@ -84,10 +85,10 @@ plugins:
       version: 0.1.0-rc.6
 project: examples-reference
 project_id: dceefc0e-edfb-477a-a230-ed461733de9a
-sdk_version: v0.1.0-rc.64
+sdk_version: v0.1.0-rc.77
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 55acb3a9fdfbeebd79add677cd4f1084a560f3ef8212b7b72a35e24115955300d4f094a18b6fa5ddaffc136749369a6d49170cc22f9418e52e4f291441889d0c
+    body: 6884227a4af85acbaf6be71d2f3aa570592e5f7105cc19f1185ed52f131f52689ed280f978c555deceace7630bb1e1c31b48fc89287f31de764c010e86f12b06
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

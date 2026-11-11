@@ -1,5 +1,6 @@
 admin_languages: []
 admin_wire: CLIENT_WIRE_UNSPECIFIED
+codegen_version: ""
 connections:
     - default: true
       name: billing-postgres
@@ -46,10 +47,10 @@ plugins:
       version: 0.1.0-rc.9
 project: examples-billing
 project_id: 514a5b95-afaf-4e9a-8730-5e172520c3a2
-sdk_version: v0.1.0-rc.64
+sdk_version: v0.1.0-rc.77
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 44be79a2fa80db3ad63bbac606c102819a0562764c94a6c2119d08f5dc3af542172a0923e8df3a611511ae31804a2a0908e6173286c34a069463daf20240bd09
+    body: 30a307b9c1fee2b55729a6f6560537ee49c5057715d6432285c83b6e509613d30b9df3dc9ae940a93f71480ae947487eab6f85c97e30916fc57d51c731f81609
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

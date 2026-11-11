@@ -1,5 +1,6 @@
 admin_languages: []
 admin_wire: CLIENT_WIRE_UNSPECIFIED
+codegen_version: ""
 connections:
     - default: true
       name: app-postgres
@@ -18,6 +19,7 @@ generated_code:
     business_bundles:
         - domain: app
           env: []
+          language: ""
           register: domains/app/modules/example/business
     ci_configs:
         - provider: azure
@@ -51,10 +53,10 @@ plugins:
       version: 0.1.0-rc.23
 project: examples-single-binary
 project_id: d1ef82a1-ffe4-4220-af2e-2bdeb3c99889
-sdk_version: v0.1.0-rc.64
+sdk_version: v0.1.0-rc.77
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 348c5f7d2969e58d376cecfca3eb2ffa6657fbe54a6683fa0430804c5684ac440ff77b0de424cb5c40740c3c8bd2b7efe1c83e21d99359112c1e5ae9d87ae502
+    body: a62fd19e09bbeb012e4225d7c9ca98ebd3d660e61a8a52e7fed902a6f739c66d5ec677e209da95408ff3575b143bae29a1a3b837985c69cd9bf876e1252ddf01
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
