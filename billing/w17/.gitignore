@@ -50,3 +50,6 @@ keys/
 
 # Private-surface dev PKI (CA + a leaf per caller) — machine-local key material.
 certs/private/
+
+# Codegen's record of the files it wrote — describes this checkout's disk.
+/.codegen-manifest.json

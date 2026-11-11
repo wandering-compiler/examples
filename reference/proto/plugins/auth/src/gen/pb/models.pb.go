@@ -475,8 +475,7 @@ const (
 	// A registration named an address that has an account (EMAIL_TAKEN).
 	SignInOutcome_SIGN_IN_OUTCOME_EMAIL_TAKEN SignInOutcome = 13
 	// A registration refused by a sign-up gate: the reserved domain, the
-	// allowlist, invite-only, an invitation for another address, an unknown
-	// tenant.
+	// allowlist, invite-only, an invitation for another address.
 	SignInOutcome_SIGN_IN_OUTCOME_SIGN_UP_REFUSED SignInOutcome = 14
 	// OAuth refused to link an identity: the account or the provider has not
 	// verified the address.
@@ -915,15 +914,24 @@ func (x *User) GetSignInWindowAt() *timestamppb.Timestamp {
 // token, so the table is the history of every credential the
 // account ever held.
 //
-// v1 LIMITATION — no DB-level FK constraint on `user_id`. The
-// FK target table name is `<registered_as>_user`, but plugin
-// authoring time can't see the per-activation rename, and
-// w17's current `fk:` syntax doesn't carry an activation-aware
-// placeholder. Application-layer code enforces the link via
-// the AuthService handler. Lifting this requires extending the
-// FK syntax with a plugin-aware reference (parked). Same
-// caveat applies to every cross-table id reference in this
-// plugin (User↔Role + Role's permission grants via RolePermission).
+// References — every id column that names a row of this activation's own
+// tables carries a foreign key, `fk: "@module.<Model>"`. Staging expands
+// `@module` to the activation's registered_as, so the key names the
+// activation's own `<registered_as>_<model>` table whatever it is called. A
+// reference the plugin's code got wrong — a grant written for a role that does
+// not exist — is refused by the store instead of stored silently. Every one is
+// `deletion_rule: BLOCK` (ON DELETE RESTRICT): nothing in this plugin deletes
+// a row — an account is erased, a role, an organization or a grant is ended —
+// so a delete that would strand a reference is refused, never cascaded.
+//
+// Two kinds of reference are deliberately NOT keyed:
+//   - the actor columns (`revoked_by`, `removed_by`, `invited_by`,
+//     `granted_by`, `ended_by`, …): the actor may be an operator of ANOTHER
+//     activation — an admin realm signs in against its own User table — so
+//     the id need not be a row of this one;
+//   - `UserToken.oauth_org_id`, `OAuthAuthorization.org_id` and
+//     `OAuthGrant.org_id`: `oauth_server` stages without `org_membership`, and
+//     then there is no Organization table to point at.
 type UserToken struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -968,8 +976,6 @@ type UserToken struct {
 	// key its request names — the program that will use it. Authenticate
 	// refuses a token whose device's thumbprint is not the one the request's
 	// proof was signed with, and a token with none.
-	// No DB-level FK (the activation-rename caveat that applies to every
-	// cross-table id ref in this plugin — see the message header).
 	// Nullable only for rows minted before device binding (refused by
 	// Authenticate, so their holders sign in once more) and for MCP-flow
 	// tokens (mcp_only).
@@ -1003,8 +1009,8 @@ type UserToken struct {
 	// revoked_by — the account that revoked it: the holder for a logout, a
 	// password change or a device revocation, the operator for an admin
 	// revocation or erasure. NULL when the system did it (a password reset, a
-	// disable, the low-level RevokeToken primitive). No DB-level FK (the
-	// activation-rename caveat in the message header).
+	// disable, the low-level RevokeToken primitive). An actor column, so no
+	// foreign key (see "References" above).
 	RevokedBy string `protobuf:"bytes,13,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
 	// revoke_reason — why (RevokeReason). NONE on a live token. Written in the
 	// same statement as revoked_at, so the two never disagree.
@@ -1035,7 +1041,7 @@ type UserToken struct {
 	// operator's device leaves it (it is bound to the account's one key; revoke
 	// the account's device to end it). NULL on every
 	// other token, and when the authorizing request was bound to no device. Base
-	// tier. No DB-level FK (the activation-rename caveat in the message header).
+	// tier.
 	ApprovedByDeviceId string `protobuf:"bytes,16,opt,name=approved_by_device_id,json=approvedByDeviceId,proto3" json:"approved_by_device_id,omitempty"`
 	// --- oauth_server: an access token the authorization server issued ---
 	// oauth_grant_id — the OAuth grant (a "connected app") the token belongs
@@ -1240,9 +1246,6 @@ func (x *UserToken) GetOauthOrgId() string {
 // is never deleted and never revived — a client answers DEVICE_REVOKED by
 // generating a new key, which is a new device (and passes the second factor
 // like any new device).
-//
-// Same no-DB-FK caveat as the rest of the plugin (user_id is app-enforced;
-// see UserToken).
 type Device struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1438,8 +1441,8 @@ func (x *Device) GetSignInWindowAt() *timestamppb.Timestamp {
 //	ip, user_agent  the client address (first X-Forwarded-For hop) and user
 //	            agent, as Device.ip / Device.label take them. Display only.
 //
-// No DB-level FK on user_id / device_id (the activation-rename caveat, see
-// UserToken).
+// user_id / device_id are foreign keys (see "References" above UserToken): a
+// refusal's row names an account and a device only when they exist.
 type SignInEvent struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1842,9 +1845,9 @@ func (x *Role) GetEndedKey() string {
 // drift) is refused at the storage layer with
 // VALIDATION_CHECK_CONSTRAINT mapped to InvalidArgument.
 //
-// v1 LIMITATION — no DB-level FK constraint on `role_id`
-// (activation-rename caveat; see UserToken). `permission_id`
-// has no FK target by design (the catalog is a proto enum,
+// `role_id` is a foreign key to Role (see "References" above UserToken): a
+// grant written for a role that does not exist is refused, not stored.
+// `permission_id` has no FK target by design (the catalog is a proto enum,
 // not a DB table); the CHECK constraint covers the integrity
 // the FK would have provided.
 //
@@ -2062,8 +2065,8 @@ func (x *RolePermissionChange) GetCreatedAt() *timestamppb.Timestamp {
 // indexes are PG + SQLite only, which is the same support surface the
 // rest of this plugin's `where:` usage has.
 //
-// v1 LIMITATION — no DB-level FK on `user_id` / `role_id` / `org_id`
-// (activation-rename caveat applies; see UserToken).
+// `user_id` / `role_id` / `org_id` are foreign keys (see "References" above
+// UserToken).
 //
 // A grant is never deleted. Revoking one (RevokeRoleFromUser, a membership's
 // role change or removal, DeleteRole, DeleteOrganization) stamps revoked_at
@@ -2092,9 +2095,8 @@ type UserRole struct {
 	// the ROLE-COMPOSITION shape — "accountant + worker" for someone who
 	// does both. It falls out of the M2M rather than needing a feature.
 	//
-	// Field-gated: dropped entirely when `org_membership` is off, exactly
-	// like `User.tenant_id` under `tenant_scope` — which is why the index
-	// entries above are gated in step with it.
+	// Field-gated: dropped entirely when `org_membership` is off — which is
+	// why the index entries above are gated in step with it.
 	//
 	// The gate is why NO permission-resolving query mentions this column.
 	// Putting `(ur.org_id IS NULL OR ur.org_id = :org_id)` into their DQL
@@ -2106,10 +2108,6 @@ type UserRole struct {
 	// `GetUserOrgRoleIds` reports as applicable (see handlers/
 	// org_membership.go). One gated query, no matrix, and the realm axis
 	// keeps its own queries untouched.
-	//
-	// `tenant_scope` deliberately gets nothing here: it is 1:1
-	// user↔tenant, so a per-user role is ALREADY a per-tenant role there
-	// and an org axis would be a second name for the same thing.
 	OrgId string `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	// revoked_at / revoked_by — the grant was revoked, and by whom (NULL when
 	// the caller named nobody: an admin binding, a cascade, project code).
@@ -2990,9 +2988,8 @@ func (x *OAuthRefreshToken) GetUsedAt() *timestamppb.Timestamp {
 }
 
 // Organization is a GitHub-style org — a membership boundary an identity
-// can belong to MANY of (a private personal org + a company org + …). The
-// `org_membership` feature's generalization of single-tenant tenant_scope:
-// where Tenant is 1:1 with a User, an Organization is M2M via OrgMembership.
+// can belong to MANY of (a private personal org + a company org + …),
+// through OrgMembership (the `org_membership` feature).
 //
 // An organization is never deleted. DeleteOrganization stamps deleted_at,
 // removes every membership and revokes every grant scoped to it, and releases
@@ -3219,8 +3216,8 @@ func (x *OrgMembership) GetEndedKey() string {
 }
 
 // OrgHost — a host (white-label or co-brand) bound to the organization it
-// serves (org_hosts). An audience that takes the tenant from the host
-// (w17/audience.proto TENANT_SOURCE_HOST) acts in this organization on a
+// serves (org_hosts). An audience that takes the organization from the host
+// (w17/audience.proto ORG_SOURCE_HOST) acts in this organization on a
 // request arriving on it. One live binding per host; unbinding ends the row
 // (ended_at, ended_key = id), and nothing is deleted.
 type OrgHost struct {
@@ -3347,7 +3344,22 @@ type OrgSignUpPolicy struct {
 	EndedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
 	EndedBy string                 `protobuf:"bytes,9,opt,name=ended_by,json=endedBy,proto3" json:"ended_by,omitempty"`
 	// ended_key — ” while live, the row's own id once replaced or cleared.
-	EndedKey      string `protobuf:"bytes,10,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
+	EndedKey string `protobuf:"bytes,10,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
+	// role_snapshot — the role as the operator setting an open policy was
+	// allowed to hand it out, in OrgInvite.role_snapshot's form
+	// (`<role id>:<permission ids, sorted, comma-separated>`, or `<role id>:*`
+	// for a wildcard). Written by SetOrgSignUpPolicy from the role ceiling
+	// (handlers/role_ceiling.go) and checked at every registration the policy
+	// admits, because the grant is written THEN, against a catalogue that may
+	// have moved in between: a role widened since the policy was set, or a
+	// different role now answering to the name, would otherwise hand out
+	// permissions the operator never held.
+	//
+	// Empty on a closed policy, and on an open one seeded by fixtures or set
+	// before the column existed. Such an open policy is pinned by its first
+	// registration (PinOrgSignUpPolicySnapshotRow) to the role as it reads then,
+	// and held to that from the next registration on.
+	RoleSnapshot  string `protobuf:"bytes,12,opt,name=role_snapshot,json=roleSnapshot,proto3" json:"role_snapshot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3452,11 +3464,18 @@ func (x *OrgSignUpPolicy) GetEndedKey() string {
 	return ""
 }
 
+func (x *OrgSignUpPolicy) GetRoleSnapshot() string {
+	if x != nil {
+		return x.RoleSnapshot
+	}
+	return ""
+}
+
 var File_types_models_proto protoreflect.FileDescriptor
 
 const file_types_models_proto_rawDesc = "" +
 	"\n" +
-	"\x12types/models.proto\x12\x10w17.contrib.auth\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11w17/contrib.proto\x1a\fw17/db.proto\x1a\x0fw17/field.proto\"\xa4\x03\n" +
+	"\x12types/models.proto\x12\x10w17.contrib.auth\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11w17/contrib.proto\x1a\fw17/db.proto\x1a\x0fw17/field.proto\"\xaa\x03\n" +
 	"\x04User\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12!\n" +
 	"\x05email\x18\x02 \x01(\tB\v\xca\xf3\x18\a\b\x048\x01@\xc0\x02R\x05email\x12+\n" +
@@ -3466,11 +3485,11 @@ const file_types_models_proto_rawDesc = "" +
 	"\x17device_trust_revoked_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x14deviceTrustRevokedAt\x123\n" +
 	"\x10sign_in_failures\x18\x0f \x01(\x03B\t\xca\xf3\x18\x05\b\f\xa8\x01\x00R\x0esignInFailures\x12O\n" +
-	"\x11sign_in_window_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x0esignInWindowAt:\x04\xc2\xf3\x18\x00\"\xc6\b\n" +
+	"\x11sign_in_window_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x0esignInWindowAt:\x04\xc2\xf3\x18\x00J\x04\b\x05\x10\x06\"\xad\t\n" +
 	"\tUserToken\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\"\n" +
-	"\x05token\x18\x02 \x01(\tB\f\xca\xf3\x18\b\bC(\x018\x01@@R\x05token\x12%\n" +
-	"\auser_id\x18\x03 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06userId\x12F\n" +
+	"\x05token\x18\x02 \x01(\tB\f\xca\xf3\x18\b\bC(\x018\x01@@R\x05token\x125\n" +
+	"\auser_id\x18\x03 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.User \x03R\x06userId\x12F\n" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12C\n" +
 	"\n" +
@@ -3479,8 +3498,8 @@ const file_types_models_proto_rawDesc = "" +
 	"token_type\x18\x05 \x01(\x0e2\x1b.w17.contrib.auth.TokenTypeB\x16\xca\xf3\x18\x05\b2\xa8\x01\x01\x92\xf5\x18\tapi_tokenR\ttokenType\x12,\n" +
 	"\x04name\x18\x06 \x01(\tB\x18\xca\xf3\x18\a\b\x010\x01@\x80\x01\x92\xf5\x18\tapi_tokenR\x04name\x12S\n" +
 	"\flast_used_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x15\xca\xf3\x18\x04\b\x16(\x01\x92\xf5\x18\tapi_tokenR\n" +
-	"lastUsedAt\x12+\n" +
-	"\tdevice_id\x18\t \x01(\tB\x0e\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x02\b\x01R\bdeviceId\x12\"\n" +
+	"lastUsedAt\x12=\n" +
+	"\tdevice_id\x18\t \x01(\tB \xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x14\b\x01\x1a\x0e@module.Device \x03R\bdeviceId\x12\"\n" +
 	"\bmcp_only\x18\v \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\amcpOnly\x12+\n" +
 	"\n" +
 	"token_hash\x18\n" +
@@ -3490,15 +3509,15 @@ const file_types_models_proto_rawDesc = "" +
 	"\n" +
 	"revoked_by\x18\r \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\trevokedBy\x12Q\n" +
 	"\rrevoke_reason\x18\x0e \x01(\x0e2\x1e.w17.contrib.auth.RevokeReasonB\f\xca\xf3\x18\b\b2\x90\x02\x01\xa8\x01\x00R\frevokeReason\x120\n" +
-	"\x0fpublic_computer\x18\x0f \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\x0epublicComputer\x12;\n" +
-	"\x15approved_by_device_id\x18\x10 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId\x12D\n" +
-	"\x0eoauth_grant_id\x18\x15 \x01(\tB\x1e\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x02\b\x01\x92\xf5\x18\foauth_serverR\foauthGrantId\x127\n" +
+	"\x0fpublic_computer\x18\x0f \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\x0epublicComputer\x12j\n" +
+	"\x15approved_by_device_id\x18\x10 \x01(\tB7\xca\xf3\x18\x1d\b\x03(\x01\xda\x01\x16approved_usertoken_set\xd2\xf3\x18\x12\x1a\x0e@module.Device \x03R\x12approvedByDeviceId\x12Z\n" +
+	"\x0eoauth_grant_id\x18\x15 \x01(\tB4\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x18\b\x01\x1a\x12@module.OAuthGrant \x03\x92\xf5\x18\foauth_serverR\foauthGrantId\x127\n" +
 	"\bresource\x18\x16 \x01(\tB\x1b\xca\xf3\x18\a\b\x05(\x01@\x80\x10\x92\xf5\x18\foauth_serverR\bresource\x12:\n" +
 	"\foauth_org_id\x18\x17 \x01(\tB\x18\xca\xf3\x18\x04\b\x03(\x01\x92\xf5\x18\foauth_serverR\n" +
-	"oauthOrgId:\x04\xc2\xf3\x18\x00\"\xc7\x05\n" +
+	"oauthOrgId:\x04\xc2\xf3\x18\x00\"\xd7\x05\n" +
 	"\x06Device\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12%\n" +
-	"\auser_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06userId\x12*\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x125\n" +
+	"\auser_id\x18\x02 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.User \x03R\x06userId\x12*\n" +
 	"\n" +
 	"thumbprint\x18\n" +
 	" \x01(\tB\n" +
@@ -3524,14 +3543,14 @@ const file_types_models_proto_rawDesc = "" +
 	"\n" +
 	"thumbprint\x10\x01J\x04\b\x03\x10\x04J\x04\b\t\x10\n" +
 	"R\n" +
-	"identifierR\x10trust_token_hash\"\xce\x04\n" +
+	"identifierR\x10trust_token_hash\"\xf8\x04\n" +
 	"\vSignInEvent\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12L\n" +
 	"\n" +
-	"created_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x11\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01\xd2\xf3\x18\x02\b\x01R\tcreatedAt\x12!\n" +
-	"\auser_id\x18\x03 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x06userId\x12%\n" +
-	"\aaddress\x18\x04 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\xc0\x02R\aaddress\x12%\n" +
-	"\tdevice_id\x18\x05 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\bdeviceId\x12*\n" +
+	"created_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x11\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01\xd2\xf3\x18\x02\b\x01R\tcreatedAt\x125\n" +
+	"\auser_id\x18\x03 \x01(\tB\x1c\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x10\x1a\f@module.User \x03R\x06userId\x12%\n" +
+	"\aaddress\x18\x04 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\xc0\x02R\aaddress\x12;\n" +
+	"\tdevice_id\x18\x05 \x01(\tB\x1e\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x12\x1a\x0e@module.Device \x03R\bdeviceId\x12*\n" +
 	"\n" +
 	"thumbprint\x18\x06 \x01(\tB\n" +
 	"\xca\xf3\x18\x06\b\x01(\x01@+R\n" +
@@ -3578,10 +3597,10 @@ const file_types_models_proto_rawDesc = "" +
 	"\x06\n" +
 	"\x04name\n" +
 	"\v\n" +
-	"\tended_key\x10\x01\xfa\xf4\x18\x04rbac\"\xee\x02\n" +
+	"\tended_key\x10\x01\xfa\xf4\x18\x04rbac\"\xfe\x02\n" +
 	"\x0eRolePermission\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12%\n" +
-	"\arole_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06roleId\x124\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x125\n" +
+	"\arole_id\x18\x02 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.Role \x03R\x06roleId\x124\n" +
 	"\rpermission_id\x18\x03 \x01(\x05B\x0f\xca\xf3\x18\x05\b\n" +
 	"\xf8\x01\x02\xd2\xf3\x18\x02\b\x01R\fpermissionId\x12F\n" +
 	"\n" +
@@ -3593,24 +3612,24 @@ const file_types_models_proto_rawDesc = "" +
 	"\t\n" +
 	"\arole_id\n" +
 	"\x0f\n" +
-	"\rpermission_id\x10\x01\xfa\xf4\x18\x04rbac\"\xce\x02\n" +
+	"\rpermission_id\x10\x01\xfa\xf4\x18\x04rbac\"\xde\x02\n" +
 	"\x14RolePermissionChange\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12%\n" +
-	"\arole_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06roleId\x12+\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x125\n" +
+	"\arole_id\x18\x02 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.Role \x03R\x06roleId\x12+\n" +
 	"\rpermission_id\x18\x03 \x01(\x05B\x06\xca\xf3\x18\x02\b\n" +
 	"R\fpermissionId\x12F\n" +
 	"\x04kind\x18\x04 \x01(\x0e2*.w17.contrib.auth.RolePermissionChangeKindB\x06\xca\xf3\x18\x02\b2R\x04kind\x12'\n" +
 	"\n" +
 	"changed_by\x18\x05 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\tchangedBy\x12F\n" +
 	"\n" +
-	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\f\xc2\xf3\x18\x00\xfa\xf4\x18\x04rbac\"\xbc\x04\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\f\xc2\xf3\x18\x00\xfa\xf4\x18\x04rbac\"\xf4\x04\n" +
 	"\bUserRole\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12%\n" +
-	"\auser_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06userId\x12%\n" +
-	"\arole_id\x18\x03 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06roleId\x12F\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x125\n" +
+	"\auser_id\x18\x02 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.User \x03R\x06userId\x125\n" +
+	"\arole_id\x18\x03 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.Role \x03R\x06roleId\x12F\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x127\n" +
-	"\x06org_id\x18\x05 \x01(\tB \xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x02\b\x01\x92\xf5\x18\x0eorg_membershipR\x05orgId\x12C\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12O\n" +
+	"\x06org_id\x18\x05 \x01(\tB8\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x1a\b\x01\x1a\x14@module.Organization \x03\x92\xf5\x18\x0eorg_membershipR\x05orgId\x12C\n" +
 	"\n" +
 	"revoked_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\trevokedAt\x12'\n" +
 	"\n" +
@@ -3629,10 +3648,10 @@ const file_types_models_proto_rawDesc = "" +
 	"\b\n" +
 	"\x06org_id\n" +
 	"\v\n" +
-	"\tended_key\x10\x01B\x12org_id IS NOT NULLJ\x0eorg_membership\xfa\xf4\x18\x04rbac\"\x89\x02\n" +
+	"\tended_key\x10\x01B\x12org_id IS NOT NULLJ\x0eorg_membership\xfa\xf4\x18\x04rbac\"\x9e\x02\n" +
 	"\x0fTokenPermission\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12'\n" +
-	"\btoken_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\atokenId\x124\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12<\n" +
+	"\btoken_id\x18\x02 \x01(\tB!\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x17\b\x01\x1a\x11@module.UserToken \x03R\atokenId\x124\n" +
 	"\rpermission_id\x18\x03 \x01(\x05B\x0f\xca\xf3\x18\x05\b\n" +
 	"\xf8\x01\x02\xd2\xf3\x18\x02\b\x01R\fpermissionId\x12F\n" +
 	"\n" +
@@ -3641,11 +3660,11 @@ const file_types_models_proto_rawDesc = "" +
 	"\n" +
 	"\btoken_id\n" +
 	"\x0f\n" +
-	"\rpermission_id\x10\x01\xfa\xf4\x18\tapi_token\"\xa7\x01\n" +
+	"\rpermission_id\x10\x01\xfa\xf4\x18\tapi_token\"\xbb\x01\n" +
 	"\x0eBootstrapClaim\x12\x1e\n" +
 	"\x04slot\x18\x01 \x01(\tB\n" +
-	"\xca\xf3\x18\x06\b\x06\x10\x01@ R\x04slot\x12\x1f\n" +
-	"\auser_id\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12F\n" +
+	"\xca\xf3\x18\x06\b\x06\x10\x01@ R\x04slot\x123\n" +
+	"\auser_id\x18\x02 \x01(\tB\x1a\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x10\x1a\f@module.User \x03R\x06userId\x12F\n" +
 	"\n" +
 	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\f\xc2\xf3\x18\x00\xfa\xf4\x18\x04rbac\"\xd9\x05\n" +
 	"\vOAuthClient\x12\x1b\n" +
@@ -3674,13 +3693,13 @@ const file_types_models_proto_rawDesc = "" +
 	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12T\n" +
 	"\x13metadata_fetched_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x11metadataFetchedAt\x12E\n" +
 	"\vdisabled_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\n" +
-	"disabledAt:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\foauth_server\"\x88\n" +
+	"disabledAt:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\foauth_server\"\xc5\n" +
 	"\n" +
 	"\x12OAuthAuthorization\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12-\n" +
 	"\frequest_hash\x18\x02 \x01(\tB\n" +
-	"\xca\xf3\x18\x06\b\x018\x01@@R\vrequestHash\x120\n" +
-	"\rclient_row_id\x18\x03 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\vclientRowId\x12<\n" +
+	"\xca\xf3\x18\x06\b\x018\x01@@R\vrequestHash\x12G\n" +
+	"\rclient_row_id\x18\x03 \x01(\tB#\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x19\b\x01\x1a\x13@module.OAuthClient \x03R\vclientRowId\x12<\n" +
 	"\x04kind\x18\x04 \x01(\x0e2 .w17.contrib.auth.OAuthGrantKindB\x06\xca\xf3\x18\x02\b2R\x04kind\x12,\n" +
 	"\fredirect_uri\x18\x05 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x10R\vredirectUri\x12$\n" +
 	"\x05state\x18\x06 \x01(\tB\x0e\xca\xf3\x18\n" +
@@ -3700,27 +3719,27 @@ const file_types_models_proto_rawDesc = "" +
 	"expires_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16R\texpiresAt\x12C\n" +
 	"\n" +
 	"decided_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\tdecidedAt\x12I\n" +
-	"\bdecision\x18\x0f \x01(\x0e2\x1f.w17.contrib.auth.OAuthDecisionB\f\xca\xf3\x18\b\b2\x90\x02\x01\xa8\x01\x00R\bdecision\x12'\n" +
-	"\auser_id\x18\x10 \x01(\tB\x0e\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x02\b\x01R\x06userId\x12\x1f\n" +
-	"\x06org_id\x18\x11 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05orgId\x12;\n" +
-	"\x15approved_by_device_id\x18\x12 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId\x12R\n" +
+	"\bdecision\x18\x0f \x01(\x0e2\x1f.w17.contrib.auth.OAuthDecisionB\f\xca\xf3\x18\b\b2\x90\x02\x01\xa8\x01\x00R\bdecision\x127\n" +
+	"\auser_id\x18\x10 \x01(\tB\x1e\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x12\b\x01\x1a\f@module.User \x03R\x06userId\x12\x1f\n" +
+	"\x06org_id\x18\x11 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05orgId\x12Q\n" +
+	"\x15approved_by_device_id\x18\x12 \x01(\tB\x1e\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x12\x1a\x0e@module.Device \x03R\x12approvedByDeviceId\x12R\n" +
 	"\x12session_expires_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x10sessionExpiresAt\x12)\n" +
 	"\tcode_hash\x18\x14 \x01(\tB\f\xca\xf3\x18\b\b\x01(\x018\x01@@R\bcodeHash\x12L\n" +
 	"\x0fcode_expires_at\x18\x15 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\rcodeExpiresAt\x12N\n" +
 	"\x10code_consumed_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x0ecodeConsumedAt\x128\n" +
 	"\x12session_token_hash\x18\x17 \x01(\tB\n" +
-	"\xca\xf3\x18\x06\b\x01(\x01@@R\x10sessionTokenHash:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\foauth_server\"\x8a\x06\n" +
+	"\xca\xf3\x18\x06\b\x01(\x01@@R\x10sessionTokenHash:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\foauth_server\"\xe9\x06\n" +
 	"\n" +
 	"OAuthGrant\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12%\n" +
-	"\auser_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06userId\x12\x1f\n" +
-	"\x06org_id\x18\x03 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05orgId\x120\n" +
-	"\rclient_row_id\x18\x04 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\vclientRowId\x121\n" +
-	"\x10authorization_id\x18\x05 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x0fauthorizationId\x12%\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x125\n" +
+	"\auser_id\x18\x02 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.User \x03R\x06userId\x12\x1f\n" +
+	"\x06org_id\x18\x03 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05orgId\x12G\n" +
+	"\rclient_row_id\x18\x04 \x01(\tB#\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x19\b\x01\x1a\x13@module.OAuthClient \x03R\vclientRowId\x12S\n" +
+	"\x10authorization_id\x18\x05 \x01(\tB(\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x1e\x1a\x1a@module.OAuthAuthorization \x03R\x0fauthorizationId\x12%\n" +
 	"\bresource\x18\x06 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x10R\bresource\x12$\n" +
 	"\x05scope\x18\a \x01(\tB\x0e\xca\xf3\x18\n" +
-	"\b\x010\x01@\xc8\x01\xa2\x01\x00R\x05scope\x12;\n" +
-	"\x15approved_by_device_id\x18\b \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId\x12F\n" +
+	"\b\x010\x01@\xc8\x01\xa2\x01\x00R\x05scope\x12Q\n" +
+	"\x15approved_by_device_id\x18\b \x01(\tB\x1e\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x12\x1a\x0e@module.Device \x03R\x12approvedByDeviceId\x12F\n" +
 	"\n" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12A\n" +
 	"\n" +
@@ -3732,10 +3751,10 @@ const file_types_models_proto_rawDesc = "" +
 	"revoked_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\trevokedAt\x12'\n" +
 	"\n" +
 	"revoked_by\x18\r \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\trevokedBy\x12Q\n" +
-	"\rrevoke_reason\x18\x0e \x01(\x0e2\x1e.w17.contrib.auth.RevokeReasonB\f\xca\xf3\x18\b\b2\x90\x02\x01\xa8\x01\x00R\frevokeReason:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\foauth_server\"\xe4\x02\n" +
+	"\rrevoke_reason\x18\x0e \x01(\x0e2\x1e.w17.contrib.auth.RevokeReasonB\f\xca\xf3\x18\b\b2\x90\x02\x01\xa8\x01\x00R\frevokeReason:\x14\xc2\xf3\x18\x00\xfa\xf4\x18\foauth_server\"\xfa\x02\n" +
 	"\x11OAuthRefreshToken\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12'\n" +
-	"\bgrant_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\agrantId\x12)\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12=\n" +
+	"\bgrant_id\x18\x02 \x01(\tB\"\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x18\b\x01\x1a\x12@module.OAuthGrant \x03R\agrantId\x12)\n" +
 	"\n" +
 	"token_hash\x18\x03 \x01(\tB\n" +
 	"\xca\xf3\x18\x06\b\x018\x01@@R\ttokenHash\x12F\n" +
@@ -3758,11 +3777,11 @@ const file_types_models_proto_rawDesc = "" +
 	"\x06\n" +
 	"\x04slug\n" +
 	"\v\n" +
-	"\tended_key\x10\x01\xfa\xf4\x18\x0eorg_membershipJ\x04\b\x06\x10\aR\bowner_id\"\xb6\x03\n" +
+	"\tended_key\x10\x01\xfa\xf4\x18\x0eorg_membershipJ\x04\b\x06\x10\aR\bowner_id\"\xde\x03\n" +
 	"\rOrgMembership\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12%\n" +
-	"\auser_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06userId\x12#\n" +
-	"\x06org_id\x18\x03 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x05orgId\x12\x1c\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x125\n" +
+	"\auser_id\x18\x02 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.User \x03R\x06userId\x12;\n" +
+	"\x06org_id\x18\x03 \x01(\tB$\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x1a\b\x01\x1a\x14@module.Organization \x03R\x05orgId\x12\x1c\n" +
 	"\x04role\x18\x04 \x01(\tB\b\xca\xf3\x18\x04\b\x01@dR\x04role\x12F\n" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12C\n" +
@@ -3776,11 +3795,11 @@ const file_types_models_proto_rawDesc = "" +
 	"\b\n" +
 	"\x06org_id\n" +
 	"\v\n" +
-	"\tended_key\x10\x01\xfa\xf4\x18\x0eorg_membership\"\x91\x03\n" +
+	"\tended_key\x10\x01\xfa\xf4\x18\x0eorg_membership\"\xa9\x03\n" +
 	"\aOrgHost\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\x1d\n" +
-	"\x04host\x18\x02 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\xfd\x01R\x04host\x12#\n" +
-	"\x06org_id\x18\x03 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x05orgId\x12#\n" +
+	"\x04host\x18\x02 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\xfd\x01R\x04host\x12;\n" +
+	"\x06org_id\x18\x03 \x01(\tB$\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x1a\b\x01\x1a\x14@module.Organization \x03R\x05orgId\x12#\n" +
 	"\bbound_by\x18\x04 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\aboundBy\x12B\n" +
 	"\bbound_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\aboundAt\x12?\n" +
 	"\bended_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\aendedAt\x12#\n" +
@@ -3789,10 +3808,10 @@ const file_types_models_proto_rawDesc = "" +
 	"\x06\n" +
 	"\x04host\n" +
 	"\v\n" +
-	"\tended_key\x10\x01\xfa\xf4\x18\torg_hosts\"\xd8\x03\n" +
+	"\tended_key\x10\x01\xfa\xf4\x18\torg_hosts\"\xa2\x04\n" +
 	"\x0fOrgSignUpPolicy\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12#\n" +
-	"\x06org_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x05orgId\x12!\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12;\n" +
+	"\x06org_id\x18\x02 \x01(\tB$\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x1a\b\x01\x1a\x14@module.Organization \x03R\x05orgId\x12!\n" +
 	"\x04kind\x18\x03 \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@ \xa2\x01\x00R\x04kind\x12\x12\n" +
 	"\x04open\x18\x04 \x01(\bR\x04open\x12\"\n" +
 	"\x04role\x18\x05 \x01(\tB\x0e\xca\xf3\x18\n" +
@@ -3802,7 +3821,8 @@ const file_types_models_proto_rawDesc = "" +
 	"\bended_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\aendedAt\x12#\n" +
 	"\bended_by\x18\t \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\aendedBy\x12*\n" +
 	"\tended_key\x18\n" +
-	" \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@$\xa2\x01\x00R\bendedKey:5\xc2\xf3\x18#\x12!\n" +
+	" \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@$\xa2\x01\x00R\bendedKey\x120\n" +
+	"\rrole_snapshot\x18\f \x01(\tB\v\xca\xf3\x18\a\b\x020\x01\xa2\x01\x00R\froleSnapshot:5\xc2\xf3\x18#\x12!\n" +
 	"\b\n" +
 	"\x06org_id\n" +
 	"\x06\n" +
@@ -4026,4 +4046,4 @@ func file_types_models_proto_init() {
 	file_types_models_proto_depIdxs = nil
 }
 
-// emit-sha256: 1024817146a41836a4be8940512d9013d95b887389c1dc2cc84c8a04481f8b66
+// emit-sha256: 965b42b7d3d2cabee846a3bd47178c8f7ce49bc19bda768944e2d3861b987286

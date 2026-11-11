@@ -5,9 +5,9 @@
       "schema": {
         "renderer": "1",
         "tables": {
-          "admin_auth.Role": "16509aa13b2c51a0525c27358597db34fdc70b1e35ea1ab974162b995f507d74",
-          "admin_auth.User": "72b68862f6772546b137f8110f43b614efb271bc1cd47c2c984da0dce631bb13",
-          "admin_auth.UserRole": "02f23cfa463da8752cde7051c95b1f3822c7ae9ab2dc9ceb8afcb3c6afc3ce25",
+          "admin_auth.Role": "73ac172b8750e83e2d89bb7b851c68187ee74d0b5d56d33d69f0615b20509a26",
+          "admin_auth.User": "f6c8ed5d8cce7011e0f17a0f3b98572ed04c1a17ad53ec4b7d12c095b5e68408",
+          "admin_auth.UserRole": "5ab3b510199994b801a42f1437b02325ee6b3c5a073367792ff18a40c4e248af",
           "example.Note": "e0e615159949a5b0612c96ee75ff71916fc3bf6ee8b125564af044264e5a3da4"
         }
       }

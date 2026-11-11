@@ -102,6 +102,11 @@ func DefaultParams() Params {
 	}
 }
 
+// ErrTooLong is Hash's refusal of a password the algorithm cannot take whole:
+// bcrypt reads at most 72 bytes, and refuses more rather than ignore the rest.
+// It is the person's input, not a fault, so callers answer it as one.
+var ErrTooLong = bcrypt.ErrPasswordTooLong
+
 // saltSize for newly-generated hashes (16 bytes = 128 bits,
 // well above the 64-bit minimum every modern algo recommends).
 const saltSize = 16
@@ -162,6 +167,16 @@ func Verify(stored, plain string, currentAlgo Algo, currentParams Params) (ok, n
 	}
 	needsRehash = storedAlgo != currentAlgo || paramsWeakerThan(storedAlgo, stored, currentParams)
 	return ok, needsRehash
+}
+
+// Verifiable reports whether stored names an algorithm Verify can run — a
+// PHC string of a supported algorithm. A sentinel such as "!" (a machine
+// account, an erased one), an empty hash or an unknown prefix is not: Verify
+// refuses it at once, without deriving anything. A caller that must not let
+// the response time tell such an account apart runs a throwaway verify
+// instead.
+func Verifiable(stored string) bool {
+	return stored != "" && detectAlgo(stored) != AlgoUnknown
 }
 
 // detectAlgo reads the leading PHC prefix on `stored` and returns

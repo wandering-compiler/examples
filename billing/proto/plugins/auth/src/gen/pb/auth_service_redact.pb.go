@@ -12,17 +12,20 @@ import (
 // may write: the fields left out of a record (sensitive by label or type).
 func init() {
 	redact.Register(map[string]redact.Plan{
-		"w17.contrib.auth.AuthReq":    {},
-		"w17.contrib.auth.AuthResp":   {},
-		"w17.contrib.auth.SignInReq":  {Skip: []protowire.Number{2 /* password */}},
-		"w17.contrib.auth.SignInResp": {},
-		"w17.contrib.auth.SignUpReq":  {Skip: []protowire.Number{2 /* password */}},
-		"w17.contrib.auth.SignUpResp": {},
-		"w17.contrib.auth.WhoAmIReq":  {},
-		"w17.contrib.auth.WhoAmIResp": {},
-		"w17.contrib.auth.LogoutReq":  {},
-		"w17.contrib.auth.LogoutResp": {},
+		"w17.contrib.auth.AuthReq":                {Skip: []protowire.Number{1 /* headers */}},
+		"w17.contrib.auth.ResolveUserReq":         {},
+		"w17.contrib.auth.AuthResp":               {},
+		"w17.contrib.auth.SignInReq":              {Skip: []protowire.Number{2 /* password */}},
+		"w17.contrib.auth.SignInResp":             {Skip: []protowire.Number{2 /* token */}},
+		"w17.contrib.auth.SignUpReq":              {Skip: []protowire.Number{2 /* password */, 4 /* invite_token */}},
+		"w17.contrib.auth.SignUpResp":             {Skip: []protowire.Number{2 /* token */}},
+		"w17.contrib.auth.WhoAmIReq":              {},
+		"w17.contrib.auth.WhoAmIResp":             {},
+		"w17.contrib.auth.LogoutReq":              {},
+		"w17.contrib.auth.LogoutResp":             {},
+		"w17.contrib.auth.ListMySignInEventsReq":  {},
+		"w17.contrib.auth.ListMySignInEventsResp": {},
 	})
 }
 
-// emit-sha256: b6cabd6af6e2dd7c5ef48f15aee25d51abd3dc8ca05f2114d33294c1dac074eb
+// emit-sha256: c738615333e515ccbb3d30454f8f301e9e223b64c19fce512b2ae7c4f5092bf3

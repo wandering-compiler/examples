@@ -1,5 +1,5 @@
 name: auth
-version: 0.1.0-rc.54
+version: 0.1.0-rc.60
 requires_w17: ">=1.17"
 
 # v3 — explicit Go module anchor. Staging text-rewrites every
@@ -29,11 +29,11 @@ env:
   - name: two_factor_totp
     type: bool
     default: "true"
-    description: "Built-in TOTP second factor (two_factor feature). false = the plugin never verifies TOTP; every challenge goes out via MfaChallengeRequested for a hand-written delivery channel (SMS/e-mail)."
+    description: "Built-in TOTP second factor (two_factor feature). false = the plugin never verifies TOTP; every challenge goes out via MfaChallengeRequested for a hand-written delivery channel (SMS/e-mail). With false and two_factor_policy required, that channel is the ONLY way any account signs in: deploy a subscriber that delivers the code before switching it on (the boot cannot check that one exists)."
   - name: two_factor_policy
     type: string
     default: required
-    description: "Who signs in with a second factor (two_factor feature): required (every account is challenged; an account without a confirmed authenticator gets its code through MfaChallengeRequested, so without a hand-written SMS/e-mail channel it cannot sign in — required suits a project that enrols from the first account), optional (an account that confirmed an authenticator is challenged, the others sign in with the password — how 2FA is offered on a running product) or disabled (nobody is challenged and EnrollTotp is refused; an authenticator already confirmed stays stored and counts again when the policy changes). two_factor_scope says WHEN a challenged account is asked. The activation's default: with org_two_factor_policy an organization overrides it per kind of membership. Another value refuses the boot."
+    description: "Who signs in with a second factor (two_factor feature): required (every account is challenged; an account without a confirmed authenticator gets its code through MfaChallengeRequested, so without a hand-written SMS/e-mail channel it cannot sign in — required suits a project that enrols from the first account), enrol (every account is challenged too, and one without a confirmed authenticator sets it up at sign-in instead of getting a code — the policy of a project with no SMS/e-mail channel; needs the two_factor_enrolment feature and two_factor_totp=true, or the boot refuses it), optional (an account that confirmed an authenticator is challenged, the others sign in with the password — how 2FA is offered on a running product) or disabled (nobody is challenged and EnrollTotp is refused; an authenticator already confirmed stays stored and counts again when the policy changes). two_factor_scope says WHEN a challenged account is asked. The activation's default: with org_two_factor_policy an organization overrides it per kind of membership. Another value refuses the boot."
   - name: delivery_recipient
     type: string
     default: ""
@@ -149,11 +149,11 @@ env:
   - name: org_from_sole_membership
     type: bool
     default: "true"
-    description: "Whether a request that names no organization acts in the caller's only one (org_membership). Default TRUE, today's behaviour: on an install where everyone belongs to one organization, every request but the first would otherwise need the W17-Org selector. false = an organization is only ever taken from the request — the selector, the organization in the path, or the host (org_hosts) — and a request naming none acts in no organization, which a scoped read refuses. Through an audience gateway it applies to TENANT_SOURCE_DEFAULT (w17/audience.proto); an audience whose tenant_from omits DEFAULT never infers. Either way, a backoffice method that refuses inside an organization (packages, hosts, sign-up policies, the products' roles and plans) acts realm-wide for a caller who holds it through a realm-wide role, wherever the request acts: an operator may also be a member of one organization."
+    description: "Whether a request that names no organization acts in the caller's only one (org_membership). Default TRUE, today's behaviour: on an install where everyone belongs to one organization, every request but the first would otherwise need the W17-Org selector. false = an organization is only ever taken from the request — the selector, the organization in the path, or the host (org_hosts) — and a request naming none acts in no organization, which a scoped read refuses. Through an audience gateway it applies to ORG_SOURCE_DEFAULT (w17/audience.proto); an audience whose org_from omits DEFAULT never infers. Either way, a backoffice method that refuses inside an organization (packages, hosts, sign-up policies, the products' roles and plans) acts realm-wide for a caller who holds it through a realm-wide role, wherever the request acts: an operator may also be a member of one organization."
   - name: email_proof_required
     type: string
     default: "none"
-    description: "How much proof an address needs before AcceptOrgInvite will admit it (org_invite). Three values, ordered weakest to strongest, and they read as a FLOOR on User.email_proof: 'none' asks nothing and is today's behaviour; 'derived' accepts an address a BOUND invitation named (the invitation said this address and the secret link reached whoever registered — no round trip asked of anybody), and also accepts a self-confirmed one; 'full' accepts only an address whose owner proved it by a round trip — the email_verification link, a sign_up_confirmation code, or an OAuth provider asserting email_verified=true (the provider made that round trip; the same assertion OAuth already relies on to link an existing account). ⚠️ Defaults to 'none' on purpose, which is NOT this plugin's usual 'the unsafe state is the one you opt into': every account that exists today is UNPROVEN, so a stricter default would refuse invitations those people were legitimately sent — a default that reads as safe and is really a breaking change is worse than an honest knob, which is the same reasoning the boolean this replaces carried. 'derived' is the setting most deployments want once they are past onboarding: it closes the address-guessing hole without asking anyone for a round trip, because an OPEN invitation cannot derive anything (the registrant picks the address) and is therefore refused by it. Replaces `invite_requires_verified_email`, a boolean that could not express 'derived' at all."
+    description: "How much proof an address needs before AcceptOrgInvite will admit it (org_invite). Three values, ordered weakest to strongest, and they read as a FLOOR on User.email_proof: 'none' asks nothing and is today's behaviour; 'derived' accepts an address a BOUND invitation named (the invitation said this address and the secret link reached whoever registered — no round trip asked of anybody), and also accepts a self-confirmed one; 'full' accepts only an address whose owner proved it by a round trip — the email_verification link, a sign_up_confirmation code, or an OAuth provider asserting email_verified=true (the provider made that round trip; the same assertion OAuth already relies on to link an existing account). ⚠️ Defaults to 'none' on purpose, which is NOT this plugin's usual 'the unsafe state is the one you opt into': every account that exists today is UNPROVEN, so a stricter default would refuse invitations those people were legitimately sent — a default that reads as safe and is really a breaking change is worse than an honest knob, which is the same reasoning the boolean this replaces carried. The floor holds on every way into an organization, not only an invitation: a registration on an organization's host (org_signup) joins under a floor above 'none' only with a proof the registration made itself (a sign_up_confirmation code, an OAuth provider's email_verified) — no invitation derived anything there — and is refused before anything is written otherwise (SIGNUP_EMAIL_PROOF_REQUIRED). With org_email_proof_policy an organization overrides it with a floor of its own. 'derived' is the setting most deployments want once they are past onboarding: it closes the address-guessing hole without asking anyone for a round trip, because an OPEN invitation cannot derive anything (the registrant picks the address) and is therefore refused by it. Replaces `invite_requires_verified_email`, a boolean that could not express 'derived' at all."
   - name: sign_up_allowlist
     type: string
     default: ""
@@ -177,7 +177,7 @@ env:
 
 features:
   - name: rbac
-    description: "Role / Permission / UserRole / RolePermission tables + their CRUD mutations (incl. UpdateRole, which edits a role's name/description only — the privilege flags stay declarative) + their lifecycle events. Nothing is deleted: DeleteRole stamps Role.deleted_at and revokes the role's grants, RevokeRoleFromUser stamps UserRole.revoked_at, RemovePermissionFromRole stamps RolePermission.removed_at (AddPermissionToRole revives a removed pair; both are logged in the append-only RolePermissionChange table); every permission reader skips ended rows, and a released name or grant can be taken again. Required when the project's gateway has ACL annotations + uses role-based assignment. Also stages the turnkey declarative signup role assignment (first_user / default -> UserRole), with the BootstrapClaim table (one row) that hands the first_user roles to exactly one sign-up."
+    description: "Role / Permission / UserRole / RolePermission tables + their CRUD mutations (incl. UpdateRole, which edits a role's name/description only — the privilege flags stay declarative) + their lifecycle events. Nothing is deleted: DeleteRole stamps Role.deleted_at and revokes the role's grants (refusing, LAST_ADMIN_ROLE, to retire a wildcard role one of whose holders holds no other wildcard role), RevokeRoleFromUser stamps UserRole.revoked_at, RemovePermissionFromRole stamps RolePermission.removed_at (AddPermissionToRole revives a removed pair; both are logged in the append-only RolePermissionChange table); every permission reader skips ended rows, and a released name or grant can be taken again. Required when the project's gateway has ACL annotations + uses role-based assignment. Also stages the turnkey declarative signup role assignment (first_user / default -> UserRole), with the BootstrapClaim table (one row) that hands the first_user roles to exactly one sign-up."
     default: true
     go_files:
       - handlers/signup_roles.go
@@ -209,24 +209,6 @@ features:
   - name: sign_in_turnkey
     description: "AuthService.SignIn — authored Go handler chaining GetUserByEmail + passwordhash.VerifyAndRotate + IssueToken. Emits opaque Unauthenticated on every failure (anti-enumeration). Disable for custom sign-in flows (MFA, rate limit, lockout, federated identity)."
     default: true
-  - name: tenant_scope
-    requires:
-      # The tenant create path IS the SignUp create path: tenant.go replaces
-      # the `signupCreateUser` seam with a function taking `*pb.SignUpReq`,
-      # a type gated `sign_up_turnkey`. Without it the bundle does not build.
-      - sign_up_turnkey
-    conflicts_with:
-      # Stated in the description since this feature existed, enforced by
-      # nothing until now: handlers/oauth.go creates users through the
-      # baseline CreateUser and has no tenant to resolve, so an OAuth sign-in
-      # under tenant_scope hits the NOT NULL tenant_id at RUNTIME — the worst
-      # place to learn it. A documented incompatibility that codegen does not
-      # know about is a promise the compiler cannot keep.
-      - oauth
-    description: "Multi-tenant isolation. Adds the Tenant table + a required User.tenant_id column + AuthQuery.GetUserTenant, and makes Authenticate stamp scopes[tenant_id] for the principal's tenant (resolved from auth, never client-sent). A project scoping its rows by name: tenant_id then gets per-tenant isolation. The NOT NULL tenant_id is written by AuthMutation.CreateUser through a feature-gated SET assignment (?feature(tenant_scope)), so there is ONE create rpc for every activation — this feature used to gate the baseline out and replace it with a CreateUserWithTenant twin, which cost the UserCreated event its only emit site. NOT compatible with `oauth`: handlers/oauth.go creates users through the baseline CreateUser and has no tenant to resolve (it was already broken before the gate — an OAuth sign-in under tenant_scope produced a NOT NULL violation at runtime; making OAuth tenant-aware is its own change). Compatible with `service_account`: a machine account is created in the tenant its minting operator is acting in, written by handlers/service_account_tenant.go, which is staged only when both features are on. Off by default — opt in for multi-tenant deployments."
-    default: false
-    go_files:
-      - handlers/tenant.go
   - name: api_token
     description: "API / MCP tokens alongside browser bearer sessions. Adds UserToken.token_type discriminator (SESSION/API) + management columns (name/last_used_at) + the TokenPermission subset table, plus Create/List/Revoke management RPCs (exposed via the plugin's REST + MCP presets). API tokens resolve permissions from the user's API-realm roles, intersected with the per-token subset (narrow-only). (Token expiry is base-tier — UserToken.expires_at applies to every token, see models.proto.) Off by default — opt in for projects exposing an MCP surface or non-browser API clients. ⚠️ A token here belongs to a USER, not to an organization: it hangs off UserToken and its ceiling is that user's roles. There is deliberately no org-owned key — a credential that carries permissions must carry an identity, or nobody answers for what it does — so machine access is a VIRTUAL USER (bot1, audit-bot) with the membership and role it should have. Two narrowings over bare permission-id SETS cannot compose, so both axes resolve role-attributed grants and intersect on ROLES, so a permission survives only when ONE role grants it and that role passes every axis. Machine access is still a VIRTUAL USER (bot1, audit-bot) with the membership and role it should have, not a third realm (the anonymous case with NO permissions is a custom auth method, as in a public-link view). Every API token is bound to a device key — the program's that will use it — except a machine account's bearer token (service_account: IssueBotToken without public_key). CreateApiToken (and IssueBotToken given one) take public_key, the program's PUBLIC JWK (EC P-256 or OKP Ed25519; a private member is refused), bind the token to its RFC 7638 thumbprint, and every request with the token needs a DPoP proof by that key. Only a signed-in session creates one. The creating device (for a CLI session, the browser that approved it) is recorded, and revoking that one device ends the token. API tokens minted before device binding are refused by Authenticate like every unbound token. Emits ApiTokenCreated."
     requires:
@@ -278,7 +260,7 @@ features:
       # mfa.go names pb.SignInResp: the two-step sign-in RETURNS one
       # (mfa_required instead of a token). No sign-in, no build.
       - sign_in_turnkey
-    description: "Second-factor auth at sign-in. Built-in TOTP (RFC 6238) on by default, disable-able via env (two_factor_totp=false). Adds UserTotpSecret (seed encrypted at rest, codes single-use) + UserRecoveryCode + MfaChallenge tables, the EnrollTotp (returns the otpauth URI and a QR code as SVG)/ConfirmTotp (returns ten recovery codes)/DisableTotp/GetMfaStatus/GenerateRecoveryCodes enrollment RPCs, and the two-step sign-in: SignIn returns mfa_required + challenge_id instead of a token, VerifyMfa (dual-path: confirmed TOTP secret, else event-flow code) completes it. Every challenge emits MfaChallengeRequested carrying totp_enrolled so a hand-written subscriber can deliver a fallback code (SMS/e-mail). Scope all_logins | new_devices (an untrusted (account, device) pair only); policy required | optional | disabled (two_factor_policy: who is challenged at all), per organization with org_two_factor_policy. Off by default."
+    description: "Second-factor auth at sign-in. Built-in TOTP (RFC 6238) on by default, disable-able via env (two_factor_totp=false). Adds UserTotpSecret (seed encrypted at rest, codes single-use) + UserRecoveryCode + MfaChallenge tables, the EnrollTotp (returns the otpauth URI and a QR code as SVG)/ConfirmTotp (returns ten recovery codes)/DisableTotp/GetMfaStatus/GenerateRecoveryCodes enrollment RPCs, and the two-step sign-in: SignIn returns mfa_required + challenge_id instead of a token, VerifyMfa (dual-path: confirmed TOTP secret, else event-flow code) completes it. Every challenge emits MfaChallengeRequested carrying totp_enrolled so a hand-written subscriber can deliver a fallback code (SMS/e-mail). Scope all_logins | new_devices (an untrusted (account, device) pair only); policy required | enrol | optional | disabled (two_factor_policy: who is challenged at all; enrol is two_factor_enrolment's), per organization with org_two_factor_policy. Off by default."
     default: false
     go_files:
       - handlers/mfa.go
@@ -335,7 +317,7 @@ features:
       # feature's own file names it, and a dependency held only transitively
       # breaks the day the link in between is relaxed.
       - rbac
-    description: "GitHub-style multi-org membership — one identity belongs to MANY Organizations via OrgMembership (the generalization of single-tenant tenant_scope). Adds the Organization + OrgMembership tables + AuthQuery.ListUserOrgs / GetUserOrgBySlug, the ListMyOrgs business RPC (the caller's orgs, for a CLI's `org list` + login cache + init org picker), and an Authenticate decorator that stamps scopes[org_id] for the request's ACTIVE org (a client-selected slug in the W17-Org header, VALIDATED against membership — a caller can only ever scope into an org they belong to). A project scoping rows by name: org_id then gets per-org isolation. Coexists with tenant_scope (a project picks one model). Off by default."
+    description: "GitHub-style multi-org membership — one identity belongs to MANY Organizations via OrgMembership. Adds the Organization + OrgMembership tables + AuthQuery.ListUserOrgs / GetUserOrgBySlug, the ListMyOrgs business RPC (the caller's orgs, for a CLI's `org list` + login cache + init org picker), and an Authenticate decorator that stamps scopes[org_id] for the request's ACTIVE org (a client-selected slug in the W17-Org header, VALIDATED against membership — a caller can only ever scope into an org they belong to). A project scoping rows by name: org_id then gets per-org isolation. Off by default."
     default: false
     # api_token narrows permissions by REALM (inside resolvePrincipal);
     # org_membership narrows them by ORGANIZATION (a grant narrower that
@@ -360,7 +342,7 @@ features:
       # lookup lives here, not in org_invite.go, because both features grant.
       - handlers/org_membership_role.go
   - name: org_invite
-    description: "Invite-based org membership — an admin (or whoever holds the permission) invites an EMAIL into an organization with a named role. Adds the OrgInvite table + AuthQuery.ListOrgInvites / ListPendingInvitesForEmail / GetOrgInvite, AuthMutation.CreateOrgInvite / BindOpenOrgInvite / ConsumeOrgInviteByToken / CloseOrgInvite / CloseExpiredOrgInvite (a withdrawn or lapsed invitation is closed, never deleted), and the InviteToOrg / ListOrgInvites / RevokeOrgInvite / ListMyInvites / AcceptOrgInvite business RPCs. An invitation is accepted through its link (AcceptOrgInvite); with `invite_accept_from_list` also from the caller's own list. Listing and withdrawing an organization's invitations shows and allows only those whose role the caller could give. Accepting writes BOTH the OrgMembership row and the UserRole grant scoped to that org, so an invited member arrives with permissions rather than with a label and nothing behind it. Keyed on (org, email) rather than a user id — the invitee may not have an account yet — which is also what lets `invite_only` gate sign-up: with it on, SignUp refuses an address that holds no pending invitation. Off by default."
+    description: "Invite-based org membership — an admin (or whoever holds the permission) invites an EMAIL into an organization with a named role. Adds the OrgInvite table + AuthQuery.ListOrgInvites / ListPendingInvitesForEmail / GetOrgInvite, AuthMutation.CreateOrgInvite / BindOpenOrgInvite / ConsumeOrgInviteByToken / CloseOrgInvite / CloseExpiredOrgInvite (a withdrawn or lapsed invitation is closed, never deleted), and the InviteToOrg / ListOrgInvites / RevokeOrgInvite / ListMyInvites / AcceptOrgInvite business RPCs. The backoffice's invitations in every organization are backoffice_invites. An invitation is accepted through its link (AcceptOrgInvite); with `invite_accept_from_list` also from the caller's own list. Listing and withdrawing an organization's invitations shows and allows only those whose role the caller could give. Accepting writes BOTH the OrgMembership row and the UserRole grant scoped to that org, so an invited member arrives with permissions rather than with a label and nothing behind it. Keyed on (org, email) rather than a user id — the invitee may not have an account yet — which is also what lets `invite_only` gate sign-up: with it on, SignUp refuses an address that holds no pending invitation. Off by default."
     default: false
     # Built ON org_membership, not merely alongside it: the invite writes an
     # OrgMembership row and an org-scoped UserRole, both of which are types
@@ -390,6 +372,13 @@ features:
       - org_invite
     go_files:
       - handlers/org_invite_from_list.go
+  - name: backoffice_invites
+    description: "The backoffice manages invitations in every organization — realm-wide, gated by the endpoint ACL. Publishes the OrgInvites admin page (every organization's pending invitations, the org's name beside its id; an \"Invite to an organization\" action with an organization picker that shows the link once; \"Withdraw\" over picked rows; AuthQuery.ListOrgInvitesAdmin) and POST /auth/admin/invites, POST /auth/admin/invites/withdraw (AuthService.InviteToOrgAdmin, AuthService.RevokeOrgInvites). InviteToOrgAdmin invites into the organization the request names by its slug (`org`); both act realm-wide — from inside an organization only for a caller holding the method realm-wide — and only when the endpoint ACL gates them (bound by the page or a route), under the role ceiling against what the caller holds. They are methods of their own, not a mode of InviteToOrg, because a project's default role commonly grants AuthService.* to every account: exclude them from such a role as you do the plan methods. Off by default: an upgrade adds no method, page or route to a project that did not ask for them."
+    default: false
+    requires:
+      - org_invite
+    go_files:
+      - handlers/org_invite_backoffice.go
   - name: membership_kinds
     description: "Memberships of several KINDS — the auth half of audience surfaces (a domain publishing one REST / MCP / gRPC surface per audience, each on its own gateway). OrgMembership and OrgInvite gain a kind (`staff`, `client`, … — the project names them, the plugin carries them); a membership has one kind, so a person is an organization's staff or its client, and may be staff of one and client of another. An audience gateway names the kinds it admits in every Authenticate (x-w17-membership-kinds, which only a gateway writes): the organization a request acts in is resolved among the caller's memberships of an admitted kind, a caller holding none is refused 403 (MEMBERSHIP_NOT_ADMITTED) before any handler. A gateway that names no kinds admits every membership. InviteToOrg takes the kind of membership accepting creates, held to the kinds the inviter may invite (INVITE_KIND_NOT_ALLOWED). Off by default; a migration adds the columns. A member's kind is changed in place (UpdateOrgMembershipKind, PUT /auth/orgs/{org}/members/{id}/kind) under the role ceiling and the kinds the caller may hand out."
     default: false
@@ -400,7 +389,7 @@ features:
     go_files:
       - handlers/membership_kinds.go
   - name: password_change
-    description: "Authenticated password change — the signed-in principal supplies its current password and a new one. Distinct from `password_reset`, which is the FORGOTTEN-password flow and needs a mail channel to deliver a token; this one needs no channel at all, because the proof is the current password. A deployment that cannot send mail can still let people rotate their own credentials. Adds the ChangePassword business RPC over AuthMutation.UpdateUserPasswordIfUnchanged, and AuthMutation.RevokeOtherSessionTokens, which signs the person out of every other session in the same unit of work (API tokens are kept; the sessions are revoked, not deleted). With `password_reset` staged too, the change also spends every live reset link of the account in that unit of work. Off by default."
+    description: "Authenticated password change — the signed-in person, on a session (an API token is refused with SESSION_REQUIRED), supplies the current password and a new one. Distinct from `password_reset`, which is the FORGOTTEN-password flow and needs a mail channel to deliver a token; this one needs no channel at all, because the proof is the current password. A deployment that cannot send mail can still let people rotate their own credentials. Adds the ChangePassword business RPC over AuthMutation.UpdateUserPasswordIfUnchanged, and AuthMutation.RevokeOtherSessionTokens, which signs the person out of every other session in the same unit of work (API tokens are kept; the sessions are revoked, not deleted). With `password_reset` staged too, the change also spends every live reset link of the account in that unit of work. Off by default."
     default: false
     go_files:
       - handlers/password_change.go
@@ -454,7 +443,7 @@ features:
     go_files:
       - handlers/org_packages.go
   - name: org_hosts
-    description: "A host (white-label or co-brand) bound to the organization it serves. The backoffice binds and unbinds hosts realm-wide (BindOrgHost / UnbindOrgHost / ListOrgHosts — PUT / DELETE /auth/admin/hosts/{host}, GET /auth/admin/hosts; one live organization per host, a call acting inside an organization refused with HOSTS_REALM_ONLY), and anyone may ask which organization a host serves (GetHostOrg, GET /auth/hosts/{host}, unauthenticated and limited per address) — a sign-in page on the host renders it before anyone signs in. An audience that takes the tenant from the host (w17/audience.proto TENANT_SOURCE_HOST) then acts, on a request arriving on a bound host, in that organization: the caller must hold a membership there (of a kind the audience admits), and a W17-Org selector naming another organization is refused (ORG_HOST_CONFLICT), never followed. An unbound host names nothing and the audience's next source is tried. Nothing is deleted. Off by default; a migration adds the table."
+    description: "A host (white-label or co-brand) bound to the organization it serves. The backoffice binds and unbinds hosts realm-wide (BindOrgHost / UnbindOrgHost / ListOrgHosts — PUT / DELETE /auth/admin/hosts/{host}, GET /auth/admin/hosts; one live organization per host, a call acting inside an organization refused with HOSTS_REALM_ONLY), and anyone may ask which organization a host serves (GetHostOrg, GET /auth/hosts/{host}, unauthenticated and limited per address) — a sign-in page on the host renders it before anyone signs in. An audience that takes the organization from the host (w17/audience.proto ORG_SOURCE_HOST) then acts, on a request arriving on a bound host, in that org: the caller must hold a membership there (of a kind the audience admits), and a W17-Org selector naming another organization is refused (ORG_HOST_CONFLICT), never followed. An unbound host names nothing and the audience's next source is tried. Nothing is deleted. Off by default; a migration adds the table."
     default: false
     requires:
       # The organizations, the active scope and its resolution are org_membership's.
@@ -462,15 +451,37 @@ features:
     go_files:
       - handlers/org_hosts.go
   - name: org_two_factor_policy
-    description: "An organization's own second-factor policy (two_factor_policy: required | optional | disabled) per kind of membership, over the activation's default. Kind '' is the organization's own and covers every kind without a row of its own. The backoffice sets it realm-wide (SetOrgTwoFactorPolicy / ClearOrgTwoFactorPolicy / ListOrgTwoFactorPolicies — PUT / GET /auth/admin/orgs/{org_id}/two-factor-policies, POST …/clear; TWO_FACTOR_POLICIES_REALM_ONLY from inside an organization), the organization its own from inside it (SetMyOrgTwoFactorPolicy / ClearMyOrgTwoFactorPolicy / ListMyOrgTwoFactorPolicies — PUT / GET /auth/orgs/{org}/two-factor-policies, POST …/clear). Both are gated by the project's endpoint ACL and refuse a method the lock does not gate: who may switch an organization's second factor off is the project's decision, never every member's. A password sign-in reads the policy of the organization it arrives for — the host bound to it (org_hosts, through an audience that takes the tenant from the host), the W17-Org selector, or the person's only organization — for the kind of the person's membership there, then the organization's own, then the default; enrolling an authenticator reads the one of the organization the caller acts in. Nothing is deleted. Off by default; a migration adds the table."
+    description: "An organization's own second-factor policy (two_factor_policy: required | enrol | optional | disabled; enrol only with two_factor_enrolment and the built-in authenticator on) per kind of membership, over the activation's default. Kind '' is the organization's own and covers every kind without a row of its own. The backoffice sets it realm-wide (SetOrgTwoFactorPolicy / ClearOrgTwoFactorPolicy / ListOrgTwoFactorPolicies — PUT / GET /auth/admin/orgs/{org_id}/two-factor-policies, POST …/clear; TWO_FACTOR_POLICIES_REALM_ONLY from inside an organization), the organization its own from inside it (SetMyOrgTwoFactorPolicy / ClearMyOrgTwoFactorPolicy / ListMyOrgTwoFactorPolicies — PUT / GET /auth/orgs/{org}/two-factor-policies, POST …/clear). Both are gated by the project's endpoint ACL and refuse a method the lock does not gate: who may switch an organization's second factor off is the project's decision, never every member's. A password sign-in reads the policy of the organization it arrives for — the host bound to it (org_hosts, through an audience that takes the organization from the host), the W17-Org selector, or the person's only organization — for the kind of the person's membership there, then the organization's own, then the default; enrolling an authenticator reads the one of the organization the caller acts in. Nothing is deleted. Off by default; a migration adds the table."
     default: false
     requires:
       - two_factor
       - org_membership
     go_files:
       - handlers/org_two_factor_policy.go
+  - name: org_email_proof_policy
+    description: "An organization's own address-proof floor (none | derived | full, the values of email_proof_required) over the activation's default. It holds on every way into the organization: accepting an invitation (AcceptOrgInvite, AcceptMyOrgInvite, an invitation taken at registration) and registering on the organization's host (org_signup), where no invitation derives anything — a registration there joins only with a proof of its own (a sign_up_confirmation code, an OAuth provider's email_verified), and is refused before anything is written otherwise (SIGNUP_EMAIL_PROOF_REQUIRED). The backoffice sets it realm-wide (SetOrgEmailProof / ClearOrgEmailProof / GetOrgEmailProof — PUT / GET /auth/admin/orgs/{org_id}/email-proof, POST …/clear; EMAIL_PROOF_POLICIES_REALM_ONLY from inside an organization), the organization its own from inside it (SetMyOrgEmailProof / ClearMyOrgEmailProof / GetMyOrgEmailProof — PUT / GET /auth/orgs/{org}/email-proof, POST …/clear). Both are gated by the project's endpoint ACL and refuse a method the lock does not gate: who may lower an organization's floor is the project's decision, never every member's. Nothing is deleted. Off by default; a migration adds the table."
+    default: false
+    requires:
+      - email_verification
+      - org_membership
+    go_files:
+      - handlers/org_email_proof_policy.go
+  - name: org_suspension
+    description: "The realm's operators suspend a whole organization (an incident, a leak): Organization.suspended_at, set and cleared by AuthMutation.SuspendOrganizations / ResumeOrganizations (bulk, by id; the project's endpoint ACL decides who may call them — a backoffice admin's Suspend / Resume actions). While it is set, Authenticate refuses every request that acts in the organization with PERMISSION_DENIED / ORG_SUSPENDED: its people's sessions and API tokens, its machine accounts' bearer tokens, OAuth tokens consented for it — one check after the organization is chosen, whichever way it was. Said only to a member. A request in no organization (signing in, listing one's own), one whose organization was only inferred (the person's only one — it then goes on in none) and the member's other organizations are not touched. Nobody enters it: accepting an invitation, registering on its host and an OAuth grant for it are refused ORG_SUSPENDED. Nothing is revoked or deleted: resuming restores every session and token as it was. One read per request in an organization. Off by default; a migration adds the column."
+    default: false
+    requires:
+      - org_membership
+    go_files:
+      - handlers/org_suspension.go
+  - name: two_factor_enrolment
+    description: "Enrolment at sign-in: the two_factor_policy value enrol, for the activation and (with org_two_factor_policy) per organization. Under it, a password sign-in of an account without a confirmed authenticator answers mfa_required + challenge_id + enrolment_required (SignInResp) and sends no code — no MfaChallengeRequested; the client sets up an authenticator on that challenge with AuthService.EnrollTotpAtSignIn (POST /auth/mfa/enrol, unauthenticated like VerifyMfa, signed by the key that passed the password; answers the secret, the otpauth URI and a QR code; called again it replaces the authenticator not yet confirmed) and completes the sign-in with VerifyMfa and that authenticator's first code, which confirms it, answers its ten recovery codes (VerifyMfaResp.recovery_codes) and issues the session, trusting the device. Every refusal of the enrolment is VerifyMfa's opaque one. An account with an authenticator is challenged for its code as under required. Needs two_factor_totp=true: enrol with the built-in authenticator off refuses the boot and an organization's policy. Nobody is locked out: a project switches its second factor on with enrol and every account enrols at its next sign-in. Off by default; a migration adds MfaChallenge.enrol (two_factor's)."
+    default: false
+    requires:
+      - two_factor
+    go_files:
+      - handlers/mfa_enrolment.go
   - name: org_signup
-    description: "Registration on an organization's own host. Per organization and kind of membership, the backoffice sets whether people may register without an invitation and with which org-scoped role (SetOrgSignUpPolicy / ClearOrgSignUpPolicy / ListOrgSignUpPolicies — PUT / GET /auth/admin/orgs/{org_id}/signup-policies, POST /auth/admin/orgs/{org_id}/signup-policies/clear; realm-wide only, SIGNUP_POLICIES_REALM_ONLY from inside an organization). A registration without an invitation — SignUp, ConfirmSignUp, an OAuth sign-in that creates the account — arriving on a host bound to the organization (org_hosts), through an audience that takes the tenant from the host, of a kind the audience admits: an open policy makes the new account a member of that kind with that role in the same transaction, whatever invite_only says; a closed one refuses it (SIGNUP_NOT_INVITED); with no policy for the kind, invite_only decides as before and the account joins nothing. Two open kinds on one audience are a configuration error (SIGNUP_KIND_AMBIGUOUS), never a guess. An invitation still decides its own organization. GetHostOrg answers the open kinds, so a sign-up page knows whether to show its form. A registration page on the identity's own host (bound to no organization) names the host the person comes from (SignUpReq / OAuthExchangeReq `signup_host`): with no gateway host it decides exactly as a registration on that host would; a gateway host bound to an organization wins and a body host naming another is refused (SIGNUP_HOST_CONFLICT); an unbound gateway host (the identity's own) leaves the body host to decide. Nothing is deleted. Off by default; a migration adds the table."
+    description: "Registration on an organization's own host. Per organization and kind of membership, the backoffice sets whether people may register without an invitation and with which org-scoped role (SetOrgSignUpPolicy / ClearOrgSignUpPolicy / ListOrgSignUpPolicies — PUT / GET /auth/admin/orgs/{org_id}/signup-policies, POST /auth/admin/orgs/{org_id}/signup-policies/clear; realm-wide only, SIGNUP_POLICIES_REALM_ONLY from inside an organization). A registration without an invitation — SignUp, ConfirmSignUp, an OAuth sign-in that creates the account — arriving on a host bound to the organization (org_hosts), through an audience that takes the organization from the host, of a kind the audience admits: an open policy makes the new account a member of that kind with that role in the same transaction, whatever invite_only says; a closed one refuses it (SIGNUP_NOT_INVITED); with no policy for the kind, invite_only decides as before and the account joins nothing. Two open kinds on one audience are a configuration error (SIGNUP_KIND_AMBIGUOUS), never a guess. An open policy's role is held to the role ceiling of the operator setting it (ROLE_ABOVE_CALLER) and stored as it was then (role_snapshot); a registration whose role has widened since is refused (SIGNUP_POLICY_STALE) until the policy is set again; an open policy without a snapshot (seeded by fixtures, or set before it was stored) is pinned by its first registration. An invitation still decides its own organization. GetHostOrg answers the open kinds, so a sign-up page knows whether to show its form. A registration page on the identity's own host (bound to no organization) names the host the person comes from (SignUpReq / OAuthExchangeReq `signup_host`): with no gateway host it decides exactly as a registration on that host would; a gateway host bound to an organization wins and a body host naming another is refused (SIGNUP_HOST_CONFLICT); an unbound gateway host (the identity's own) leaves the body host to decide. Nothing is deleted. Off by default; a migration adds the table."
     default: false
     requires:
       # The organization comes from the host; the membership and its grant are
@@ -489,7 +500,7 @@ features:
       - handlers/product_roles.go
       - handlers/product_role_defs.go
   - name: product_plans
-    description: "An organization's plan across the products (product_roles): the roles of each product its members may hold, a line per role or a whole product. The backoffice gives and takes the lines realm-wide (ListOrgProductPlan / AllowOrgProduct / DisallowOrgProduct — GET / PUT /auth/admin/orgs/{org_id}/product-plan, POST /auth/admin/orgs/{org_id}/product-plan/remove; PRODUCT_PLANS_REALM_ONLY from inside an organization), and an organization reads its own (ListMyOrgProductPlan, GET /auth/orgs/{org}/product-plan). A product role held in an organization counts only when its plan carries it — on every request, so taking a line applies on the next one — and nobody hands out a role the plan does not carry (PRODUCT_ROLE_NOT_IN_PLAN). An organization without a line for a product holds nothing there. Realm-wide roles are not bounded. Nothing is deleted. Off by default; a migration adds the table."
+    description: "An organization's plan across the products (product_roles): the roles of each product its members may hold, a line per role or a whole product. The backoffice gives and takes the lines realm-wide (ListOrgProductPlan / AllowOrgProduct / DisallowOrgProduct — GET / PUT /auth/admin/orgs/{org_id}/product-plan, POST /auth/admin/orgs/{org_id}/product-plan/remove; PRODUCT_PLANS_REALM_ONLY from inside an organization; DisallowOrgProducts ends lines picked by their row ids, the shape an admin row action sends), and an organization reads its own (ListMyOrgProductPlan, GET /auth/orgs/{org}/product-plan). A product role held in an organization counts only when its plan carries it — on every request, so taking a line applies on the next one — and nobody hands out a role the plan does not carry (PRODUCT_ROLE_NOT_IN_PLAN). An organization without a line for a product holds nothing there. Realm-wide roles are not bounded. Nothing is deleted. Off by default; a migration adds the table."
     default: false
     requires:
       - product_roles
@@ -590,13 +601,9 @@ features:
     go_files:
       - handlers/admin_mfa.go
 
-# Files that need a feature PAIR. A machine account under tenant_scope must be
-# written with a tenant (User.tenant_id is NOT NULL), and the code that fills it
-# references a field that exists only with tenant_scope from a handler that
-# exists only with service_account — so it lives in neither feature's go_files.
+# Files that need a feature PAIR: the code references what exists only when
+# both features do, so it lives in neither feature's go_files.
 go_files_combined:
-  - features: [service_account, tenant_scope]
-    files: [handlers/service_account_tenant.go]
   # What organizations add to machine accounts: the membership a new one is
   # written into, and listing / minting scoped to the operator's organization.
   # The calls it makes exist only with org_membership.
@@ -607,10 +614,6 @@ go_files_combined:
   # org_membership.
   - features: [oauth_server, org_membership]
     files: [handlers/oauth_server_org.go]
-  # The pending registration carries the tenant SignUp resolved; the fields
-  # that hold it exist only when both features do.
-  - features: [sign_up_confirmation, tenant_scope]
-    files: [handlers/signup_confirm_tenant.go]
   # An invitation names the kind of membership accepting creates; the
   # invitation calls exist only with org_invite.
   - features: [membership_kinds, org_invite]
@@ -663,11 +666,6 @@ presets:
     forward_headers:
       - { name: User-Agent }
       - { name: X-Forwarded-For }
-      # tenant_scope resolves a registration's tenant from the request's Host
-      # (Tenant.domain). restgw forwards it as x-forwarded-host — the gRPC hop
-      # has an :authority of its own. Without this the Host never left the
-      # gateway and every tenant_scope sign-up was refused.
-      - { name: Host, feature: tenant_scope }
       # The active-org selector — a slug the client sends to scope a request
       # into one of its orgs. NOT in the reserved x-w17-* namespace (that's
       # for VERIFIED auth/scope metadata only — a client header there could
@@ -774,6 +772,9 @@ presets:
         description: "Two-factor: TOTP enrollment + challenge verification."
         endpoints:
           - { ref: AuthService.VerifyMfa,    method: POST,   path: /verify,       exclude_auth: true, public_limit: failed_only, feature: two_factor }
+          # An authenticator set up on a sign-in's enrolment challenge
+          # (two_factor_policy=enrol): no token yet either.
+          - { ref: AuthService.EnrollTotpAtSignIn, method: POST, path: /enrol, exclude_auth: true, public_limit: failed_only, feature: two_factor_enrolment }
           - { ref: AuthService.EnrollTotp,   method: POST,   path: /totp,                             feature: two_factor }
           - { ref: AuthService.ConfirmTotp,  method: POST,   path: /totp/confirm,                     feature: two_factor }
           - { ref: AuthService.DisableTotp,  method: DELETE, path: /totp,                             feature: two_factor }
@@ -885,6 +886,9 @@ presets:
           - { ref: AuthService.ListOrgTwoFactorPolicies, method: GET,  path: "/{org_id}/two-factor-policies",       feature: org_two_factor_policy }
           - { ref: AuthService.SetOrgTwoFactorPolicy,    method: PUT,  path: "/{org_id}/two-factor-policies",       feature: org_two_factor_policy }
           - { ref: AuthService.ClearOrgTwoFactorPolicy,  method: POST, path: "/{org_id}/two-factor-policies/clear", feature: org_two_factor_policy }
+          - { ref: AuthService.GetOrgEmailProof,   method: GET,  path: "/{org_id}/email-proof",       feature: org_email_proof_policy }
+          - { ref: AuthService.SetOrgEmailProof,   method: PUT,  path: "/{org_id}/email-proof",       feature: org_email_proof_policy }
+          - { ref: AuthService.ClearOrgEmailProof, method: POST, path: "/{org_id}/email-proof/clear", feature: org_email_proof_policy }
           - { ref: AuthService.ClearOrgSignUpPolicy,  method: POST, path: "/{org_id}/signup-policies/clear", feature: org_signup }
           - { ref: AuthService.ListOrgProductPlan, method: GET,  path: "/{org_id}/product-plan",        feature: product_plans }
           - { ref: AuthService.AllowOrgProduct,    method: PUT,  path: "/{org_id}/product-plan",        feature: product_plans }
@@ -896,6 +900,16 @@ presets:
       # The backoffice's named plans (named_product_plans): defined once,
       # realm-wide; an organization goes on one through
       # /auth/admin/orgs/{org_id}/product-plan-assignment.
+      # The backoffice's invitations in every organization (backoffice_invites):
+      # realm-wide, gated by the endpoint ACL; InviteToOrgAdmin names the
+      # organization in its body (`org`, the slug). The list of every
+      # organization's invitations is the OrgInvites admin page's: it pages,
+      # and a preset route cannot declare paging.
+      - prefix: /auth/admin/invites
+        description: "The backoffice's invitations across every organization."
+        endpoints:
+          - { ref: AuthService.InviteToOrgAdmin, method: POST, path: "",          feature: backoffice_invites }
+          - { ref: AuthService.RevokeOrgInvites, method: POST, path: "/withdraw", feature: backoffice_invites }
       - prefix: /auth/admin/product-plans
         description: "The plans organizations are put on — each a set of the products' roles, defined once."
         endpoints:
@@ -1001,6 +1015,10 @@ presets:
           - { ref: AuthService.ListMyOrgTwoFactorPolicies, method: GET,  path: /two-factor-policies,       feature: org_two_factor_policy }
           - { ref: AuthService.SetMyOrgTwoFactorPolicy,    method: PUT,  path: /two-factor-policies,       feature: org_two_factor_policy }
           - { ref: AuthService.ClearMyOrgTwoFactorPolicy,  method: POST, path: /two-factor-policies/clear, feature: org_two_factor_policy }
+          # How much proof an address needs to become a member here (handlers/org_email_proof_policy.go).
+          - { ref: AuthService.GetMyOrgEmailProof,   method: GET,  path: /email-proof,       feature: org_email_proof_policy }
+          - { ref: AuthService.SetMyOrgEmailProof,   method: PUT,  path: /email-proof,       feature: org_email_proof_policy }
+          - { ref: AuthService.ClearMyOrgEmailProof, method: POST, path: /email-proof/clear, feature: org_email_proof_policy }
           - { ref: AuthService.ListOrgTeams,        method: GET,    path: /teams,                               feature: teams }
           - { ref: AuthService.CreateOrgTeam,       method: POST,   path: /teams,                               feature: teams }
           - { ref: AuthService.UpdateOrgTeam,       method: PUT,    path: "/teams/{team_id}",                   feature: teams }
@@ -1165,8 +1183,7 @@ presets:
       # No `create` either. A machine account is created WITH its membership
       # and role in one transaction (AuthService.CreateBot), because a bot
       # without them authenticates with nothing; the only storage create is
-      # the bare CreateBotUser, and under tenant_scope it also needs a tenant
-      # an admin form has no way to supply.
+      # the bare CreateBotUser.
       #
       # Erasing one revokes it: every token of the account is revoked, and the
       # record stays.
@@ -1273,6 +1290,49 @@ presets:
           # so it can neither move a membership nor reach another org's.
           fields: [role, org]
           readonly_fields: [id, user_id, org_id, created_at]
+      # Turnkey OrgInvites — the backoffice's invitations, in every
+      # organization. Gated backoffice_invites (built on org_invite and so on
+      # org_membership, so the
+      # Organizations page it links to and picks from is always there).
+      # Realm-wide: its operator is a member of none, so the invite action
+      # names the organization (`org`, picked from Organizations by its slug)
+      # and InviteToOrgAdmin acts there; binding it here puts it in the
+      # endpoint ACL, which the method requires. The role ceiling
+      # still applies, against what the operator holds realm-wide. The link
+      # is shown ONCE (secret result): the row keeps only its hash.
+      # Withdrawing picks rows (RevokeOrgInvites). A hand-written page named
+      # "OrgInvites" overrides this.
+      - name: OrgInvites
+        model: OrgInvite
+        feature: backoffice_invites
+        list:
+          source: AuthQuery.ListOrgInvitesAdmin
+          columns:
+            - created_at
+            - email
+            - { name: organization, ref: { title: org_name, page: Organizations } }
+            - role
+            - expires_at
+          detail_link_column: created_at
+        detail:
+          read: AuthQuery.GetOrgInviteAdmin
+          readonly_fields: [id, email, organization, org_name, role, expires_at, created_at]
+        actions:
+          - name: invite
+            source: AuthService.InviteToOrgAdmin
+            label: "Invite to an organization"
+            target: page
+            # An empty address is an OPEN invitation: whoever holds the link
+            # picks their own.
+            fields: [org, email, role]
+            field_refs:
+              - { field: org, page: Organizations, value: slug, title: "{name}" }
+            result: { fields: [token], secret: true }
+          - name: withdraw
+            source: AuthService.RevokeOrgInvites
+            label: "Withdraw"
+            confirm: "Withdraw the selected invitations? Their links stop working."
+            target: list
       # Turnkey session/token review. Gated user_admin. Lists every
       # UserToken across users (NEVER the secret token value) so an
       # operator can review + revoke sessions. Revoked tokens stay listed,
@@ -1469,13 +1529,15 @@ msgids:
   - "Authentication is temporarily unavailable. Please try again shortly."
   - "Authenticator apps are not available here. Your sign-in codes arrive by message instead."
   - "Choose at least one permission for the role."
+  - "Choose none, derived or full."
   - "Choose one of your organizations for this application."
-  - "Choose required, optional or disabled."
+  - "Choose required, enrol, optional or disabled."
   - "Choose the role people get when they register."
   - "Confirm it is you before creating a token."
   - "Confirm it is you with your authenticator app or the code we email you."
   - "Confirm your email address before accepting this invitation."
   - "Every organization has this package; it is not given or taken."
+  - "From inside an organization, change its email verification in the organization's own settings."
   - "From inside an organization, change its two-step sign-in in the organization's own settings."
   - "Give the public key of the program that will use this token."
   - "Give the role a name."
@@ -1486,10 +1548,12 @@ msgids:
   - "Organizations are on this plan. Move them to another plan first."
   - "Permission {permission} is not part of this deployment."
   - "Registration here is not set up correctly. Contact the organization."
+  - "Registration here is paused until the organization confirms its settings again. Contact the organization."
   - "Registration is by invitation only. Ask the organization you are joining to invite you."
   - "Registration is not open for this email address."
   - "Role {role} is not one this organization's teams can hold."
   - "Set up an authenticator app first. Recovery codes belong to it."
+  - "Setting up an authenticator at sign-in is not available here."
   - "Sign in to do this. An API token cannot create credentials."
   - "Signing in with the provider did not complete. Please start again."
   - "Someone still holds this role, directly or through a team. Give them another role first."
@@ -1514,7 +1578,6 @@ msgids:
   - "This API token expired on {date}. Create a new token."
   - "This account has been disabled."
   - "This address belongs to another organization than the one you chose."
-  - "This address does not belong to any organization here. Check the address you registered on."
   - "This app did not prove which device it runs on. Reload or update it, then sign in again."
   - "This authenticator app is already set up. To get new recovery codes, generate them."
   - "This callback was registered under this client ID and revoked. Register it under a new client ID."
@@ -1532,7 +1595,9 @@ msgids:
   - "This machine account holds a role with permissions you do not hold, so you cannot issue a token for it."
   - "This member holds a role with permissions you do not have, so you cannot change or remove their membership."
   - "This membership belongs to another organization."
+  - "This organization admits only a confirmed email address, and this registration cannot confirm one."
   - "This organization already has a team named {name}."
+  - "This organization is suspended by the operators of the service. Contact them to have it restored."
   - "This part of the service is not open to you: none of your memberships is of a kind it admits."
   - "This password is too long. Use a shorter one."
   - "This person is already a member of the organization."

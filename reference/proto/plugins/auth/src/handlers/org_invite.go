@@ -294,16 +294,17 @@ func (h *AuthServiceHandler) callerEmail(ctx context.Context, userID string) (st
 // ORG-SCOPED ONLY. A realm role reaches every organization, so it is not an
 // org admin's to hand out; filtering here rather than in the caller means a
 // second caller cannot forget to.
-func (h *AuthServiceHandler) ListAssignableRoles(ctx context.Context, req *pb.ListAssignableRolesReq) (*pb.ListAssignableRolesResp, error) {
+func (h *AuthServiceHandler) ListAssignableRoles(ctx context.Context, req *pb.ListAssignableRolesReq) (_ *pb.ListAssignableRolesResp, err error) {
+	defer markReplaySafe(&err)
 	if err := refuseOtherOrg(ctx, req.GetOrg()); err != nil {
 		return nil, err
 	}
-	// ListOrgScopedRoles, not ListRoles: the shared catalogue query cannot
-	// return `org_scoped` at all (the column only exists under the
-	// org_membership feature, so naming it there fails the typecheck for
-	// projects without it — the query's own comment says so). Filtering in Go
-	// on a field that is never populated silently returned an EMPTY list,
-	// which is how this was found.
+	// ListOrgScopedRoles, not ListRoles: the org-scoped read FILTERS on
+	// `org_scoped` in SQL (and, under org_roles, keeps only this
+	// organization's own roles beside the shared ones), where the shared
+	// catalogue is paged and only projects the column. Filtering in Go
+	// once ran on a field the query did not fill and silently returned an
+	// EMPTY list, which is how this was found.
 	// No active organization (a direct call): the shared catalogue, no
 	// organization's own roles.
 	orgID, _ := principal.Scope(ctx, "org_id")
@@ -444,6 +445,13 @@ func (h *AuthServiceHandler) InviteToOrg(ctx context.Context, req *pb.InviteToOr
 	if err != nil {
 		return nil, err
 	}
+	return h.inviteInto(ctx, orgID, inviter, req)
+}
+
+// inviteInto is an invitation into orgID by inviter, under orgID's lock: the
+// role ceiling, the kind and the products' roles held to the inviter, then the
+// row and the link.
+func (h *AuthServiceHandler) inviteInto(ctx context.Context, orgID, inviter string, req *pb.InviteToOrgReq) (*pb.InviteToOrgResp, error) {
 	// Normalized here, once, and stored normalized: SignIn lower-cases the
 	// address it looks up, so an invitation stored as typed would never
 	// match the account that arrives to accept it.
@@ -585,7 +593,8 @@ func (h *AuthServiceHandler) InviteToOrg(ctx context.Context, req *pb.InviteToOr
 }
 
 // ListOrgInvites returns the active organization's outstanding invitations.
-func (h *AuthServiceHandler) ListOrgInvites(ctx context.Context, req *pb.ListOrgInvitesReq) (*pb.ListOrgInvitesResp, error) {
+func (h *AuthServiceHandler) ListOrgInvites(ctx context.Context, req *pb.ListOrgInvitesReq) (_ *pb.ListOrgInvitesResp, err error) {
+	defer markReplaySafe(&err)
 	if err := refuseOtherOrg(ctx, req.GetOrg()); err != nil {
 		return nil, err
 	}
@@ -676,7 +685,8 @@ func (h *AuthServiceHandler) RevokeOrgInvite(ctx context.Context, req *pb.Revoke
 
 // ListMyInvites returns the invitations addressed to the CALLER, across
 // every organization — the list a person sees in their own account.
-func (h *AuthServiceHandler) ListMyInvites(ctx context.Context, _ *pb.ListMyInvitesReq) (*pb.ListMyInvitesResp, error) {
+func (h *AuthServiceHandler) ListMyInvites(ctx context.Context, _ *pb.ListMyInvitesReq) (_ *pb.ListMyInvitesResp, err error) {
+	defer markReplaySafe(&err)
 	userID, err := callerUserID(ctx)
 	if err != nil {
 		return nil, Unauthenticated(err)
@@ -717,6 +727,13 @@ func (h *AuthServiceHandler) AcceptOrgInvite(ctx context.Context, req *pb.Accept
 	if err != nil {
 		return nil, Unauthenticated(err)
 	}
+	// Joining changes what the PERSON holds — a membership and a role — so
+	// only their session may do it, as only a session mints a token or
+	// changes the password; an API token is refused before anything is read
+	// (org_invite/session-only).
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
+	}
 	email, err := h.callerEmail(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -751,7 +768,7 @@ func (h *AuthServiceHandler) AcceptOrgInvite(ctx context.Context, req *pb.Accept
 	if bound && invitedEmail != email {
 		return nil, errInviteInvalid
 	}
-	if err := inviteVerifiedEmailGate(ctx, h, userID, bound); err != nil {
+	if err := inviteVerifiedEmailGate(ctx, h, userID, pending.GetOrgId(), bound); err != nil {
 		return nil, err
 	}
 
@@ -838,6 +855,10 @@ func (h *AuthServiceHandler) acceptInviteTx(txCtx context.Context, userID string
 		}
 	}
 
+	// No one joins an organization the operators suspended.
+	if err := checkOrgEntry(txCtx, h, orgID); err != nil {
+		return nil, err
+	}
 	addReq := &pb.AddOrgMembershipReq{
 		UserId: userID,
 		OrgId:  orgID,

@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/wandering-compiler/plugins/auth/lib/passwordhash"
 	"github.com/wandering-compiler/plugins/auth/lib/totp"
 
 	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
@@ -66,13 +67,24 @@ func (h *AuthServiceHandler) acceptTotp(ctx context.Context, row *pb.UserTotpSec
 
 // acceptRecoveryCode spends one of the user's recovery codes. Anything that
 // is not shaped like one is refused without a lookup.
+//
+// The code is looked up as its slow hash (recoveryCodeHash) and, when that
+// spends nothing, as the SHA-256 a set made before the slow hash was stored
+// with (legacyRecoveryCodeHash): such a set keeps working, each code once,
+// until it is used up or replaced — no row is rewritten. Each lookup is the
+// one conditional UPDATE that spends the code, so single use still holds.
 func (h *AuthServiceHandler) acceptRecoveryCode(ctx context.Context, userID, code string) bool {
 	norm := normaliseRecoveryCode(code)
 	if len(norm) != recoveryCodeLen {
 		return false
 	}
-	spent, err := h.Mutation.ConsumeRecoveryCode(ctx, &pb.ConsumeRecoveryCodeReq{UserId: userID, CodeHash: recoveryCodeHash(norm)})
-	return err == nil && spent.GetId() != ""
+	for _, hash := range []string{recoveryCodeHash(userID, norm), legacyRecoveryCodeHash(norm)} {
+		spent, err := h.Mutation.ConsumeRecoveryCode(ctx, &pb.ConsumeRecoveryCodeReq{UserId: userID, CodeHash: hash, Thumbprint: requestThumbprint(ctx)})
+		if err == nil && spent.GetId() != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // stepUp is the proof a change to a CONFIRMED authenticator asks for: a
@@ -91,7 +103,12 @@ func (h *AuthServiceHandler) acceptRecoveryCode(ctx context.Context, userID, cod
 func (h *AuthServiceHandler) stepUp(ctx context.Context, userID string, row *pb.UserTotpSecret, code string) error {
 	att, err := h.Mutation.RecordStepUpAttempt(ctx, &pb.RecordStepUpAttemptReq{Id: row.GetId()})
 	if err != nil && notFoundOK(err) != nil {
-		return Unauthenticated(errMfaChallengeInvalid) // an unaccounted guess is not granted
+		// An unaccounted guess is not granted. An outage is said as one
+		// (AUTH_UNAVAILABLE), so the person retries instead of retyping.
+		if operationalCode(err) != codes.OK {
+			return Unauthenticated(err)
+		}
+		return UnauthenticatedMfaCode(errMfaChallengeInvalid)
 	}
 	if att.GetAttempts() == 0 {
 		return stepUpLocked(ctx)
@@ -113,7 +130,7 @@ func (h *AuthServiceHandler) stepUp(ctx context.Context, userID string, row *pb.
 		}
 	}
 	if !ok {
-		return Unauthenticated(errMfaChallengeInvalid)
+		return UnauthenticatedMfaCode(errMfaChallengeInvalid)
 	}
 	_, _ = h.Mutation.ResetStepUp(ctx, &pb.ResetStepUpReq{Id: row.GetId()})
 	return nil
@@ -125,6 +142,10 @@ func (h *AuthServiceHandler) GenerateRecoveryCodes(ctx context.Context, req *pb.
 	userID, err := callerUserID(ctx)
 	if err != nil {
 		return nil, Unauthenticated(err)
+	}
+	// Recovery codes stand in for the second factor — see EnrollTotp.
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
 	}
 	enrolled, row, err := h.totpEnrolled(ctx, userID)
 	if err != nil {
@@ -138,7 +159,7 @@ func (h *AuthServiceHandler) GenerateRecoveryCodes(ctx context.Context, req *pb.
 		return nil, err
 	}
 	var out []string
-	if err := h.inMfaTx(ctx, func(txCtx context.Context) error {
+	if err := h.inTx(ctx, func(txCtx context.Context) error {
 		var err error
 		out, err = h.replaceRecoveryCodes(txCtx, userID)
 		return err
@@ -148,11 +169,11 @@ func (h *AuthServiceHandler) GenerateRecoveryCodes(ctx context.Context, req *pb.
 	return &pb.GenerateRecoveryCodesResp{RecoveryCodes: out}, nil
 }
 
-// replaceRecoveryCodes deletes the user's set and stores a fresh one,
+// replaceRecoveryCodes revokes the user's unused codes and stores a fresh set,
 // returning the plaintext (formatted xxxxx-xxxxx). Run it inside a
 // transaction: half a set is a set the person believes they have.
 func (h *AuthServiceHandler) replaceRecoveryCodes(txCtx context.Context, userID string) ([]string, error) {
-	if _, err := h.Mutation.DeleteRecoveryCodes(txCtx, &pb.DeleteRecoveryCodesReq{UserId: userID}); notFoundOK(err) != nil {
+	if _, err := h.Mutation.RevokeRecoveryCodes(txCtx, &pb.RevokeRecoveryCodesReq{UserId: userID}); notFoundOK(err) != nil {
 		return nil, err
 	}
 	out := make([]string, 0, recoveryCodeCount)
@@ -161,7 +182,7 @@ func (h *AuthServiceHandler) replaceRecoveryCodes(txCtx context.Context, userID 
 		if err != nil {
 			return nil, err
 		}
-		if _, err := h.Mutation.CreateRecoveryCode(txCtx, &pb.CreateRecoveryCodeReq{UserId: userID, CodeHash: recoveryCodeHash(code)}); err != nil {
+		if _, err := h.Mutation.CreateRecoveryCode(txCtx, &pb.CreateRecoveryCodeReq{UserId: userID, CodeHash: recoveryCodeHash(userID, code)}); err != nil {
 			return nil, err
 		}
 		out = append(out, code[:recoveryCodeLen/2]+"-"+code[recoveryCodeLen/2:])
@@ -193,7 +214,28 @@ func normaliseRecoveryCode(code string) string {
 	}, strings.ToLower(strings.TrimSpace(code)))
 }
 
-func recoveryCodeHash(norm string) string {
+// recoveryCodeHash is what a recovery code is stored and looked up as:
+// argon2id of the normalised code, salted by the account, with parameters
+// fixed in code (passwordhash.FixedArgon2idHex), not the deployment's
+// password parameters, because the value is recomputed at every attempt.
+//
+// A code is ~2^49.5 and lives until it is used — the longest-lived of the
+// plugin's low-entropy secrets — so a plain digest of it falls to an offline
+// search from any read of the table (a backup, a replica) in hours. Here
+// every guess costs an argon2id derivation, and the salt makes it a guess
+// against ONE account. The salt is derived from the user id rather than
+// random so the hash stays deterministic: the code is still spent by the one
+// conditional UPDATE keyed on it (single use under concurrency), with no
+// read-then-verify of the account's rows. It is not secret, and need not be.
+func recoveryCodeHash(userID, norm string) string {
+	salt := sha256.Sum256([]byte("w17-auth-recovery-code\x00" + userID))
+	return passwordhash.FixedArgon2idHex(norm, salt[:16])
+}
+
+// legacyRecoveryCodeHash is how sets made before recoveryCodeHash were
+// stored: the plain SHA-256 of the normalised code. Only ever looked up,
+// never written.
+func legacyRecoveryCodeHash(norm string) string {
 	sum := sha256.Sum256([]byte(norm))
 	return hex.EncodeToString(sum[:])
 }

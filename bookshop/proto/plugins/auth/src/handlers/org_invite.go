@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -9,8 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	distxpb "github.com/wandering-compiler/sdk/go/pb/common/distx"
-	"github.com/wandering-compiler/sdk/go/service/tx/distx"
+	"github.com/wandering-compiler/sdk/go/lib/principal"
 
 	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
 )
@@ -38,28 +38,95 @@ import (
 
 const defaultOrgInviteTTLHours = 24 * 7 // 7 days
 
+// The sentence a person reads for this file's refusal. Mirrored into
+// plugin.yaml by `make plugin-msgids-sync` (see errors.go).
+//
+//w17:msgid
+const (
+	MsgInviteAlreadyMember = "This person is already a member of the organization."
+)
+
+// CodeInviteAlreadyMember: InviteToOrg named an address whose account already
+// holds a live membership of the organization (org_invite/no-invite-for-a-member).
+const CodeInviteAlreadyMember = "INVITE_ALREADY_MEMBER"
+
 // init installs the enforcing invite gate. The seam it replaces lives in
 // auth_service.go and defaults to permissive; this file is staged only
 // when the activation enables `org_invite`, so the enforcing version
 // exists exactly when there are invitations to enforce.
 //
-// ⚠️ NOTHING REFERENCES THIS FUNCTION, which is exactly how it was lost
-// once. A refactor that moved `ListOrgMembers` out of this file took the
-// init() with it. The three helpers in the same span came back because the
-// compiler demanded them; nothing demands an init, and removing one is
-// always valid Go. So it compiled, the plugin's tests passed, `make ci`
-// passed, codegen staged it, the image built, the deploy succeeded — and
-// the deployed console accepted an UNINVITED registration on the public
-// internet: HTTP 200, account created, `invite_only` at its default and
-// then pinned explicitly in the stack env, twice (2026-09-08).
+// ⚠️ NOTHING REFERENCES THIS FUNCTION. A refactor that moves code out of
+// this file can take the init() with it: helpers come back because the
+// compiler demands them, but nothing demands an init, and removing one is
+// always valid Go. Without it everything compiles, codegen stages it, the
+// image builds, the deploy succeeds — and the deployment accepts an
+// UNINVITED registration: HTTP 200, account created, with `invite_only` at
+// its default or pinned explicitly in the env.
 //
 // The compiler cannot miss what nobody calls. If you move things out of
 // this file, check that this survived — and note that the behavioural test
 // in org_invite_gate_test.go fails exactly when it has not, because the
 // permissive default returns nil for everything.
+// checkEmailProofFloor refuses, at boot, a floor that would not be enforced:
+// an unknown value (a typo), or one above `none` without `email_verification`,
+// whose gate is then a no-op and admits every acceptance while the operator
+// believes addresses are proved.
+func checkEmailProofFloor(h *AuthServiceHandler) error {
+	switch floor := strings.TrimSpace(strings.ToLower(h.EmailProofRequired)); floor {
+	case "", emailProofNone:
+		return nil
+	case emailProofDerived, emailProofFull:
+		if !emailProofEnforced {
+			return fmt.Errorf("auth plugin: email_proof_required=%s needs the email_verification feature — without it no address proof exists to check, and every invitation would be accepted", floor)
+		}
+		return nil
+	default:
+		return fmt.Errorf("auth plugin: email_proof_required=%q is not one of none, derived, full", h.EmailProofRequired)
+	}
+}
+
+// The sentence and code for withdrawing an invitation above the caller.
+//
+//w17:msgid
+const MsgInviteAboveCaller = "This invitation offers a role with permissions you do not have, so you cannot withdraw it."
+
+// CodeInviteAboveCaller is the code a client branches on for it.
+const CodeInviteAboveCaller = "INVITE_ABOVE_CALLER"
+
 func init() {
+	configChecks = append(configChecks, checkEmailProofFloor)
 	signupInviteGate = requirePendingInvite
 	signupClaimInvite = claimOpenInvite
+	erasers = append(erasers, eraseInviteAddress)
+	orgRemovalCascades = append(orgRemovalCascades, closeInvitesOfOrg)
+}
+
+// closeInvitesOfOrg is org_invite's share of deleting an organization
+// (RemoveOrganization): its pending invitations are closed, by the account
+// deleting it, so none can be accepted into an organization that is gone. The
+// rows stay. Every invitation statement also requires a live organization,
+// for a deletion that did not come through RemoveOrganization.
+func closeInvitesOfOrg(ctx context.Context, h *AuthServiceHandler, orgID, by string) error {
+	_, err := h.Mutation.CloseOrgInvitesOfOrg(ctx, &pb.CloseOrgInvitesOfOrgReq{OrgId: orgID, ClosedBy: by})
+	return err
+}
+
+// eraseInviteAddress is org_invite's eraser: the invitations addressed to the
+// erased address lose it — email NULL, and a pending one ended
+// (EraseOrgInviteAddress) — so none can be accepted and an accepted one keeps
+// its record without the address. The rows stay.
+//
+// Invitations store the address normalised; an account's address may not be
+// (an admin edit writes it as given), so it is normalised here before the
+// comparison. Skipped when the account already holds its placeholder (a
+// retried erasure): there is no old address left to look for.
+func eraseInviteAddress(ctx context.Context, h *AuthServiceHandler, _, email, placeholder string) error {
+	email = normalizeEmail(email)
+	if email == "" || email == normalizeEmail(placeholder) {
+		return nil
+	}
+	_, err := h.Mutation.EraseOrgInviteAddress(ctx, &pb.EraseOrgInviteAddressReq{Email: email})
+	return err
 }
 
 // claimOpenInvite binds an OPEN invitation to the address registering
@@ -105,11 +172,18 @@ func claimOpenInvite(ctx context.Context, h *AuthServiceHandler, email, inviteTo
 	case err != nil && status.Code(err) != codes.NotFound:
 		return err
 	}
+	boundElsewhere := err == nil // found, and bound to another address
 	resp, err := h.Query.ListPendingInvitesForEmail(ctx, &pb.ListPendingInvitesForEmailReq{Email: email})
 	if err != nil {
 		return err
 	}
 	if len(resp.GetInvites()) == 0 {
+		if boundElsewhere {
+			// Said apart from "not invited": the person holds a real
+			// invitation and registered with another address, which they
+			// can fix. The invitation's address is not revealed.
+			return errInviteOtherAddress
+		}
 		return errSignUpNotInvited
 	}
 	return nil
@@ -142,6 +216,7 @@ func requirePendingInvite(ctx context.Context, h *AuthServiceHandler, email, inv
 	//
 	// Read, not consumed. Acceptance is what spends a single-use invitation, and a
 	// signup that fails after this point must leave the link usable.
+	boundElsewhere := false
 	if inviteToken != "" {
 		pending, err := h.Query.GetPendingOrgInviteByToken(ctx, &pb.GetPendingOrgInviteByTokenReq{
 			TokenHash: sha256Hex(inviteToken),
@@ -152,6 +227,7 @@ func requirePendingInvite(ctx context.Context, h *AuthServiceHandler, email, inv
 			if invited := pending.GetEmail(); invited == "" || invited == email {
 				return nil
 			}
+			boundElsewhere = true
 		} else if status.Code(err) != codes.NotFound {
 			// Fail-CLOSED on a real query failure, for the reason below: the
 			// alternative admits everybody exactly when nobody is watching.
@@ -167,6 +243,9 @@ func requirePendingInvite(ctx context.Context, h *AuthServiceHandler, email, inv
 		return err
 	}
 	if len(resp.GetInvites()) == 0 {
+		if boundElsewhere {
+			return errInviteOtherAddress
+		}
 		return errSignUpNotInvited
 	}
 	return nil
@@ -214,18 +293,22 @@ func (h *AuthServiceHandler) callerEmail(ctx context.Context, userID string) (st
 //
 // ORG-SCOPED ONLY. A realm role reaches every organization, so it is not an
 // org admin's to hand out; filtering here rather than in the caller means a
-// second consumer cannot forget to.
-func (h *AuthServiceHandler) ListAssignableRoles(ctx context.Context, req *pb.ListAssignableRolesReq) (*pb.ListAssignableRolesResp, error) {
+// second caller cannot forget to.
+func (h *AuthServiceHandler) ListAssignableRoles(ctx context.Context, req *pb.ListAssignableRolesReq) (_ *pb.ListAssignableRolesResp, err error) {
+	defer markReplaySafe(&err)
 	if err := refuseOtherOrg(ctx, req.GetOrg()); err != nil {
 		return nil, err
 	}
-	// ListOrgScopedRoles, not ListRoles: the shared catalogue query cannot
-	// return `org_scoped` at all (the column only exists under the
-	// org_membership feature, so naming it there fails the typecheck for
-	// projects without it — the query's own comment says so). Filtering in Go
-	// on a field that is never populated silently returned an EMPTY list,
-	// which is how this was found.
-	roles, err := h.assignableRoles(ctx)
+	// ListOrgScopedRoles, not ListRoles: the org-scoped read FILTERS on
+	// `org_scoped` in SQL (and, under org_roles, keeps only this
+	// organization's own roles beside the shared ones), where the shared
+	// catalogue is paged and only projects the column. Filtering in Go
+	// once ran on a field the query did not fill and silently returned an
+	// EMPTY list, which is how this was found.
+	// No active organization (a direct call): the shared catalogue, no
+	// organization's own roles.
+	orgID, _ := principal.Scope(ctx, "org_id")
+	roles, err := h.assignableRoles(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -243,6 +326,7 @@ func (h *AuthServiceHandler) ListAssignableRoles(ctx context.Context, req *pb.Li
 		out.Roles = append(out.Roles, &pb.AssignableRole{
 			Name:        r.GetName(),
 			Description: r.GetDescription(),
+			DisplayName: r.GetDisplayName(),
 		})
 	}
 	return out, nil
@@ -257,7 +341,7 @@ func (h *AuthServiceHandler) ListAssignableRoles(ctx context.Context, req *pb.Li
 //
 // As a JSON DOCUMENT, not as bytes: Postgres keeps the column as jsonb, so what
 // comes back (list, acceptance) is the same value re-serialised — key order and
-// whitespace are the database's (measured by examples/auth-proof). A consumer
+// whitespace are the database's. A consumer
 // that compares or signs it must parse it, not compare strings.
 func metadataOrEmptyObject(m string) string {
 	if strings.TrimSpace(m) == "" {
@@ -266,9 +350,90 @@ func metadataOrEmptyObject(m string) string {
 	return m
 }
 
+// refuseInviteForMember refuses a bound invitation for an address whose
+// account is already a LIVE member of the organization
+// (org_invite/no-invite-for-a-member).
+//
+// Acceptance would refuse it anyway — the membership's unique index allows one
+// live row per (user, org) — but only then, so the invitation used to be
+// written, listed as pending and delivered, and could never be accepted. A
+// consumer mirroring invitations into its own tables got a row for a person
+// who was already there. The invariant belongs here, where the inviter can
+// still act on it.
+//
+// The account is found the way sign-in finds it (GetUserByEmail on the
+// normalised address); its membership here is GetOrgMember, the (user, org)
+// point lookup over live rows only: a REMOVED member is not found and may be
+// invited back (org_membership/removal-is-a-state). No account (NotFound) is
+// the ordinary case of an invitation — the invitee registers later. An open
+// invitation names no address, so there is nobody to look up.
+//
+// A membership that starts after this check (the person accepts another
+// invitation meanwhile) is still refused at acceptance by the index; this
+// closes the common case, not the race.
+func (h *AuthServiceHandler) refuseInviteForMember(ctx context.Context, orgID, email string) error {
+	if email == "" {
+		return nil
+	}
+	u, err := h.Query.GetUserByEmail(ctx, &pb.GetUserByEmailReq{Email: email})
+	if status.Code(err) == codes.NotFound {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	userID := u.GetUser().GetId()
+	if userID == "" {
+		return nil
+	}
+	member, err := h.Query.GetOrgMember(ctx, &pb.GetOrgMemberReq{UserId: userID, OrgId: orgID})
+	if err != nil && status.Code(err) != codes.NotFound {
+		return err
+	}
+	if member.GetUserId() != "" {
+		// The address stays out of the developer message: it is logged, and the
+		// inviter already holds it.
+		return refusal(ctx, codes.AlreadyExists,
+			"org_invite: the invited address belongs to a live member of organization "+orgID,
+			CodeInviteAlreadyMember, "email", MsgInviteAlreadyMember, nil)
+	}
+	return nil
+}
+
 // InviteToOrg records an invitation for an address to join the caller's
 // active organization with a named role.
+// kindOfInvite / kindOfClaim carry an invitation's membership kind into the
+// rows it writes; set by membership_kinds.go, nil without it.
+var (
+	// kindOfInvite checks the invitation's kind and returns what writes it onto
+	// the create request (the field exists only with membership_kinds).
+	kindOfInvite func(ctx context.Context, h *AuthServiceHandler, inviterID, orgID string, req *pb.InviteToOrgReq) (func(*pb.CreateOrgInviteReq), error)
+	kindOfClaim  func(claimed *pb.ConsumeOrgInviteByTokenResp, add *pb.AddOrgMembershipReq)
+)
+
+// inviteProductRoles carries the products' roles an invitation gives into
+// the rows it writes and the summaries it shows (product_roles_invite.go);
+// nil without product_roles.
+var inviteProductRoles *inviteProductRoleHooks
+
+type inviteProductRoleHooks struct {
+	// check holds the roles to the inviter's ceiling and the organization's
+	// plan, and returns what writes them onto the create request.
+	check func(ctx context.Context, h *AuthServiceHandler, inviterID, orgID string, req *pb.InviteToOrgReq) (func(*pb.CreateOrgInviteReq), error)
+	// verify holds them to the catalogue and the plan again at acceptance,
+	// before anything of the acceptance is written.
+	verify func(txCtx context.Context, h *AuthServiceHandler, orgID string, claimed *pb.ConsumeOrgInviteByTokenResp) error
+	// grant writes them for the accepting member, in the acceptance's
+	// transaction, and reports them on the response.
+	grant   func(txCtx context.Context, h *AuthServiceHandler, userID, orgID string, claimed *pb.ConsumeOrgInviteByTokenResp, resp *pb.AcceptOrgInviteResp) error
+	summary func(row *pb.OrgInvite, out *pb.OrgInviteSummary)
+	mine    func(row *pb.PendingInviteRow, out *pb.MyInvite)
+}
+
 func (h *AuthServiceHandler) InviteToOrg(ctx context.Context, req *pb.InviteToOrgReq) (*pb.InviteToOrgResp, error) {
+	if resp, done, err := underOrgLock(ctx, h, scopeOrg(ctx), req, h.InviteToOrg); done {
+		return resp, err
+	}
 	if err := refuseOtherOrg(ctx, req.GetOrg()); err != nil {
 		return nil, err
 	}
@@ -280,6 +445,13 @@ func (h *AuthServiceHandler) InviteToOrg(ctx context.Context, req *pb.InviteToOr
 	if err != nil {
 		return nil, err
 	}
+	return h.inviteInto(ctx, orgID, inviter, req)
+}
+
+// inviteInto is an invitation into orgID by inviter, under orgID's lock: the
+// role ceiling, the kind and the products' roles held to the inviter, then the
+// row and the link.
+func (h *AuthServiceHandler) inviteInto(ctx context.Context, orgID, inviter string, req *pb.InviteToOrgReq) (*pb.InviteToOrgResp, error) {
 	// Normalized here, once, and stored normalized: SignIn lower-cases the
 	// address it looks up, so an invitation stored as typed would never
 	// match the account that arrives to accept it.
@@ -289,7 +461,7 @@ func (h *AuthServiceHandler) InviteToOrg(ctx context.Context, req *pb.InviteToOr
 	// address later, because only there does "the invitation named it" say
 	// anything about what the registrant types.
 	email := normalizeEmail(req.GetEmail())
-	roleID, err := h.roleIDByName(ctx, req.GetRole())
+	roleID, err := h.roleIDByName(ctx, orgID, req.GetRole())
 	if err != nil {
 		return nil, err
 	}
@@ -300,6 +472,26 @@ func (h *AuthServiceHandler) InviteToOrg(ctx context.Context, req *pb.InviteToOr
 	if err != nil {
 		return nil, err
 	}
+	// The invitation's kind (membership_kinds), held to what the inviter may
+	// invite — before anything is written, so a refused request changes
+	// nothing.
+	var writeKind func(*pb.CreateOrgInviteReq)
+	if kindOfInvite != nil {
+		if writeKind, err = kindOfInvite(ctx, h, inviter, orgID, req); err != nil {
+			return nil, err
+		}
+	}
+	// The products' roles it gives (product_roles), held to what the inviter
+	// holds and to the organization's plan.
+	var writeProductRoles func(*pb.CreateOrgInviteReq)
+	if inviteProductRoles != nil {
+		if writeProductRoles, err = inviteProductRoles.check(ctx, h, inviter, orgID, req); err != nil {
+			return nil, err
+		}
+	}
+	if err := h.refuseInviteForMember(ctx, orgID, email); err != nil {
+		return nil, err
+	}
 	// The link's secret. Minted here, stored hashed, returned once — the same
 	// three steps a password reset takes, and for the same reason: a stored
 	// plaintext is a stored credential.
@@ -308,7 +500,8 @@ func (h *AuthServiceHandler) InviteToOrg(ctx context.Context, req *pb.InviteToOr
 		return nil, err
 	}
 
-	// Release a lapsed invitation for this address before writing a new one.
+	// Release a lapsed invitation for this address before writing a new one:
+	// it is closed (closed_at), not deleted, and stays as the record.
 	//
 	// The pending-invite index cannot exclude expired rows — a partial index
 	// predicate has to be IMMUTABLE and `NOW()` is not — so an invitation that
@@ -318,16 +511,16 @@ func (h *AuthServiceHandler) InviteToOrg(ctx context.Context, req *pb.InviteToOr
 	// cannot get past.
 	//
 	// NOT_FOUND here is the ORDINARY answer: nothing had lapsed. Treating it
-	// as a failure would refuse every first invitation to an address, which is
-	// the same unreachable-branch mistake D13-7 shipped one function away.
+	// as a failure would refuse every first invitation to an address — a
+	// RETURNING statement reports "no row" as an error, not as an empty
+	// response.
 	//
 	// Only for a BOUND invitation. An open one stores NULL, which the unique
 	// index never compares, so nothing can block it — and the clear's own
-	// request requires the address, so calling it with "" refused every open
-	// invitation with REQUIRED_VIOLATION before it was written (found live by
-	// examples/auth-proof, after the request field itself had been fixed).
+	// request requires the address, so calling it with "" would refuse every
+	// open invitation with REQUIRED_VIOLATION before it was written.
 	if email != "" {
-		if _, cerr := h.Mutation.ClearExpiredOrgInvite(ctx, &pb.ClearExpiredOrgInviteReq{
+		if _, cerr := h.Mutation.CloseExpiredOrgInvite(ctx, &pb.CloseExpiredOrgInviteReq{
 			OrgId: orgID,
 			Email: email,
 		}); cerr != nil && status.Code(cerr) != codes.NotFound {
@@ -335,7 +528,7 @@ func (h *AuthServiceHandler) InviteToOrg(ctx context.Context, req *pb.InviteToOr
 		}
 	}
 
-	created, err := h.Mutation.CreateOrgInvite(ctx, &pb.CreateOrgInviteReq{
+	createReq := &pb.CreateOrgInviteReq{
 		OrgId:     orgID,
 		Email:     email,
 		Role:      req.GetRole(),
@@ -365,22 +558,33 @@ func (h *AuthServiceHandler) InviteToOrg(ctx context.Context, req *pb.InviteToOr
 		Metadata: metadataOrEmptyObject(req.GetMetadata()),
 		// What the ceiling checked — accept holds the grant to it.
 		RoleSnapshot: snapshot,
-	})
+	}
+	if writeKind != nil {
+		writeKind(createReq)
+	}
+	if writeProductRoles != nil {
+		writeProductRoles(createReq)
+	}
+	created, err := h.Mutation.CreateOrgInvite(ctx, createReq)
 	if err != nil {
 		return nil, err
 	}
 	inv := created.GetInvite()
+	summary := &pb.OrgInviteSummary{
+		InviteId:  inv.GetId(),
+		Email:     inv.GetEmail(),
+		Role:      inv.GetRole(),
+		ExpiresAt: inv.GetExpiresAt(),
+		CreatedAt: inv.GetCreatedAt(),
+		// Echoed from the WRITTEN row rather than from the request, so the
+		// caller sees what was actually stored.
+		Metadata: inv.GetMetadata(),
+	}
+	if inviteProductRoles != nil {
+		inviteProductRoles.summary(inv, summary)
+	}
 	return &pb.InviteToOrgResp{
-		Invite: &pb.OrgInviteSummary{
-			InviteId:  inv.GetId(),
-			Email:     inv.GetEmail(),
-			Role:      inv.GetRole(),
-			ExpiresAt: inv.GetExpiresAt(),
-			CreatedAt: inv.GetCreatedAt(),
-			// Echoed from the WRITTEN row rather than from the request, so the
-			// caller sees what was actually stored.
-			Metadata: inv.GetMetadata(),
-		},
+		Invite: summary,
 		// Handed back ONCE. The row keeps only the hash, so there is no second
 		// chance to read it and no list that can show it — the inviter is the
 		// delivery channel and this is the moment they are holding the link.
@@ -389,7 +593,8 @@ func (h *AuthServiceHandler) InviteToOrg(ctx context.Context, req *pb.InviteToOr
 }
 
 // ListOrgInvites returns the active organization's outstanding invitations.
-func (h *AuthServiceHandler) ListOrgInvites(ctx context.Context, req *pb.ListOrgInvitesReq) (*pb.ListOrgInvitesResp, error) {
+func (h *AuthServiceHandler) ListOrgInvites(ctx context.Context, req *pb.ListOrgInvitesReq) (_ *pb.ListOrgInvitesResp, err error) {
+	defer markReplaySafe(&err)
 	if err := refuseOtherOrg(ctx, req.GetOrg()); err != nil {
 		return nil, err
 	}
@@ -404,9 +609,18 @@ func (h *AuthServiceHandler) ListOrgInvites(ctx context.Context, req *pb.ListOrg
 	if err != nil {
 		return nil, err
 	}
+	// Only the invitations whose role the caller could give: an invitation is
+	// the offer of a role, and its address and metadata are the inviter's
+	// business — a member below that role sees neither.
+	may := h.inviteRoleCeiling(orgID)
 	out := make([]*pb.OrgInviteSummary, 0, len(resp.GetInvites()))
 	for _, i := range resp.GetInvites() {
-		out = append(out, &pb.OrgInviteSummary{
+		if ok, err := may(ctx, i.GetRole()); err != nil {
+			return nil, err
+		} else if !ok {
+			continue
+		}
+		summary := &pb.OrgInviteSummary{
 			InviteId:  i.GetId(),
 			Email:     i.GetEmail(),
 			Role:      i.GetRole(),
@@ -414,7 +628,11 @@ func (h *AuthServiceHandler) ListOrgInvites(ctx context.Context, req *pb.ListOrg
 			CreatedAt: i.GetCreatedAt(),
 			// So an admin screen can show WHAT each pending invitation is for.
 			Metadata: i.GetMetadata(),
-		})
+		}
+		if inviteProductRoles != nil {
+			inviteProductRoles.summary(i, summary)
+		}
+		out = append(out, summary)
 	}
 	return &pb.ListOrgInvitesResp{Invites: out}, nil
 }
@@ -424,20 +642,41 @@ func (h *AuthServiceHandler) RevokeOrgInvite(ctx context.Context, req *pb.Revoke
 	if err := refuseOtherOrg(ctx, req.GetOrg()); err != nil {
 		return nil, err
 	}
-	if _, err := callerUserID(ctx); err != nil {
+	callerID, err := callerUserID(ctx)
+	if err != nil {
 		return nil, Unauthenticated(err)
 	}
 	orgID, err := activeOrgID(ctx)
 	if err != nil {
 		return nil, err
 	}
+	// Withdrawn only by someone who could have made it: the role it offers
+	// must be within the caller's ceiling. An id this organization does not
+	// hold falls through to the close, which matches nothing.
+	pending, err := h.Query.ListOrgInvitesByOrg(ctx, &pb.ListOrgInvitesByOrgReq{OrgId: orgID})
+	if err != nil {
+		return nil, err
+	}
+	for _, i := range pending.GetInvites() {
+		if i.GetId() != req.GetInviteId() {
+			continue
+		}
+		if ok, err := h.inviteRoleCeiling(orgID)(ctx, i.GetRole()); err != nil {
+			return nil, err
+		} else if !ok {
+			return nil, refusal(ctx, codes.PermissionDenied, "revoke org invite: the invitation offers a role above the caller's",
+				CodeInviteAboveCaller, "invite_id", MsgInviteAboveCaller, nil)
+		}
+	}
 	// org_id goes into the statement's WHERE, not just into a check here:
-	// the delete itself refuses an invitation belonging to another
+	// the close itself refuses an invitation belonging to another
 	// organization, so guessing a uuid is not a way to revoke somebody
-	// else's.
-	if _, err := h.Mutation.DeleteOrgInvite(ctx, &pb.DeleteOrgInviteReq{
+	// else's. The invitation is closed, not deleted: the row stays, with who
+	// withdrew it.
+	if _, err := h.Mutation.CloseOrgInvite(ctx, &pb.CloseOrgInviteReq{
 		InviteId: req.GetInviteId(),
 		OrgId:    orgID,
+		ClosedBy: callerID,
 	}); err != nil {
 		return nil, err
 	}
@@ -446,7 +685,8 @@ func (h *AuthServiceHandler) RevokeOrgInvite(ctx context.Context, req *pb.Revoke
 
 // ListMyInvites returns the invitations addressed to the CALLER, across
 // every organization — the list a person sees in their own account.
-func (h *AuthServiceHandler) ListMyInvites(ctx context.Context, _ *pb.ListMyInvitesReq) (*pb.ListMyInvitesResp, error) {
+func (h *AuthServiceHandler) ListMyInvites(ctx context.Context, _ *pb.ListMyInvitesReq) (_ *pb.ListMyInvitesResp, err error) {
+	defer markReplaySafe(&err)
 	userID, err := callerUserID(ctx)
 	if err != nil {
 		return nil, Unauthenticated(err)
@@ -461,13 +701,17 @@ func (h *AuthServiceHandler) ListMyInvites(ctx context.Context, _ *pb.ListMyInvi
 	}
 	out := make([]*pb.MyInvite, 0, len(resp.GetInvites()))
 	for _, i := range resp.GetInvites() {
-		out = append(out, &pb.MyInvite{
+		mine := &pb.MyInvite{
 			InviteId:  i.GetInviteId(),
 			OrgSlug:   i.GetOrgSlug(),
 			OrgName:   i.GetOrgName(),
 			Role:      i.GetRole(),
 			ExpiresAt: i.GetExpiresAt(),
-		})
+		}
+		if inviteProductRoles != nil {
+			inviteProductRoles.mine(i, mine)
+		}
+		out = append(out, mine)
 	}
 	return &pb.ListMyInvitesResp{Invites: out}, nil
 }
@@ -482,6 +726,13 @@ func (h *AuthServiceHandler) AcceptOrgInvite(ctx context.Context, req *pb.Accept
 	userID, err := callerUserID(ctx)
 	if err != nil {
 		return nil, Unauthenticated(err)
+	}
+	// Joining changes what the PERSON holds — a membership and a role — so
+	// only their session may do it, as only a session mints a token or
+	// changes the password; an API token is refused before anything is read
+	// (org_invite/session-only).
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
 	}
 	email, err := h.callerEmail(ctx, userID)
 	if err != nil {
@@ -517,41 +768,44 @@ func (h *AuthServiceHandler) AcceptOrgInvite(ctx context.Context, req *pb.Accept
 	if bound && invitedEmail != email {
 		return nil, errInviteInvalid
 	}
-	if err := inviteVerifiedEmailGate(ctx, h, userID, bound); err != nil {
+	if err := inviteVerifiedEmailGate(ctx, h, userID, pending.GetOrgId(), bound); err != nil {
 		return nil, err
 	}
 
-	var tx *distx.TxHandle
-	txCtx := ctx
-	if h.DistTx != nil {
-		if tx, txCtx, err = distx.Begin(ctx, h.DistTx, &distxpb.BeginRequest{ConnectionName: h.Connection}); err != nil {
-			return nil, err
-		}
-	}
-	resp, err := h.acceptInviteTx(txCtx, tokenHash, userID, bound)
+	// Under the organization's lock (withOrgLock): the grant it writes is
+	// checked against the role as it carries now (checkRoleWithinSnapshot), and
+	// an edit of that role in the same moment must come before or after it,
+	// not between the check and the grant.
+	var resp *pb.AcceptOrgInviteResp
+	err = h.withOrgLock(ctx, pending.GetOrgId(), func(txCtx context.Context) error {
+		var txErr error
+		resp, txErr = h.acceptInviteTx(txCtx, userID, true, func(txCtx context.Context) (*pb.ConsumeOrgInviteByTokenResp, error) {
+			// Claim by TOKEN, and by the address: an open invitation, or one
+			// bound to this account's address. A bind that raced the read above
+			// is decided here, in the statement that spends the row.
+			return h.Mutation.ConsumeOrgInviteByToken(txCtx, &pb.ConsumeOrgInviteByTokenReq{
+				TokenHash: tokenHash,
+				UserId:    userID,
+				Email:     email,
+			})
+		})
+		return txErr
+	})
 	if err != nil {
-		if tx != nil {
-			_ = tx.Rollback(ctx)
-		}
 		return nil, err
-	}
-	if tx != nil {
-		if err := tx.Commit(ctx); err != nil {
-			return nil, err
-		}
 	}
 	return resp, nil
 }
 
-func (h *AuthServiceHandler) acceptInviteTx(txCtx context.Context, tokenHash, userID string, bound bool) (*pb.AcceptOrgInviteResp, error) {
-	// Claim by TOKEN. The not-yet-accepted and not-expired tests still sit in the
-	// UPDATE's own WHERE, so there is no window between deciding an invitation is
-	// good and consuming it — two clicks cannot both win, and the read above is
+// acceptInviteTx spends the invitation claim names and makes the caller a
+// member under it. viaLink says whether the caller presented the link: only
+// then does accepting a BOUND invitation derive the address.
+func (h *AuthServiceHandler) acceptInviteTx(txCtx context.Context, userID string, viaLink bool, claim func(context.Context) (*pb.ConsumeOrgInviteByTokenResp, error)) (*pb.AcceptOrgInviteResp, error) {
+	// The not-yet-accepted and not-expired tests sit in the UPDATE's own
+	// WHERE, so there is no window between deciding an invitation is good and
+	// consuming it — two clicks cannot both win, and any read before is
 	// advisory rather than a decision this relies on.
-	claimed, err := h.Mutation.ConsumeOrgInviteByToken(txCtx, &pb.ConsumeOrgInviteByTokenReq{
-		TokenHash: tokenHash,
-		UserId:    userID,
-	})
+	claimed, err := claim(txCtx)
 	// A claim that matches nothing arrives as NotFound, not as an empty
 	// response: the mutation carries RETURNING, and the generated write
 	// reports zero rows as an error.
@@ -582,7 +836,7 @@ func (h *AuthServiceHandler) acceptInviteTx(txCtx context.Context, tokenHash, us
 	// The role is resolved from the CLAIMED row, not from anything the
 	// request said: the invitation decides the role, the acceptor only
 	// decides whether to take it.
-	roleID, err := h.roleIDByName(txCtx, roleName)
+	roleID, err := h.roleIDByName(txCtx, orgID, roleName)
 	if err != nil {
 		return nil, err
 	}
@@ -592,22 +846,42 @@ func (h *AuthServiceHandler) acceptInviteTx(txCtx context.Context, tokenHash, us
 	if err := h.checkRoleWithinSnapshot(txCtx, roleID, claimed.GetRoleSnapshot()); err != nil {
 		return nil, err
 	}
+	// The products' roles it gives must still be the catalogue's and the
+	// plan's — checked before the membership is written, so a refusal leaves
+	// nothing behind even without a distributed transaction.
+	if inviteProductRoles != nil {
+		if err := inviteProductRoles.verify(txCtx, h, orgID, claimed); err != nil {
+			return nil, err
+		}
+	}
 
-	if _, err := h.Mutation.AddOrgMembership(txCtx, &pb.AddOrgMembershipReq{
+	// No one joins an organization the operators suspended.
+	if err := checkOrgEntry(txCtx, h, orgID); err != nil {
+		return nil, err
+	}
+	addReq := &pb.AddOrgMembershipReq{
 		UserId: userID,
 		OrgId:  orgID,
 		Role:   roleName,
-	}); err != nil {
+	}
+	grantReq := &pb.AssignRoleToUserReq{
+		UserId: userID,
+		RoleId: roleID,
+		OrgId:  orgID,
+	}
+	// The invitation's kind becomes the membership's (membership_kinds). A
+	// person who is already a member — of any kind — is refused by the
+	// membership's unique index: a membership has one kind.
+	if kindOfClaim != nil {
+		kindOfClaim(claimed, addReq)
+	}
+	if _, err := h.Mutation.AddOrgMembership(txCtx, addReq); err != nil {
 		return nil, err
 	}
 	// org_id on the grant is what scopes it. Empty would mean REALM-WIDE
 	// — the role would count in every organization the person belongs to,
 	// which is the one outcome an org invitation must never produce.
-	if _, err := h.Mutation.AssignRoleToUser(txCtx, &pb.AssignRoleToUserReq{
-		UserId: userID,
-		RoleId: roleID,
-		OrgId:  orgID,
-	}); err != nil {
+	if _, err := h.Mutation.AssignRoleToUser(txCtx, grantReq); err != nil {
 		return nil, err
 	}
 	// A BOUND invitation proved the address by being accepted, so record HOW —
@@ -621,7 +895,10 @@ func (h *AuthServiceHandler) acceptInviteTx(txCtx context.Context, tokenHash, us
 	// The seam is nil unless `email_verification` is staged — the column does not
 	// exist otherwise, and an invitation must not stop working because a project
 	// declined that feature.
-	if bound {
+	//
+	// Bound is read from the CLAIMED row: the statement that spent it matched
+	// only an open invitation or one bound to this address.
+	if viaLink && claimed.GetEmail() != "" {
 		if err := markEmailDerived(txCtx, h, userID); err != nil {
 			return nil, err
 		}
@@ -630,5 +907,49 @@ func (h *AuthServiceHandler) acceptInviteTx(txCtx context.Context, tokenHash, us
 	// invitation — so a caller acting on the pairing knows the acceptance
 	// committed. Reading it back with a second query could answer for a row a
 	// different request had since consumed.
-	return &pb.AcceptOrgInviteResp{OrgId: orgID, Role: roleName, Metadata: claimed.GetMetadata()}, nil
+	resp := &pb.AcceptOrgInviteResp{OrgId: orgID, Role: roleName, Metadata: claimed.GetMetadata()}
+	// The products' roles it gives (product_roles), once the person is a
+	// member, in this transaction.
+	if inviteProductRoles != nil {
+		if err := inviteProductRoles.grant(txCtx, h, userID, orgID, claimed, resp); err != nil {
+			return nil, err
+		}
+	}
+	return resp, nil
+}
+
+// inviteRoleCeiling answers whether the caller could give an invitation's
+// role in orgID (the same ceiling InviteToOrg applies), once per role name.
+// A role the organization no longer has is within anyone's ceiling who may
+// give some role: nobody can be given it any more, and withdrawing the
+// offer is housekeeping.
+func (h *AuthServiceHandler) inviteRoleCeiling(orgID string) func(ctx context.Context, role string) (bool, error) {
+	seen := map[string]bool{}
+	return func(ctx context.Context, role string) (bool, error) {
+		if ok, done := seen[role]; done {
+			return ok, nil
+		}
+		roleID, err := h.roleIDByName(ctx, orgID, role)
+		if status.Code(err) == codes.InvalidArgument {
+			grantable, gerr := h.grantableRoleIDs(ctx)
+			if gerr != nil {
+				return false, gerr
+			}
+			seen[role] = len(grantable) > 0
+			return seen[role], nil
+		}
+		if err != nil {
+			return false, err
+		}
+		_, err = h.checkMayGrantRole(ctx, roleID)
+		switch status.Code(err) {
+		case codes.OK:
+			seen[role] = true
+		case codes.PermissionDenied:
+			seen[role] = false
+		default:
+			return false, err
+		}
+		return seen[role], nil
+	}
 }

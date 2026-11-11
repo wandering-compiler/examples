@@ -3,9 +3,6 @@ package handlers
 import (
 	"context"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
 	distxpb "github.com/wandering-compiler/sdk/go/pb/common/distx"
 	"github.com/wandering-compiler/sdk/go/service/tx/distx"
@@ -20,26 +17,8 @@ import (
 // compiled file. Standalone (the plugin author's own go test) always
 // compiles it, since gating happens at activation staging.
 
-// signupCreateUser creates the user during SignUp and returns its id.
-// The default below is the plain create; handlers/tenant.go overrides it
-// in init() when `tenant_scope` is staged, to resolve the request's
-// tenant first and stamp it on the same call.
-//
-// The body used to live in its own file, signup_tenantless.go, staged
-// only when the feature was OFF. That was forced: `tenant_scope` REMOVED
-// the baseline CreateUser rpc (the feature adds a NOT NULL
-// User.tenant_id that the fixed INSERT could not write), so a default
-// referencing it would not compile in a tenant-scoped bundle — the
-// override ran, but the dead code it replaced still had to compile.
-//
-// CreateUser now writes the column through a feature-gated SET
-// assignment, so it survives every activation and the default can come
-// home. Package-level var initialisation runs before any init(), so
-// tenant.go's assignment still wins where it is staged.
-//
-// tenant_scope without sign_up_turnkey stays unsupported: tenant.go's
-// override references this seam, which lives here under
-// sign_up_turnkey.
+// signupCreateUser creates the user during SignUp and returns its id. A
+// var so a test can stand in for the storage write.
 var signupCreateUser = func(ctx context.Context, h *AuthServiceHandler, _ *pb.SignUpReq, email, passwordHash string) (string, error) {
 	resp, err := h.Mutation.CreateUser(ctx, &pb.CreateUserReq{
 		Email:        email,
@@ -55,7 +34,7 @@ var signupCreateUser = func(ctx context.Context, h *AuthServiceHandler, _ *pb.Si
 // pending registration that ConfirmSignUp completes. handlers/signup_confirm.go
 // installs it; it lives here because its signature names pb.SignUpReq, which
 // exists only with `sign_up_turnkey` — the feature this file is staged with.
-var signUpConfirmation func(ctx context.Context, h *AuthServiceHandler, req *pb.SignUpReq) (*pb.SignUpResp, error)
+var signUpConfirmation func(ctx context.Context, h *AuthServiceHandler, req *pb.SignUpReq, join *orgJoin) (*pb.SignUpResp, error)
 
 // SignUp is the canonical register-and-issue-token flow, made ATOMIC via the
 // distributed transaction:
@@ -73,7 +52,24 @@ var signUpConfirmation func(ctx context.Context, h *AuthServiceHandler, req *pb.
 //
 // The invite gate it calls first lives in auth_service.go, because a
 // second surface creates accounts too — see signupInviteGate.
-func (h *AuthServiceHandler) SignUp(ctx context.Context, req *pb.SignUpReq) (*pb.SignUpResp, error) {
+//
+// A SignUp that issues a session is a sign-in: every attempt appends one
+// SignInEvent (method SIGN_UP), the gate refusals too; the success row is
+// written in the registration's transaction. Under `sign_up_confirmation`
+// SignUp signs nobody in and records nothing — ConfirmSignUp does.
+func (h *AuthServiceHandler) SignUp(ctx context.Context, req *pb.SignUpReq) (_ *pb.SignUpResp, err error) {
+	var attempt *signInAttempt
+	if signUpConfirmation == nil {
+		attempt = beginSignIn(ctx, pb.SignInMethod_SIGN_IN_METHOD_SIGN_UP)
+		attempt.named(req.GetEmail())
+		attempt.publicComputer = req.GetPublicComputer()
+		defer func() { h.endSignIn(ctx, attempt, err) }()
+	}
+	// The erased-account domain first: it is refused whoever asks, so the
+	// answer says nothing about any account.
+	if err := refuseReservedEmail(ctx, req.GetEmail()); err != nil {
+		return nil, err
+	}
 	// BEFORE the hash, and before any write. Argon2id is deliberately
 	// expensive, so hashing first would let an uninvited caller spend the
 	// server's CPU on every attempt — and a refusal that costs the
@@ -81,19 +77,31 @@ func (h *AuthServiceHandler) SignUp(ctx context.Context, req *pb.SignUpReq) (*pb
 	if err := signUpAllowlistGate(h, normalizeEmail(req.GetEmail())); err != nil {
 		return nil, err
 	}
-	if err := signupInviteGate(ctx, h, normalizeEmail(req.GetEmail()), req.GetInviteToken()); err != nil {
+	// The invitation, or the organization of the host it arrived on (org_signup).
+	// Under sign_up_confirmation the account is created only by the code mailed
+	// to the address, so this registration proves it.
+	join, err := signupGates(ctx, h, normalizeEmail(req.GetEmail()), req.GetInviteToken(), signupHost(req), signUpConfirmation != nil)
+	if err != nil {
 		return nil, err
 	}
 
 	// `sign_up_confirmation`: park the registration and mail a code instead
 	// of creating the account. After the gates, so they decide for both.
 	if signUpConfirmation != nil {
-		return signUpConfirmation(ctx, h, req)
+		return signUpConfirmation(ctx, h, req, join)
+	}
+
+	// The session this registration issues is bound to the caller's device
+	// key. Checked before the hash and before any write, so a client that
+	// cannot sign creates no account it could not use.
+	thumbprint, err := mintThumbprint(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	hashed, err := h.PasswordHash.Hash(req.GetPassword())
 	if err != nil {
-		return nil, err
+		return nil, hashPasswordErr(ctx, err, "password")
 	}
 
 	// Role decision from committed state, before the tx (see
@@ -114,7 +122,7 @@ func (h *AuthServiceHandler) SignUp(ctx context.Context, req *pb.SignUpReq) (*pb
 		}
 	}
 
-	resp, err := h.signUpTx(txCtx, req, hashed, roles)
+	resp, err := h.signUpTx(txCtx, req, hashed, roles, thumbprint, attempt, join)
 	if err != nil {
 		if tx != nil {
 			_ = tx.Rollback(ctx)
@@ -130,16 +138,11 @@ func (h *AuthServiceHandler) SignUp(ctx context.Context, req *pb.SignUpReq) (*pb
 }
 
 // signUpTx runs SignUp's write side against txCtx (carrying the distx w17-tx-id
-// when a transaction is open): create the user, link its turnkey roles, mint
-// the session token. Every storage call uses txCtx so all three join the one
-// transaction.
-func (h *AuthServiceHandler) signUpTx(txCtx context.Context, req *pb.SignUpReq, hashed string, roles signupRoles) (*pb.SignUpResp, error) {
-	if signupCreateUser == nil {
-		// Neither create path staged — see the seam's declaration. This
-		// is a bundle-composition fault, not something a caller did, so
-		// it says which knob is wrong instead of panicking on a nil call.
-		return nil, status.Error(codes.Internal, "auth: no user-create path staged for this activation (sign_up_turnkey is on but neither the tenant-less nor the tenant_scope create was staged)")
-	}
+// when a transaction is open): create the user, link its turnkey roles,
+// register the device, mint the session token bound to it, and write the
+// attempt's success row. Every storage call uses txCtx so all of them join
+// the one transaction.
+func (h *AuthServiceHandler) signUpTx(txCtx context.Context, req *pb.SignUpReq, hashed string, roles signupRoles, thumbprint string, attempt *signInAttempt, join *orgJoin) (*pb.SignUpResp, error) {
 	userID, err := signupCreateUser(txCtx, h, req, normalizeEmail(req.GetEmail()), hashed)
 	if err != nil {
 		// The unique index on the address. Without this the caller read the
@@ -159,19 +162,35 @@ func (h *AuthServiceHandler) signUpTx(txCtx context.Context, req *pb.SignUpReq, 
 	if err := signupClaimInvite(txCtx, h, normalizeEmail(req.GetEmail()), req.GetInviteToken()); err != nil {
 		return nil, err
 	}
-	// Stamp the absolute session TTL like SignIn (issueSession): a SignUp-minted
-	// bearer expires too. Without ExpiresAt the storage binds the proto zero
-	// time (0001-01-01), which the validation guard reads as already-expired →
-	// the fresh token 401s.
-	token, hash, err := newBearerToken()
+	if err := joinSignedUpOrg(txCtx, h, userID, join); err != nil {
+		return nil, err
+	}
+	// Joined by the host's policy, the person is a member already; the
+	// invitation stays for them to accept.
+	if join == nil {
+		if err := signupAcceptInvite(txCtx, h, userID, normalizeEmail(req.GetEmail()), req.GetInviteToken(), false); err != nil {
+			return nil, err
+		}
+	}
+	// A new account's device is new and untrusted: the registration passed
+	// no second factor. Stamp the absolute session TTL like SignIn
+	// (issueSession): a SignUp-minted bearer expires too — sooner on a public
+	// computer.
+	dev, err := mintDevice(txCtx, h, userID, thumbprint)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := h.Mutation.IssueToken(txCtx, &pb.IssueTokenReq{UserId: userID, ExpiresAt: h.sessionTokenExpiry(), TokenHash: hash}); err != nil {
+	public := attempt.publicComputer
+	token, err := h.issueBoundToken(txCtx, userID, dev, h.sessionExpiry(public), sessionGrant{public: public})
+	if err != nil {
+		return nil, err
+	}
+	if err := h.recordSignInOK(txCtx, attempt, userID, dev); err != nil {
 		return nil, err
 	}
 	return &pb.SignUpResp{
-		UserId: userID,
-		Token:  token,
+		UserId:         userID,
+		Token:          token,
+		PublicComputer: public,
 	}, nil
 }

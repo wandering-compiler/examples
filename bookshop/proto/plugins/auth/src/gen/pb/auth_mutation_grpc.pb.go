@@ -30,8 +30,17 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	AuthMutation_CreateUser_FullMethodName               = "/w17.contrib.auth.AuthMutation/CreateUser"
 	AuthMutation_IssueToken_FullMethodName               = "/w17.contrib.auth.AuthMutation/IssueToken"
-	AuthMutation_DeleteToken_FullMethodName              = "/w17.contrib.auth.AuthMutation/DeleteToken"
-	AuthMutation_DeleteSessionToken_FullMethodName       = "/w17.contrib.auth.AuthMutation/DeleteSessionToken"
+	AuthMutation_RevokeToken_FullMethodName              = "/w17.contrib.auth.AuthMutation/RevokeToken"
+	AuthMutation_UpgradeTokenHash_FullMethodName         = "/w17.contrib.auth.AuthMutation/UpgradeTokenHash"
+	AuthMutation_RevokeSessionToken_FullMethodName       = "/w17.contrib.auth.AuthMutation/RevokeSessionToken"
+	AuthMutation_CountSignInAttempt_FullMethodName       = "/w17.contrib.auth.AuthMutation/CountSignInAttempt"
+	AuthMutation_CountDeviceSignInAttempt_FullMethodName = "/w17.contrib.auth.AuthMutation/CountDeviceSignInAttempt"
+	AuthMutation_ResetSignInAttempts_FullMethodName      = "/w17.contrib.auth.AuthMutation/ResetSignInAttempts"
+	AuthMutation_RegisterDevice_FullMethodName           = "/w17.contrib.auth.AuthMutation/RegisterDevice"
+	AuthMutation_RecordSignInEvent_FullMethodName        = "/w17.contrib.auth.AuthMutation/RecordSignInEvent"
+	AuthMutation_TrustDevice_FullMethodName              = "/w17.contrib.auth.AuthMutation/TrustDevice"
+	AuthMutation_RevokeDeviceTokens_FullMethodName       = "/w17.contrib.auth.AuthMutation/RevokeDeviceTokens"
+	AuthMutation_MarkDeviceRevoked_FullMethodName        = "/w17.contrib.auth.AuthMutation/MarkDeviceRevoked"
 	AuthMutation_CreateRole_FullMethodName               = "/w17.contrib.auth.AuthMutation/CreateRole"
 	AuthMutation_UpdateRole_FullMethodName               = "/w17.contrib.auth.AuthMutation/UpdateRole"
 	AuthMutation_DeleteRole_FullMethodName               = "/w17.contrib.auth.AuthMutation/DeleteRole"
@@ -40,44 +49,67 @@ const (
 	AuthMutation_AddPermissionToRole_FullMethodName      = "/w17.contrib.auth.AuthMutation/AddPermissionToRole"
 	AuthMutation_RemovePermissionFromRole_FullMethodName = "/w17.contrib.auth.AuthMutation/RemovePermissionFromRole"
 	AuthMutation_UpdateUserPassword_FullMethodName       = "/w17.contrib.auth.AuthMutation/UpdateUserPassword"
+	AuthMutation_RehashUserPassword_FullMethodName       = "/w17.contrib.auth.AuthMutation/RehashUserPassword"
+	AuthMutation_ClaimBootstrapAdmin_FullMethodName      = "/w17.contrib.auth.AuthMutation/ClaimBootstrapAdmin"
 )
 
 // AuthMutationClient is the client API for AuthMutation service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AuthMutationClient interface {
+	// CreateUser — INSERT User. The `password_hash` request
+	// field carries the already-encoded hash — the plugin's
+	// AuthService.SignUp handler computes it via
+	// passwordhash.Settings.Hash() before calling. Refuses on
+	// duplicate email (unique violation surfaces as
+	// AlreadyExists via the storage DB-error classification).
 	CreateUser(ctx context.Context, in *CreateUserReq, opts ...grpc.CallOption) (*CreateUserResp, error)
-	// IssueToken — INSERT UserToken. The `token` column fills
-	// app-side via the CRYPTO_RANDOM default (Phase N) — request
-	// doesn't carry the token value; codegen preamble generates
-	// it before SQL emit.
+	// IssueToken — INSERT UserToken. The handler mints the token and
+	// passes only its sha256 (token_hash); the token itself is never
+	// stored.
+	//
+	// One statement. It used to sweep the user's expired sessions first, in
+	// the same transaction; that sweep is gone because nothing in the auth
+	// tables is deleted: an expired token is history like a revoked one, and
+	// every lookup refuses it by its expires_at.
 	IssueToken(ctx context.Context, in *IssueTokenReq, opts ...grpc.CallOption) (*IssueTokenResp, error)
-	// DeleteToken — DELETE matching token. Idempotent: no-such-
-	// token returns OK with an empty response (RowsAffected = 0
-	// is not an error for sign-out semantics).
+	// RevokeToken — revoke the token presented (by its hash, or the legacy
+	// clear token): stamps revoked_at with reason TOKEN_REVOKED, revoked_by
+	// NULL (project code, no actor). The row stays. Guarded on
+	// `revoked_at IS NULL`, so a token already revoked keeps its first
+	// revocation and matches no row (NotFound — the caller's "already done").
 	//
 	// Token rotation is not a single-RPC primitive — consumer
-	// composes it as GetUserByToken → DeleteToken → IssueToken
+	// composes it as GetUserByToken → RevokeToken → IssueToken
 	// (3 calls, ~3 lines). DQL doesn't pass results between
 	// query/mutation ops in the same RPC, so atomic rotation
 	// can't be expressed in the current DSL; the time gap
 	// between old-invalid and new-issued is irrelevant for
 	// bearer-token semantics.
 	// Does NOT emit TokenRevoked: the eventbus allows one emit site per
-	// event, and DeleteSessionToken (the live, handler-driven logout path)
-	// owns it. DeleteToken is an uncalled low-level primitive — emitting
-	// here would be dead (never fires) and, in its documented rotation use
-	// (GetUserByToken → DeleteToken → IssueToken), a misleading "revoked"
-	// signal for what is really a rotation. The RETURNING ids stay for the
-	// caller's response.
-	DeleteToken(ctx context.Context, in *DeleteTokenReq, opts ...grpc.CallOption) (*DeleteTokenResp, error)
-	// DeleteSessionToken — base-tier logout primitive (gated
-	// authenticate_turnkey). Delete-by-id, OWNERSHIP guarded (id AND
-	// user_id) so a caller revokes only their own token. This is the SOLE
-	// TokenRevoked emit site (the live logout path) so cache-invalidation
-	// subscribers react on logout; DeleteToken no longer emits. Idempotent.
+	// event, and RevokeSessionToken (the live, handler-driven logout path)
+	// owns it. RevokeToken is an uncalled low-level primitive — emitting
+	// here would be dead (never fires) and, in its documented rotation use,
+	// a misleading "revoked" signal for what is really a rotation. The
+	// RETURNING ids stay for the caller's response.
+	RevokeToken(ctx context.Context, in *RevokeTokenReq, opts ...grpc.CallOption) (*RevokeTokenResp, error)
+	// UpgradeTokenHash — moves a legacy UserToken row (token in the clear,
+	// minted before the hash) to token_hash and clears the clear copy. The
+	// lookups find a legacy row by its token and report an empty
+	// stored_token_hash; the caller then runs this. Guarded on token_hash IS
+	// NULL, so a second run, or a race with another request presenting the
+	// same token, changes nothing.
+	UpgradeTokenHash(ctx context.Context, in *UpgradeTokenHashReq, opts ...grpc.CallOption) (*UpgradeTokenHashResp, error)
+	// RevokeSessionToken — base-tier logout primitive (gated
+	// authenticate_turnkey). Revoke-by-id, OWNERSHIP guarded (id AND
+	// user_id) so a caller revokes only their own token; the holder is the
+	// actor (revoked_by = user_id), the reason LOGOUT. The row stays. This
+	// is the SOLE TokenRevoked emit site (the live logout path) so cache-
+	// invalidation subscribers react on logout; RevokeToken does not emit.
+	// Idempotent: an already revoked token matches no row (`revoked_at IS
+	// NULL`), keeps its first revocation and emits nothing.
 	//
-	// Q64-auth-1: the DQL deliberately does NOT filter on token_type — that
+	// The DQL deliberately does NOT filter on token_type — that
 	// column is gated by the `api_token` feature, so referencing it here (a
 	// base-tier authenticate_turnkey mutation) breaks typecheck on the
 	// default config where api_token is off and the column doesn't exist.
@@ -87,36 +119,177 @@ type AuthMutationClient interface {
 	// (an API-token bearer yields "" → idempotent no-op), so token_id is
 	// always a session token. The retained req.token_type field is unused by
 	// the DQL (kept for wire stability + the handler's explicit intent).
-	DeleteSessionToken(ctx context.Context, in *DeleteSessionTokenReq, opts ...grpc.CallOption) (*DeleteSessionTokenResp, error)
+	RevokeSessionToken(ctx context.Context, in *RevokeSessionTokenReq, opts ...grpc.CallOption) (*RevokeSessionTokenResp, error)
+	// RegisterDevice — find or create the (user, thumbprint) Device in ONE
+	// statement, and say what it is: a mint binds its token to the returned
+	// id, refuses a row with revoked_at set (DEVICE_REVOKED, for good), and
+	// reads trusted_at for the new-device second factor. On a conflict the
+	// row's last_seen_at / label / ip are refreshed — on a revoked row too, on
+	// purpose: a refused attempt from a revoked device is still recorded as
+	// seen (it never clears revoked_at). No create-then-re-read race: the
+	// unique (user_id, thumbprint) index decides. :thumbprint is never NULL
+	// (the request requires it), so a legacy row (NULL thumbprint) is never
+	// the conflict target. api_key is written on the INSERT only: whether a key
+	// is a program's (Device.api_key) is decided by the request that first
+	// named it, and the caller refuses a row of the other kind.
+	// CountSignInAttempt — count one SignIn password attempt against the
+	// account, BEFORE its password is checked: one statement, so concurrent
+	// guesses get distinct counts and none shares a budget. A window older
+	// than :cutoff starts over at 1. SET is in this order on purpose: a
+	// dialect that reads columns as already updated (MySQL) must see the old
+	// window when it decides the count.
+	CountSignInAttempt(ctx context.Context, in *CountSignInAttemptReq, opts ...grpc.CallOption) (*CountSignInAttemptResp, error)
+	// CountDeviceSignInAttempt — the same, against the account's live
+	// signed-in device of this key. No row = the key never signed in to the
+	// account (or its device is revoked, or a program's), and the caller
+	// refuses.
+	CountDeviceSignInAttempt(ctx context.Context, in *CountDeviceSignInAttemptReq, opts ...grpc.CallOption) (*CountDeviceSignInAttemptResp, error)
+	// ResetSignInAttempts — a correct password: the account's budget and
+	// the signing device's start over. No RETURNING: a device that signs in
+	// for the first time has no row yet, and that is no failure.
+	ResetSignInAttempts(ctx context.Context, in *ResetSignInAttemptsReq, opts ...grpc.CallOption) (*ResetSignInAttemptsResp, error)
+	RegisterDevice(ctx context.Context, in *RegisterDeviceReq, opts ...grpc.CallOption) (*RegisterDeviceResp, error)
+	// RecordSignInEvent — append one row to the sign-in history. The only
+	// statement that writes SignInEvent but the erasure's (EraseSignInEvents):
+	// the table is append-only. A successful mint calls it inside the
+	// transaction that issues the session; a refusal calls it on its own.
+	RecordSignInEvent(ctx context.Context, in *RecordSignInEventReq, opts ...grpc.CallOption) (*RecordSignInEventResp, error)
+	// TrustDevice — mark the device trusted + refresh last_seen. Called when
+	// a sign-in that passed the second factor (VerifyMfa), or renewed trust
+	// the device already had (SignIn), completes; the trusted_at it stamps is
+	// the signal `two_factor` new-device mode reads to skip the challenge.
+	// Matches no row for a revoked device, or when the account's device trust
+	// was revoked after :not_revoked_after (see the request): the sign-in
+	// then gets its session but no trust.
+	TrustDevice(ctx context.Context, in *TrustDeviceReq, opts ...grpc.CallOption) (*TrustDeviceResp, error)
+	// The "approved" op ends, in the same statement set, the CLI sessions the
+	// device APPROVED (cli_login: UserToken.approved_by_device_id) — bound to
+	// the CLI's own key, so the first op does not match them. Without it, a
+	// stolen browser session could approve the thief's own CLI key, and
+	// revoking the stolen device would leave that CLI session alive for its
+	// whole lifetime. The access tokens of the OAuth grants it approved
+	// (oauth_server, type MCP) end with it the same way, and their grants end at
+	// the next refresh (the approver is checked there). Not API tokens: an API
+	// token records the device that
+	// created it in the same column, and the API tokens a device created are
+	// ended only when that ONE device is revoked on purpose
+	// (RevokeApprovedApiTokens, beside this) — RevokeOtherDevices and
+	// RevokeAllDevices spare API tokens (devices/revoke-all-spares-api-tokens). Same reason, same actor, same ownership predicate; it
+	// spares :keep_token_id, the caller's own session when RevokeOtherDevices
+	// comes from a CLI session the revoked browser approved.
+	//
+	// Ending the approving browser SESSION (Logout, the admin Sessions revoke)
+	// does not end the CLI sessions it approved, on purpose: a CLI session is
+	// ended by revoking the approving DEVICE or by revoking the CLI session
+	// itself.
+	RevokeDeviceTokens(ctx context.Context, in *RevokeDeviceTokensReq, opts ...grpc.CallOption) (*RevokeDeviceTokensResp, error)
+	// MarkDeviceRevoked — revoke the (user, device) pair for good: every
+	// token bound to it is refused from now on (Authenticate reads revoked_at
+	// through the token's binding), and a sign-in with the same key is
+	// refused with DEVICE_REVOKED. Never a DELETE: a deleted row would let the
+	// same key register again as a fresh device. Ownership-guarded (id AND
+	// user_id); guarded on revoked_at IS NULL so the first revocation's time
+	// stands. Zero rows (already revoked, or not the caller's) → NotFound,
+	// which the handler treats as done.
+	MarkDeviceRevoked(ctx context.Context, in *MarkDeviceRevokedReq, opts ...grpc.CallOption) (*MarkDeviceRevokedResp, error)
 	// CreateRole — INSERT Role. Refuses duplicate name (unique
-	// violation → AlreadyExists via REV-026 DB-error classification).
+	// violation → AlreadyExists via the storage DB-error classification).
 	CreateRole(ctx context.Context, in *CreateRoleReq, opts ...grpc.CallOption) (*CreateRoleResp, error)
-	// DeleteRole — DELETE matching role. Idempotent. Caller
-	// is responsible for cleaning up dependent UserRole /
-	// RolePermission rows ahead of time (v1: no FK cascade —
-	// the activation-rename FK limitation applies).
 	// UpdateRole — the admin Roles page detail `update`. Copy only
 	// (name + description); the privilege flags stay declarative, seeded
 	// from `(w17.acl_roles)`, so an admin form can't widen a grant.
 	// Gated rbac.
 	UpdateRole(ctx context.Context, in *UpdateRoleReq, opts ...grpc.CallOption) (*UpdateRoleResp, error)
+	// DeleteRole — retire a role (the admin Roles page's `delete`). Nothing is
+	// deleted, in one transaction:
+	//
+	//	grants  every live grant of the role is revoked (revoked_at, ended_key),
+	//	        so no reader counts it — it used to be the caller's job to
+	//	        clean them up, and a grant left behind kept granting through
+	//	        GetUserPermissions;
+	//	main    the role is stamped deleted_at, and ended_key takes its id,
+	//	        which frees its name for a new role. preset_key is KEPT.
+	//
+	// A PRESET role (preset_key set, seeded from the project's
+	// `(w17.acl_roles)` declarations) may be deleted too — the seed never
+	// retires a role the project stopped declaring, so this is the only way
+	// to end one (a stale wildcard, an assign_default role still handed to
+	// every sign-up). Its preset_key stays on the deleted row: the next seed
+	// finds the row by that key (its upsert target), rewrites the declared
+	// columns it owns, and leaves deleted_at alone, so the preset STAYS
+	// deleted across re-seeds and nothing collides (the seed writes no id or
+	// name of a second row). To bring it back, declare it under a new key.
+	//
+	// Its RolePermission rows stay as they are, the record of what it granted;
+	// no reader joins them past a deleted role. Guarded on `deleted_at IS
+	// NULL`: deleting a deleted role (or a missing one) matches nothing
+	// (NotFound), as deleting a missing one did. revoked_by stays NULL: the
+	// admin page binds this mutation directly, and a statement cannot name its
+	// caller.
+	//
+	// No administrator is stranded (rbac/no-admin-lockout-by-role-deletion).
+	// Retiring a live WILDCARD role (all_permissions) is refused —
+	// LAST_ADMIN_ROLE, before anything is written — while one of its live
+	// holders holds no live grant of another live wildcard role: the "grants"
+	// op would revoke the last administrator grant that account has. For the
+	// realm's last administrators that was a lockout nothing in the product
+	// could undo: the BootstrapClaim stays taken, the page cannot create or
+	// widen a role, and a re-seed brings a preset back to nobody. The rule is
+	// per holder, not "is someone else still an administrator", because the
+	// statement is the only place the admin page reaches and the account
+	// stamps that say whether someone else can act (disabled_at, erased_at)
+	// exist only with user_admin, which a statement's subquery cannot gate on.
+	// To retire a wildcard its holders rely on, give them the replacement
+	// first. Every live wildcard row is locked first ("lock"), so two
+	// retirements of two wildcards that someone holds both of run one after
+	// the other, and the second one's guard sees the first.
 	DeleteRole(ctx context.Context, in *DeleteRoleReq, opts ...grpc.CallOption) (*DeleteRoleResp, error)
 	// AssignRoleToUser — INSERT UserRole linking a user to a
-	// role. Composite-unique (user_id, role_id) refuses duplicate
-	// assignments with AlreadyExists.
+	// role. A live duplicate (same user, role and org, ended_key ”) is refused
+	// by the unique index with AlreadyExists; a REVOKED grant does not block it
+	// (its ended_key is its own id), so a grant revoked earlier is given again
+	// as a new row and the revoked one stays as history. A deleted (or
+	// unknown) role is refused with NOT_FOUND / ROLE_NOT_FOUND before the
+	// write: a grant of a deleted role would grant nothing, yet still be listed
+	// among the member's org roles.
 	AssignRoleToUser(ctx context.Context, in *AssignRoleToUserReq, opts ...grpc.CallOption) (*AssignRoleToUserResp, error)
-	// RevokeRoleFromUser — DELETE matching UserRole row.
-	// Idempotent.
+	// RevokeRoleFromUser — revoke the matching live grant: revoked_at,
+	// revoked_by and ended_key are stamped and the row stays. Guarded on
+	// `revoked_at IS NULL`: with no live grant it matches nothing (NotFound),
+	// as the DELETE it replaces did.
 	RevokeRoleFromUser(ctx context.Context, in *RevokeRoleFromUserReq, opts ...grpc.CallOption) (*RevokeRoleFromUserResp, error)
-	// AddPermissionToRole — INSERT RolePermission linking a
-	// permission to a role. Composite-unique (role_id,
-	// permission_id) refuses duplicate grants.
+	// AddPermissionToRole — grant a permission to a role. RolePermission keeps
+	// one row per (role, permission) — the unique index is the role seed's
+	// conflict target — so the write is an UPSERT on that pair: a new pair is
+	// inserted, a REMOVED one is revived (removed_at / removed_by cleared).
+	// Two guards run first, so only a real change is logged and announced: a
+	// deleted (or unknown) role is refused with NOT_FOUND / ROLE_NOT_FOUND —
+	// by a no-op UPDATE that also LOCKS the role row, so two concurrent adds of
+	// one pair cannot both pass the next guard and log twice — and
+	// a permission the role already carries with ALREADY_EXISTS /
+	// PERMISSION_ALREADY_GRANTED (as the INSERT's unique index refused it
+	// before). Then the change is appended to RolePermissionChange and the pair
+	// written, in the same transaction; RolePermissionAdded fires only then.
 	AddPermissionToRole(ctx context.Context, in *AddPermissionToRoleReq, opts ...grpc.CallOption) (*AddPermissionToRoleResp, error)
-	// RemovePermissionFromRole — DELETE matching RolePermission
-	// row. Idempotent.
+	// RemovePermissionFromRole — take a permission from a role: removed_at and
+	// removed_by are stamped and the row stays; no permission reader counts a
+	// removed row. The change is appended to RolePermissionChange in the same
+	// transaction. Guarded on `removed_at IS NULL`: with nothing granted it
+	// matches nothing (NotFound, as the DELETE it replaces did) and the log row
+	// rolls back with it.
 	RemovePermissionFromRole(ctx context.Context, in *RemovePermissionFromRoleReq, opts ...grpc.CallOption) (*RemovePermissionFromRoleResp, error)
 	// UpdateUserPassword — apply a reset: set the user's password_hash.
 	UpdateUserPassword(ctx context.Context, in *UpdateUserPasswordReq, opts ...grpc.CallOption) (*UpdateUserPasswordResp, error)
+	// RehashUserPassword — see its request. Unlike a password CHANGE it does
+	// NOT end device trust and revokes nothing: the credential is the same, only
+	// its stored form is stronger. No row (the hash changed since the verify) is
+	// NotFound, which SignIn leaves alone.
+	RehashUserPassword(ctx context.Context, in *RehashUserPasswordReq, opts ...grpc.CallOption) (*RehashUserPasswordResp, error)
+	// ClaimBootstrapAdmin takes the bootstrap-administrator slot for the user
+	// being created, inside its sign-up transaction. `written` is 1 for the
+	// one sign-up that took it and 0 for every other: a concurrent sign-up
+	// waits on the key and then conflicts. See BootstrapClaim.
+	ClaimBootstrapAdmin(ctx context.Context, in *ClaimBootstrapAdminReq, opts ...grpc.CallOption) (*ClaimBootstrapAdminResp, error)
 }
 
 type authMutationClient struct {
@@ -147,20 +320,110 @@ func (c *authMutationClient) IssueToken(ctx context.Context, in *IssueTokenReq, 
 	return out, nil
 }
 
-func (c *authMutationClient) DeleteToken(ctx context.Context, in *DeleteTokenReq, opts ...grpc.CallOption) (*DeleteTokenResp, error) {
+func (c *authMutationClient) RevokeToken(ctx context.Context, in *RevokeTokenReq, opts ...grpc.CallOption) (*RevokeTokenResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DeleteTokenResp)
-	err := c.cc.Invoke(ctx, AuthMutation_DeleteToken_FullMethodName, in, out, cOpts...)
+	out := new(RevokeTokenResp)
+	err := c.cc.Invoke(ctx, AuthMutation_RevokeToken_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authMutationClient) DeleteSessionToken(ctx context.Context, in *DeleteSessionTokenReq, opts ...grpc.CallOption) (*DeleteSessionTokenResp, error) {
+func (c *authMutationClient) UpgradeTokenHash(ctx context.Context, in *UpgradeTokenHashReq, opts ...grpc.CallOption) (*UpgradeTokenHashResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DeleteSessionTokenResp)
-	err := c.cc.Invoke(ctx, AuthMutation_DeleteSessionToken_FullMethodName, in, out, cOpts...)
+	out := new(UpgradeTokenHashResp)
+	err := c.cc.Invoke(ctx, AuthMutation_UpgradeTokenHash_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) RevokeSessionToken(ctx context.Context, in *RevokeSessionTokenReq, opts ...grpc.CallOption) (*RevokeSessionTokenResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeSessionTokenResp)
+	err := c.cc.Invoke(ctx, AuthMutation_RevokeSessionToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) CountSignInAttempt(ctx context.Context, in *CountSignInAttemptReq, opts ...grpc.CallOption) (*CountSignInAttemptResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CountSignInAttemptResp)
+	err := c.cc.Invoke(ctx, AuthMutation_CountSignInAttempt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) CountDeviceSignInAttempt(ctx context.Context, in *CountDeviceSignInAttemptReq, opts ...grpc.CallOption) (*CountDeviceSignInAttemptResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CountDeviceSignInAttemptResp)
+	err := c.cc.Invoke(ctx, AuthMutation_CountDeviceSignInAttempt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) ResetSignInAttempts(ctx context.Context, in *ResetSignInAttemptsReq, opts ...grpc.CallOption) (*ResetSignInAttemptsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResetSignInAttemptsResp)
+	err := c.cc.Invoke(ctx, AuthMutation_ResetSignInAttempts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) RegisterDevice(ctx context.Context, in *RegisterDeviceReq, opts ...grpc.CallOption) (*RegisterDeviceResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterDeviceResp)
+	err := c.cc.Invoke(ctx, AuthMutation_RegisterDevice_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) RecordSignInEvent(ctx context.Context, in *RecordSignInEventReq, opts ...grpc.CallOption) (*RecordSignInEventResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RecordSignInEventResp)
+	err := c.cc.Invoke(ctx, AuthMutation_RecordSignInEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) TrustDevice(ctx context.Context, in *TrustDeviceReq, opts ...grpc.CallOption) (*TrustDeviceResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TrustDeviceResp)
+	err := c.cc.Invoke(ctx, AuthMutation_TrustDevice_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) RevokeDeviceTokens(ctx context.Context, in *RevokeDeviceTokensReq, opts ...grpc.CallOption) (*RevokeDeviceTokensResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeDeviceTokensResp)
+	err := c.cc.Invoke(ctx, AuthMutation_RevokeDeviceTokens_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) MarkDeviceRevoked(ctx context.Context, in *MarkDeviceRevokedReq, opts ...grpc.CallOption) (*MarkDeviceRevokedResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkDeviceRevokedResp)
+	err := c.cc.Invoke(ctx, AuthMutation_MarkDeviceRevoked_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -247,42 +510,83 @@ func (c *authMutationClient) UpdateUserPassword(ctx context.Context, in *UpdateU
 	return out, nil
 }
 
+func (c *authMutationClient) RehashUserPassword(ctx context.Context, in *RehashUserPasswordReq, opts ...grpc.CallOption) (*RehashUserPasswordResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RehashUserPasswordResp)
+	err := c.cc.Invoke(ctx, AuthMutation_RehashUserPassword_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authMutationClient) ClaimBootstrapAdmin(ctx context.Context, in *ClaimBootstrapAdminReq, opts ...grpc.CallOption) (*ClaimBootstrapAdminResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClaimBootstrapAdminResp)
+	err := c.cc.Invoke(ctx, AuthMutation_ClaimBootstrapAdmin_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthMutationServer is the server API for AuthMutation service.
 // All implementations should embed UnimplementedAuthMutationServer
 // for forward compatibility.
 type AuthMutationServer interface {
+	// CreateUser — INSERT User. The `password_hash` request
+	// field carries the already-encoded hash — the plugin's
+	// AuthService.SignUp handler computes it via
+	// passwordhash.Settings.Hash() before calling. Refuses on
+	// duplicate email (unique violation surfaces as
+	// AlreadyExists via the storage DB-error classification).
 	CreateUser(context.Context, *CreateUserReq) (*CreateUserResp, error)
-	// IssueToken — INSERT UserToken. The `token` column fills
-	// app-side via the CRYPTO_RANDOM default (Phase N) — request
-	// doesn't carry the token value; codegen preamble generates
-	// it before SQL emit.
+	// IssueToken — INSERT UserToken. The handler mints the token and
+	// passes only its sha256 (token_hash); the token itself is never
+	// stored.
+	//
+	// One statement. It used to sweep the user's expired sessions first, in
+	// the same transaction; that sweep is gone because nothing in the auth
+	// tables is deleted: an expired token is history like a revoked one, and
+	// every lookup refuses it by its expires_at.
 	IssueToken(context.Context, *IssueTokenReq) (*IssueTokenResp, error)
-	// DeleteToken — DELETE matching token. Idempotent: no-such-
-	// token returns OK with an empty response (RowsAffected = 0
-	// is not an error for sign-out semantics).
+	// RevokeToken — revoke the token presented (by its hash, or the legacy
+	// clear token): stamps revoked_at with reason TOKEN_REVOKED, revoked_by
+	// NULL (project code, no actor). The row stays. Guarded on
+	// `revoked_at IS NULL`, so a token already revoked keeps its first
+	// revocation and matches no row (NotFound — the caller's "already done").
 	//
 	// Token rotation is not a single-RPC primitive — consumer
-	// composes it as GetUserByToken → DeleteToken → IssueToken
+	// composes it as GetUserByToken → RevokeToken → IssueToken
 	// (3 calls, ~3 lines). DQL doesn't pass results between
 	// query/mutation ops in the same RPC, so atomic rotation
 	// can't be expressed in the current DSL; the time gap
 	// between old-invalid and new-issued is irrelevant for
 	// bearer-token semantics.
 	// Does NOT emit TokenRevoked: the eventbus allows one emit site per
-	// event, and DeleteSessionToken (the live, handler-driven logout path)
-	// owns it. DeleteToken is an uncalled low-level primitive — emitting
-	// here would be dead (never fires) and, in its documented rotation use
-	// (GetUserByToken → DeleteToken → IssueToken), a misleading "revoked"
-	// signal for what is really a rotation. The RETURNING ids stay for the
-	// caller's response.
-	DeleteToken(context.Context, *DeleteTokenReq) (*DeleteTokenResp, error)
-	// DeleteSessionToken — base-tier logout primitive (gated
-	// authenticate_turnkey). Delete-by-id, OWNERSHIP guarded (id AND
-	// user_id) so a caller revokes only their own token. This is the SOLE
-	// TokenRevoked emit site (the live logout path) so cache-invalidation
-	// subscribers react on logout; DeleteToken no longer emits. Idempotent.
+	// event, and RevokeSessionToken (the live, handler-driven logout path)
+	// owns it. RevokeToken is an uncalled low-level primitive — emitting
+	// here would be dead (never fires) and, in its documented rotation use,
+	// a misleading "revoked" signal for what is really a rotation. The
+	// RETURNING ids stay for the caller's response.
+	RevokeToken(context.Context, *RevokeTokenReq) (*RevokeTokenResp, error)
+	// UpgradeTokenHash — moves a legacy UserToken row (token in the clear,
+	// minted before the hash) to token_hash and clears the clear copy. The
+	// lookups find a legacy row by its token and report an empty
+	// stored_token_hash; the caller then runs this. Guarded on token_hash IS
+	// NULL, so a second run, or a race with another request presenting the
+	// same token, changes nothing.
+	UpgradeTokenHash(context.Context, *UpgradeTokenHashReq) (*UpgradeTokenHashResp, error)
+	// RevokeSessionToken — base-tier logout primitive (gated
+	// authenticate_turnkey). Revoke-by-id, OWNERSHIP guarded (id AND
+	// user_id) so a caller revokes only their own token; the holder is the
+	// actor (revoked_by = user_id), the reason LOGOUT. The row stays. This
+	// is the SOLE TokenRevoked emit site (the live logout path) so cache-
+	// invalidation subscribers react on logout; RevokeToken does not emit.
+	// Idempotent: an already revoked token matches no row (`revoked_at IS
+	// NULL`), keeps its first revocation and emits nothing.
 	//
-	// Q64-auth-1: the DQL deliberately does NOT filter on token_type — that
+	// The DQL deliberately does NOT filter on token_type — that
 	// column is gated by the `api_token` feature, so referencing it here (a
 	// base-tier authenticate_turnkey mutation) breaks typecheck on the
 	// default config where api_token is off and the column doesn't exist.
@@ -292,36 +596,177 @@ type AuthMutationServer interface {
 	// (an API-token bearer yields "" → idempotent no-op), so token_id is
 	// always a session token. The retained req.token_type field is unused by
 	// the DQL (kept for wire stability + the handler's explicit intent).
-	DeleteSessionToken(context.Context, *DeleteSessionTokenReq) (*DeleteSessionTokenResp, error)
+	RevokeSessionToken(context.Context, *RevokeSessionTokenReq) (*RevokeSessionTokenResp, error)
+	// RegisterDevice — find or create the (user, thumbprint) Device in ONE
+	// statement, and say what it is: a mint binds its token to the returned
+	// id, refuses a row with revoked_at set (DEVICE_REVOKED, for good), and
+	// reads trusted_at for the new-device second factor. On a conflict the
+	// row's last_seen_at / label / ip are refreshed — on a revoked row too, on
+	// purpose: a refused attempt from a revoked device is still recorded as
+	// seen (it never clears revoked_at). No create-then-re-read race: the
+	// unique (user_id, thumbprint) index decides. :thumbprint is never NULL
+	// (the request requires it), so a legacy row (NULL thumbprint) is never
+	// the conflict target. api_key is written on the INSERT only: whether a key
+	// is a program's (Device.api_key) is decided by the request that first
+	// named it, and the caller refuses a row of the other kind.
+	// CountSignInAttempt — count one SignIn password attempt against the
+	// account, BEFORE its password is checked: one statement, so concurrent
+	// guesses get distinct counts and none shares a budget. A window older
+	// than :cutoff starts over at 1. SET is in this order on purpose: a
+	// dialect that reads columns as already updated (MySQL) must see the old
+	// window when it decides the count.
+	CountSignInAttempt(context.Context, *CountSignInAttemptReq) (*CountSignInAttemptResp, error)
+	// CountDeviceSignInAttempt — the same, against the account's live
+	// signed-in device of this key. No row = the key never signed in to the
+	// account (or its device is revoked, or a program's), and the caller
+	// refuses.
+	CountDeviceSignInAttempt(context.Context, *CountDeviceSignInAttemptReq) (*CountDeviceSignInAttemptResp, error)
+	// ResetSignInAttempts — a correct password: the account's budget and
+	// the signing device's start over. No RETURNING: a device that signs in
+	// for the first time has no row yet, and that is no failure.
+	ResetSignInAttempts(context.Context, *ResetSignInAttemptsReq) (*ResetSignInAttemptsResp, error)
+	RegisterDevice(context.Context, *RegisterDeviceReq) (*RegisterDeviceResp, error)
+	// RecordSignInEvent — append one row to the sign-in history. The only
+	// statement that writes SignInEvent but the erasure's (EraseSignInEvents):
+	// the table is append-only. A successful mint calls it inside the
+	// transaction that issues the session; a refusal calls it on its own.
+	RecordSignInEvent(context.Context, *RecordSignInEventReq) (*RecordSignInEventResp, error)
+	// TrustDevice — mark the device trusted + refresh last_seen. Called when
+	// a sign-in that passed the second factor (VerifyMfa), or renewed trust
+	// the device already had (SignIn), completes; the trusted_at it stamps is
+	// the signal `two_factor` new-device mode reads to skip the challenge.
+	// Matches no row for a revoked device, or when the account's device trust
+	// was revoked after :not_revoked_after (see the request): the sign-in
+	// then gets its session but no trust.
+	TrustDevice(context.Context, *TrustDeviceReq) (*TrustDeviceResp, error)
+	// The "approved" op ends, in the same statement set, the CLI sessions the
+	// device APPROVED (cli_login: UserToken.approved_by_device_id) — bound to
+	// the CLI's own key, so the first op does not match them. Without it, a
+	// stolen browser session could approve the thief's own CLI key, and
+	// revoking the stolen device would leave that CLI session alive for its
+	// whole lifetime. The access tokens of the OAuth grants it approved
+	// (oauth_server, type MCP) end with it the same way, and their grants end at
+	// the next refresh (the approver is checked there). Not API tokens: an API
+	// token records the device that
+	// created it in the same column, and the API tokens a device created are
+	// ended only when that ONE device is revoked on purpose
+	// (RevokeApprovedApiTokens, beside this) — RevokeOtherDevices and
+	// RevokeAllDevices spare API tokens (devices/revoke-all-spares-api-tokens). Same reason, same actor, same ownership predicate; it
+	// spares :keep_token_id, the caller's own session when RevokeOtherDevices
+	// comes from a CLI session the revoked browser approved.
+	//
+	// Ending the approving browser SESSION (Logout, the admin Sessions revoke)
+	// does not end the CLI sessions it approved, on purpose: a CLI session is
+	// ended by revoking the approving DEVICE or by revoking the CLI session
+	// itself.
+	RevokeDeviceTokens(context.Context, *RevokeDeviceTokensReq) (*RevokeDeviceTokensResp, error)
+	// MarkDeviceRevoked — revoke the (user, device) pair for good: every
+	// token bound to it is refused from now on (Authenticate reads revoked_at
+	// through the token's binding), and a sign-in with the same key is
+	// refused with DEVICE_REVOKED. Never a DELETE: a deleted row would let the
+	// same key register again as a fresh device. Ownership-guarded (id AND
+	// user_id); guarded on revoked_at IS NULL so the first revocation's time
+	// stands. Zero rows (already revoked, or not the caller's) → NotFound,
+	// which the handler treats as done.
+	MarkDeviceRevoked(context.Context, *MarkDeviceRevokedReq) (*MarkDeviceRevokedResp, error)
 	// CreateRole — INSERT Role. Refuses duplicate name (unique
-	// violation → AlreadyExists via REV-026 DB-error classification).
+	// violation → AlreadyExists via the storage DB-error classification).
 	CreateRole(context.Context, *CreateRoleReq) (*CreateRoleResp, error)
-	// DeleteRole — DELETE matching role. Idempotent. Caller
-	// is responsible for cleaning up dependent UserRole /
-	// RolePermission rows ahead of time (v1: no FK cascade —
-	// the activation-rename FK limitation applies).
 	// UpdateRole — the admin Roles page detail `update`. Copy only
 	// (name + description); the privilege flags stay declarative, seeded
 	// from `(w17.acl_roles)`, so an admin form can't widen a grant.
 	// Gated rbac.
 	UpdateRole(context.Context, *UpdateRoleReq) (*UpdateRoleResp, error)
+	// DeleteRole — retire a role (the admin Roles page's `delete`). Nothing is
+	// deleted, in one transaction:
+	//
+	//	grants  every live grant of the role is revoked (revoked_at, ended_key),
+	//	        so no reader counts it — it used to be the caller's job to
+	//	        clean them up, and a grant left behind kept granting through
+	//	        GetUserPermissions;
+	//	main    the role is stamped deleted_at, and ended_key takes its id,
+	//	        which frees its name for a new role. preset_key is KEPT.
+	//
+	// A PRESET role (preset_key set, seeded from the project's
+	// `(w17.acl_roles)` declarations) may be deleted too — the seed never
+	// retires a role the project stopped declaring, so this is the only way
+	// to end one (a stale wildcard, an assign_default role still handed to
+	// every sign-up). Its preset_key stays on the deleted row: the next seed
+	// finds the row by that key (its upsert target), rewrites the declared
+	// columns it owns, and leaves deleted_at alone, so the preset STAYS
+	// deleted across re-seeds and nothing collides (the seed writes no id or
+	// name of a second row). To bring it back, declare it under a new key.
+	//
+	// Its RolePermission rows stay as they are, the record of what it granted;
+	// no reader joins them past a deleted role. Guarded on `deleted_at IS
+	// NULL`: deleting a deleted role (or a missing one) matches nothing
+	// (NotFound), as deleting a missing one did. revoked_by stays NULL: the
+	// admin page binds this mutation directly, and a statement cannot name its
+	// caller.
+	//
+	// No administrator is stranded (rbac/no-admin-lockout-by-role-deletion).
+	// Retiring a live WILDCARD role (all_permissions) is refused —
+	// LAST_ADMIN_ROLE, before anything is written — while one of its live
+	// holders holds no live grant of another live wildcard role: the "grants"
+	// op would revoke the last administrator grant that account has. For the
+	// realm's last administrators that was a lockout nothing in the product
+	// could undo: the BootstrapClaim stays taken, the page cannot create or
+	// widen a role, and a re-seed brings a preset back to nobody. The rule is
+	// per holder, not "is someone else still an administrator", because the
+	// statement is the only place the admin page reaches and the account
+	// stamps that say whether someone else can act (disabled_at, erased_at)
+	// exist only with user_admin, which a statement's subquery cannot gate on.
+	// To retire a wildcard its holders rely on, give them the replacement
+	// first. Every live wildcard row is locked first ("lock"), so two
+	// retirements of two wildcards that someone holds both of run one after
+	// the other, and the second one's guard sees the first.
 	DeleteRole(context.Context, *DeleteRoleReq) (*DeleteRoleResp, error)
 	// AssignRoleToUser — INSERT UserRole linking a user to a
-	// role. Composite-unique (user_id, role_id) refuses duplicate
-	// assignments with AlreadyExists.
+	// role. A live duplicate (same user, role and org, ended_key ”) is refused
+	// by the unique index with AlreadyExists; a REVOKED grant does not block it
+	// (its ended_key is its own id), so a grant revoked earlier is given again
+	// as a new row and the revoked one stays as history. A deleted (or
+	// unknown) role is refused with NOT_FOUND / ROLE_NOT_FOUND before the
+	// write: a grant of a deleted role would grant nothing, yet still be listed
+	// among the member's org roles.
 	AssignRoleToUser(context.Context, *AssignRoleToUserReq) (*AssignRoleToUserResp, error)
-	// RevokeRoleFromUser — DELETE matching UserRole row.
-	// Idempotent.
+	// RevokeRoleFromUser — revoke the matching live grant: revoked_at,
+	// revoked_by and ended_key are stamped and the row stays. Guarded on
+	// `revoked_at IS NULL`: with no live grant it matches nothing (NotFound),
+	// as the DELETE it replaces did.
 	RevokeRoleFromUser(context.Context, *RevokeRoleFromUserReq) (*RevokeRoleFromUserResp, error)
-	// AddPermissionToRole — INSERT RolePermission linking a
-	// permission to a role. Composite-unique (role_id,
-	// permission_id) refuses duplicate grants.
+	// AddPermissionToRole — grant a permission to a role. RolePermission keeps
+	// one row per (role, permission) — the unique index is the role seed's
+	// conflict target — so the write is an UPSERT on that pair: a new pair is
+	// inserted, a REMOVED one is revived (removed_at / removed_by cleared).
+	// Two guards run first, so only a real change is logged and announced: a
+	// deleted (or unknown) role is refused with NOT_FOUND / ROLE_NOT_FOUND —
+	// by a no-op UPDATE that also LOCKS the role row, so two concurrent adds of
+	// one pair cannot both pass the next guard and log twice — and
+	// a permission the role already carries with ALREADY_EXISTS /
+	// PERMISSION_ALREADY_GRANTED (as the INSERT's unique index refused it
+	// before). Then the change is appended to RolePermissionChange and the pair
+	// written, in the same transaction; RolePermissionAdded fires only then.
 	AddPermissionToRole(context.Context, *AddPermissionToRoleReq) (*AddPermissionToRoleResp, error)
-	// RemovePermissionFromRole — DELETE matching RolePermission
-	// row. Idempotent.
+	// RemovePermissionFromRole — take a permission from a role: removed_at and
+	// removed_by are stamped and the row stays; no permission reader counts a
+	// removed row. The change is appended to RolePermissionChange in the same
+	// transaction. Guarded on `removed_at IS NULL`: with nothing granted it
+	// matches nothing (NotFound, as the DELETE it replaces did) and the log row
+	// rolls back with it.
 	RemovePermissionFromRole(context.Context, *RemovePermissionFromRoleReq) (*RemovePermissionFromRoleResp, error)
 	// UpdateUserPassword — apply a reset: set the user's password_hash.
 	UpdateUserPassword(context.Context, *UpdateUserPasswordReq) (*UpdateUserPasswordResp, error)
+	// RehashUserPassword — see its request. Unlike a password CHANGE it does
+	// NOT end device trust and revokes nothing: the credential is the same, only
+	// its stored form is stronger. No row (the hash changed since the verify) is
+	// NotFound, which SignIn leaves alone.
+	RehashUserPassword(context.Context, *RehashUserPasswordReq) (*RehashUserPasswordResp, error)
+	// ClaimBootstrapAdmin takes the bootstrap-administrator slot for the user
+	// being created, inside its sign-up transaction. `written` is 1 for the
+	// one sign-up that took it and 0 for every other: a concurrent sign-up
+	// waits on the key and then conflicts. See BootstrapClaim.
+	ClaimBootstrapAdmin(context.Context, *ClaimBootstrapAdminReq) (*ClaimBootstrapAdminResp, error)
 }
 
 // UnimplementedAuthMutationServer should be embedded to have
@@ -337,11 +782,38 @@ func (UnimplementedAuthMutationServer) CreateUser(context.Context, *CreateUserRe
 func (UnimplementedAuthMutationServer) IssueToken(context.Context, *IssueTokenReq) (*IssueTokenResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method IssueToken not implemented")
 }
-func (UnimplementedAuthMutationServer) DeleteToken(context.Context, *DeleteTokenReq) (*DeleteTokenResp, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteToken not implemented")
+func (UnimplementedAuthMutationServer) RevokeToken(context.Context, *RevokeTokenReq) (*RevokeTokenResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeToken not implemented")
 }
-func (UnimplementedAuthMutationServer) DeleteSessionToken(context.Context, *DeleteSessionTokenReq) (*DeleteSessionTokenResp, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteSessionToken not implemented")
+func (UnimplementedAuthMutationServer) UpgradeTokenHash(context.Context, *UpgradeTokenHashReq) (*UpgradeTokenHashResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpgradeTokenHash not implemented")
+}
+func (UnimplementedAuthMutationServer) RevokeSessionToken(context.Context, *RevokeSessionTokenReq) (*RevokeSessionTokenResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeSessionToken not implemented")
+}
+func (UnimplementedAuthMutationServer) CountSignInAttempt(context.Context, *CountSignInAttemptReq) (*CountSignInAttemptResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method CountSignInAttempt not implemented")
+}
+func (UnimplementedAuthMutationServer) CountDeviceSignInAttempt(context.Context, *CountDeviceSignInAttemptReq) (*CountDeviceSignInAttemptResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method CountDeviceSignInAttempt not implemented")
+}
+func (UnimplementedAuthMutationServer) ResetSignInAttempts(context.Context, *ResetSignInAttemptsReq) (*ResetSignInAttemptsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResetSignInAttempts not implemented")
+}
+func (UnimplementedAuthMutationServer) RegisterDevice(context.Context, *RegisterDeviceReq) (*RegisterDeviceResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterDevice not implemented")
+}
+func (UnimplementedAuthMutationServer) RecordSignInEvent(context.Context, *RecordSignInEventReq) (*RecordSignInEventResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RecordSignInEvent not implemented")
+}
+func (UnimplementedAuthMutationServer) TrustDevice(context.Context, *TrustDeviceReq) (*TrustDeviceResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method TrustDevice not implemented")
+}
+func (UnimplementedAuthMutationServer) RevokeDeviceTokens(context.Context, *RevokeDeviceTokensReq) (*RevokeDeviceTokensResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeDeviceTokens not implemented")
+}
+func (UnimplementedAuthMutationServer) MarkDeviceRevoked(context.Context, *MarkDeviceRevokedReq) (*MarkDeviceRevokedResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method MarkDeviceRevoked not implemented")
 }
 func (UnimplementedAuthMutationServer) CreateRole(context.Context, *CreateRoleReq) (*CreateRoleResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateRole not implemented")
@@ -366,6 +838,12 @@ func (UnimplementedAuthMutationServer) RemovePermissionFromRole(context.Context,
 }
 func (UnimplementedAuthMutationServer) UpdateUserPassword(context.Context, *UpdateUserPasswordReq) (*UpdateUserPasswordResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateUserPassword not implemented")
+}
+func (UnimplementedAuthMutationServer) RehashUserPassword(context.Context, *RehashUserPasswordReq) (*RehashUserPasswordResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method RehashUserPassword not implemented")
+}
+func (UnimplementedAuthMutationServer) ClaimBootstrapAdmin(context.Context, *ClaimBootstrapAdminReq) (*ClaimBootstrapAdminResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClaimBootstrapAdmin not implemented")
 }
 func (UnimplementedAuthMutationServer) testEmbeddedByValue() {}
 
@@ -423,38 +901,200 @@ func _AuthMutation_IssueToken_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthMutation_DeleteToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteTokenReq)
+func _AuthMutation_RevokeToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeTokenReq)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthMutationServer).DeleteToken(ctx, in)
+		return srv.(AuthMutationServer).RevokeToken(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthMutation_DeleteToken_FullMethodName,
+		FullMethod: AuthMutation_RevokeToken_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthMutationServer).DeleteToken(ctx, req.(*DeleteTokenReq))
+		return srv.(AuthMutationServer).RevokeToken(ctx, req.(*RevokeTokenReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthMutation_DeleteSessionToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteSessionTokenReq)
+func _AuthMutation_UpgradeTokenHash_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpgradeTokenHashReq)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthMutationServer).DeleteSessionToken(ctx, in)
+		return srv.(AuthMutationServer).UpgradeTokenHash(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthMutation_DeleteSessionToken_FullMethodName,
+		FullMethod: AuthMutation_UpgradeTokenHash_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthMutationServer).DeleteSessionToken(ctx, req.(*DeleteSessionTokenReq))
+		return srv.(AuthMutationServer).UpgradeTokenHash(ctx, req.(*UpgradeTokenHashReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_RevokeSessionToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeSessionTokenReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).RevokeSessionToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_RevokeSessionToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).RevokeSessionToken(ctx, req.(*RevokeSessionTokenReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_CountSignInAttempt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CountSignInAttemptReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).CountSignInAttempt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_CountSignInAttempt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).CountSignInAttempt(ctx, req.(*CountSignInAttemptReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_CountDeviceSignInAttempt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CountDeviceSignInAttemptReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).CountDeviceSignInAttempt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_CountDeviceSignInAttempt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).CountDeviceSignInAttempt(ctx, req.(*CountDeviceSignInAttemptReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_ResetSignInAttempts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetSignInAttemptsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).ResetSignInAttempts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_ResetSignInAttempts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).ResetSignInAttempts(ctx, req.(*ResetSignInAttemptsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_RegisterDevice_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterDeviceReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).RegisterDevice(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_RegisterDevice_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).RegisterDevice(ctx, req.(*RegisterDeviceReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_RecordSignInEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordSignInEventReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).RecordSignInEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_RecordSignInEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).RecordSignInEvent(ctx, req.(*RecordSignInEventReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_TrustDevice_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TrustDeviceReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).TrustDevice(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_TrustDevice_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).TrustDevice(ctx, req.(*TrustDeviceReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_RevokeDeviceTokens_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeDeviceTokensReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).RevokeDeviceTokens(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_RevokeDeviceTokens_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).RevokeDeviceTokens(ctx, req.(*RevokeDeviceTokensReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_MarkDeviceRevoked_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkDeviceRevokedReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).MarkDeviceRevoked(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_MarkDeviceRevoked_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).MarkDeviceRevoked(ctx, req.(*MarkDeviceRevokedReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -603,6 +1243,42 @@ func _AuthMutation_UpdateUserPassword_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthMutation_RehashUserPassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RehashUserPasswordReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).RehashUserPassword(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_RehashUserPassword_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).RehashUserPassword(ctx, req.(*RehashUserPasswordReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthMutation_ClaimBootstrapAdmin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClaimBootstrapAdminReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthMutationServer).ClaimBootstrapAdmin(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthMutation_ClaimBootstrapAdmin_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthMutationServer).ClaimBootstrapAdmin(ctx, req.(*ClaimBootstrapAdminReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthMutation_ServiceDesc is the grpc.ServiceDesc for AuthMutation service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -619,12 +1295,48 @@ var AuthMutation_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthMutation_IssueToken_Handler,
 		},
 		{
-			MethodName: "DeleteToken",
-			Handler:    _AuthMutation_DeleteToken_Handler,
+			MethodName: "RevokeToken",
+			Handler:    _AuthMutation_RevokeToken_Handler,
 		},
 		{
-			MethodName: "DeleteSessionToken",
-			Handler:    _AuthMutation_DeleteSessionToken_Handler,
+			MethodName: "UpgradeTokenHash",
+			Handler:    _AuthMutation_UpgradeTokenHash_Handler,
+		},
+		{
+			MethodName: "RevokeSessionToken",
+			Handler:    _AuthMutation_RevokeSessionToken_Handler,
+		},
+		{
+			MethodName: "CountSignInAttempt",
+			Handler:    _AuthMutation_CountSignInAttempt_Handler,
+		},
+		{
+			MethodName: "CountDeviceSignInAttempt",
+			Handler:    _AuthMutation_CountDeviceSignInAttempt_Handler,
+		},
+		{
+			MethodName: "ResetSignInAttempts",
+			Handler:    _AuthMutation_ResetSignInAttempts_Handler,
+		},
+		{
+			MethodName: "RegisterDevice",
+			Handler:    _AuthMutation_RegisterDevice_Handler,
+		},
+		{
+			MethodName: "RecordSignInEvent",
+			Handler:    _AuthMutation_RecordSignInEvent_Handler,
+		},
+		{
+			MethodName: "TrustDevice",
+			Handler:    _AuthMutation_TrustDevice_Handler,
+		},
+		{
+			MethodName: "RevokeDeviceTokens",
+			Handler:    _AuthMutation_RevokeDeviceTokens_Handler,
+		},
+		{
+			MethodName: "MarkDeviceRevoked",
+			Handler:    _AuthMutation_MarkDeviceRevoked_Handler,
 		},
 		{
 			MethodName: "CreateRole",
@@ -658,9 +1370,17 @@ var AuthMutation_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "UpdateUserPassword",
 			Handler:    _AuthMutation_UpdateUserPassword_Handler,
 		},
+		{
+			MethodName: "RehashUserPassword",
+			Handler:    _AuthMutation_RehashUserPassword_Handler,
+		},
+		{
+			MethodName: "ClaimBootstrapAdmin",
+			Handler:    _AuthMutation_ClaimBootstrapAdmin_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "mutations/auth_mutation.proto",
 }
 
-// emit-sha256: 46f9033e78b6e4e730a533d7025ee88799e2685f9771ea9a08681fb4e774d646
+// emit-sha256: c87611317202446e3583ddfcb17913b8b8446144760425adb805d3ef129f2a0b

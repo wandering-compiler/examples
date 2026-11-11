@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-10-14 11:58+0000\n"
+"POT-Creation-Date: 2026-11-11 22:45+0000\n"
 "Language: cs\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -20,6 +20,12 @@ msgid "No permissions are in effect for you here. If access is scoped by organiz
 msgstr ""
 
 msgid "Something went wrong on our side."
+msgstr ""
+
+msgid "The captcha could not be checked. Try again later."
+msgstr ""
+
+msgid "The captcha was not accepted. Solve it again."
 msgstr ""
 
 msgid "The file is too large."
@@ -44,6 +50,9 @@ msgid "This cannot be done in the current state."
 msgstr ""
 
 msgid "This is not available."
+msgstr ""
+
+msgid "This request needs a solved captcha."
 msgstr ""
 
 msgid "This type of file is not accepted."

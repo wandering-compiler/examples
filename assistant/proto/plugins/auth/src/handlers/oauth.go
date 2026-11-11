@@ -33,6 +33,27 @@ import (
 // is authored Go rather than DQL. Every failure maps to opaque
 // Unauthenticated (anti-enumeration, like SignIn).
 
+// init adds this feature's share of an erasure, and the outcomes of its
+// refusals in the sign-in history.
+func init() {
+	erasers = append(erasers, eraseOAuthData)
+	signInOutcomeRules = append(signInOutcomeRules,
+		outcomeRule{errOAuthCodeInvalid, pb.SignInOutcome_SIGN_IN_OUTCOME_WRONG_CODE},
+		outcomeRule{errOAuthVerifierInvalid, pb.SignInOutcome_SIGN_IN_OUTCOME_WRONG_CODE},
+		outcomeRule{errOAuthLocalUnverified, pb.SignInOutcome_SIGN_IN_OUTCOME_UNVERIFIED_EMAIL},
+		outcomeRule{errOAuthEmailUnverified, pb.SignInOutcome_SIGN_IN_OUTCOME_UNVERIFIED_EMAIL},
+	)
+}
+
+// eraseOAuthData is oauth's eraser: the account's identities lose their
+// asserted email and their provider subject (replaced by the row's own id, so
+// nothing a provider sends resolves to the erased account any more), and its
+// login codes are spent and blanked (EraseOAuthData). The rows stay.
+func eraseOAuthData(ctx context.Context, h *AuthServiceHandler, userID, _, _ string) error {
+	_, err := h.Mutation.EraseOAuthData(ctx, &pb.EraseOAuthDataReq{UserId: userID})
+	return err
+}
+
 // oauthHTTPClient performs the outbound token-exchange + userinfo calls.
 // A package var (not a handler field) so tests can point it at a fake IdP
 // without threading config; the per-provider URLs come from the row.
@@ -105,6 +126,9 @@ func (h *AuthServiceHandler) OAuthAuthorizeURL(ctx context.Context, req *pb.OAut
 	if !isPKCEChallenge(req.GetCodeChallenge()) {
 		return nil, oauthRefusal(errOAuthChallengeMissing)
 	}
+	if err := checkResponseMode(p); err != nil {
+		return nil, oauthRefusal(err)
+	}
 	state, nonce, err := signOAuthState(p.GetSecret(), p.GetName(), req.GetRedirectAfter(), challengeDigest(req.GetCodeChallenge()), time.Now())
 	if err != nil {
 		return nil, oauthRefusal(err)
@@ -117,6 +141,9 @@ func (h *AuthServiceHandler) OAuthAuthorizeURL(ctx context.Context, req *pb.OAut
 		q.Set("scope", s)
 	}
 	q.Set("state", state)
+	if m := p.GetResponseMode(); m != "" {
+		q.Set("response_mode", m)
+	}
 	// Towards the provider: PKCE, so an intercepted provider code is useless
 	// without our verifier, and an OIDC nonce, so an id_token minted for
 	// another sign-in is refused. Both derive from the state's nonce under the
@@ -148,6 +175,12 @@ func (h *AuthServiceHandler) OAuthCallback(ctx context.Context, req *pb.OAuthCal
 	if err != nil {
 		return nil, oauthRefusal(err)
 	}
+	return h.oauthCallback(ctx, p, req)
+}
+
+// oauthCallback is the callback for a loaded provider, by either route: the
+// GET (OAuthCallback) or a form POST (OAuthCallbackForm, oauth_apple.go).
+func (h *AuthServiceHandler) oauthCallback(ctx context.Context, p *pb.OAuthProvider, req *pb.OAuthCallbackReq) (*pb.OAuthCallbackResp, error) {
 	st, err := verifyOAuthState(p.GetSecret(), p.GetName(), req.GetState(), time.Now())
 	if err != nil {
 		return nil, oauthRefusal(err)
@@ -173,7 +206,7 @@ func (h *AuthServiceHandler) OAuthCallback(ctx context.Context, req *pb.OAuthCal
 		return nil, oauthRefusal(err)
 	}
 	if userID != "" {
-		if err := refuseUnsignableAccount(ctx, h, userID); err != nil {
+		if _, err := refuseUnsignableAccount(ctx, h, userID); err != nil {
 			return nil, oauthRefusal(err)
 		}
 	}
@@ -208,7 +241,19 @@ func (h *AuthServiceHandler) OAuthCallback(ctx context.Context, req *pb.OAuthCal
 // issues the session. The consume is a conditional UPDATE, so a code works
 // once; it is spent before the verifier is compared, so a wrong verifier
 // burns it rather than leaving it open to guesses.
-func (h *AuthServiceHandler) OAuthExchange(ctx context.Context, req *pb.OAuthExchangeReq) (*pb.OAuthExchangeResp, error) {
+func (h *AuthServiceHandler) OAuthExchange(ctx context.Context, req *pb.OAuthExchangeReq) (_ *pb.OAuthExchangeResp, err error) {
+	// Every exchange appends one SignInEvent (method OAUTH), the refusals
+	// too; the success row is written with the session.
+	attempt := beginSignIn(ctx, pb.SignInMethod_SIGN_IN_METHOD_OAUTH)
+	attempt.publicComputer = req.GetPublicComputer()
+	defer func() { h.endSignIn(ctx, attempt, err) }()
+
+	// The device key before the code is spent: a client that cannot sign
+	// must not burn a single-use code on a session it could never be given.
+	thumbprint, err := mintThumbprint(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if len(req.GetCodeVerifier()) < pkceMinVerifierLen || req.GetCode() == "" {
 		return nil, oauthRefusal(errOAuthVerifierInvalid)
 	}
@@ -221,6 +266,10 @@ func (h *AuthServiceHandler) OAuthExchange(ctx context.Context, req *pb.OAuthExc
 	if consumed.GetCodeChallenge() == "" {
 		return nil, oauthRefusal(errOAuthCodeInvalid)
 	}
+	// The code names the account (or the identity) it was issued for: a
+	// refusal from here on is an attempt at that sign-in.
+	attempt.named(consumed.GetEmail())
+	attempt.userID = consumed.GetUserId()
 	if !verifyChallengeDigest(req.GetCodeVerifier(), consumed.GetCodeChallenge()) {
 		return nil, oauthRefusal(errOAuthVerifierInvalid)
 	}
@@ -243,10 +292,11 @@ func (h *AuthServiceHandler) OAuthExchange(ctx context.Context, req *pb.OAuthExc
 		if err != nil {
 			return nil, oauthRefusal(err)
 		}
+		attempt.userID = userID
 		if userID == "" {
 			// This is the sign-up, and the invitation (if any) comes with
 			// this request.
-			userID, err = h.createOAuthAccount(ctx, providerID, subject, email, consumed.GetEmailVerified(), req.GetInviteToken())
+			userID, err = h.createOAuthAccount(ctx, providerID, subject, email, consumed.GetEmailVerified(), req.GetInviteToken(), signupHost(req))
 			if isEmailTaken(err) {
 				// The unique address, lost to a registration racing this one
 				// after the lookup above: answered as SignUp answers it.
@@ -259,27 +309,60 @@ func (h *AuthServiceHandler) OAuthExchange(ctx context.Context, req *pb.OAuthExc
 				// classified like the rest, never sent raw.
 				return nil, oauthRefusal(err)
 			}
+			attempt.userID = userID
 		}
 	}
 	// The account may have changed since the callback; and the device is the
 	// one making THIS request — the page, not the provider's redirect.
-	if err := refuseUnsignableAccount(ctx, h, userID); err != nil {
+	account, err := refuseUnsignableAccount(ctx, h, userID)
+	attempt.account = account
+	if err != nil {
 		return nil, oauthRefusal(err)
 	}
-	deviceID, _, err := resolveSignInDevice(ctx, h, userID)
+	dev, err := mintDevice(ctx, h, userID, thumbprint)
+	attempt.deviceID = dev.id
 	if err != nil {
 		return nil, oauthRefusal(err)
 	}
 	// Bound to the device, never trusting it: this sign-in skipped the
 	// plugin's second factor, and a trusted device skips it later for a
 	// password sign-in too.
-	token, trustToken, err := issueSession(ctx, h, userID, deviceID, false)
+	token, err := issueSession(ctx, h, attempt, userID, dev, nil)
 	if err != nil {
 		return nil, oauthRefusal(err)
 	}
-	resp := &pb.OAuthExchangeResp{UserId: userID, Token: token}
-	stampDeviceTrust(resp, trustToken) // devices-gated field; seam is a no-op without `devices`
-	return resp, nil
+	return &pb.OAuthExchangeResp{UserId: userID, Token: token, PublicComputer: attempt.publicComputer}, nil
+}
+
+// providerOf reassembles the provider from GetProviderByName: the row's
+// columns and the secret, which is decrypted beside the row rather than inside
+// it (a CRYPTED_SECRET is read as a top-level column). nil when there is no
+// row.
+func providerOf(resp *pb.GetProviderByNameResp) *pb.OAuthProvider {
+	r := resp.GetProvider()
+	if r == nil {
+		return nil
+	}
+	p := &pb.OAuthProvider{
+		Id:           r.GetId(),
+		Name:         r.GetName(),
+		DisplayName:  r.GetDisplayName(),
+		ClientId:     r.GetClientId(),
+		ClientSecret: r.GetClientSecret(),
+		AuthorizeUrl: r.GetAuthorizeUrl(),
+		TokenUrl:     r.GetTokenUrl(),
+		UserinfoUrl:  r.GetUserinfoUrl(),
+		Scopes:       r.GetScopes(),
+		SubjectPath:  r.GetSubjectPath(),
+		EmailPath:    r.GetEmailPath(),
+		Enabled:      r.GetEnabled(),
+		CreatedAt:    r.GetCreatedAt(),
+		Secret:       resp.GetSecret(),
+		ResponseMode: r.GetResponseMode(),
+		TeamId:       r.GetTeamId(),
+		KeyId:        r.GetKeyId(),
+	}
+	return p
 }
 
 // loadEnabledProvider resolves a provider by slug and enforces `enabled`.
@@ -288,11 +371,10 @@ func (h *AuthServiceHandler) loadEnabledProvider(ctx context.Context, name strin
 	if err != nil {
 		return nil, err
 	}
-	p := resp.GetProvider()
+	p := providerOf(resp)
 	if p == nil || !p.GetEnabled() {
 		return nil, errOAuthProviderDisabled
 	}
-	p.Secret = resp.GetSecret() // decrypted beside the row, not inside it
 	// The legacy plaintext column (rc.19 and earlier, or a fixture) is read
 	// only while the encrypted `secret` is empty, and moved there; once
 	// `secret` is set it wins — it is where the admin writes — and a
@@ -346,13 +428,17 @@ func hostFromMeta(ctx context.Context) string {
 // exchangeCode POSTs the authorization code to the provider's token
 // endpoint and returns the decoded token response.
 func (h *AuthServiceHandler) exchangeCode(ctx context.Context, p *pb.OAuthProvider, code, verifier string) (*oauthTokenResp, error) {
+	secret, err := clientSecret(p, time.Now())
+	if err != nil {
+		return nil, err
+	}
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
 	form.Set("code", code)
 	form.Set("code_verifier", verifier)
 	form.Set("redirect_uri", h.oauthRedirectURI(ctx, p.GetName()))
 	form.Set("client_id", p.GetClientId())
-	form.Set("client_secret", p.GetSecret())
+	form.Set("client_secret", secret)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.GetTokenUrl(), strings.NewReader(form.Encode()))
 	if err != nil {
@@ -543,14 +629,27 @@ func orDefault(s, def string) string {
 // address, which it links when both sides verified the address. "" with no
 // error means no account exists: OAuthExchange creates one, with the
 // invitation the page passes there.
+//
+// Only NotFound (or an empty answer) means "no row". Any other failure of
+// either read is returned: a store that could not say whether the subject is
+// linked must not be read as "not linked", or the exchange matches the
+// asserted address to another account and links the subject there, or goes
+// on to create an account for an address that has one (oauth/outage-is-not-no-row).
 func (h *AuthServiceHandler) findOAuthAccount(ctx context.Context, providerID, subject, email string, emailVerified bool) (string, error) {
-	if ident, err := h.Query.GetOAuthIdentity(ctx, &pb.GetOAuthIdentityReq{ProviderId: providerID, ExternalId: subject}); err == nil && ident.GetIdentity() != nil {
+	ident, err := h.Query.GetOAuthIdentity(ctx, &pb.GetOAuthIdentityReq{ProviderId: providerID, ExternalId: subject})
+	if err := notFoundOK(err); err != nil {
+		return "", err
+	}
+	if err == nil && ident.GetIdentity() != nil {
 		return ident.GetIdentity().GetUserId(), nil
 	}
 	// Canonicalise so the IdP-asserted email matches a password-signup
 	// account (and a later password signin) regardless of case.
 	email = normalizeEmail(email)
 	u, err := h.Query.GetUserByEmail(ctx, &pb.GetUserByEmailReq{Email: email})
+	if err := notFoundOK(err); err != nil {
+		return "", err
+	}
 	if err != nil || u.GetUser() == nil || u.GetUser().GetId() == "" {
 		return "", nil
 	}
@@ -574,6 +673,7 @@ func (h *AuthServiceHandler) findOAuthAccount(ctx context.Context, providerID, s
 		ProviderId: providerID,
 		ExternalId: subject,
 		Email:      email,
+		Thumbprint: requestThumbprint(ctx),
 	}); err != nil {
 		return "", err
 	}
@@ -587,12 +687,18 @@ func (h *AuthServiceHandler) findOAuthAccount(ctx context.Context, providerID, s
 // invitation (which names no address) works too, and its link is spent by
 // this registration. The user, its roles, the verified address, the spent
 // invitation and the identity link commit together.
-func (h *AuthServiceHandler) createOAuthAccount(ctx context.Context, providerID, subject, email string, emailVerified bool, inviteToken string) (string, error) {
+func (h *AuthServiceHandler) createOAuthAccount(ctx context.Context, providerID, subject, email string, emailVerified bool, inviteToken, bodyHost string) (string, error) {
 	email = normalizeEmail(email)
+	// A provider may assert any address, the erased-account domain included.
+	if err := refuseReservedEmail(ctx, email); err != nil {
+		return "", err
+	}
 	if err := signUpAllowlistGate(h, email); err != nil {
 		return "", err
 	}
-	if err := signupInviteGate(ctx, h, email, inviteToken); err != nil {
+	// The invitation, or the organization of the host it arrived on (org_signup).
+	join, err := signupGates(ctx, h, email, inviteToken, bodyHost, emailVerified)
+	if err != nil {
 		return "", err
 	}
 	randomPw, err := randomToken(32)
@@ -619,11 +725,18 @@ func (h *AuthServiceHandler) createOAuthAccount(ctx context.Context, providerID,
 		err = signupClaimInvite(txCtx, h, email, inviteToken)
 	}
 	if err == nil {
+		err = joinSignedUpOrg(txCtx, h, userID, join)
+	}
+	if err == nil && join == nil {
+		err = signupAcceptInvite(txCtx, h, userID, email, inviteToken, emailVerified)
+	}
+	if err == nil {
 		_, err = h.Mutation.CreateOAuthIdentity(txCtx, &pb.CreateOAuthIdentityReq{
 			UserId:     userID,
 			ProviderId: providerID,
 			ExternalId: subject,
 			Email:      email,
+			Thumbprint: requestThumbprint(ctx),
 		})
 	}
 	if err != nil {
@@ -787,19 +900,6 @@ func isChallengeDigest(d string) bool {
 	}
 	for i := 0; i < len(d); i++ {
 		if c := d[i]; (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return false
-		}
-	}
-	return true
-}
-
-// isPKCEChallenge accepts exactly an S256 challenge: 43 base64url characters.
-func isPKCEChallenge(c string) bool {
-	if len(c) != 43 {
-		return false
-	}
-	for _, r := range c {
-		if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
 			return false
 		}
 	}

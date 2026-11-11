@@ -3,13 +3,17 @@ package handlers
 import (
 	"context"
 	"errors"
+	"time"
+
 	distxpb "github.com/wandering-compiler/sdk/go/pb/common/distx"
 	"github.com/wandering-compiler/sdk/go/service/tx/distx"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
+	"github.com/wandering-compiler/plugins/auth/lib/devicekey"
 )
 
 // errAuthnBotNoPassword is the internal reason a machine account was refused a
@@ -39,12 +43,16 @@ var errAuthnBotNoPassword = errors.New("machine account: password sign-in is not
 // which is why the always-compiled handlers reach it through the seam below
 // and never name the field.
 func init() {
+	serviceAccountStaged = true // see feature_marks.go
+	isBotAccount = func(user *pb.User) bool { return user.GetKind() == pb.AccountKind_BOT }
 	signInBotGate = func(user *pb.User) error {
 		if user.GetKind() == pb.AccountKind_BOT {
 			return errAuthnBotNoPassword
 		}
 		return nil
 	}
+	signInOutcomeRules = append(signInOutcomeRules,
+		outcomeRule{errAuthnBotNoPassword, pb.SignInOutcome_SIGN_IN_OUTCOME_MACHINE_ACCOUNT})
 }
 
 // errNotABotAccount is the refusal for minting a token against a person.
@@ -71,62 +79,40 @@ var (
 // Refused with PermissionDenied rather than InvalidArgument: the caller may
 // name a real account and still not be allowed to mint for it, which is an
 // authorisation answer, not a malformed request.
-func (h *AuthServiceHandler) IssueBotToken(ctx context.Context, req *pb.IssueBotTokenReq) (*pb.IssueBotTokenResp, error) {
-	if _, err := callerUserID(ctx); err != nil {
+//
+// The token is bound to the machine account's key (public_key), and the
+// account has exactly ONE (device/bot-one-key): its first token registers
+// the key as the account's device, every later token must name the same key
+// — the account's replicas share it — and another key is refused
+// (BOT_KEY_MISMATCH) while the account's device is live. Replacing the key is
+// revoking that device (the admin Devices page), then issuing with the new
+// one. The operator's own device is recorded as the token's approver.
+//
+// Recorded in the sign-in history (method BOT_TOKEN), one row whatever the
+// outcome; the row names the machine account only once it is known to be one
+// the operator may mint for, so a refused probe of another account writes no
+// account onto that account's history.
+func (h *AuthServiceHandler) IssueBotToken(ctx context.Context, req *pb.IssueBotTokenReq) (_ *pb.IssueBotTokenResp, err error) {
+	callerID, err := callerUserID(ctx)
+	if err != nil {
 		return nil, Unauthenticated(err)
+	}
+	attempt := beginKeyedMint(ctx, pb.SignInMethod_SIGN_IN_METHOD_BOT_TOKEN)
+	defer func() { h.endSignIn(ctx, attempt, err) }()
+	// A credential is minted only by a signed-in person, as CreateApiToken
+	// and CliAuthorize require: an API token — the bot's own, or an
+	// operator's on an API-realm role that may call this — must not mint
+	// further machine tokens (api_token/derived-token-not-wider).
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
 	}
 	target := req.GetUserId()
 	if target == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	// The target must be a bot IN THE CALLER'S ORGANIZATION, where the realm
-	// has organizations. Both halves are load-bearing and the second was
-	// missing: `user_id` arrives on the wire, so an operator in one company
-	// could name a machine account in another and mint a working credential
-	// for it. The listing that leaked those ids made that a two-step attack
-	// with no barrier between the steps. A realm without organizations is one
-	// organization, and every machine account in it is the operator's.
-	orgs, err := botOrgScopeOrNil()
+	bot, err := h.operableBot(ctx, target)
 	if err != nil {
-		return nil, err
-	}
-	if orgs != nil {
-		inOrg, err := orgs.isMember(ctx, h, target)
-		if err != nil {
-			return nil, err
-		}
-		if !inOrg {
-			// One message for "not a bot", "not here", and "does not exist":
-			// the caller must not learn which, or the refusal becomes a
-			// directory of other companies' accounts.
-			return nil, status.Error(codes.PermissionDenied, errNotABotAccount.Error())
-		}
-	}
-
-	// Read the target and refuse a person. Read FIRST: minting and then
-	// checking would leave a live credential behind on the refusal path.
-	userResp, err := h.Query.GetUserById(ctx, &pb.GetUserByIdReq{UserId: target})
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			// Does not exist reads like "not a bot" — see above.
-			return nil, status.Error(codes.PermissionDenied, errNotABotAccount.Error())
-		}
-		return nil, err
-	}
-	if userResp.GetUser().GetKind() != pb.AccountKind_BOT || !visibleBot(ctx, userResp.GetUser()) {
-		// The message names the RULE, not the account: a caller must not
-		// learn from the refusal whether the id belongs to a person, a bot it
-		// may not touch, or nothing at all.
-		return nil, status.Error(codes.PermissionDenied, errNotABotAccount.Error())
-	}
-	// Not above the minting operator. A token acts with the bot's roles, so
-	// minting for a bot whose role the operator could not have GRANTED is
-	// handing out what they themselves may not do — the rule CreateBot holds
-	// at creation, held here too, because the bot may have been created by
-	// someone with more. (The token's subset only narrows the bot; it cannot
-	// lift this.)
-	if err := h.checkMayActAsBot(ctx, target); err != nil {
 		return nil, err
 	}
 
@@ -134,12 +120,32 @@ func (h *AuthServiceHandler) IssueBotToken(ctx context.Context, req *pb.IssueBot
 	// anyway, and the admin should hear why instead of receiving a dead one.
 	// After the ceiling, so an operator who may not act as the bot does not
 	// learn its state either.
-	if err := signInDisabledGate(userResp.GetUser()); err != nil {
+	attempt.userID, attempt.account = bot.GetId(), bot
+	attempt.named(bot.GetEmail())
+	if err := signInDisabledGate(bot); err != nil {
+		attempt.outcome = pb.SignInOutcome_SIGN_IN_OUTCOME_ACCOUNT_DISABLED
 		return nil, status.Error(codes.FailedPrecondition, "machine account is disabled; enable it first")
 	}
+	extras, err := h.checkTokenMint(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if req.GetPublicKey() == "" {
+		return h.issueBotBearerToken(ctx, attempt, callerID, req, extras)
+	}
+	key, err := parseTokenKey(ctx, req.GetPublicKey())
+	if err != nil {
+		return nil, err
+	}
+	attempt.thumbprint = key.Thumbprint
 
-	// The token and its narrowing are ONE unit, and this is the sharpest
-	// reason in this file for a transaction.
+	expiresAt, err := h.apiTokenExpiry(ctx, req.GetExpiresAt())
+	if err != nil {
+		return nil, err
+	}
+
+	// The account's key, the token, its narrowing and the history row are ONE
+	// unit, and this is the sharpest reason in this file for a transaction.
 	//
 	// Minted first and narrowed after, a failure partway leaves a LIVE token
 	// with a partial subset — or with none, which the resolver reads as
@@ -148,42 +154,170 @@ func (h *AuthServiceHandler) IssueBotToken(ctx context.Context, req *pb.IssueBot
 	// error back, could be leaving behind a WIDER one than they asked for,
 	// believing nothing happened.
 	//
-	// Rolled back together, the failure means what the caller was told.
-	var tx *distx.TxHandle
-	txCtx := ctx
-	if h.DistTx != nil {
-		if tx, txCtx, err = distx.Begin(ctx, h.DistTx, &distxpb.BeginRequest{ConnectionName: h.Connection}); err != nil {
-			return nil, err
+	// Rolled back together, the failure means what the caller was told. And
+	// the one-key check holds only inside it: the account row is locked
+	// first, so a concurrent first token with another key waits, then reads
+	// the key this one registered.
+	var token, tokenID string
+	err = h.inTx(ctx, func(txCtx context.Context) error {
+		// The ceiling on acting as the machine account, again under the
+		// organization's lock: operableBot read it outside this transaction.
+		txCtx, err := h.underBotOrgLock(txCtx)
+		if err != nil {
+			return err
 		}
-	}
-	expiresAt, err := h.apiTokenExpiry(ctx, req.GetExpiresAt())
+		if err := h.checkMayActAsBot(txCtx, target); err != nil {
+			return err
+		}
+		dev, err := h.machineKeyDevice(txCtx, attempt, target, key)
+		if err != nil {
+			return err
+		}
+		approver, err := h.approverDevice(txCtx, callerID)
+		if err != nil {
+			return err
+		}
+		token, tokenID, err = h.issueApiTokenTx(txCtx, attempt, target, req.GetName(), req.GetPermissionSubset(), extras, expiresAt, dev, approver)
+		return err
+	})
 	if err != nil {
-		if tx != nil {
-			_ = tx.Rollback(ctx)
-		}
 		return nil, err
 	}
-	token, tokenID, err := h.issueApiTokenTx(txCtx, target, req.GetName(), req.GetPermissionSubset(), expiresAt)
-	if err != nil {
-		if tx != nil {
-			_ = tx.Rollback(ctx)
-		}
-		return nil, err
-	}
-	if tx != nil {
-		if err := tx.Commit(ctx); err != nil {
-			return nil, err
-		}
-	}
-	return &pb.IssueBotTokenResp{Token: token, TokenId: tokenID, ExpiresAt: expiresAt}, nil
+	return &pb.IssueBotTokenResp{Token: token, TokenId: tokenID, ExpiresAt: expiresAt, DeviceId: key.Thumbprint}, nil
 }
 
-// botUserFillers complete a CreateBotUser request with what another feature's
-// columns need. Appended, never assigned: each feature pair that adds a column
-// to a machine account brings its own filler, and an assignment would let the
-// last one staged erase the others. Empty unless such a pair is active —
-// handlers/service_account_tenant.go is the one today.
-var botUserFillers []func(ctx context.Context, req *pb.CreateBotUserReq) error
+// maxBotBearerTTL is the furthest a bearer token's expiry may lie ahead
+// (device/bot-bearer): a credential that works without a key must end, and
+// rotating once a year is the least that keeps "forgot to" survivable.
+const maxBotBearerTTL = 366 * 24 * time.Hour
+
+// MsgBearerExpiryTooFar is what a person reads for a bearer token's expiry
+// beyond maxBotBearerTTL.
+//
+//w17:msgid
+const MsgBearerExpiryTooFar = "A token without a key must expire within a year. Choose an earlier date."
+
+// botBearerExpiry decides when a bearer token expires: as apiTokenExpiry
+// does, except that "never" is not an answer — the deployment's default of 0
+// becomes defaultAPITokenTTLHours — and no expiry may lie beyond
+// maxBotBearerTTL.
+func (h *AuthServiceHandler) botBearerExpiry(ctx context.Context, requested *timestamppb.Timestamp) (*timestamppb.Timestamp, error) {
+	exp, err := h.apiTokenExpiry(ctx, requested)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	if exp == nil {
+		return timestamppb.New(now.Add(time.Duration(defaultAPITokenTTLHours) * time.Hour)), nil
+	}
+	if exp.AsTime().After(now.Add(maxBotBearerTTL)) {
+		if requested == nil {
+			// The deployment's default is longer than a bearer token may live:
+			// the ceiling, not a refusal the operator cannot act on.
+			return timestamppb.New(now.Add(maxBotBearerTTL)), nil
+		}
+		return nil, refusal(ctx, codes.InvalidArgument,
+			"expires_at "+exp.AsTime().UTC().Format(time.RFC3339)+" is more than a year ahead; a bearer token must expire within one",
+			"TOKEN_EXPIRY_TOO_FAR", "expires_at", MsgBearerExpiryTooFar, nil)
+	}
+	return exp, nil
+}
+
+// issueBotBearerToken is IssueBotToken without a key (device/bot-bearer),
+// once every authorization check passed: a token bound to no device, flagged
+// `bearer`, with the bot-bearer prefix and an expiry, its narrowing and the
+// history row in one transaction — the reason IssueBotToken gives for one
+// holds here unchanged. The operator's device is the approver.
+func (h *AuthServiceHandler) issueBotBearerToken(ctx context.Context, attempt *signInAttempt, callerID string, req *pb.IssueBotTokenReq, extras []tokenMintWrite) (*pb.IssueBotTokenResp, error) {
+	expiresAt, err := h.botBearerExpiry(ctx, req.GetExpiresAt())
+	if err != nil {
+		return nil, err
+	}
+	target := req.GetUserId()
+	var token, tokenID string
+	err = h.inTx(ctx, func(txCtx context.Context) error {
+		// As IssueBotToken's keyed transaction: the ceiling again, under the
+		// organization's lock.
+		txCtx, err := h.underBotOrgLock(txCtx)
+		if err != nil {
+			return err
+		}
+		if err := h.checkMayActAsBot(txCtx, target); err != nil {
+			return err
+		}
+		approver, err := h.approverDevice(txCtx, callerID)
+		if err != nil {
+			return err
+		}
+		var hash string
+		token, hash, err = newBotBearerToken()
+		if err != nil {
+			return err
+		}
+		creator, _ := callerUserID(txCtx)
+		// IssueApiToken, not a statement of its own: ApiTokenCreated has one
+		// emit site. No device, and the bearer flag only this file can set.
+		issued, err := h.Mutation.IssueApiToken(txCtx, &pb.IssueApiTokenReq{
+			UserId:             target,
+			Name:               req.GetName(),
+			TokenType:          pb.TokenType_TOKEN_TYPE_API,
+			ExpiresAt:          expiresAt,
+			TokenHash:          hash,
+			ApprovedByDeviceId: approver,
+			Thumbprint:         requestThumbprint(txCtx),
+			CreatedBy:          creator,
+			Bearer:             true,
+		})
+		if err != nil {
+			return err
+		}
+		tokenID = issued.GetToken().GetId()
+		for _, perm := range req.GetPermissionSubset() {
+			if _, err := h.Mutation.AddTokenPermission(txCtx, &pb.AddTokenPermissionReq{
+				TokenId:      tokenID,
+				PermissionId: perm,
+			}); err != nil {
+				return err
+			}
+		}
+		if err := writeTokenMint(txCtx, extras, tokenID); err != nil {
+			return err
+		}
+		return h.recordSignInOK(txCtx, attempt, target, signInDevice{})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &pb.IssueBotTokenResp{Token: token, TokenId: tokenID, ExpiresAt: expiresAt, Bearer: true}, nil
+}
+
+// machineKeyLabel labels a machine account's device: one key for every token
+// and replica of the account, so no token's name.
+const machineKeyLabel = "Machine account key"
+
+// machineKeyDevice is the machine account's one device for key, on txCtx
+// (device/bot-one-key): the account row is locked (LockMachineAccount), its
+// live key read (ListMachineKeys), and another live key refuses the mint
+// (BOT_KEY_MISMATCH); the same key — or none yet — registers or finds the
+// device as a person's API token does (registerKeyDevice, which refuses a
+// revoked one).
+func (h *AuthServiceHandler) machineKeyDevice(txCtx context.Context, a *signInAttempt, botID string, key devicekey.Key) (signInDevice, error) {
+	if _, err := h.Query.LockMachineAccount(txCtx, &pb.LockMachineAccountReq{UserId: botID}); err != nil {
+		return signInDevice{}, err
+	}
+	keys, err := h.Query.ListMachineKeys(txCtx, &pb.ListMachineKeysReq{UserId: botID})
+	if err != nil {
+		return signInDevice{}, err
+	}
+	for _, k := range keys.GetKeys() {
+		if k.GetThumbprint() != key.Thumbprint {
+			return signInDevice{}, refusal(txCtx, codes.FailedPrecondition,
+				"the machine account already has another key; its replicas share one key, and replacing it means revoking the account's device first",
+				CodeBotKeyMismatch, "public_key", MsgBotKeyMismatch, nil)
+		}
+	}
+	return h.registerKeyDevice(txCtx, a, botID, key, machineKeyLabel)
+}
 
 // botOrgs is what a realm WITH organizations adds to machine accounts: each
 // belongs to one, is listed and served only there, and holds its role inside
@@ -212,21 +346,6 @@ func botOrgScopeOrNil() (*botOrgScope, error) {
 	return botOrgs, nil
 }
 
-// botVisible are the checks another feature adds to "may this caller see and
-// mint for this machine account" — tenant_scope's tenant, today
-// (service_account_tenant.go). Appended, never assigned, like botUserFillers.
-// A machine account fails if ANY check says no.
-var botVisible []func(ctx context.Context, bot *pb.User) bool
-
-func visibleBot(ctx context.Context, bot *pb.User) bool {
-	for _, ok := range botVisible {
-		if !ok(ctx, bot) {
-			return false
-		}
-	}
-	return true
-}
-
 type botOrgScope struct {
 	// active is the organization the caller acts in; an error when none is
 	// selected, which every caller refuses.
@@ -238,18 +357,43 @@ type botOrgScope struct {
 	accounts func(ctx context.Context, h *AuthServiceHandler) ([]*pb.User, error)
 	// isMember reports whether userID is a member of the caller's organization.
 	isMember func(ctx context.Context, h *AuthServiceHandler, userID string) (bool, error)
+	// lock takes orgID's row lock inside the caller's transaction — the one
+	// every change to who holds what in the organization takes first
+	// (withOrgLock) — and answers txCtx marked as under it, as withOrgLock
+	// marks its own: the ceiling re-checked there reads the caller's grants
+	// as they are now (heldNow).
+	lock func(h *AuthServiceHandler, txCtx context.Context, orgID string) (context.Context, error)
+}
+
+// underBotOrgLock is the start of a machine-account transaction whose
+// authorization rests on roles: where the realm has organizations it takes the
+// caller's organization's lock, so a role change there (SetBotRoles, an edit
+// of the role) comes before or after this transaction, not between the
+// ceiling it is about to re-check and its write. Without organizations there
+// is nothing to lock. A caller with no active organization was refused before
+// the transaction (operableBot, CreateBot); here that refuses too, rather than
+// re-checking with no lock. It answers the context the transaction goes on
+// in: under the lock, marked so (orgLockKey) — every ceiling checked on it
+// judges the caller's grants as they are now, not as the request resolved them.
+func (h *AuthServiceHandler) underBotOrgLock(txCtx context.Context) (context.Context, error) {
+	orgs, err := botOrgScopeOrNil()
+	if err != nil || orgs == nil || orgs.lock == nil {
+		return txCtx, err
+	}
+	orgID, err := orgs.active(txCtx)
+	if err != nil {
+		return nil, err
+	}
+	return orgs.lock(h, txCtx, orgID)
 }
 
 // createBotUserTx creates the machine account and its grant — and, where the
 // realm has organizations, its membership. Kept together so one transaction
 // can hold them; this is about all of them or none.
 func (h *AuthServiceHandler) createBotUserTx(txCtx context.Context, email, orgID, roleID string) (string, error) {
-	req := &pb.CreateBotUserReq{Email: email}
-	for _, fill := range botUserFillers {
-		if err := fill(txCtx, req); err != nil {
-			return "", err
-		}
-	}
+	// The operator and their device, for BotCreated.
+	operator, _ := callerUserID(txCtx)
+	req := &pb.CreateBotUserReq{Email: email, CreatedBy: operator, Thumbprint: requestThumbprint(txCtx)}
 	created, err := h.Mutation.CreateBotUser(txCtx, req)
 	if err != nil {
 		return "", err
@@ -332,6 +476,9 @@ func (h *AuthServiceHandler) CreateBot(ctx context.Context, req *pb.CreateBotReq
 	if req.GetEmail() == "" {
 		return nil, status.Error(codes.InvalidArgument, "email is required")
 	}
+	if err := refuseReservedEmail(ctx, req.GetEmail()); err != nil {
+		return nil, err
+	}
 	if req.GetRoleId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "role_id is required — a bot with no role holds a token that does nothing")
 	}
@@ -385,7 +532,19 @@ func (h *AuthServiceHandler) CreateBot(ctx context.Context, req *pb.CreateBotReq
 			return nil, err
 		}
 	}
-	userID, err := h.createBotUserTx(txCtx, req.GetEmail(), orgID, req.GetRoleId())
+	// The ceiling on the role, again under the organization's lock: an edit of
+	// the role at the same moment comes before or after the grant, not between
+	// the check above and it.
+	txCtx, err = h.underBotOrgLock(txCtx)
+	if err == nil {
+		_, err = h.checkMayGrantRole(txCtx, req.GetRoleId())
+	}
+	var userID string
+	if err == nil {
+		// Normalized as every other account's address, so the unique index
+		// sees one address in one spelling.
+		userID, err = h.createBotUserTx(txCtx, normalizeEmail(req.GetEmail()), orgID, req.GetRoleId())
+	}
 	if err != nil {
 		if tx != nil {
 			_ = tx.Rollback(ctx)
@@ -410,7 +569,8 @@ func containsRole(roles []*pb.ApiRealmRole, id string) bool {
 }
 
 // ListBots returns the machine accounts for an operator's directory.
-func (h *AuthServiceHandler) ListBots(ctx context.Context, _ *pb.ListBotsReq) (*pb.ListBotsResp, error) {
+func (h *AuthServiceHandler) ListBots(ctx context.Context, _ *pb.ListBotsReq) (_ *pb.ListBotsResp, err error) {
+	defer markReplaySafe(&err)
 	if _, err := callerUserID(ctx); err != nil {
 		return nil, Unauthenticated(err)
 	}
@@ -442,20 +602,31 @@ func (h *AuthServiceHandler) ListBots(ctx context.Context, _ *pb.ListBotsReq) (*
 	for _, u := range accounts {
 		// The kind is checked HERE for both sources: a membership is held by
 		// people and machines alike.
-		if u.GetKind() != pb.AccountKind_BOT || !visibleBot(ctx, u) {
+		if u.GetKind() != pb.AccountKind_BOT {
 			continue
 		}
-		out = append(out, &pb.BotSummary{
+		bot := &pb.BotSummary{
 			Id:       u.GetId(),
 			Email:    u.GetEmail(),
 			Disabled: u.GetDisabledAt() != nil,
-		})
+		}
+		if botSummaryFill != nil {
+			if err := botSummaryFill(ctx, h, bot); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, bot)
 	}
 	return &pb.ListBotsResp{Bots: out}, nil
 }
 
+// botSummaryFill, set by bot_roles, adds what a feature knows about a bot to
+// its directory entry (the roles it holds).
+var botSummaryFill func(ctx context.Context, h *AuthServiceHandler, bot *pb.BotSummary) error
+
 // ListBotRoles returns the roles a machine account may hold — API-realm only.
-func (h *AuthServiceHandler) ListBotRoles(ctx context.Context, _ *pb.ListBotRolesReq) (*pb.ListBotRolesResp, error) {
+func (h *AuthServiceHandler) ListBotRoles(ctx context.Context, _ *pb.ListBotRolesReq) (_ *pb.ListBotRolesResp, err error) {
+	defer markReplaySafe(&err)
 	if _, err := callerUserID(ctx); err != nil {
 		return nil, Unauthenticated(err)
 	}
@@ -476,6 +647,64 @@ func (h *AuthServiceHandler) ListBotRoles(ctx context.Context, _ *pb.ListBotRole
 		out = append(out, &pb.BotRole{Id: r.GetId(), Name: r.GetName(), Description: r.GetDescription()})
 	}
 	return &pb.ListBotRolesResp{Roles: out}, nil
+}
+
+// operableBot is the machine account target an operator may act on: a bot of
+// the caller's organization (where the realm has organizations), visible to
+// them, and holding no role above their own ceiling. Every refusal but the
+// ceiling is the one opaque "not a machine account" answer. IssueBotToken and
+// the bot_token_guard endpoints share it.
+func (h *AuthServiceHandler) operableBot(ctx context.Context, target string) (*pb.User, error) {
+	// The target must be a bot IN THE CALLER'S ORGANIZATION, where the realm
+	// has organizations. Both halves are load-bearing and the second was
+	// missing: `user_id` arrives on the wire, so an operator in one company
+	// could name a machine account in another and mint a working credential
+	// for it. The listing that leaked those ids made that a two-step attack
+	// with no barrier between the steps. A realm without organizations is one
+	// organization, and every machine account in it is the operator's.
+	orgs, err := botOrgScopeOrNil()
+	if err != nil {
+		return nil, err
+	}
+	if orgs != nil {
+		inOrg, err := orgs.isMember(ctx, h, target)
+		if err != nil {
+			return nil, err
+		}
+		if !inOrg {
+			// One message for "not a bot", "not here", and "does not exist":
+			// the caller must not learn which, or the refusal becomes a
+			// directory of other companies' accounts.
+			return nil, status.Error(codes.PermissionDenied, errNotABotAccount.Error())
+		}
+	}
+
+	// Read the target and refuse a person. Read FIRST: minting and then
+	// checking would leave a live credential behind on the refusal path.
+	userResp, err := h.Query.GetUserById(ctx, &pb.GetUserByIdReq{UserId: target})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			// Does not exist reads like "not a bot" — see above.
+			return nil, status.Error(codes.PermissionDenied, errNotABotAccount.Error())
+		}
+		return nil, err
+	}
+	if userResp.GetUser().GetKind() != pb.AccountKind_BOT {
+		// The message names the RULE, not the account: a caller must not
+		// learn from the refusal whether the id belongs to a person, a bot it
+		// may not touch, or nothing at all.
+		return nil, status.Error(codes.PermissionDenied, errNotABotAccount.Error())
+	}
+	// Not above the minting operator. A token acts with the bot's roles, so
+	// minting for a bot whose role the operator could not have GRANTED is
+	// handing out what they themselves may not do — the rule CreateBot holds
+	// at creation, held here too, because the bot may have been created by
+	// someone with more. (The token's subset only narrows the bot; it cannot
+	// lift this.)
+	if err := h.checkMayActAsBot(ctx, target); err != nil {
+		return nil, err
+	}
+	return userResp.GetUser(), nil
 }
 
 // errBotAboveCaller is the refusal for minting for a machine account that holds

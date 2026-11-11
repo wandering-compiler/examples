@@ -22,7 +22,7 @@ import (
 	_ "github.com/wandering-compiler/sdk/go/pb/w17/db"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	_ "google.golang.org/protobuf/types/known/timestamppb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -233,6 +233,139 @@ func (x *GetUserByTokenResp) GetStoredTokenHash() string {
 	return ""
 }
 
+// GetExpiredToken — the miss-path lookup of the default (single-realm)
+// Authenticate: the presented token is a row that EXISTS and has ENDED —
+// past its expires_at, or revoked. Run only after the live lookup found
+// nothing, so a valid token never pays for it. A revoked token is answered
+// exactly as an expired one (the earlier of the two instants is when it
+// ended). See GetExpiredTokenWithType for the api_token twin.
+type GetExpiredTokenReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LegacyToken   string                 `protobuf:"bytes,1,opt,name=legacy_token,json=legacyToken,proto3" json:"legacy_token,omitempty"`
+	TokenHash     string                 `protobuf:"bytes,2,opt,name=token_hash,json=tokenHash,proto3" json:"token_hash,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetExpiredTokenReq) Reset() {
+	*x = GetExpiredTokenReq{}
+	mi := &file_queries_auth_query_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetExpiredTokenReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetExpiredTokenReq) ProtoMessage() {}
+
+func (x *GetExpiredTokenReq) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_auth_query_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetExpiredTokenReq.ProtoReflect.Descriptor instead.
+func (*GetExpiredTokenReq) Descriptor() ([]byte, []int) {
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetExpiredTokenReq) GetLegacyToken() string {
+	if x != nil {
+		return x.LegacyToken
+	}
+	return ""
+}
+
+func (x *GetExpiredTokenReq) GetTokenHash() string {
+	if x != nil {
+		return x.TokenHash
+	}
+	return ""
+}
+
+type GetExpiredTokenResp struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// NULL for a never-expiring token that was revoked.
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// The key the expired token is bound to (” for none): SESSION_EXPIRED is
+	// said only to a request whose proof is by that key.
+	DeviceThumbprint string `protobuf:"bytes,2,opt,name=device_thumbprint,json=deviceThumbprint,proto3" json:"device_thumbprint,omitempty"`
+	// When the token was revoked; NULL = not revoked (it expired).
+	RevokedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
+	// When the device it is bound to was revoked; NULL = live (or bound to
+	// none). The key's holder then hears DEVICE_REVOKED, as a live token of a
+	// revoked device answers.
+	DeviceRevokedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=device_revoked_at,json=deviceRevokedAt,proto3" json:"device_revoked_at,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *GetExpiredTokenResp) Reset() {
+	*x = GetExpiredTokenResp{}
+	mi := &file_queries_auth_query_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetExpiredTokenResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetExpiredTokenResp) ProtoMessage() {}
+
+func (x *GetExpiredTokenResp) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_auth_query_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetExpiredTokenResp.ProtoReflect.Descriptor instead.
+func (*GetExpiredTokenResp) Descriptor() ([]byte, []int) {
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetExpiredTokenResp) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *GetExpiredTokenResp) GetDeviceThumbprint() string {
+	if x != nil {
+		return x.DeviceThumbprint
+	}
+	return ""
+}
+
+func (x *GetExpiredTokenResp) GetRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RevokedAt
+	}
+	return nil
+}
+
+func (x *GetExpiredTokenResp) GetDeviceRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DeviceRevokedAt
+	}
+	return nil
+}
+
 type GetUserPermissionsReq struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -242,7 +375,7 @@ type GetUserPermissionsReq struct {
 
 func (x *GetUserPermissionsReq) Reset() {
 	*x = GetUserPermissionsReq{}
-	mi := &file_queries_auth_query_proto_msgTypes[4]
+	mi := &file_queries_auth_query_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -254,7 +387,7 @@ func (x *GetUserPermissionsReq) String() string {
 func (*GetUserPermissionsReq) ProtoMessage() {}
 
 func (x *GetUserPermissionsReq) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[4]
+	mi := &file_queries_auth_query_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -267,7 +400,7 @@ func (x *GetUserPermissionsReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserPermissionsReq.ProtoReflect.Descriptor instead.
 func (*GetUserPermissionsReq) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{4}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetUserPermissionsReq) GetUserId() string {
@@ -290,7 +423,7 @@ type GetUserPermissionsResp struct {
 
 func (x *GetUserPermissionsResp) Reset() {
 	*x = GetUserPermissionsResp{}
-	mi := &file_queries_auth_query_proto_msgTypes[5]
+	mi := &file_queries_auth_query_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -302,7 +435,7 @@ func (x *GetUserPermissionsResp) String() string {
 func (*GetUserPermissionsResp) ProtoMessage() {}
 
 func (x *GetUserPermissionsResp) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[5]
+	mi := &file_queries_auth_query_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -315,7 +448,7 @@ func (x *GetUserPermissionsResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserPermissionsResp.ProtoReflect.Descriptor instead.
 func (*GetUserPermissionsResp) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{5}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetUserPermissionsResp) GetPermissionIds() []int32 {
@@ -336,7 +469,7 @@ type GetUserByTokenWithPermissionsReq struct {
 
 func (x *GetUserByTokenWithPermissionsReq) Reset() {
 	*x = GetUserByTokenWithPermissionsReq{}
-	mi := &file_queries_auth_query_proto_msgTypes[6]
+	mi := &file_queries_auth_query_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -348,7 +481,7 @@ func (x *GetUserByTokenWithPermissionsReq) String() string {
 func (*GetUserByTokenWithPermissionsReq) ProtoMessage() {}
 
 func (x *GetUserByTokenWithPermissionsReq) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[6]
+	mi := &file_queries_auth_query_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -361,7 +494,7 @@ func (x *GetUserByTokenWithPermissionsReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserByTokenWithPermissionsReq.ProtoReflect.Descriptor instead.
 func (*GetUserByTokenWithPermissionsReq) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{6}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetUserByTokenWithPermissionsReq) GetLegacyToken() string {
@@ -410,7 +543,7 @@ type GetUserRoleGrantsReq struct {
 
 func (x *GetUserRoleGrantsReq) Reset() {
 	*x = GetUserRoleGrantsReq{}
-	mi := &file_queries_auth_query_proto_msgTypes[7]
+	mi := &file_queries_auth_query_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -422,7 +555,7 @@ func (x *GetUserRoleGrantsReq) String() string {
 func (*GetUserRoleGrantsReq) ProtoMessage() {}
 
 func (x *GetUserRoleGrantsReq) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[7]
+	mi := &file_queries_auth_query_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -435,7 +568,7 @@ func (x *GetUserRoleGrantsReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserRoleGrantsReq.ProtoReflect.Descriptor instead.
 func (*GetUserRoleGrantsReq) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{7}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetUserRoleGrantsReq) GetUserId() string {
@@ -454,7 +587,7 @@ type GetUserRoleGrantsResp struct {
 
 func (x *GetUserRoleGrantsResp) Reset() {
 	*x = GetUserRoleGrantsResp{}
-	mi := &file_queries_auth_query_proto_msgTypes[8]
+	mi := &file_queries_auth_query_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -466,7 +599,7 @@ func (x *GetUserRoleGrantsResp) String() string {
 func (*GetUserRoleGrantsResp) ProtoMessage() {}
 
 func (x *GetUserRoleGrantsResp) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[8]
+	mi := &file_queries_auth_query_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -479,7 +612,7 @@ func (x *GetUserRoleGrantsResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserRoleGrantsResp.ProtoReflect.Descriptor instead.
 func (*GetUserRoleGrantsResp) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{8}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetUserRoleGrantsResp) GetGrants() []*RoleGrant {
@@ -504,7 +637,7 @@ type ListRoleGrantsReq struct {
 
 func (x *ListRoleGrantsReq) Reset() {
 	*x = ListRoleGrantsReq{}
-	mi := &file_queries_auth_query_proto_msgTypes[9]
+	mi := &file_queries_auth_query_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -516,7 +649,7 @@ func (x *ListRoleGrantsReq) String() string {
 func (*ListRoleGrantsReq) ProtoMessage() {}
 
 func (x *ListRoleGrantsReq) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[9]
+	mi := &file_queries_auth_query_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -529,7 +662,7 @@ func (x *ListRoleGrantsReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRoleGrantsReq.ProtoReflect.Descriptor instead.
 func (*ListRoleGrantsReq) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{9}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{11}
 }
 
 type ListRoleGrantsResp struct {
@@ -541,7 +674,7 @@ type ListRoleGrantsResp struct {
 
 func (x *ListRoleGrantsResp) Reset() {
 	*x = ListRoleGrantsResp{}
-	mi := &file_queries_auth_query_proto_msgTypes[10]
+	mi := &file_queries_auth_query_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -553,7 +686,7 @@ func (x *ListRoleGrantsResp) String() string {
 func (*ListRoleGrantsResp) ProtoMessage() {}
 
 func (x *ListRoleGrantsResp) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[10]
+	mi := &file_queries_auth_query_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -566,7 +699,7 @@ func (x *ListRoleGrantsResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRoleGrantsResp.ProtoReflect.Descriptor instead.
 func (*ListRoleGrantsResp) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{10}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ListRoleGrantsResp) GetGrants() []*RoleGrant {
@@ -593,7 +726,7 @@ type RoleGrant struct {
 
 func (x *RoleGrant) Reset() {
 	*x = RoleGrant{}
-	mi := &file_queries_auth_query_proto_msgTypes[11]
+	mi := &file_queries_auth_query_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -605,7 +738,7 @@ func (x *RoleGrant) String() string {
 func (*RoleGrant) ProtoMessage() {}
 
 func (x *RoleGrant) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[11]
+	mi := &file_queries_auth_query_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -618,7 +751,7 @@ func (x *RoleGrant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoleGrant.ProtoReflect.Descriptor instead.
 func (*RoleGrant) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{11}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RoleGrant) GetRoleId() string {
@@ -652,13 +785,21 @@ type GetUserByTokenWithPermissionsResp struct {
 	// The row's token_hash, empty on a legacy row: the caller then moves the
 	// row to the hash (UpgradeTokenHash).
 	StoredTokenHash string `protobuf:"bytes,6,opt,name=stored_token_hash,json=storedTokenHash,proto3" json:"stored_token_hash,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The device the token is bound to: its key thumbprint (empty for a token
+	// bound to none — minted before device binding, or an API token) and when
+	// it was revoked (NULL = live). Authenticate compares the thumbprint with
+	// the request's proof and refuses a revoked device.
+	DeviceThumbprint string                 `protobuf:"bytes,7,opt,name=device_thumbprint,json=deviceThumbprint,proto3" json:"device_thumbprint,omitempty"`
+	DeviceRevokedAt  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=device_revoked_at,json=deviceRevokedAt,proto3" json:"device_revoked_at,omitempty"`
+	// UserToken.mcp_only: accepted without a proof on the MCP surface only.
+	McpOnly       bool `protobuf:"varint,9,opt,name=mcp_only,json=mcpOnly,proto3" json:"mcp_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetUserByTokenWithPermissionsResp) Reset() {
 	*x = GetUserByTokenWithPermissionsResp{}
-	mi := &file_queries_auth_query_proto_msgTypes[12]
+	mi := &file_queries_auth_query_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -670,7 +811,7 @@ func (x *GetUserByTokenWithPermissionsResp) String() string {
 func (*GetUserByTokenWithPermissionsResp) ProtoMessage() {}
 
 func (x *GetUserByTokenWithPermissionsResp) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[12]
+	mi := &file_queries_auth_query_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -683,7 +824,7 @@ func (x *GetUserByTokenWithPermissionsResp) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetUserByTokenWithPermissionsResp.ProtoReflect.Descriptor instead.
 func (*GetUserByTokenWithPermissionsResp) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{12}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetUserByTokenWithPermissionsResp) GetUser() *User {
@@ -707,6 +848,27 @@ func (x *GetUserByTokenWithPermissionsResp) GetStoredTokenHash() string {
 	return ""
 }
 
+func (x *GetUserByTokenWithPermissionsResp) GetDeviceThumbprint() string {
+	if x != nil {
+		return x.DeviceThumbprint
+	}
+	return ""
+}
+
+func (x *GetUserByTokenWithPermissionsResp) GetDeviceRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DeviceRevokedAt
+	}
+	return nil
+}
+
+func (x *GetUserByTokenWithPermissionsResp) GetMcpOnly() bool {
+	if x != nil {
+		return x.McpOnly
+	}
+	return false
+}
+
 // Signup role-assignment support (rbac). CountUsers backs the
 // first-user determination (COUNT==1 right after the insert = bootstrap
 // admin); GetFirstUserRoles / GetDefaultRoles return the role ids the
@@ -721,7 +883,7 @@ type CountUsersReq struct {
 
 func (x *CountUsersReq) Reset() {
 	*x = CountUsersReq{}
-	mi := &file_queries_auth_query_proto_msgTypes[13]
+	mi := &file_queries_auth_query_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -733,7 +895,7 @@ func (x *CountUsersReq) String() string {
 func (*CountUsersReq) ProtoMessage() {}
 
 func (x *CountUsersReq) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[13]
+	mi := &file_queries_auth_query_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -746,7 +908,7 @@ func (x *CountUsersReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountUsersReq.ProtoReflect.Descriptor instead.
 func (*CountUsersReq) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{13}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{15}
 }
 
 type CountUsersResp struct {
@@ -758,7 +920,7 @@ type CountUsersResp struct {
 
 func (x *CountUsersResp) Reset() {
 	*x = CountUsersResp{}
-	mi := &file_queries_auth_query_proto_msgTypes[14]
+	mi := &file_queries_auth_query_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -770,7 +932,7 @@ func (x *CountUsersResp) String() string {
 func (*CountUsersResp) ProtoMessage() {}
 
 func (x *CountUsersResp) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[14]
+	mi := &file_queries_auth_query_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -783,7 +945,7 @@ func (x *CountUsersResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountUsersResp.ProtoReflect.Descriptor instead.
 func (*CountUsersResp) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{14}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CountUsersResp) GetCount() int64 {
@@ -801,7 +963,7 @@ type GetFirstUserRolesReq struct {
 
 func (x *GetFirstUserRolesReq) Reset() {
 	*x = GetFirstUserRolesReq{}
-	mi := &file_queries_auth_query_proto_msgTypes[15]
+	mi := &file_queries_auth_query_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -813,7 +975,7 @@ func (x *GetFirstUserRolesReq) String() string {
 func (*GetFirstUserRolesReq) ProtoMessage() {}
 
 func (x *GetFirstUserRolesReq) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[15]
+	mi := &file_queries_auth_query_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -826,7 +988,7 @@ func (x *GetFirstUserRolesReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFirstUserRolesReq.ProtoReflect.Descriptor instead.
 func (*GetFirstUserRolesReq) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{15}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{17}
 }
 
 type GetFirstUserRolesResp struct {
@@ -838,7 +1000,7 @@ type GetFirstUserRolesResp struct {
 
 func (x *GetFirstUserRolesResp) Reset() {
 	*x = GetFirstUserRolesResp{}
-	mi := &file_queries_auth_query_proto_msgTypes[16]
+	mi := &file_queries_auth_query_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -850,7 +1012,7 @@ func (x *GetFirstUserRolesResp) String() string {
 func (*GetFirstUserRolesResp) ProtoMessage() {}
 
 func (x *GetFirstUserRolesResp) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[16]
+	mi := &file_queries_auth_query_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -863,7 +1025,7 @@ func (x *GetFirstUserRolesResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFirstUserRolesResp.ProtoReflect.Descriptor instead.
 func (*GetFirstUserRolesResp) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{16}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetFirstUserRolesResp) GetRoleIds() []string {
@@ -881,7 +1043,7 @@ type GetDefaultRolesReq struct {
 
 func (x *GetDefaultRolesReq) Reset() {
 	*x = GetDefaultRolesReq{}
-	mi := &file_queries_auth_query_proto_msgTypes[17]
+	mi := &file_queries_auth_query_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -893,7 +1055,7 @@ func (x *GetDefaultRolesReq) String() string {
 func (*GetDefaultRolesReq) ProtoMessage() {}
 
 func (x *GetDefaultRolesReq) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[17]
+	mi := &file_queries_auth_query_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -906,7 +1068,7 @@ func (x *GetDefaultRolesReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDefaultRolesReq.ProtoReflect.Descriptor instead.
 func (*GetDefaultRolesReq) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{17}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{19}
 }
 
 type GetDefaultRolesResp struct {
@@ -918,7 +1080,7 @@ type GetDefaultRolesResp struct {
 
 func (x *GetDefaultRolesResp) Reset() {
 	*x = GetDefaultRolesResp{}
-	mi := &file_queries_auth_query_proto_msgTypes[18]
+	mi := &file_queries_auth_query_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -930,7 +1092,7 @@ func (x *GetDefaultRolesResp) String() string {
 func (*GetDefaultRolesResp) ProtoMessage() {}
 
 func (x *GetDefaultRolesResp) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[18]
+	mi := &file_queries_auth_query_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -943,7 +1105,7 @@ func (x *GetDefaultRolesResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDefaultRolesResp.ProtoReflect.Descriptor instead.
 func (*GetDefaultRolesResp) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{18}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetDefaultRolesResp) GetRoleIds() []string {
@@ -959,14 +1121,19 @@ func (x *GetDefaultRolesResp) GetRoleIds() []string {
 // column absent from the base Role table); the always-present rbac
 // columns carry the management view.
 type ListRolesReq struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Narrow to the role a declared preset seeded. ABSENT lists the whole
+	// catalogue (the admin page's call). A caller that wants ONE preset role
+	// names it here instead of scanning the paged list for it, which would
+	// miss the preset once the catalogue grows past the first page.
+	PresetKey     *string `protobuf:"bytes,1,opt,name=preset_key,json=presetKey,proto3,oneof" json:"preset_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListRolesReq) Reset() {
 	*x = ListRolesReq{}
-	mi := &file_queries_auth_query_proto_msgTypes[19]
+	mi := &file_queries_auth_query_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -978,7 +1145,7 @@ func (x *ListRolesReq) String() string {
 func (*ListRolesReq) ProtoMessage() {}
 
 func (x *ListRolesReq) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[19]
+	mi := &file_queries_auth_query_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -991,7 +1158,162 @@ func (x *ListRolesReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRolesReq.ProtoReflect.Descriptor instead.
 func (*ListRolesReq) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{19}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ListRolesReq) GetPresetKey() string {
+	if x != nil && x.PresetKey != nil {
+		return *x.PresetKey
+	}
+	return ""
+}
+
+type ListRealmSuperadminsReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRealmSuperadminsReq) Reset() {
+	*x = ListRealmSuperadminsReq{}
+	mi := &file_queries_auth_query_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRealmSuperadminsReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRealmSuperadminsReq) ProtoMessage() {}
+
+func (x *ListRealmSuperadminsReq) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_auth_query_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRealmSuperadminsReq.ProtoReflect.Descriptor instead.
+func (*ListRealmSuperadminsReq) Descriptor() ([]byte, []int) {
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{22}
+}
+
+type ListRealmSuperadminsResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Grants        []*RealmSuperadminRow  `protobuf:"bytes,1,rep,name=grants,proto3" json:"grants,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRealmSuperadminsResp) Reset() {
+	*x = ListRealmSuperadminsResp{}
+	mi := &file_queries_auth_query_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRealmSuperadminsResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRealmSuperadminsResp) ProtoMessage() {}
+
+func (x *ListRealmSuperadminsResp) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_auth_query_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRealmSuperadminsResp.ProtoReflect.Descriptor instead.
+func (*ListRealmSuperadminsResp) Descriptor() ([]byte, []int) {
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ListRealmSuperadminsResp) GetGrants() []*RealmSuperadminRow {
+	if x != nil {
+		return x.Grants
+	}
+	return nil
+}
+
+type RealmSuperadminRow struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	RoleId        string                 `protobuf:"bytes,2,opt,name=role_id,json=roleId,proto3" json:"role_id,omitempty"`
+	DisabledAt    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=disabled_at,json=disabledAt,proto3" json:"disabled_at,omitempty"`
+	ErasedAt      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=erased_at,json=erasedAt,proto3" json:"erased_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RealmSuperadminRow) Reset() {
+	*x = RealmSuperadminRow{}
+	mi := &file_queries_auth_query_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RealmSuperadminRow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RealmSuperadminRow) ProtoMessage() {}
+
+func (x *RealmSuperadminRow) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_auth_query_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RealmSuperadminRow.ProtoReflect.Descriptor instead.
+func (*RealmSuperadminRow) Descriptor() ([]byte, []int) {
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *RealmSuperadminRow) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *RealmSuperadminRow) GetRoleId() string {
+	if x != nil {
+		return x.RoleId
+	}
+	return ""
+}
+
+func (x *RealmSuperadminRow) GetDisabledAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DisabledAt
+	}
+	return nil
+}
+
+func (x *RealmSuperadminRow) GetErasedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ErasedAt
+	}
+	return nil
 }
 
 type ListRolesResp struct {
@@ -1010,7 +1332,7 @@ type ListRolesResp struct {
 
 func (x *ListRolesResp) Reset() {
 	*x = ListRolesResp{}
-	mi := &file_queries_auth_query_proto_msgTypes[20]
+	mi := &file_queries_auth_query_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1022,7 +1344,7 @@ func (x *ListRolesResp) String() string {
 func (*ListRolesResp) ProtoMessage() {}
 
 func (x *ListRolesResp) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[20]
+	mi := &file_queries_auth_query_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1035,7 +1357,7 @@ func (x *ListRolesResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRolesResp.ProtoReflect.Descriptor instead.
 func (*ListRolesResp) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{20}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListRolesResp) GetRoles() []*Role {
@@ -1061,7 +1383,7 @@ type GetRoleReq struct {
 
 func (x *GetRoleReq) Reset() {
 	*x = GetRoleReq{}
-	mi := &file_queries_auth_query_proto_msgTypes[21]
+	mi := &file_queries_auth_query_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1073,7 +1395,7 @@ func (x *GetRoleReq) String() string {
 func (*GetRoleReq) ProtoMessage() {}
 
 func (x *GetRoleReq) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[21]
+	mi := &file_queries_auth_query_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1086,7 +1408,7 @@ func (x *GetRoleReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRoleReq.ProtoReflect.Descriptor instead.
 func (*GetRoleReq) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{21}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetRoleReq) GetId() string {
@@ -1110,7 +1432,7 @@ type GetUserByIdReq struct {
 
 func (x *GetUserByIdReq) Reset() {
 	*x = GetUserByIdReq{}
-	mi := &file_queries_auth_query_proto_msgTypes[22]
+	mi := &file_queries_auth_query_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1122,7 +1444,7 @@ func (x *GetUserByIdReq) String() string {
 func (*GetUserByIdReq) ProtoMessage() {}
 
 func (x *GetUserByIdReq) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[22]
+	mi := &file_queries_auth_query_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1135,7 +1457,7 @@ func (x *GetUserByIdReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserByIdReq.ProtoReflect.Descriptor instead.
 func (*GetUserByIdReq) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{22}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetUserByIdReq) GetUserId() string {
@@ -1154,7 +1476,7 @@ type GetUserByIdResp struct {
 
 func (x *GetUserByIdResp) Reset() {
 	*x = GetUserByIdResp{}
-	mi := &file_queries_auth_query_proto_msgTypes[23]
+	mi := &file_queries_auth_query_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1166,7 +1488,7 @@ func (x *GetUserByIdResp) String() string {
 func (*GetUserByIdResp) ProtoMessage() {}
 
 func (x *GetUserByIdResp) ProtoReflect() protoreflect.Message {
-	mi := &file_queries_auth_query_proto_msgTypes[23]
+	mi := &file_queries_auth_query_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1179,12 +1501,190 @@ func (x *GetUserByIdResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserByIdResp.ProtoReflect.Descriptor instead.
 func (*GetUserByIdResp) Descriptor() ([]byte, []int) {
-	return file_queries_auth_query_proto_rawDescGZIP(), []int{23}
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GetUserByIdResp) GetUser() *User {
 	if x != nil {
 		return x.User
+	}
+	return nil
+}
+
+// GetDeviceTrustRevokedAt reads User.device_trust_revoked_at: a device
+// trusted at or before it is no longer trusted.
+type GetDeviceTrustRevokedAtReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDeviceTrustRevokedAtReq) Reset() {
+	*x = GetDeviceTrustRevokedAtReq{}
+	mi := &file_queries_auth_query_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDeviceTrustRevokedAtReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDeviceTrustRevokedAtReq) ProtoMessage() {}
+
+func (x *GetDeviceTrustRevokedAtReq) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_auth_query_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDeviceTrustRevokedAtReq.ProtoReflect.Descriptor instead.
+func (*GetDeviceTrustRevokedAtReq) Descriptor() ([]byte, []int) {
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *GetDeviceTrustRevokedAtReq) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type GetDeviceTrustRevokedAtResp struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	DeviceTrustRevokedAt *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=device_trust_revoked_at,json=deviceTrustRevokedAt,proto3" json:"device_trust_revoked_at,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *GetDeviceTrustRevokedAtResp) Reset() {
+	*x = GetDeviceTrustRevokedAtResp{}
+	mi := &file_queries_auth_query_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDeviceTrustRevokedAtResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDeviceTrustRevokedAtResp) ProtoMessage() {}
+
+func (x *GetDeviceTrustRevokedAtResp) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_auth_query_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDeviceTrustRevokedAtResp.ProtoReflect.Descriptor instead.
+func (*GetDeviceTrustRevokedAtResp) Descriptor() ([]byte, []int) {
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *GetDeviceTrustRevokedAtResp) GetDeviceTrustRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DeviceTrustRevokedAt
+	}
+	return nil
+}
+
+type ListUserSignInEventsReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListUserSignInEventsReq) Reset() {
+	*x = ListUserSignInEventsReq{}
+	mi := &file_queries_auth_query_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListUserSignInEventsReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListUserSignInEventsReq) ProtoMessage() {}
+
+func (x *ListUserSignInEventsReq) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_auth_query_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListUserSignInEventsReq.ProtoReflect.Descriptor instead.
+func (*ListUserSignInEventsReq) Descriptor() ([]byte, []int) {
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ListUserSignInEventsReq) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type ListUserSignInEventsResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Events        []*SignInEvent         `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListUserSignInEventsResp) Reset() {
+	*x = ListUserSignInEventsResp{}
+	mi := &file_queries_auth_query_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListUserSignInEventsResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListUserSignInEventsResp) ProtoMessage() {}
+
+func (x *ListUserSignInEventsResp) ProtoReflect() protoreflect.Message {
+	mi := &file_queries_auth_query_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListUserSignInEventsResp.ProtoReflect.Descriptor instead.
+func (*ListUserSignInEventsResp) Descriptor() ([]byte, []int) {
+	return file_queries_auth_query_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ListUserSignInEventsResp) GetEvents() []*SignInEvent {
+	if x != nil {
+		return x.Events
 	}
 	return nil
 }
@@ -1204,13 +1704,24 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"token_hash\x18\x02 \x01(\tR\ttokenHash\"l\n" +
 	"\x12GetUserByTokenResp\x12*\n" +
 	"\x04user\x18\x01 \x01(\v2\x16.w17.contrib.auth.UserR\x04user\x12*\n" +
-	"\x11stored_token_hash\x18\x02 \x01(\tR\x0fstoredTokenHash\":\n" +
+	"\x11stored_token_hash\x18\x02 \x01(\tR\x0fstoredTokenHash\"V\n" +
+	"\x12GetExpiredTokenReq\x12!\n" +
+	"\flegacy_token\x18\x01 \x01(\tR\vlegacyToken\x12\x1d\n" +
+	"\n" +
+	"token_hash\x18\x02 \x01(\tR\ttokenHash\"\x9e\x02\n" +
+	"\x13GetExpiredTokenResp\x12C\n" +
+	"\n" +
+	"expires_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\texpiresAt\x12+\n" +
+	"\x11device_thumbprint\x18\x02 \x01(\tR\x10deviceThumbprint\x12C\n" +
+	"\n" +
+	"revoked_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\trevokedAt\x12P\n" +
+	"\x11device_revoked_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x0fdeviceRevokedAt\":\n" +
 	"\x15GetUserPermissionsReq\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId:\b\xfa\xf4\x18\x04rbac\"I\n" +
 	"\x16GetUserPermissionsResp\x12%\n" +
-	"\x0epermission_ids\x18\x01 \x03(\x05R\rpermissionIds:\b\xfa\xf4\x18\x04rbac\"n\n" +
-	" GetUserByTokenWithPermissionsReq\x12!\n" +
-	"\flegacy_token\x18\x01 \x01(\tR\vlegacyToken\x12\x1d\n" +
+	"\x0epermission_ids\x18\x01 \x03(\x05R\rpermissionIds:\b\xfa\xf4\x18\x04rbac\"y\n" +
+	" GetUserByTokenWithPermissionsReq\x12,\n" +
+	"\flegacy_token\x18\x01 \x01(\tB\t\xca\xf3\x18\x050\x01\xa0\x02\x01R\vlegacyToken\x12\x1d\n" +
 	"\n" +
 	"token_hash\x18\x02 \x01(\tR\ttokenHash:\b\xfa\xf4\x18\x04rbac\"A\n" +
 	"\x14GetUserRoleGrantsReq\x12\x1f\n" +
@@ -1223,11 +1734,14 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\tRoleGrant\x12\x1f\n" +
 	"\arole_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06roleId\x12%\n" +
 	"\x0epermission_ids\x18\x02 \x03(\x05R\rpermissionIds\x12'\n" +
-	"\x0fall_permissions\x18\x03 \x01(\bR\x0eallPermissions\"\xba\x01\n" +
+	"\x0fall_permissions\x18\x03 \x01(\bR\x0eallPermissions\"\xd4\x02\n" +
 	"!GetUserByTokenWithPermissionsResp\x12*\n" +
 	"\x04user\x18\x01 \x01(\v2\x16.w17.contrib.auth.UserR\x04user\x12!\n" +
 	"\btoken_id\x18\x03 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\atokenId\x12*\n" +
-	"\x11stored_token_hash\x18\x06 \x01(\tR\x0fstoredTokenHash:\b\xfa\xf4\x18\x04rbacJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"\x19\n" +
+	"\x11stored_token_hash\x18\x06 \x01(\tR\x0fstoredTokenHash\x12+\n" +
+	"\x11device_thumbprint\x18\a \x01(\tR\x10deviceThumbprint\x12P\n" +
+	"\x11device_revoked_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x0fdeviceRevokedAt\x12\x19\n" +
+	"\bmcp_only\x18\t \x01(\bR\amcpOnly:\b\xfa\xf4\x18\x04rbacJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"\x19\n" +
 	"\rCountUsersReq:\b\xfa\xf4\x18\x04rbac\"0\n" +
 	"\x0eCountUsersResp\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x03R\x05count:\b\xfa\xf4\x18\x04rbac\" \n" +
@@ -1236,8 +1750,20 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\brole_ids\x18\x01 \x03(\tR\aroleIds:\b\xfa\xf4\x18\x04rbac\"\x1e\n" +
 	"\x12GetDefaultRolesReq:\b\xfa\xf4\x18\x04rbac\":\n" +
 	"\x13GetDefaultRolesResp\x12\x19\n" +
-	"\brole_ids\x18\x01 \x03(\tR\aroleIds:\b\xfa\xf4\x18\x04rbac\"\x18\n" +
-	"\fListRolesReq:\b\xfa\xf4\x18\x04rbac\"l\n" +
+	"\brole_ids\x18\x01 \x03(\tR\aroleIds:\b\xfa\xf4\x18\x04rbac\"U\n" +
+	"\fListRolesReq\x12,\n" +
+	"\n" +
+	"preset_key\x18\x01 \x01(\tB\b\xca\xf3\x18\x04\b\x06@dH\x00R\tpresetKey\x88\x01\x01:\b\xfa\xf4\x18\x04rbacB\r\n" +
+	"\v_preset_key\"#\n" +
+	"\x17ListRealmSuperadminsReq:\b\xfa\xf4\x18\x04rbac\"b\n" +
+	"\x18ListRealmSuperadminsResp\x12<\n" +
+	"\x06grants\x18\x01 \x03(\v2$.w17.contrib.auth.RealmSuperadminRowR\x06grants:\b\xfa\xf4\x18\x04rbac\"\xda\x01\n" +
+	"\x12RealmSuperadminRow\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x17\n" +
+	"\arole_id\x18\x02 \x01(\tR\x06roleId\x12E\n" +
+	"\vdisabled_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\n" +
+	"disabledAt\x12A\n" +
+	"\terased_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\berasedAt:\b\xfa\xf4\x18\x04rbac\"l\n" +
 	"\rListRolesResp\x12,\n" +
 	"\x05roles\x18\x01 \x03(\v2\x16.w17.contrib.auth.RoleR\x05roles\x12#\n" +
 	"\x06paging\x18\x02 \x01(\v2\v.w17.PagingR\x06paging:\b\xfa\xf4\x18\x04rbac\"&\n" +
@@ -1247,33 +1773,53 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\x0eGetUserByIdReq\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\"=\n" +
 	"\x0fGetUserByIdResp\x12*\n" +
-	"\x04user\x18\x01 \x01(\v2\x16.w17.contrib.auth.UserR\x04user2\xa1&\n" +
-	"\tAuthQuery\x12\xec\x03\n" +
-	"\x0eGetUserByEmail\x12#.w17.contrib.auth.GetUserByEmailReq\x1a$.w17.contrib.auth.GetUserByEmailResp\"\x8e\x03\xf2\xf3\x18\x89\x03B\x86\x03\n" +
-	"\x04main\x12\xfd\x02SELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        u.created_at AS user.created_at,        ?feature(service_account) u.kind AS user.kind,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at FROM @module.User u WHERE u.email = :email\x12\x99\x04\n" +
-	"\x0eGetUserByToken\x12#.w17.contrib.auth.GetUserByTokenReq\x1a$.w17.contrib.auth.GetUserByTokenResp\"\xbb\x03\xf2\xf3\x18\xb6\x03B\xb3\x03\n" +
-	"\x04main\x12\xaa\x03SELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        ?feature(service_account) u.kind AS user.kind,        u.created_at AS user.created_at,        COALESCE(t.token_hash, '') AS stored_token_hash FROM @module.User u JOIN @module.UserToken t ON t.user_id = u.id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW())\x12\xaa\x02\n" +
-	"\x12GetUserPermissions\x12'.w17.contrib.auth.GetUserPermissionsReq\x1a(.w17.contrib.auth.GetUserPermissionsResp\"\xc0\x01\xf2\xf3\x18\xb3\x01B\xb0\x01\n" +
-	"\x04main\x12\xa7\x01SELECT ROWS_TO_ARRAY(rp.permission_id) AS permission_ids FROM @module.RolePermission rp JOIN @module.UserRole ur ON ur.role_id = rp.role_id WHERE ur.user_id = :user_id\x8a\xf5\x18\x04rbac\x12\xa6\x05\n" +
-	"\x1dGetUserByTokenWithPermissions\x122.w17.contrib.auth.GetUserByTokenWithPermissionsReq\x1a3.w17.contrib.auth.GetUserByTokenWithPermissionsResp\"\x9b\x04\xf2\xf3\x18\x8e\x04B\x8b\x04\n" +
-	"\x04main\x12\x82\x04SELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        ?feature(service_account) u.kind AS user.kind,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        u.created_at AS user.created_at,        t.id AS token_id,        COALESCE(t.token_hash, '') AS stored_token_hash FROM @module.User u JOIN @module.UserToken t ON t.user_id = u.id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW())\x8a\xf5\x18\x04rbac\x12\xc7\x03\n" +
-	"\x11GetUserRoleGrants\x12&.w17.contrib.auth.GetUserRoleGrantsReq\x1a'.w17.contrib.auth.GetUserRoleGrantsResp\"\xe0\x02\xf2\xf3\x18\xd3\x02B\xd0\x02\n" +
-	"\x04main\x12\xc7\x02SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.UserRole ur JOIN @module.Role r ON r.id = ur.role_id LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id WHERE ur.user_id = :user_id GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x04rbac\x12\xf4\x02\n" +
-	"\x0eListRoleGrants\x12#.w17.contrib.auth.ListRoleGrantsReq\x1a$.w17.contrib.auth.ListRoleGrantsResp\"\x96\x02\xf2\xf3\x18\x89\x02B\x86\x02\n" +
-	"\x04main\x12\xfd\x01SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.Role r LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x04rbac\x12\x93\x01\n" +
+	"\x04user\x18\x01 \x01(\v2\x16.w17.contrib.auth.UserR\x04user\"5\n" +
+	"\x1aGetDeviceTrustRevokedAtReq\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"x\n" +
+	"\x1bGetDeviceTrustRevokedAtResp\x12Y\n" +
+	"\x17device_trust_revoked_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02(\x01R\x14deviceTrustRevokedAt\"T\n" +
+	"\x17ListUserSignInEventsReq\x12\x1f\n" +
+	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId:\x18\xfa\xf4\x18\x14authenticate_turnkey\"k\n" +
+	"\x18ListUserSignInEventsResp\x125\n" +
+	"\x06events\x18\x01 \x03(\v2\x1d.w17.contrib.auth.SignInEventR\x06events:\x18\xfa\xf4\x18\x14authenticate_turnkey2\x8dP\n" +
+	"\tAuthQuery\x12\x8c\b\n" +
+	"\x0eGetUserByEmail\x12#.w17.contrib.auth.GetUserByEmailReq\x1a$.w17.contrib.auth.GetUserByEmailResp\"\xae\a\xf2\xf3\x18\xa9\aB\xa6\a\n" +
+	"\x04main\x12\x9d\aSELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        u.created_at AS user.created_at,        ?feature(service_account) u.kind AS user.kind,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u WHERE u.email = :email\x12\xe4\t\n" +
+	"\x0eGetUserByToken\x12#.w17.contrib.auth.GetUserByTokenReq\x1a$.w17.contrib.auth.GetUserByTokenResp\"\x86\t\xf2\xf3\x18\x81\tB\xfe\b\n" +
+	"\x04main\x12\xf5\bSELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        ?feature(service_account) u.kind AS user.kind,        u.created_at AS user.created_at,        COALESCE(t.token_hash, '') AS stored_token_hash,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u JOIN @module.UserToken t ON t.user_id = u.id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL\x12\xa0\x03\n" +
+	"\x12GetUserPermissions\x12'.w17.contrib.auth.GetUserPermissionsReq\x1a(.w17.contrib.auth.GetUserPermissionsResp\"\xb6\x02\xf2\xf3\x18\xa9\x02B\xa6\x02\n" +
+	"\x04main\x12\x9d\x02SELECT ROWS_TO_ARRAY(rp.permission_id) AS permission_ids FROM @module.RolePermission rp JOIN @module.UserRole ur ON ur.role_id = rp.role_id JOIN @module.Role r ON r.id = rp.role_id WHERE ur.user_id = :user_id AND ur.revoked_at IS NULL AND rp.removed_at IS NULL AND r.deleted_at IS NULL\x8a\xf5\x18\x04rbac\x12\xd8\x03\n" +
+	"\x0fGetExpiredToken\x12$.w17.contrib.auth.GetExpiredTokenReq\x1a%.w17.contrib.auth.GetExpiredTokenResp\"\xf7\x02\xf2\xf3\x18\xf2\x02B\xef\x02\n" +
+	"\x04main\x12\xe6\x02SELECT t.expires_at AS expires_at,        COALESCE(d.thumbprint, '') AS device_thumbprint,        t.revoked_at AS revoked_at,        d.revoked_at AS device_revoked_at FROM @module.UserToken t LEFT JOIN @module.Device d ON d.id = t.device_id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at <= NOW() OR t.revoked_at IS NOT NULL)\x12\xe4\v\n" +
+	"\x1dGetUserByTokenWithPermissions\x122.w17.contrib.auth.GetUserByTokenWithPermissionsReq\x1a3.w17.contrib.auth.GetUserByTokenWithPermissionsResp\"\xd9\n" +
+	"\xf2\xf3\x18\xcc\n" +
+	"B\xc9\n" +
+	"\n" +
+	"\x04main\x12\xc0\n" +
+	"SELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        ?feature(service_account) u.kind AS user.kind,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        u.created_at AS user.created_at,        t.id AS token_id,        COALESCE(t.token_hash, '') AS stored_token_hash,        COALESCE(d.thumbprint, '') AS device_thumbprint,        d.revoked_at AS device_revoked_at,        t.mcp_only AS mcp_only,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u JOIN @module.UserToken t ON t.user_id = u.id LEFT JOIN @module.Device d ON d.id = t.device_id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL\x8a\xf5\x18\x04rbac\x12\x94\x04\n" +
+	"\x11GetUserRoleGrants\x12&.w17.contrib.auth.GetUserRoleGrantsReq\x1a'.w17.contrib.auth.GetUserRoleGrantsResp\"\xad\x03\xf2\xf3\x18\xa0\x03B\x9d\x03\n" +
+	"\x04main\x12\x94\x03SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.UserRole ur JOIN @module.Role r ON r.id = ur.role_id LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL WHERE ur.user_id = :user_id AND ur.revoked_at IS NULL AND r.deleted_at IS NULL GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x04rbac\x12\xa9\x03\n" +
+	"\x0eListRoleGrants\x12#.w17.contrib.auth.ListRoleGrantsReq\x1a$.w17.contrib.auth.ListRoleGrantsResp\"\xcb\x02\xf2\xf3\x18\xbe\x02B\xbb\x02\n" +
+	"\x04main\x12\xb2\x02SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.Role r LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL WHERE r.deleted_at IS NULL GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x04rbac\x12\x93\x01\n" +
 	"\n" +
 	"CountUsers\x12\x1f.w17.contrib.auth.CountUsersReq\x1a .w17.contrib.auth.CountUsersResp\"B\xf2\xf3\x186B4\n" +
-	"\x04main\x12,SELECT COUNT(*) AS count FROM @module.User u\x8a\xf5\x18\x04rbac\x12\xd7\x01\n" +
-	"\x11GetFirstUserRoles\x12&.w17.contrib.auth.GetFirstUserRolesReq\x1a'.w17.contrib.auth.GetFirstUserRolesResp\"q\xf2\xf3\x18eBc\n" +
-	"\x04main\x12[SELECT ROWS_TO_ARRAY(r.id) AS role_ids FROM @module.Role r WHERE r.assign_first_user = TRUE\x8a\xf5\x18\x04rbac\x12\xce\x01\n" +
-	"\x0fGetDefaultRoles\x12$.w17.contrib.auth.GetDefaultRolesReq\x1a%.w17.contrib.auth.GetDefaultRolesResp\"n\xf2\xf3\x18bB`\n" +
-	"\x04main\x12XSELECT ROWS_TO_ARRAY(r.id) AS role_ids FROM @module.Role r WHERE r.assign_default = TRUE\x8a\xf5\x18\x04rbac\x12\xcf\x03\n" +
-	"\tListRoles\x12\x1e.w17.contrib.auth.ListRolesReq\x1a\x1f.w17.contrib.auth.ListRolesResp\"\x80\x03\xf2\xf3\x18\xf3\x02B\xf0\x02\n" +
-	"\x04main\x12\xe7\x02SELECT r.id AS id, r.name AS name, r.description AS description,        r.display_name AS display_name,        r.all_permissions AS all_permissions,        r.assign_first_user AS assign_first_user,        r.assign_default AS assign_default,        r.preset_key AS preset_key,        r.created_at AS created_at FROM @module.Role r ORDER BY r.name ASC, r.id ASC\x8a\xf5\x18\x04rbac\x12\xbc\x03\n" +
-	"\aGetRole\x12\x1c.w17.contrib.auth.GetRoleReq\x1a\x16.w17.contrib.auth.Role\"\xfa\x02\xf2\xf3\x18\xed\x02B\xea\x02\n" +
-	"\x04main\x12\xe1\x02SELECT r.id AS id, r.name AS name,        r.description AS description,        r.display_name AS display_name,        r.all_permissions AS all_permissions,        r.assign_first_user AS assign_first_user,        r.assign_default AS assign_default,        r.preset_key AS preset_key,        r.created_at AS created_at FROM @module.Role r WHERE r.id = :id\x8a\xf5\x18\x04rbac\x12\x9f\x04\n" +
-	"\vGetUserById\x12 .w17.contrib.auth.GetUserByIdReq\x1a!.w17.contrib.auth.GetUserByIdResp\"\xca\x03\xf2\xf3\x18\xc5\x03B\xc2\x03\n" +
-	"\x04main\x12\xb9\x03SELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        ?feature(service_account) u.kind AS user.kind,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(tenant_scope) u.tenant_id AS user.tenant_id,        u.created_at AS user.created_at FROM @module.User u WHERE u.id = :user_idB\xbb\x01\n" +
+	"\x04main\x12,SELECT COUNT(*) AS count FROM @module.User u\x8a\xf5\x18\x04rbac\x12\xf1\x01\n" +
+	"\x11GetFirstUserRoles\x12&.w17.contrib.auth.GetFirstUserRolesReq\x1a'.w17.contrib.auth.GetFirstUserRolesResp\"\x8a\x01\xf2\xf3\x18~B|\n" +
+	"\x04main\x12tSELECT ROWS_TO_ARRAY(r.id) AS role_ids FROM @module.Role r WHERE r.assign_first_user = TRUE AND r.deleted_at IS NULL\x8a\xf5\x18\x04rbac\x12\xe8\x01\n" +
+	"\x0fGetDefaultRoles\x12$.w17.contrib.auth.GetDefaultRolesReq\x1a%.w17.contrib.auth.GetDefaultRolesResp\"\x87\x01\xf2\xf3\x18{By\n" +
+	"\x04main\x12qSELECT ROWS_TO_ARRAY(r.id) AS role_ids FROM @module.Role r WHERE r.assign_default = TRUE AND r.deleted_at IS NULL\x8a\xf5\x18\x04rbac\x12\x9c\x05\n" +
+	"\x14ListRealmSuperadmins\x12).w17.contrib.auth.ListRealmSuperadminsReq\x1a*.w17.contrib.auth.ListRealmSuperadminsResp\"\xac\x04\xf2\xf3\x18\x9f\x04B\x9c\x04\n" +
+	"\x04main\x12\x93\x04SELECT ur.user_id AS user_id, r.id AS role_id,        ?feature(user_admin) u.disabled_at AS disabled_at,        ?unless(user_admin) NULL AS disabled_at,        ?feature(user_admin) u.erased_at AS erased_at,        ?unless(user_admin) NULL AS erased_at,        ?feature(api_token) r.token_type AS token_type FROM @module.User u JOIN @module.UserRole ur ON ur.user_id = u.id JOIN @module.Role r ON r.id = ur.role_id WHERE ur.revoked_at IS NULL   AND r.all_permissions = TRUE AND r.deleted_at IS NULL ORDER BY ur.user_id ASC, r.id ASC\x8a\xf5\x18\x04rbac\x12\xf0\x05\n" +
+	"\tListRoles\x12\x1e.w17.contrib.auth.ListRolesReq\x1a\x1f.w17.contrib.auth.ListRolesResp\"\xa1\x05\xf2\xf3\x18\x94\x05B\x91\x05\n" +
+	"\x04main\x12\x88\x05SELECT r.id AS id, r.name AS name, r.description AS description,        r.display_name AS display_name,        r.all_permissions AS all_permissions,        r.assign_first_user AS assign_first_user,        r.assign_default AS assign_default,        r.preset_key AS preset_key,        r.created_at AS created_at,        ?feature(api_token) r.token_type AS token_type,        ?feature(org_membership) r.org_scoped AS org_scoped,        r.deleted_at AS deleted_at,        r.ended_key AS ended_key,        ?feature(org_roles) r.org_id AS org_id FROM @module.Role r WHERE r.deleted_at IS NULL AND ?r.preset_key = :preset_key ORDER BY r.name ASC, r.id ASC\x8a\xf5\x18\x04rbac\x12\xbb\x05\n" +
+	"\aGetRole\x12\x1c.w17.contrib.auth.GetRoleReq\x1a\x16.w17.contrib.auth.Role\"\xf9\x04\xf2\xf3\x18\xec\x04B\xe9\x04\n" +
+	"\x04main\x12\xe0\x04SELECT r.id AS id, r.name AS name,        r.description AS description,        r.display_name AS display_name,        r.all_permissions AS all_permissions,        r.assign_first_user AS assign_first_user,        r.assign_default AS assign_default,        r.preset_key AS preset_key,        r.created_at AS created_at,        ?feature(api_token) r.token_type AS token_type,        ?feature(org_membership) r.org_scoped AS org_scoped,        r.deleted_at AS deleted_at,        r.ended_key AS ended_key,        ?feature(org_roles) r.org_id AS org_id FROM @module.Role r WHERE r.id = :id AND r.deleted_at IS NULL\x8a\xf5\x18\x04rbac\x12\x82\b\n" +
+	"\vGetUserById\x12 .w17.contrib.auth.GetUserByIdReq\x1a!.w17.contrib.auth.GetUserByIdResp\"\xad\a\xf2\xf3\x18\xa8\aB\xa5\a\n" +
+	"\x04main\x12\x9c\aSELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        ?feature(service_account) u.kind AS user.kind,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        u.created_at AS user.created_at,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u WHERE u.id = :user_id\x12\xeb\x01\n" +
+	"\x17GetDeviceTrustRevokedAt\x12,.w17.contrib.auth.GetDeviceTrustRevokedAtReq\x1a-.w17.contrib.auth.GetDeviceTrustRevokedAtResp\"s\xf2\xf3\x18oBm\n" +
+	"\x04main\x12eSELECT u.device_trust_revoked_at AS device_trust_revoked_at FROM @module.User u WHERE u.id = :user_id\x12\xa9\x04\n" +
+	"\x14ListUserSignInEvents\x12).w17.contrib.auth.ListUserSignInEventsReq\x1a*.w17.contrib.auth.ListUserSignInEventsResp\"\xb9\x03\xf2\xf3\x18\x9c\x03B\x99\x03\n" +
+	"\x04main\x12\x90\x03SELECT e.id AS id, e.created_at AS created_at,        e.user_id AS user_id, e.address AS address,        e.device_id AS device_id, e.thumbprint AS thumbprint,        e.ip AS ip, e.user_agent AS user_agent,        e.method AS method, e.outcome AS outcome,        e.public_computer AS public_computer FROM @module.SignInEvent e WHERE e.user_id = :user_id ORDER BY e.created_at DESC, e.id DESC LIMIT 100\x8a\xf5\x18\x14authenticate_turnkeyB\xbb\x01\n" +
 	"\x14com.w17.contrib.authB\x0eAuthQueryProtoP\x01Z1github.com/wandering-compiler/plugins/auth/gen/pb\xa2\x02\x03WCA\xaa\x02\x10W17.Contrib.Auth\xca\x02\x10W17\\Contrib\\Auth\xe2\x02\x1cW17\\Contrib\\Auth\\GPBMetadata\xea\x02\x12W17::Contrib::Authb\x06proto3"
 
 var (
@@ -1288,74 +1834,102 @@ func file_queries_auth_query_proto_rawDescGZIP() []byte {
 	return file_queries_auth_query_proto_rawDescData
 }
 
-var file_queries_auth_query_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_queries_auth_query_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_queries_auth_query_proto_goTypes = []any{
 	(*GetUserByEmailReq)(nil),                 // 0: w17.contrib.auth.GetUserByEmailReq
 	(*GetUserByEmailResp)(nil),                // 1: w17.contrib.auth.GetUserByEmailResp
 	(*GetUserByTokenReq)(nil),                 // 2: w17.contrib.auth.GetUserByTokenReq
 	(*GetUserByTokenResp)(nil),                // 3: w17.contrib.auth.GetUserByTokenResp
-	(*GetUserPermissionsReq)(nil),             // 4: w17.contrib.auth.GetUserPermissionsReq
-	(*GetUserPermissionsResp)(nil),            // 5: w17.contrib.auth.GetUserPermissionsResp
-	(*GetUserByTokenWithPermissionsReq)(nil),  // 6: w17.contrib.auth.GetUserByTokenWithPermissionsReq
-	(*GetUserRoleGrantsReq)(nil),              // 7: w17.contrib.auth.GetUserRoleGrantsReq
-	(*GetUserRoleGrantsResp)(nil),             // 8: w17.contrib.auth.GetUserRoleGrantsResp
-	(*ListRoleGrantsReq)(nil),                 // 9: w17.contrib.auth.ListRoleGrantsReq
-	(*ListRoleGrantsResp)(nil),                // 10: w17.contrib.auth.ListRoleGrantsResp
-	(*RoleGrant)(nil),                         // 11: w17.contrib.auth.RoleGrant
-	(*GetUserByTokenWithPermissionsResp)(nil), // 12: w17.contrib.auth.GetUserByTokenWithPermissionsResp
-	(*CountUsersReq)(nil),                     // 13: w17.contrib.auth.CountUsersReq
-	(*CountUsersResp)(nil),                    // 14: w17.contrib.auth.CountUsersResp
-	(*GetFirstUserRolesReq)(nil),              // 15: w17.contrib.auth.GetFirstUserRolesReq
-	(*GetFirstUserRolesResp)(nil),             // 16: w17.contrib.auth.GetFirstUserRolesResp
-	(*GetDefaultRolesReq)(nil),                // 17: w17.contrib.auth.GetDefaultRolesReq
-	(*GetDefaultRolesResp)(nil),               // 18: w17.contrib.auth.GetDefaultRolesResp
-	(*ListRolesReq)(nil),                      // 19: w17.contrib.auth.ListRolesReq
-	(*ListRolesResp)(nil),                     // 20: w17.contrib.auth.ListRolesResp
-	(*GetRoleReq)(nil),                        // 21: w17.contrib.auth.GetRoleReq
-	(*GetUserByIdReq)(nil),                    // 22: w17.contrib.auth.GetUserByIdReq
-	(*GetUserByIdResp)(nil),                   // 23: w17.contrib.auth.GetUserByIdResp
-	(*User)(nil),                              // 24: w17.contrib.auth.User
-	(*Role)(nil),                              // 25: w17.contrib.auth.Role
-	(*w17.Paging)(nil),                        // 26: w17.Paging
+	(*GetExpiredTokenReq)(nil),                // 4: w17.contrib.auth.GetExpiredTokenReq
+	(*GetExpiredTokenResp)(nil),               // 5: w17.contrib.auth.GetExpiredTokenResp
+	(*GetUserPermissionsReq)(nil),             // 6: w17.contrib.auth.GetUserPermissionsReq
+	(*GetUserPermissionsResp)(nil),            // 7: w17.contrib.auth.GetUserPermissionsResp
+	(*GetUserByTokenWithPermissionsReq)(nil),  // 8: w17.contrib.auth.GetUserByTokenWithPermissionsReq
+	(*GetUserRoleGrantsReq)(nil),              // 9: w17.contrib.auth.GetUserRoleGrantsReq
+	(*GetUserRoleGrantsResp)(nil),             // 10: w17.contrib.auth.GetUserRoleGrantsResp
+	(*ListRoleGrantsReq)(nil),                 // 11: w17.contrib.auth.ListRoleGrantsReq
+	(*ListRoleGrantsResp)(nil),                // 12: w17.contrib.auth.ListRoleGrantsResp
+	(*RoleGrant)(nil),                         // 13: w17.contrib.auth.RoleGrant
+	(*GetUserByTokenWithPermissionsResp)(nil), // 14: w17.contrib.auth.GetUserByTokenWithPermissionsResp
+	(*CountUsersReq)(nil),                     // 15: w17.contrib.auth.CountUsersReq
+	(*CountUsersResp)(nil),                    // 16: w17.contrib.auth.CountUsersResp
+	(*GetFirstUserRolesReq)(nil),              // 17: w17.contrib.auth.GetFirstUserRolesReq
+	(*GetFirstUserRolesResp)(nil),             // 18: w17.contrib.auth.GetFirstUserRolesResp
+	(*GetDefaultRolesReq)(nil),                // 19: w17.contrib.auth.GetDefaultRolesReq
+	(*GetDefaultRolesResp)(nil),               // 20: w17.contrib.auth.GetDefaultRolesResp
+	(*ListRolesReq)(nil),                      // 21: w17.contrib.auth.ListRolesReq
+	(*ListRealmSuperadminsReq)(nil),           // 22: w17.contrib.auth.ListRealmSuperadminsReq
+	(*ListRealmSuperadminsResp)(nil),          // 23: w17.contrib.auth.ListRealmSuperadminsResp
+	(*RealmSuperadminRow)(nil),                // 24: w17.contrib.auth.RealmSuperadminRow
+	(*ListRolesResp)(nil),                     // 25: w17.contrib.auth.ListRolesResp
+	(*GetRoleReq)(nil),                        // 26: w17.contrib.auth.GetRoleReq
+	(*GetUserByIdReq)(nil),                    // 27: w17.contrib.auth.GetUserByIdReq
+	(*GetUserByIdResp)(nil),                   // 28: w17.contrib.auth.GetUserByIdResp
+	(*GetDeviceTrustRevokedAtReq)(nil),        // 29: w17.contrib.auth.GetDeviceTrustRevokedAtReq
+	(*GetDeviceTrustRevokedAtResp)(nil),       // 30: w17.contrib.auth.GetDeviceTrustRevokedAtResp
+	(*ListUserSignInEventsReq)(nil),           // 31: w17.contrib.auth.ListUserSignInEventsReq
+	(*ListUserSignInEventsResp)(nil),          // 32: w17.contrib.auth.ListUserSignInEventsResp
+	(*User)(nil),                              // 33: w17.contrib.auth.User
+	(*timestamppb.Timestamp)(nil),             // 34: google.protobuf.Timestamp
+	(*Role)(nil),                              // 35: w17.contrib.auth.Role
+	(*w17.Paging)(nil),                        // 36: w17.Paging
+	(*SignInEvent)(nil),                       // 37: w17.contrib.auth.SignInEvent
 }
 var file_queries_auth_query_proto_depIdxs = []int32{
-	24, // 0: w17.contrib.auth.GetUserByEmailResp.user:type_name -> w17.contrib.auth.User
-	24, // 1: w17.contrib.auth.GetUserByTokenResp.user:type_name -> w17.contrib.auth.User
-	11, // 2: w17.contrib.auth.GetUserRoleGrantsResp.grants:type_name -> w17.contrib.auth.RoleGrant
-	11, // 3: w17.contrib.auth.ListRoleGrantsResp.grants:type_name -> w17.contrib.auth.RoleGrant
-	24, // 4: w17.contrib.auth.GetUserByTokenWithPermissionsResp.user:type_name -> w17.contrib.auth.User
-	25, // 5: w17.contrib.auth.ListRolesResp.roles:type_name -> w17.contrib.auth.Role
-	26, // 6: w17.contrib.auth.ListRolesResp.paging:type_name -> w17.Paging
-	24, // 7: w17.contrib.auth.GetUserByIdResp.user:type_name -> w17.contrib.auth.User
-	0,  // 8: w17.contrib.auth.AuthQuery.GetUserByEmail:input_type -> w17.contrib.auth.GetUserByEmailReq
-	2,  // 9: w17.contrib.auth.AuthQuery.GetUserByToken:input_type -> w17.contrib.auth.GetUserByTokenReq
-	4,  // 10: w17.contrib.auth.AuthQuery.GetUserPermissions:input_type -> w17.contrib.auth.GetUserPermissionsReq
-	6,  // 11: w17.contrib.auth.AuthQuery.GetUserByTokenWithPermissions:input_type -> w17.contrib.auth.GetUserByTokenWithPermissionsReq
-	7,  // 12: w17.contrib.auth.AuthQuery.GetUserRoleGrants:input_type -> w17.contrib.auth.GetUserRoleGrantsReq
-	9,  // 13: w17.contrib.auth.AuthQuery.ListRoleGrants:input_type -> w17.contrib.auth.ListRoleGrantsReq
-	13, // 14: w17.contrib.auth.AuthQuery.CountUsers:input_type -> w17.contrib.auth.CountUsersReq
-	15, // 15: w17.contrib.auth.AuthQuery.GetFirstUserRoles:input_type -> w17.contrib.auth.GetFirstUserRolesReq
-	17, // 16: w17.contrib.auth.AuthQuery.GetDefaultRoles:input_type -> w17.contrib.auth.GetDefaultRolesReq
-	19, // 17: w17.contrib.auth.AuthQuery.ListRoles:input_type -> w17.contrib.auth.ListRolesReq
-	21, // 18: w17.contrib.auth.AuthQuery.GetRole:input_type -> w17.contrib.auth.GetRoleReq
-	22, // 19: w17.contrib.auth.AuthQuery.GetUserById:input_type -> w17.contrib.auth.GetUserByIdReq
-	1,  // 20: w17.contrib.auth.AuthQuery.GetUserByEmail:output_type -> w17.contrib.auth.GetUserByEmailResp
-	3,  // 21: w17.contrib.auth.AuthQuery.GetUserByToken:output_type -> w17.contrib.auth.GetUserByTokenResp
-	5,  // 22: w17.contrib.auth.AuthQuery.GetUserPermissions:output_type -> w17.contrib.auth.GetUserPermissionsResp
-	12, // 23: w17.contrib.auth.AuthQuery.GetUserByTokenWithPermissions:output_type -> w17.contrib.auth.GetUserByTokenWithPermissionsResp
-	8,  // 24: w17.contrib.auth.AuthQuery.GetUserRoleGrants:output_type -> w17.contrib.auth.GetUserRoleGrantsResp
-	10, // 25: w17.contrib.auth.AuthQuery.ListRoleGrants:output_type -> w17.contrib.auth.ListRoleGrantsResp
-	14, // 26: w17.contrib.auth.AuthQuery.CountUsers:output_type -> w17.contrib.auth.CountUsersResp
-	16, // 27: w17.contrib.auth.AuthQuery.GetFirstUserRoles:output_type -> w17.contrib.auth.GetFirstUserRolesResp
-	18, // 28: w17.contrib.auth.AuthQuery.GetDefaultRoles:output_type -> w17.contrib.auth.GetDefaultRolesResp
-	20, // 29: w17.contrib.auth.AuthQuery.ListRoles:output_type -> w17.contrib.auth.ListRolesResp
-	25, // 30: w17.contrib.auth.AuthQuery.GetRole:output_type -> w17.contrib.auth.Role
-	23, // 31: w17.contrib.auth.AuthQuery.GetUserById:output_type -> w17.contrib.auth.GetUserByIdResp
-	20, // [20:32] is the sub-list for method output_type
-	8,  // [8:20] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	33, // 0: w17.contrib.auth.GetUserByEmailResp.user:type_name -> w17.contrib.auth.User
+	33, // 1: w17.contrib.auth.GetUserByTokenResp.user:type_name -> w17.contrib.auth.User
+	34, // 2: w17.contrib.auth.GetExpiredTokenResp.expires_at:type_name -> google.protobuf.Timestamp
+	34, // 3: w17.contrib.auth.GetExpiredTokenResp.revoked_at:type_name -> google.protobuf.Timestamp
+	34, // 4: w17.contrib.auth.GetExpiredTokenResp.device_revoked_at:type_name -> google.protobuf.Timestamp
+	13, // 5: w17.contrib.auth.GetUserRoleGrantsResp.grants:type_name -> w17.contrib.auth.RoleGrant
+	13, // 6: w17.contrib.auth.ListRoleGrantsResp.grants:type_name -> w17.contrib.auth.RoleGrant
+	33, // 7: w17.contrib.auth.GetUserByTokenWithPermissionsResp.user:type_name -> w17.contrib.auth.User
+	34, // 8: w17.contrib.auth.GetUserByTokenWithPermissionsResp.device_revoked_at:type_name -> google.protobuf.Timestamp
+	24, // 9: w17.contrib.auth.ListRealmSuperadminsResp.grants:type_name -> w17.contrib.auth.RealmSuperadminRow
+	34, // 10: w17.contrib.auth.RealmSuperadminRow.disabled_at:type_name -> google.protobuf.Timestamp
+	34, // 11: w17.contrib.auth.RealmSuperadminRow.erased_at:type_name -> google.protobuf.Timestamp
+	35, // 12: w17.contrib.auth.ListRolesResp.roles:type_name -> w17.contrib.auth.Role
+	36, // 13: w17.contrib.auth.ListRolesResp.paging:type_name -> w17.Paging
+	33, // 14: w17.contrib.auth.GetUserByIdResp.user:type_name -> w17.contrib.auth.User
+	34, // 15: w17.contrib.auth.GetDeviceTrustRevokedAtResp.device_trust_revoked_at:type_name -> google.protobuf.Timestamp
+	37, // 16: w17.contrib.auth.ListUserSignInEventsResp.events:type_name -> w17.contrib.auth.SignInEvent
+	0,  // 17: w17.contrib.auth.AuthQuery.GetUserByEmail:input_type -> w17.contrib.auth.GetUserByEmailReq
+	2,  // 18: w17.contrib.auth.AuthQuery.GetUserByToken:input_type -> w17.contrib.auth.GetUserByTokenReq
+	6,  // 19: w17.contrib.auth.AuthQuery.GetUserPermissions:input_type -> w17.contrib.auth.GetUserPermissionsReq
+	4,  // 20: w17.contrib.auth.AuthQuery.GetExpiredToken:input_type -> w17.contrib.auth.GetExpiredTokenReq
+	8,  // 21: w17.contrib.auth.AuthQuery.GetUserByTokenWithPermissions:input_type -> w17.contrib.auth.GetUserByTokenWithPermissionsReq
+	9,  // 22: w17.contrib.auth.AuthQuery.GetUserRoleGrants:input_type -> w17.contrib.auth.GetUserRoleGrantsReq
+	11, // 23: w17.contrib.auth.AuthQuery.ListRoleGrants:input_type -> w17.contrib.auth.ListRoleGrantsReq
+	15, // 24: w17.contrib.auth.AuthQuery.CountUsers:input_type -> w17.contrib.auth.CountUsersReq
+	17, // 25: w17.contrib.auth.AuthQuery.GetFirstUserRoles:input_type -> w17.contrib.auth.GetFirstUserRolesReq
+	19, // 26: w17.contrib.auth.AuthQuery.GetDefaultRoles:input_type -> w17.contrib.auth.GetDefaultRolesReq
+	22, // 27: w17.contrib.auth.AuthQuery.ListRealmSuperadmins:input_type -> w17.contrib.auth.ListRealmSuperadminsReq
+	21, // 28: w17.contrib.auth.AuthQuery.ListRoles:input_type -> w17.contrib.auth.ListRolesReq
+	26, // 29: w17.contrib.auth.AuthQuery.GetRole:input_type -> w17.contrib.auth.GetRoleReq
+	27, // 30: w17.contrib.auth.AuthQuery.GetUserById:input_type -> w17.contrib.auth.GetUserByIdReq
+	29, // 31: w17.contrib.auth.AuthQuery.GetDeviceTrustRevokedAt:input_type -> w17.contrib.auth.GetDeviceTrustRevokedAtReq
+	31, // 32: w17.contrib.auth.AuthQuery.ListUserSignInEvents:input_type -> w17.contrib.auth.ListUserSignInEventsReq
+	1,  // 33: w17.contrib.auth.AuthQuery.GetUserByEmail:output_type -> w17.contrib.auth.GetUserByEmailResp
+	3,  // 34: w17.contrib.auth.AuthQuery.GetUserByToken:output_type -> w17.contrib.auth.GetUserByTokenResp
+	7,  // 35: w17.contrib.auth.AuthQuery.GetUserPermissions:output_type -> w17.contrib.auth.GetUserPermissionsResp
+	5,  // 36: w17.contrib.auth.AuthQuery.GetExpiredToken:output_type -> w17.contrib.auth.GetExpiredTokenResp
+	14, // 37: w17.contrib.auth.AuthQuery.GetUserByTokenWithPermissions:output_type -> w17.contrib.auth.GetUserByTokenWithPermissionsResp
+	10, // 38: w17.contrib.auth.AuthQuery.GetUserRoleGrants:output_type -> w17.contrib.auth.GetUserRoleGrantsResp
+	12, // 39: w17.contrib.auth.AuthQuery.ListRoleGrants:output_type -> w17.contrib.auth.ListRoleGrantsResp
+	16, // 40: w17.contrib.auth.AuthQuery.CountUsers:output_type -> w17.contrib.auth.CountUsersResp
+	18, // 41: w17.contrib.auth.AuthQuery.GetFirstUserRoles:output_type -> w17.contrib.auth.GetFirstUserRolesResp
+	20, // 42: w17.contrib.auth.AuthQuery.GetDefaultRoles:output_type -> w17.contrib.auth.GetDefaultRolesResp
+	23, // 43: w17.contrib.auth.AuthQuery.ListRealmSuperadmins:output_type -> w17.contrib.auth.ListRealmSuperadminsResp
+	25, // 44: w17.contrib.auth.AuthQuery.ListRoles:output_type -> w17.contrib.auth.ListRolesResp
+	35, // 45: w17.contrib.auth.AuthQuery.GetRole:output_type -> w17.contrib.auth.Role
+	28, // 46: w17.contrib.auth.AuthQuery.GetUserById:output_type -> w17.contrib.auth.GetUserByIdResp
+	30, // 47: w17.contrib.auth.AuthQuery.GetDeviceTrustRevokedAt:output_type -> w17.contrib.auth.GetDeviceTrustRevokedAtResp
+	32, // 48: w17.contrib.auth.AuthQuery.ListUserSignInEvents:output_type -> w17.contrib.auth.ListUserSignInEventsResp
+	33, // [33:49] is the sub-list for method output_type
+	17, // [17:33] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_queries_auth_query_proto_init() }
@@ -1364,13 +1938,14 @@ func file_queries_auth_query_proto_init() {
 		return
 	}
 	file_types_models_proto_init()
+	file_queries_auth_query_proto_msgTypes[21].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_queries_auth_query_proto_rawDesc), len(file_queries_auth_query_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   24,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
@@ -1383,4 +1958,4 @@ func file_queries_auth_query_proto_init() {
 	file_queries_auth_query_proto_depIdxs = nil
 }
 
-// emit-sha256: 40840ce4915ffd4859d654264d9dae0147c40ebba121212c4c194b0fec4d6c1b
+// emit-sha256: d4a5b3f0a46c87d78702b7fba374da68e7955073c76973db4b100aecc360e624

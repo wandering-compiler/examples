@@ -3,13 +3,13 @@ package handlers
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"net/url"
 	"strings"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
@@ -37,14 +37,8 @@ import (
 // SHOULD be short-lived and single-use).
 const defaultCliAuthCodeTTL = 60 * time.Second
 
-// pkceMinVerifierLen is RFC 7636 §4.1's minimum code_verifier length (the
-// floor of the 43–128 unreserved-charset range). A too-short verifier
-// weakens the challenge; we enforce the floor (not the exact charset — the
-// hash comparison already rejects a tampered verifier).
-const pkceMinVerifierLen = 43
-
 var (
-	errCliChallengeMissing = errors.New("cli auth: code_challenge required")
+	errCliChallengeMissing = errors.New("cli auth: code_challenge must be an S256 challenge (43 base64url characters)")
 	errCliRedirectUnsafe   = errors.New("cli auth: redirect_uri must be loopback (http://127.0.0.1 / ::1 / localhost) or a registered client callback")
 	errCliVerifierInvalid  = errors.New("cli auth: code_verifier invalid")
 	errCliCodeInvalid      = errors.New("cli auth: authorization code invalid/expired/used")
@@ -53,7 +47,23 @@ var (
 	// client, disabled since authorize, wrong or absent secret. Telling them
 	// apart is precisely what someone probing the registry would want.
 	errCliClientAuthFailed = errors.New("cli auth: client authentication failed")
+	// The session approving the login is no longer live — revoked, expired,
+	// or not the caller's. An approval it cannot back is no approval.
+	errCliSessionNotLive = errors.New("cli auth: the approving session is not live")
+	// The device that approved the code was revoked during the code's life:
+	// the approval it gave is withdrawn with it.
+	errCliApproverRevoked = errors.New("cli auth: the approving device was revoked")
 )
+
+// init adds the outcomes of CliToken's refusals to the sign-in history.
+func init() {
+	signInOutcomeRules = append(signInOutcomeRules,
+		outcomeRule{errCliVerifierInvalid, pb.SignInOutcome_SIGN_IN_OUTCOME_WRONG_CODE},
+		outcomeRule{errCliCodeInvalid, pb.SignInOutcome_SIGN_IN_OUTCOME_WRONG_CODE},
+		outcomeRule{errCliRedirectMismatch, pb.SignInOutcome_SIGN_IN_OUTCOME_WRONG_CODE},
+		outcomeRule{errCliClientAuthFailed, pb.SignInOutcome_SIGN_IN_OUTCOME_CLIENT_REFUSED},
+	)
+}
 
 // CliAuthorize mints a single-use authorization code for the
 // bearer-authenticated principal, bound to the CLI's PKCE challenge. The
@@ -66,11 +76,19 @@ func (h *AuthServiceHandler) CliAuthorize(ctx context.Context, req *pb.CliAuthor
 	if err != nil {
 		return nil, Unauthenticated(err)
 	}
-	if req.GetCodeChallenge() == "" {
+	// The exchange mints a session, so the caller has to be one already.
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
+	}
+	if !isPKCEChallenge(req.GetCodeChallenge()) {
 		return nil, Unauthenticated(errCliChallengeMissing)
 	}
 	if err := h.checkRedirectAllowed(ctx, req.GetClientId(), req.GetRedirectUri()); err != nil {
 		return nil, Unauthenticated(err)
+	}
+	approving, err := h.approvingSession(ctx, userID)
+	if err != nil {
+		return nil, err
 	}
 	code, err := randomURLToken()
 	if err != nil {
@@ -86,6 +104,12 @@ func (h *AuthServiceHandler) CliAuthorize(ctx context.Context, req *pb.CliAuthor
 		// no secret, PKCE is the binding (RFC 8252).
 		ClientId:  clientIDForCode(req.GetClientId(), req.GetRedirectUri()),
 		ExpiresAt: timestamppb.New(time.Now().Add(defaultCliAuthCodeTTL)),
+		// The session CliToken mints inherits this, so the CLI login ends
+		// when the browser session that approved it does.
+		SessionExpiresAt: approving.GetExpiresAt(),
+		// The approving browser's device, recorded on the CLI session as its
+		// approver. The CLI session itself is bound to the CLI's own key.
+		ApprovedByDeviceId: approving.GetDeviceId(),
 	}); err != nil {
 		return nil, err
 	}
@@ -110,7 +134,20 @@ func (h *AuthServiceHandler) CliAuthorize(ctx context.Context, req *pb.CliAuthor
 // against a live code), then verifies the verifier hashes to the bound
 // challenge, then mints the CLI bearer. Unauthenticated — the CLI has no
 // token yet; every failure is the same opaque Unauthenticated.
-func (h *AuthServiceHandler) CliToken(ctx context.Context, req *pb.CliTokenReq) (*pb.CliTokenResp, error) {
+func (h *AuthServiceHandler) CliToken(ctx context.Context, req *pb.CliTokenReq) (_ *pb.CliTokenResp, err error) {
+	// Every exchange appends one SignInEvent (method CLI), the refusals too;
+	// the success row is written with the session.
+	attempt := beginSignIn(ctx, pb.SignInMethod_SIGN_IN_METHOD_CLI)
+	defer func() { h.endSignIn(ctx, attempt, err) }()
+
+	// The CLI's own device key, before the code is spent: the session is
+	// bound to the key of the CLI that redeems the code, never to the
+	// browser that approved it, and a CLI that cannot sign must not burn the
+	// code.
+	thumbprint, err := mintThumbprint(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if len(req.GetCodeVerifier()) < pkceMinVerifierLen {
 		return nil, Unauthenticated(errCliVerifierInvalid)
 	}
@@ -121,17 +158,18 @@ func (h *AuthServiceHandler) CliToken(ctx context.Context, req *pb.CliTokenReq) 
 		// Through the opaque constructor, not raw.
 		//
 		// The statement carries RETURNING, so "no live row" arrives as
-		// NotFound — an ERROR, not an empty response. Returned raw it told a
-		// caller apart "this token is unknown/used/expired" from every other
-		// outcome, which is the enumeration the opaque refusal exists to
-		// prevent, and it made the `== ""` branch below unreachable: the code
-		// was written for a shape this mutation never produces (a consumer).
+		// NotFound — an ERROR, not an empty response. Returned raw it would
+		// tell a caller apart "this token is unknown/used/expired" from every
+		// other outcome, which is the enumeration the opaque refusal exists to
+		// prevent, and the `== ""` branch below is unreachable for it: that
+		// branch handles a shape this mutation never produces.
 		//
 		// Unauthenticated() classifies: a refusal stays opaque, an outage
 		// comes back as Unavailable rather than being dressed as a bad token.
 		return nil, Unauthenticated(err)
 	}
 	userID := consumed.GetUserId()
+	attempt.userID = userID
 	if userID == "" {
 		// Zero rows matched the live-code WHERE → unknown / expired / used.
 		return nil, Unauthenticated(errCliCodeInvalid)
@@ -169,8 +207,8 @@ func (h *AuthServiceHandler) CliToken(ctx context.Context, req *pb.CliTokenReq) 
 	// alone is the right answer (RFC 8252). Taking it past loopback to browser
 	// and server apps carried the public-client shape onto clients that CAN
 	// keep one — and then the only thing between "anybody may register a
-	// callback" and "a code is delivered there" was the registry's write path
-	// (a consumer). A confidential client closes it from the other end: the
+	// callback" and "a code is delivered there" was the registry's write path.
+	// A confidential client closes it from the other end: the
 	// registration is worthless without the secret.
 	//
 	// Loopback keeps its public-client shape deliberately. There is no
@@ -181,17 +219,112 @@ func (h *AuthServiceHandler) CliToken(ctx context.Context, req *pb.CliTokenReq) 
 			return nil, err
 		}
 	}
-	if err := refuseUnsignableAccount(ctx, h, userID); err != nil {
+	if err := h.refuseRevokedApprover(ctx, consumed.GetApprovedByDeviceId()); err != nil {
 		return nil, err
 	}
-	resp, err := h.Mutation.IssueToken(ctx, &pb.IssueTokenReq{
-		UserId:    userID,
-		ExpiresAt: h.sessionTokenExpiry(),
-	})
+	account, err := refuseUnsignableAccount(ctx, h, userID)
+	attempt.account = account
 	if err != nil {
 		return nil, err
 	}
-	return &pb.CliTokenResp{Token: resp.GetToken().GetToken(), UserId: userID}, nil
+	expiresAt := cliSessionExpiry(h.sessionTokenExpiry(), consumed.GetSessionExpiresAt())
+	if !expiresAt.AsTime().After(time.Now()) {
+		// The approving session expired between authorize and exchange. The
+		// session minted here would be dead on arrival; refuse instead.
+		return nil, Unauthenticated(errCliSessionNotLive)
+	}
+	dev, err := mintDevice(ctx, h, userID, thumbprint)
+	attempt.deviceID = dev.id
+	if err != nil {
+		return nil, Unauthenticated(err)
+	}
+	// Bound to the CLI's key (dev); the browser that approved the login is
+	// recorded beside it as the approver.
+	token, err := h.mintSession(ctx, attempt, userID, dev, expiresAt, consumed.GetApprovedByDeviceId())
+	if err != nil {
+		// Classified like every other refusal here: an outage is reported as
+		// one, and no storage text reaches the CLI.
+		return nil, Unauthenticated(err)
+	}
+	return &pb.CliTokenResp{Token: token, UserId: userID}, nil
+}
+
+// refuseRevokedApprover refuses a code whose approving device was revoked
+// after it approved the code (the code lives 60 s, a revocation can land in
+// between): revoking a device ends the CLI sessions it approved, and one it
+// had approved but not yet minted must not be minted after it. The opaque
+// refusal of every other code failure; the history records REFUSED (not
+// DEVICE_REVOKED, which names the key signing the request — the CLI's own key
+// is not revoked). A read that does not answer refuses too, and a code with no
+// approver (approved by a session bound to no device, or minted before the
+// column) has nothing to check.
+func (h *AuthServiceHandler) refuseRevokedApprover(ctx context.Context, deviceID string) error {
+	if deviceID == "" {
+		return nil
+	}
+	got, err := h.Query.GetCliApproverRevocation(ctx, &pb.GetCliApproverRevocationReq{DeviceId: deviceID})
+	if err != nil {
+		if notFoundOK(err) == nil {
+			return Unauthenticated(errCliApproverRevoked)
+		}
+		return Unauthenticated(err)
+	}
+	if got.GetDeviceId() != deviceID || got.GetRevokedAt() != nil {
+		return Unauthenticated(errCliApproverRevoked)
+	}
+	return nil
+}
+
+// approvingSession reads the session approving a CLI login — the caller's
+// own session token, named by the gateway envelope: its expiry (nil: it never
+// expires) and the Device row it is bound to (the approver recorded on the
+// CLI session).
+//
+// A session that is no longer there refuses the approval rather than
+// degrading to "no cap": a missing row read as "never expires" would hand a
+// revoked session a fresh full-lifetime one, which is the renewal this exists
+// to stop. A read that did not answer refuses too.
+func (h *AuthServiceHandler) approvingSession(ctx context.Context, userID string) (*pb.GetLiveSessionExpiryResp, error) {
+	tokenID := callerSessionTokenID(ctx)
+	if tokenID == "" {
+		// requireSessionCaller has already refused this; kept so the
+		// function cannot be called into a looser contract.
+		return nil, Unauthenticated(errCliSessionNotLive)
+	}
+	resp, err := h.Query.GetLiveSessionExpiry(ctx, &pb.GetLiveSessionExpiryReq{
+		TokenId: tokenID,
+		UserId:  userID,
+	})
+	if err != nil {
+		if notFoundOK(err) == nil {
+			return nil, Unauthenticated(errCliSessionNotLive)
+		}
+		return nil, Unauthenticated(err)
+	}
+	// The row we got back must be the row we asked for: an empty answer is
+	// "no row", never "found, and it never expires".
+	if resp.GetTokenId() != tokenID {
+		return nil, Unauthenticated(errCliSessionNotLive)
+	}
+	return resp, nil
+}
+
+// cliSessionExpiry is the expiry of the session CliToken mints: the normal
+// session lifetime from now, but never later than the session that approved
+// the login. A session therefore cannot renew itself through the CLI flow —
+// each login it approves ends when it does.
+//
+// There is deliberately no floor. A minimum lifetime for the CLI session would
+// be exactly the renewal being closed: approve a login a minute before expiry,
+// receive the floor, repeat.
+//
+// approving == nil means the approving session never expires (or the code
+// predates the binding); the normal TTL applies.
+func cliSessionExpiry(normal, approving *timestamppb.Timestamp) *timestamppb.Timestamp {
+	if approving == nil || !approving.AsTime().Before(normal.AsTime()) {
+		return normal
+	}
+	return approving
 }
 
 // authenticateClient verifies a confidential client's secret at the token
@@ -244,14 +377,6 @@ func (h *AuthServiceHandler) authenticateClient(ctx context.Context, clientID, r
 		return Unauthenticated(errCliClientAuthFailed)
 	}
 	return nil
-}
-
-// verifyPKCES256 reports whether BASE64URL(SHA256(verifier)) equals the
-// stored S256 challenge, compared in constant time.
-func verifyPKCES256(verifier, challenge string) bool {
-	sum := sha256.Sum256([]byte(verifier))
-	want := base64.RawURLEncoding.EncodeToString(sum[:])
-	return hmac.Equal([]byte(want), []byte(challenge))
 }
 
 // checkRedirectAllowed decides whether a redirect target may receive a code.
@@ -314,26 +439,6 @@ func (h *AuthServiceHandler) checkRedirectAllowed(ctx context.Context, clientID,
 	return nil
 }
 
-// isLoopbackRedirect reports whether a CLI redirect_uri is a safe loopback
-// callback (RFC 8252 §7.3): http scheme, host 127.0.0.1 / ::1 / localhost,
-// any port + path. A non-loopback target would let a stolen authorize link
-// redirect the code to an attacker-controlled origin.
-func isLoopbackRedirect(raw string) bool {
-	if raw == "" {
-		return false
-	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "http" {
-		return false
-	}
-	switch u.Hostname() {
-	case "127.0.0.1", "::1", "localhost":
-		return true
-	default:
-		return false
-	}
-}
-
 // --- the client registry ---------------------------------------------------
 //
 // An operator writes down the callbacks they vouch for; CliAuthorize will send
@@ -348,6 +453,11 @@ func (h *AuthServiceHandler) RegisterClient(ctx context.Context, req *pb.Registe
 	if _, err := callerUserID(ctx); err != nil {
 		return nil, Unauthenticated(err)
 	}
+	// A person with a session, as above — and the registration mints a client
+	// secret and a callback CliAuthorize will send a session's code to.
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
+	}
 	// Refused HERE rather than left to the authorize path, where a bad
 	// registration is silently a redirect that never matches. `http` is
 	// allowed only for loopback, which needs no registration at all — so a
@@ -358,8 +468,9 @@ func (h *AuthServiceHandler) RegisterClient(ctx context.Context, req *pb.Registe
 	}
 	// Registering IS becoming a confidential client: the secret is minted
 	// here, hashed before it is stored, and handed back exactly once. There
-	// is no endpoint that returns it again — a client that loses it is
-	// re-registered, the same contract a password-reset token has.
+	// is no endpoint that returns it again — a client that loses it gets a new
+	// one from RotateClientSecret, keeping its client_id, the same contract a
+	// password-reset token has.
 	secret, err := randomURLToken()
 	if err != nil {
 		return nil, err
@@ -375,14 +486,62 @@ func (h *AuthServiceHandler) RegisterClient(ctx context.Context, req *pb.Registe
 		ClientSecret: hashed,
 	})
 	if err != nil {
+		if status.Code(err) == codes.AlreadyExists && h.pairWasRevoked(ctx, req.GetClientId(), req.GetRedirectUri()) {
+			return nil, refusal(ctx, codes.FailedPrecondition,
+				"this (client_id, redirect_uri) was registered and revoked; a revoked registration is kept as history and not reused — register the callback under a new client_id",
+				CodeClientRevoked, "client_id", MsgClientRevoked, nil)
+		}
 		return nil, err
 	}
 	return &pb.RegisterClientResp{Client: resp.GetClient(), ClientSecret: secret}, nil
 }
 
-// ListClients returns every registration, enabled or not — an operator
-// auditing what may receive a code needs to see the disabled rows too.
-func (h *AuthServiceHandler) ListClients(ctx context.Context, _ *pb.ListClientsReq) (*pb.ListClientsResp, error) {
+// pairWasRevoked reports whether the (client_id, redirect_uri) a registration
+// collided with is a REVOKED registration. Read only after the collision, to
+// say why: a revoked row keeps its pair (the unique index is not partial), so
+// the operator is told to choose a new client_id instead of the generic
+// AlreadyExists. One row, by the unique pair. A failed read answers false,
+// leaving the original error.
+func (h *AuthServiceHandler) pairWasRevoked(ctx context.Context, clientID, redirectURI string) bool {
+	got, err := h.Query.GetAuthClientRevocation(ctx, &pb.GetAuthClientRevocationReq{ClientId: clientID, RedirectUri: redirectURI})
+	return err == nil && got.GetRevokedAt() != nil
+}
+
+// RotateClientSecret replaces a live registration's secret and hands the new
+// one back once. It is how a client that lost its secret keeps its client_id
+// — revoking keeps the row and its (client_id, redirect_uri) taken — and the
+// old secret stops working when it commits. Gated as RegisterClient is: a
+// person with a session (the new secret is a credential), then the project's
+// ACL. A revoked or unknown registration matches no row: NotFound.
+func (h *AuthServiceHandler) RotateClientSecret(ctx context.Context, req *pb.RotateClientSecretReq) (*pb.RotateClientSecretResp, error) {
+	if _, err := callerUserID(ctx); err != nil {
+		return nil, Unauthenticated(err)
+	}
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
+	}
+	secret, err := randomURLToken()
+	if err != nil {
+		return nil, err
+	}
+	hashed, err := h.PasswordHash.Hash(secret)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Mutation.RotateAuthClientSecret(ctx, &pb.RotateAuthClientSecretReq{Id: req.GetId(), ClientSecret: hashed}); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, status.Error(codes.NotFound, "no live registration with this id: it is unknown or revoked, and a revoked registration keeps the secret it had")
+		}
+		return nil, err
+	}
+	return &pb.RotateClientSecretResp{ClientSecret: secret}, nil
+}
+
+// ListClients returns every registration, enabled or not, revoked or not —
+// an operator auditing what may receive a code needs to see the disabled and
+// revoked rows too.
+func (h *AuthServiceHandler) ListClients(ctx context.Context, _ *pb.ListClientsReq) (_ *pb.ListClientsResp, err error) {
+	defer markReplaySafe(&err)
 	if _, err := callerUserID(ctx); err != nil {
 		return nil, Unauthenticated(err)
 	}
@@ -398,6 +557,11 @@ func (h *AuthServiceHandler) SetClientEnabled(ctx context.Context, req *pb.SetCl
 	if _, err := callerUserID(ctx); err != nil {
 		return nil, Unauthenticated(err)
 	}
+	// Restoring a retired callback makes it trustworthy again, the same act as
+	// registering it.
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
+	}
 	if _, err := h.Mutation.SetAuthClientEnabled(ctx, &pb.SetAuthClientEnabledReq{
 		Id: req.GetId(), Enabled: req.GetEnabled(),
 	}); err != nil {
@@ -406,12 +570,16 @@ func (h *AuthServiceHandler) SetClientEnabled(ctx context.Context, req *pb.SetCl
 	return &pb.SetClientEnabledResp{}, nil
 }
 
-// DeleteClient removes a registration outright.
+// DeleteClient ends a registration for good: AuthClient.revoked_at is
+// stamped and the row stays, as the record of what was trusted. Every
+// resolver refuses it from then on, SetClientEnabled cannot restore it, and
+// the pair can be registered again (a new row with a new secret). Revoking a
+// revoked or unknown registration matches no row, which is done.
 func (h *AuthServiceHandler) DeleteClient(ctx context.Context, req *pb.DeleteClientReq) (*pb.DeleteClientResp, error) {
 	if _, err := callerUserID(ctx); err != nil {
 		return nil, Unauthenticated(err)
 	}
-	if _, err := h.Mutation.DeleteAuthClient(ctx, &pb.DeleteAuthClientReq{Id: req.GetId()}); notFoundOK(err) != nil {
+	if _, err := h.Mutation.RevokeAuthClient(ctx, &pb.RevokeAuthClientReq{Id: req.GetId()}); notFoundOK(err) != nil {
 		return nil, err
 	}
 	return &pb.DeleteClientResp{}, nil

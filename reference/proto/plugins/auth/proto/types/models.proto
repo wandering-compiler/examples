@@ -112,20 +112,7 @@ message User {
     (w17.contrib.plugin_feature_field) = "email_verification"
   ];
 
-  // tenant_id — the owning tenant, behind `tenant_scope`. Sourced
-  // from auth (AuthQuery.GetUserTenant) into the `tenant_id` data
-  // scope; never client-set. NOT NULL so every user resolves a
-  // tenant. No DB-level FK (the activation-rename caveat that
-  // applies to every cross-table id ref in this plugin — see
-  // UserToken.user_id); referential integrity is app-enforced.
-  // Field-gated: dropped entirely when `tenant_scope` is off, and
-  // it shares the tag with the Tenant message so the FK target +
-  // the column drop atomically (no dangling reference).
-  string tenant_id = 5 [
-    (w17.field) = { type: UUID },
-    (w17.db.column) = { index: true },
-    (w17.contrib.plugin_feature_field) = "tenant_scope"
-  ];
+  reserved 5;
 
   // disabled_at — when an admin soft-disabled this account (the
   // Django `is_active` analogue, inverted: NULL = active, non-NULL =
@@ -257,8 +244,8 @@ message BotTokenUse {
   option (w17.contrib.plugin_feature) = "bot_token_guard";
 
   string id       = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string token_id = 2 [(w17.field) = { type: UUID }];
-  string user_id  = 3 [(w17.field) = { type: UUID }];
+  string token_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.UserToken", deletion_rule: BLOCK }];
+  string user_id  = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK }];
   // The client address the gateway resolved; empty where it has none (the
   // CLI surface, MCP over stdio).
   string address  = 4 [(w17.field) = { type: CHAR, max_len: 45, blank: true }];
@@ -350,33 +337,6 @@ enum AccountKind {
   BOT = 1;
 }
 
-// Tenant — an isolation boundary (organization / workspace) that
-// owns users. Behind `tenant_scope`: present only when the
-// activation enables tenant scoping. `User.tenant_id` references a
-// row here (app-enforced; same no-DB-FK caveat as the rest of the
-// plugin). The authenticated principal's tenant becomes the
-// `tenant_id` data scope, so a project that scopes its owned rows
-// by `name: "tenant_id"` gets per-tenant isolation with no hand-
-// written facade — sourced from auth as the data-scope rule
-// requires.
-message Tenant {
-  option (w17.db.table) = {};
-  option (w17.contrib.plugin_feature) = "tenant_scope";
-
-  string id   = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  // name doubles as the URL slug — SignUp resolves a tenant by it
-  // when the REST path carries `{tenant_slug}` (AuthQuery.GetTenantBySlug).
-  string name = 2 [(w17.field) = { type: SLUG, max_len: 100, unique: true }];
-  // domain — the host that maps to this tenant (e.g. `acme.example.com`),
-  // for host-based resolution at SignUp (AuthQuery.GetTenantByDomain reads
-  // the forwarded Host header). Nullable: a tenant may be slug-only.
-  string domain = 4 [
-    (w17.field) = { type: CHAR, max_len: 253, unique: true, null: true },
-    (w17.db.column) = { index: true }
-  ];
-  google.protobuf.Timestamp created_at = 3 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
-}
-
 // UserToken — bearer-token record. Project clients trade an
 // (email, password) sign-in for a long-lived token they send
 // on subsequent requests. A token ends when it expires or is
@@ -385,15 +345,24 @@ message Tenant {
 // token, so the table is the history of every credential the
 // account ever held.
 //
-// v1 LIMITATION — no DB-level FK constraint on `user_id`. The
-// FK target table name is `<registered_as>_user`, but plugin
-// authoring time can't see the per-activation rename, and
-// w17's current `fk:` syntax doesn't carry an activation-aware
-// placeholder. Application-layer code enforces the link via
-// the AuthService handler. Lifting this requires extending the
-// FK syntax with a plugin-aware reference (parked). Same
-// caveat applies to every cross-table id reference in this
-// plugin (User↔Role + Role's permission grants via RolePermission).
+// References — every id column that names a row of this activation's own
+// tables carries a foreign key, `fk: "@module.<Model>"`. Staging expands
+// `@module` to the activation's registered_as, so the key names the
+// activation's own `<registered_as>_<model>` table whatever it is called. A
+// reference the plugin's code got wrong — a grant written for a role that does
+// not exist — is refused by the store instead of stored silently. Every one is
+// `deletion_rule: BLOCK` (ON DELETE RESTRICT): nothing in this plugin deletes
+// a row — an account is erased, a role, an organization or a grant is ended —
+// so a delete that would strand a reference is refused, never cascaded.
+//
+// Two kinds of reference are deliberately NOT keyed:
+//   - the actor columns (`revoked_by`, `removed_by`, `invited_by`,
+//     `granted_by`, `ended_by`, …): the actor may be an operator of ANOTHER
+//     activation — an admin realm signs in against its own User table — so
+//     the id need not be a row of this one;
+//   - `UserToken.oauth_org_id`, `OAuthAuthorization.org_id` and
+//     `OAuthGrant.org_id`: `oauth_server` stages without `org_membership`, and
+//     then there is no Organization table to point at.
 message UserToken {
   option (w17.db.table) = {};
 
@@ -411,7 +380,7 @@ message UserToken {
   }];
   string user_id = 3 [
     (w17.field) = { type: UUID },
-    (w17.db.column) = { index: true }
+    (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }
   ];
   google.protobuf.Timestamp created_at = 4 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
 
@@ -460,14 +429,12 @@ message UserToken {
   // key its request names — the program that will use it. Authenticate
   // refuses a token whose device's thumbprint is not the one the request's
   // proof was signed with, and a token with none.
-  // No DB-level FK (the activation-rename caveat that applies to every
-  // cross-table id ref in this plugin — see the message header).
   // Nullable only for rows minted before device binding (refused by
   // Authenticate, so their holders sign in once more) and for MCP-flow
   // tokens (mcp_only).
   string device_id = 9 [
     (w17.field) = { type: UUID, null: true },
-    (w17.db.column) = { index: true }
+    (w17.db.column) = { fk: "@module.Device", deletion_rule: BLOCK, index: true }
   ];
 
   // mcp_only — a token issued by the MCP OAuth 2.1 flow, for MCP clients,
@@ -507,8 +474,8 @@ message UserToken {
   // revoked_by — the account that revoked it: the holder for a logout, a
   // password change or a device revocation, the operator for an admin
   // revocation or erasure. NULL when the system did it (a password reset, a
-  // disable, the low-level RevokeToken primitive). No DB-level FK (the
-  // activation-rename caveat in the message header).
+  // disable, the low-level RevokeToken primitive). An actor column, so no
+  // foreign key (see "References" above).
   string revoked_by = 13 [(w17.field) = { type: UUID, null: true }];
 
   // revoke_reason — why (RevokeReason). NONE on a live token. Written in the
@@ -542,8 +509,8 @@ message UserToken {
   // operator's device leaves it (it is bound to the account's one key; revoke
   // the account's device to end it). NULL on every
   // other token, and when the authorizing request was bound to no device. Base
-  // tier. No DB-level FK (the activation-rename caveat in the message header).
-  string approved_by_device_id = 16 [(w17.field) = { type: UUID, null: true }];
+  // tier.
+  string approved_by_device_id = 16 [(w17.field) = { related_name: "approved_usertoken_set", type: UUID, null: true }, (w17.db.column) = { fk: "@module.Device", deletion_rule: BLOCK }];
 
   // bearer — a machine account's token that works WITHOUT a proof of
   // possession (device/bot-bearer): bound to no device, presented as
@@ -587,7 +554,7 @@ message UserToken {
   // to; revoking the grant revokes it. NULL on every other token.
   string oauth_grant_id = 21 [
     (w17.field) = { type: UUID, null: true },
-    (w17.db.column) = { index: true },
+    (w17.db.column) = { fk: "@module.OAuthGrant", deletion_rule: BLOCK, index: true },
     (w17.contrib.plugin_feature_field) = "oauth_server"
   ];
   // resource — the protected resource (RFC 8707) the token is for: an MCP
@@ -646,9 +613,6 @@ message UserToken {
 // is never deleted and never revived — a client answers DEVICE_REVOKED by
 // generating a new key, which is a new device (and passes the second factor
 // like any new device).
-//
-// Same no-DB-FK caveat as the rest of the plugin (user_id is app-enforced;
-// see UserToken).
 message Device {
   option (w17.db.table) = {
     indexes: [
@@ -663,7 +627,7 @@ message Device {
   reserved "identifier", "trust_token_hash";
 
   string id          = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string user_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string user_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
   // RFC 7638 JWK thumbprint of the device's public key: base64url (no
   // padding) of a SHA-256, always 43 characters. NULL only on a LEGACY row —
   // a device recorded before device binding, named by a client-chosen id
@@ -777,8 +741,7 @@ enum SignInOutcome {
   // A registration named an address that has an account (EMAIL_TAKEN).
   SIGN_IN_OUTCOME_EMAIL_TAKEN = 13;
   // A registration refused by a sign-up gate: the reserved domain, the
-  // allowlist, invite-only, an invitation for another address, an unknown
-  // tenant.
+  // allowlist, invite-only, an invitation for another address.
   SIGN_IN_OUTCOME_SIGN_UP_REFUSED = 14;
   // OAuth refused to link an identity: the account or the provider has not
   // verified the address.
@@ -836,8 +799,8 @@ enum SignInOutcome {
 //   ip, user_agent  the client address (first X-Forwarded-For hop) and user
 //               agent, as Device.ip / Device.label take them. Display only.
 //
-// No DB-level FK on user_id / device_id (the activation-rename caveat, see
-// UserToken).
+// user_id / device_id are foreign keys (see "References" above UserToken): a
+// refusal's row names an account and a device only when they exist.
 message SignInEvent {
   option (w17.db.table) = {
     indexes: [
@@ -851,9 +814,9 @@ message SignInEvent {
     (w17.field) = { type: DATETIME, default_auto: NOW, immutable: true },
     (w17.db.column) = { index: true }
   ];
-  string user_id    = 3 [(w17.field) = { type: UUID, null: true }];
+  string user_id    = 3 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK }];
   string address    = 4 [(w17.field) = { type: CHAR, max_len: 320, blank: true }];
-  string device_id  = 5 [(w17.field) = { type: UUID, null: true }];
+  string device_id  = 5 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { fk: "@module.Device", deletion_rule: BLOCK }];
   string thumbprint = 6 [(w17.field) = { type: CHAR, max_len: 43, null: true }];
   string ip         = 7 [(w17.field) = { type: CHAR, max_len: 45, blank: true }];
   string user_agent = 8 [(w17.field) = { type: CHAR, max_len: 255, blank: true }];
@@ -885,8 +848,7 @@ message SignInEvent {
 // PASSWORD value that is not PHC-encoded, correctly for a credential and
 // wrongly here, so this row could not be seeded at all.
 //
-// Operators CRUD these through the generated admin. Same no-DB-FK caveat as
-// the rest of the plugin.
+// Operators CRUD these through the generated admin.
 message OAuthProvider {
   option (w17.db.table) = {};
   option (w17.contrib.plugin_feature) = "oauth";
@@ -908,14 +870,7 @@ message OAuthProvider {
   bool   enabled       = 12 [(w17.field) = { default_auto: TRUE }];
   google.protobuf.Timestamp created_at = 13 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
 
-  // tenant_id — same shape as User.tenant_id, so a multi-tenant project
-  // can scope providers per tenant. Field-gated `tenant_scope` (drops with
-  // the feature). No DB-level FK (app-enforced, like the rest).
-  string tenant_id = 14 [
-    (w17.field) = { type: UUID },
-    (w17.db.column) = { index: true },
-    (w17.contrib.plugin_feature_field) = "tenant_scope"
-  ];
+  reserved 14;
   string secret = 15 [(w17.field) = { type: CRYPTED_SECRET, null: true }]; // the client secret, or the key it is signed with (team_id)
 
   // response_mode — how the provider comes back to the callback: empty, by
@@ -935,7 +890,7 @@ message OAuthProvider {
 
 // OAuthIdentity — links a local User to an external IdP subject, behind
 // `oauth`. (provider_id, external_id) is unique; a user may link several
-// providers. Same no-DB-FK caveat as the rest of the plugin.
+// providers.
 message OAuthIdentity {
   option (w17.db.table) = {
     indexes: [
@@ -945,8 +900,8 @@ message OAuthIdentity {
   option (w17.contrib.plugin_feature) = "oauth";
 
   string id          = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string user_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
-  string provider_id = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string user_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
+  string provider_id = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.OAuthProvider", deletion_rule: BLOCK, index: true }];
   string external_id = 4 [(w17.field) = { type: CHAR, max_len: 255 }]; // the IdP "sub"
   string email       = 5 [(w17.field) = { type: EMAIL, max_len: 320, blank: true }];
   google.protobuf.Timestamp created_at = 6 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
@@ -959,7 +914,6 @@ message OAuthIdentity {
 // be one-way hashed. confirmed_at NULL = enrolled-but-unconfirmed (the first
 // code hasn't been verified yet); a user "has an authenticator" iff
 // confirmed_at IS NOT NULL. Unique on user_id (one authenticator per user).
-// Same no-DB-FK caveat as the rest of the plugin.
 //
 // `secret` is the seed as rc.19 and earlier stored it — encrypted by the
 // plugin's own lib/secretbox under the two_factor_secret_key knob. Nothing
@@ -984,7 +938,7 @@ message UserTotpSecret {
   option (w17.contrib.plugin_feature) = "two_factor";
 
   string id      = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string user_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string user_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
   string secret  = 3 [(w17.field) = { type: CHAR, max_len: 512, null: true }]; // legacy: secretbox-encrypted seed (two_factor_secret_key)
   google.protobuf.Timestamp confirmed_at = 4 [(w17.field) = { type: DATETIME, null: true }];
   google.protobuf.Timestamp created_at   = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
@@ -1029,8 +983,8 @@ message UserRecoveryCode {
   option (w17.contrib.plugin_feature) = "two_factor";
 
   string id        = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string user_id   = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
-  string code_hash = 3 [(w17.field) = { type: CHAR, max_len: 64 }]; // hex sha256 of the normalised code
+  string user_id   = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
+  string code_hash = 3 [(w17.field) = { type: CHAR, max_len: 64 }]; // hex argon2id of the normalised code, salted by the account (a set made before: hex sha256)
   google.protobuf.Timestamp used_at    = 4 [(w17.field) = { type: DATETIME, null: true }];
   google.protobuf.Timestamp created_at = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
   // revoked_at — the set this code belongs to was replaced, or the
@@ -1054,7 +1008,7 @@ message MfaChallenge {
   option (w17.contrib.plugin_feature) = "two_factor";
 
   string id          = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string user_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string user_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
   string code_hash   = 3 [(w17.field) = { type: CHAR, max_len: 255, blank: true }]; // event-flow only
   google.protobuf.Timestamp consumed_at = 4 [(w17.field) = { type: DATETIME, null: true }];
   google.protobuf.Timestamp created_at  = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
@@ -1075,6 +1029,13 @@ message MfaChallenge {
   // public lifetime and the device is not trusted, even though the second
   // factor passed.
   bool public_computer = 8 [(w17.field) = { default_auto: FALSE }];
+  // enrol — the challenge of an account without a confirmed authenticator
+  // under two_factor_policy=enrol (two_factor_enrolment): no code was sent,
+  // the person sets up an authenticator on it (EnrollTotpAtSignIn) and
+  // VerifyMfa's code is that authenticator's first one, which confirms it.
+  // A column of two_factor's, so VerifyMfa can refuse such a challenge where
+  // the feature is off.
+  bool enrol = 9 [(w17.field) = { default_auto: FALSE }];
 }
 
 // PendingSignUp — a registration that has not yet proved its address
@@ -1108,14 +1069,7 @@ message PendingSignUp {
   int64  attempts      = 5 [(w17.field) = { type: COUNTER, default_int: 0 }];
   google.protobuf.Timestamp expires_at = 6 [(w17.field) = { type: DATETIME }];
   google.protobuf.Timestamp created_at = 7 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
-  // tenant_id — the tenant SignUp resolved, so the account is created where
-  // the person registered, not wherever the confirmation request arrives.
-  // Nullable here: the row is not the account, and the User insert is what
-  // enforces a tenant.
-  string tenant_id     = 8 [
-    (w17.field) = { type: UUID, null: true },
-    (w17.contrib.plugin_feature_field) = "tenant_scope"
-  ];
+  reserved 8;
   // claimed_at — the registration became the account (ClaimPendingSignUp:
   // one guarded UPDATE, so two confirmations racing on one row get one
   // account).
@@ -1130,7 +1084,8 @@ message PendingSignUp {
   // invitation — and written when it is confirmed. NULL / '' = joins none.
   string join_org_id = 11 [
     (w17.field) = { type: UUID, null: true },
-    (w17.contrib.plugin_feature_field) = "org_signup"
+    (w17.contrib.plugin_feature_field) = "org_signup",
+    (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK }
   ];
   string join_kind = 12 [
     (w17.field) = { type: CHAR, max_len: 32, blank: true, default_string: "" },
@@ -1153,7 +1108,7 @@ message PasswordResetToken {
   option (w17.contrib.plugin_feature) = "password_reset";
 
   string id          = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string user_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string user_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
   string token_hash  = 3 [(w17.field) = { type: CHAR, max_len: 128, unique: true }]; // sha256 hex
   google.protobuf.Timestamp expires_at  = 4 [(w17.field) = { type: DATETIME }];
   google.protobuf.Timestamp consumed_at = 5 [(w17.field) = { type: DATETIME, null: true }];
@@ -1169,7 +1124,7 @@ message EmailVerificationToken {
   option (w17.contrib.plugin_feature) = "email_verification";
 
   string id          = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string user_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string user_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
   string token_hash  = 3 [(w17.field) = { type: CHAR, max_len: 128, unique: true }]; // sha256 hex
   google.protobuf.Timestamp expires_at  = 4 [(w17.field) = { type: DATETIME }];
   google.protobuf.Timestamp consumed_at = 5 [(w17.field) = { type: DATETIME, null: true }];
@@ -1339,10 +1294,10 @@ message Role {
   // UserRole.org_id, read by the permission queries as before. A custom role
   // is org-scoped (org_scoped = TRUE) and is offered, accepted and edited only
   // in its own organization (ListOrgRoleRows), so one company's roles never
-  // appear in another's pickers. Gated org_roles; app-enforced, no DB-level FK.
+  // appear in another's pickers. Gated org_roles; a foreign key to Organization.
   string org_id = 14 [
     (w17.field) = { type: UUID, null: true },
-    (w17.db.column) = { index: true },
+    (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true },
     (w17.contrib.plugin_feature_field) = "org_roles"
   ];
 }
@@ -1362,9 +1317,9 @@ message Role {
 // drift) is refused at the storage layer with
 // VALIDATION_CHECK_CONSTRAINT mapped to InvalidArgument.
 //
-// v1 LIMITATION — no DB-level FK constraint on `role_id`
-// (activation-rename caveat; see UserToken). `permission_id`
-// has no FK target by design (the catalog is a proto enum,
+// `role_id` is a foreign key to Role (see "References" above UserToken): a
+// grant written for a role that does not exist is refused, not stored.
+// `permission_id` has no FK target by design (the catalog is a proto enum,
 // not a DB table); the CHECK constraint covers the integrity
 // the FK would have provided.
 //
@@ -1389,7 +1344,7 @@ message RolePermission {
   string id            = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
   string role_id       = 2 [
     (w17.field) = { type: UUID },
-    (w17.db.column) = { index: true }
+    (w17.db.column) = { fk: "@module.Role", deletion_rule: BLOCK, index: true }
   ];
   int32  permission_id = 3 [
     (w17.field) = { type: NUMBER, auto_choices: ACL_PERMISSION_IDS },
@@ -1426,7 +1381,7 @@ message RolePermissionChange {
   option (w17.contrib.plugin_feature) = "rbac";
 
   string id            = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string role_id       = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string role_id       = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Role", deletion_rule: BLOCK, index: true }];
   int32  permission_id = 3 [(w17.field) = { type: NUMBER }];
   RolePermissionChangeKind kind = 4 [(w17.field) = { type: ENUM }];
   // changed_by — the account that made the change; NULL when the caller
@@ -1455,8 +1410,8 @@ message RolePermissionChange {
 // indexes are PG + SQLite only, which is the same support surface the
 // rest of this plugin's `where:` usage has.
 //
-// v1 LIMITATION — no DB-level FK on `user_id` / `role_id` / `org_id`
-// (activation-rename caveat applies; see UserToken).
+// `user_id` / `role_id` / `org_id` are foreign keys (see "References" above
+// UserToken).
 //
 // A grant is never deleted. Revoking one (RevokeRoleFromUser, a membership's
 // role change or removal, DeleteRole, DeleteOrganization) stamps revoked_at
@@ -1481,11 +1436,11 @@ message UserRole {
   string id      = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
   string user_id = 2 [
     (w17.field) = { type: UUID },
-    (w17.db.column) = { index: true }
+    (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }
   ];
   string role_id = 3 [
     (w17.field) = { type: UUID },
-    (w17.db.column) = { index: true }
+    (w17.db.column) = { fk: "@module.Role", deletion_rule: BLOCK, index: true }
   ];
   google.protobuf.Timestamp created_at = 4 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
 
@@ -1503,9 +1458,8 @@ message UserRole {
   // the ROLE-COMPOSITION shape — "accountant + worker" for someone who
   // does both. It falls out of the M2M rather than needing a feature.
   //
-  // Field-gated: dropped entirely when `org_membership` is off, exactly
-  // like `User.tenant_id` under `tenant_scope` — which is why the index
-  // entries above are gated in step with it.
+  // Field-gated: dropped entirely when `org_membership` is off — which is
+  // why the index entries above are gated in step with it.
   //
   // The gate is why NO permission-resolving query mentions this column.
   // Putting `(ur.org_id IS NULL OR ur.org_id = :org_id)` into their DQL
@@ -1517,13 +1471,9 @@ message UserRole {
   // `GetUserOrgRoleIds` reports as applicable (see handlers/
   // org_membership.go). One gated query, no matrix, and the realm axis
   // keeps its own queries untouched.
-  //
-  // `tenant_scope` deliberately gets nothing here: it is 1:1
-  // user↔tenant, so a per-user role is ALREADY a per-tenant role there
-  // and an org axis would be a second name for the same thing.
   string org_id = 5 [
     (w17.field) = { type: UUID, null: true },
-    (w17.db.column) = { index: true },
+    (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true },
     (w17.contrib.plugin_feature_field) = "org_membership"
   ];
 
@@ -1553,7 +1503,7 @@ message TokenPermission {
   string id            = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
   string token_id      = 2 [
     (w17.field) = { type: UUID },
-    (w17.db.column) = { index: true }
+    (w17.db.column) = { fk: "@module.UserToken", deletion_rule: BLOCK, index: true }
   ];
   int32  permission_id = 3 [
     (w17.field) = { type: NUMBER, auto_choices: ACL_PERMISSION_IDS },
@@ -1665,7 +1615,7 @@ message BootstrapClaim {
   option (w17.contrib.plugin_feature) = "rbac";
 
   string slot    = 1 [(w17.field) = { type: SLUG, max_len: 32, pk: true }];
-  string user_id = 2 [(w17.field) = { type: UUID }];
+  string user_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK }];
   google.protobuf.Timestamp created_at = 3 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
 }
 
@@ -1687,7 +1637,7 @@ message OAuthLoginCode {
   // belongs to no account yet: the callback then keeps the verified
   // identity below, and OAuthExchange creates the account — with the
   // invitation the page passes there, never through a URL.
-  optional string user_id = 2 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { index: true }];
+  optional string user_id = 2 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
   string code_hash      = 3 [(w17.field) = { type: CHAR, max_len: 64, unique: true }]; // sha256 hex of the code
   string code_challenge = 4 [(w17.field) = { type: CHAR, max_len: 64 }];                // challengeDigest (sha256 hex) of the authorize step's PKCE challenge
   google.protobuf.Timestamp expires_at  = 5 [(w17.field) = { type: DATETIME }];
@@ -1698,7 +1648,7 @@ message OAuthLoginCode {
   // columns existed: login codes are never purged, so adding a NOT NULL
   // column without one fails the migration of any deployment that has
   // signed someone in through a provider.
-  optional string provider_id = 8 [(w17.field) = { type: UUID, null: true }];
+  optional string provider_id = 8 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { fk: "@module.OAuthProvider", deletion_rule: BLOCK }];
   string external_id    = 9  [(w17.field) = { type: CHAR, max_len: 255, blank: true, default_string: "" }];
   string email          = 10 [(w17.field) = { type: CHAR, max_len: 320, blank: true, default_string: "" }];
   bool   email_verified = 11 [(w17.field) = { default_auto: FALSE }];
@@ -1717,7 +1667,7 @@ message CliAuthCode {
   option (w17.contrib.plugin_feature) = "cli_login";
 
   string id             = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string user_id        = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string user_id        = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
   string code_hash      = 3 [(w17.field) = { type: CHAR, max_len: 128, unique: true }]; // sha256 hex of the code
   string code_challenge = 4 [(w17.field) = { type: CHAR, max_len: 128 }];                // PKCE S256 challenge
   // redirect_uri — the target this code was issued FOR, kept so the token
@@ -1751,7 +1701,7 @@ message CliAuthCode {
   // the CLI session as UserToken.approved_by_device_id; the CLI session is
   // bound to the CLI's own key, never to this one. NULL when the approving
   // session is bound to no device, and on a code minted before this column.
-  string approved_by_device_id = 11 [(w17.field) = { type: UUID, null: true }];
+  string approved_by_device_id = 11 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { fk: "@module.Device", deletion_rule: BLOCK }];
 }
 
 // ── oauth_server — the OAuth 2.1 authorization server ─────────
@@ -1838,7 +1788,7 @@ message OAuthAuthorization {
 
   string id = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
   string request_hash = 2 [(w17.field) = { type: CHAR, max_len: 64, unique: true }];
-  string client_row_id = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string client_row_id = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.OAuthClient", deletion_rule: BLOCK, index: true }];
   OAuthGrantKind kind = 4 [(w17.field) = { type: ENUM }];
   string redirect_uri = 5 [(w17.field) = { type: CHAR, max_len: 2048 }];
   string state = 6 [(w17.field) = { type: CHAR, max_len: 1024, blank: true, default_string: "" }];
@@ -1856,9 +1806,9 @@ message OAuthAuthorization {
   google.protobuf.Timestamp decided_at = 14 [(w17.field) = { type: DATETIME, null: true }];
   OAuthDecision decision = 15 [(w17.field) = { type: ENUM, zero_is_value: true, default_int: 0 }];
   // Who decided, in which organization, from which device and session.
-  string user_id = 16 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { index: true }];
+  string user_id = 16 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
   string org_id = 17 [(w17.field) = { type: UUID, null: true }];
-  string approved_by_device_id = 18 [(w17.field) = { type: UUID, null: true }];
+  string approved_by_device_id = 18 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { fk: "@module.Device", deletion_rule: BLOCK }];
   // session_expires_at — when the approving session expires: a session
   // grant mints no later than this (as a CLI login does), so a session
   // cannot renew itself through this server. NULL = that session never
@@ -1883,14 +1833,14 @@ message OAuthGrant {
   option (w17.contrib.plugin_feature) = "oauth_server";
 
   string id = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string user_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string user_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
   string org_id = 3 [(w17.field) = { type: UUID, null: true }];
-  string client_row_id = 4 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
-  string authorization_id = 5 [(w17.field) = { type: UUID }];
+  string client_row_id = 4 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.OAuthClient", deletion_rule: BLOCK, index: true }];
+  string authorization_id = 5 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.OAuthAuthorization", deletion_rule: BLOCK }];
   string resource = 6 [(w17.field) = { type: CHAR, max_len: 2048 }];
   string scope = 7 [(w17.field) = { type: CHAR, max_len: 200, blank: true, default_string: "" }];
   // The device of the approving session: revoking it revokes the grant.
-  string approved_by_device_id = 8 [(w17.field) = { type: UUID, null: true }];
+  string approved_by_device_id = 8 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { fk: "@module.Device", deletion_rule: BLOCK }];
   google.protobuf.Timestamp created_at = 9 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
   // expires_at — the grant's own end (oauth_grant_max_days); no refresh
   // outlives it.
@@ -1909,7 +1859,7 @@ message OAuthRefreshToken {
   option (w17.contrib.plugin_feature) = "oauth_server";
 
   string id = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string grant_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string grant_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.OAuthGrant", deletion_rule: BLOCK, index: true }];
   string token_hash = 3 [(w17.field) = { type: CHAR, max_len: 64, unique: true }];
   google.protobuf.Timestamp created_at = 4 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
   google.protobuf.Timestamp expires_at = 5 [(w17.field) = { type: DATETIME }];
@@ -1917,9 +1867,8 @@ message OAuthRefreshToken {
 }
 
 // Organization is a GitHub-style org — a membership boundary an identity
-// can belong to MANY of (a private personal org + a company org + …). The
-// `org_membership` feature's generalization of single-tenant tenant_scope:
-// where Tenant is 1:1 with a User, an Organization is M2M via OrgMembership.
+// can belong to MANY of (a private personal org + a company org + …),
+// through OrgMembership (the `org_membership` feature).
 //
 // An organization is never deleted. DeleteOrganization stamps deleted_at,
 // removes every membership and revokes every grant scoped to it, and releases
@@ -1958,6 +1907,17 @@ message Organization {
   google.protobuf.Timestamp deleted_at = 7 [(w17.field) = { type: DATETIME, null: true }];
   // ended_key — '' while live, the row's own id once deleted (Role.ended_key).
   string ended_key = 8 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+  // suspended_at — when the operators of the realm suspended the organization
+  // (an incident, a leak). NULL = not suspended. While it is set, no request
+  // acts in the organization: Authenticate refuses every principal the
+  // organization would be selected for — its people, its machine accounts,
+  // their tokens — with ORG_SUSPENDED (handlers/org_suspension.go). Nothing
+  // is deleted or revoked; clearing it restores everything as it was.
+  // Field-gated `org_suspension`.
+  google.protobuf.Timestamp suspended_at = 9 [
+    (w17.field) = { type: DATETIME, null: true },
+    (w17.contrib.plugin_feature_field) = "org_suspension"
+  ];
 }
 
 // OrgMembership is the M2M link between a User and an Organization, with
@@ -1985,8 +1945,8 @@ message OrgMembership {
   option (w17.contrib.plugin_feature) = "org_membership";
 
   string id      = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string user_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
-  string org_id  = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string user_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
+  string org_id  = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
   // role: a label (admin | member, a Role.name). Free-form CHAR — project
   // policy owns the vocabulary; the plugin only passes it through, and it
   // grants nothing: authority comes from the roles granted on the membership. An accepted invitation and
@@ -2057,7 +2017,7 @@ message OrgInvite {
   option (w17.contrib.plugin_feature) = "org_invite";
 
   string id      = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string org_id  = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string org_id  = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
   // The invited address, and NULL is a real state: the invitation is OPEN and
   // whoever holds the link picks their own address.
   //
@@ -2100,7 +2060,7 @@ message OrgInvite {
   // meaning the same thing is two names for one state, and they drift.
   string token_hash = 9 [(w17.field) = { type: CHAR, max_len: 128, unique: true }];
   // Consumer-owned, OPAQUE. Whatever the caller needs paired with this invitation —
-  // for example a tenant and one object in the caller's own system, so that
+  // for example an organization and one object in the caller's own system, so that
   // accepting an invitation pairs both at once instead of joining a side table on
   // the e-mail address, which is the weak key this whole change is about.
   //
@@ -2184,7 +2144,7 @@ message Team {
   option (w17.contrib.plugin_feature) = "teams";
 
   string id          = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string org_id      = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string org_id      = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
   string name        = 3 [(w17.field) = { type: CHAR, max_len: 100 }];
   string description = 4 [(w17.field) = { type: TEXT, max_len: 500, blank: true, default_string: "" }];
   // created_by — the account that created it (NULL when nobody is known).
@@ -2216,9 +2176,9 @@ message TeamMember {
   option (w17.contrib.plugin_feature) = "teams";
 
   string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string team_id    = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
-  string user_id    = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
-  string org_id     = 4 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string team_id    = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Team", deletion_rule: BLOCK, index: true }];
+  string user_id    = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
+  string org_id     = 4 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
   string added_by   = 5 [(w17.field) = { type: UUID, null: true }];
   google.protobuf.Timestamp created_at = 6 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
   google.protobuf.Timestamp removed_at = 7 [(w17.field) = { type: DATETIME, null: true }];
@@ -2239,9 +2199,9 @@ message TeamRole {
   option (w17.contrib.plugin_feature) = "teams";
 
   string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string team_id    = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
-  string role_id    = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
-  string org_id     = 4 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string team_id    = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Team", deletion_rule: BLOCK, index: true }];
+  string role_id    = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Role", deletion_rule: BLOCK, index: true }];
+  string org_id     = 4 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
   string granted_by = 5 [(w17.field) = { type: UUID, null: true }];
   google.protobuf.Timestamp created_at = 6 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
   google.protobuf.Timestamp revoked_at = 7 [(w17.field) = { type: DATETIME, null: true }];
@@ -2264,7 +2224,7 @@ message OrgPackage {
   option (w17.contrib.plugin_feature) = "org_packages";
 
   string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string org_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string org_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
   string package    = 3 [(w17.field) = { type: CHAR, max_len: 64 }];
   string enabled_by = 4 [(w17.field) = { type: UUID, null: true }];
   google.protobuf.Timestamp enabled_at = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
@@ -2275,8 +2235,8 @@ message OrgPackage {
 }
 
 // OrgHost — a host (white-label or co-brand) bound to the organization it
-// serves (org_hosts). An audience that takes the tenant from the host
-// (w17/audience.proto TENANT_SOURCE_HOST) acts in this organization on a
+// serves (org_hosts). An audience that takes the organization from the host
+// (w17/audience.proto ORG_SOURCE_HOST) acts in this organization on a
 // request arriving on it. One live binding per host; unbinding ends the row
 // (ended_at, ended_key = id), and nothing is deleted.
 message OrgHost {
@@ -2288,7 +2248,7 @@ message OrgHost {
   string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
   // host — lower-case, no port and no trailing dot: as the gateway reports it.
   string host       = 2 [(w17.field) = { type: CHAR, max_len: 253 }];
-  string org_id     = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string org_id     = 3 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
   string bound_by   = 4 [(w17.field) = { type: UUID, null: true }];
   google.protobuf.Timestamp bound_at = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
   google.protobuf.Timestamp ended_at = 6 [(w17.field) = { type: DATETIME, null: true }];
@@ -2311,7 +2271,7 @@ message OrgSignUpPolicy {
   option (w17.contrib.plugin_feature) = "org_signup";
 
   string id      = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string org_id  = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string org_id  = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
   // kind — the membership kind it is for ('' without membership_kinds).
   string kind    = 3 [(w17.field) = { type: CHAR, max_len: 32, blank: true, default_string: "" }];
   // open — a registration of this kind joins without an invitation.
@@ -2330,6 +2290,22 @@ message OrgSignUpPolicy {
     (w17.field) = { type: TEXT, blank: true, default_string: "" },
     (w17.contrib.plugin_feature_field) = "product_roles"
   ];
+
+  // role_snapshot — the role as the operator setting an open policy was
+  // allowed to hand it out, in OrgInvite.role_snapshot's form
+  // (`<role id>:<permission ids, sorted, comma-separated>`, or `<role id>:*`
+  // for a wildcard). Written by SetOrgSignUpPolicy from the role ceiling
+  // (handlers/role_ceiling.go) and checked at every registration the policy
+  // admits, because the grant is written THEN, against a catalogue that may
+  // have moved in between: a role widened since the policy was set, or a
+  // different role now answering to the name, would otherwise hand out
+  // permissions the operator never held.
+  //
+  // Empty on a closed policy, and on an open one seeded by fixtures or set
+  // before the column existed. Such an open policy is pinned by its first
+  // registration (PinOrgSignUpPolicySnapshotRow) to the role as it reads then,
+  // and held to that from the next registration on.
+  string role_snapshot = 12 [(w17.field) = { type: TEXT, blank: true, default_string: "" }];
 }
 
 // OrgTwoFactorPolicy — whether an organization's people sign in with a second
@@ -2347,7 +2323,7 @@ message OrgTwoFactorPolicy {
   option (w17.contrib.plugin_feature) = "org_two_factor_policy";
 
   string id      = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string org_id  = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string org_id  = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
   // kind — the membership kind it is for; '' is the organization's own
   // (every kind without a row of its own, and every member without
   // membership_kinds).
@@ -2360,6 +2336,33 @@ message OrgTwoFactorPolicy {
   string ended_by  = 8 [(w17.field) = { type: UUID, null: true }];
   // ended_key — '' while live, the row's own id once replaced or cleared.
   string ended_key = 9 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
+}
+
+// OrgEmailProofPolicy — how much proof an address needs before it becomes a
+// member of an organization (org_email_proof_policy): `none`, `derived` (an
+// address a bound invitation named, or one its owner proved) or `full` (only
+// an address its owner proved by a round trip). It holds on every way in: an
+// invitation's acceptance and a registration on the organization's host
+// (org_signup), where nothing was derived and only a proof the registration
+// made itself counts. Absent, the activation's email_proof_required decides.
+// One live row per organization; replacing or clearing it ends the row, and
+// nothing is deleted.
+message OrgEmailProofPolicy {
+  option (w17.db.table) = {
+    indexes: [ { unique: true, fields: [{ name: "org_id" }, { name: "ended_key" }] } ]
+  };
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+
+  string id      = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
+  string org_id  = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
+  // floor — none | derived | full.
+  string floor   = 3 [(w17.field) = { type: CHAR, max_len: 16 }];
+  string set_by  = 4 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp set_at   = 5 [(w17.field) = { type: DATETIME, default_auto: NOW, immutable: true }];
+  google.protobuf.Timestamp ended_at = 6 [(w17.field) = { type: DATETIME, null: true }];
+  string ended_by  = 7 [(w17.field) = { type: UUID, null: true }];
+  // ended_key — '' while live, the row's own id once replaced or cleared.
+  string ended_key = 8 [(w17.field) = { type: CHAR, max_len: 36, blank: true, default_string: "" }];
 }
 
 // ProductRoleDef is a role the identity defines from its products'
@@ -2381,7 +2384,7 @@ message ProductRoleDef {
 
   string id          = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
   // org_id — the organization that defined it; NULL = the backoffice's.
-  string org_id      = 2 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { index: true }];
+  string org_id      = 2 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
   string key         = 3 [(w17.field) = { type: CHAR, max_len: 64 }];
   string name        = 4 [(w17.field) = { type: CHAR, max_len: 128 }];
   // org_scoped — held in an organization; false = held realm-wide only (the
@@ -2412,7 +2415,7 @@ message TokenProductRole {
   option (w17.contrib.plugin_feature) = "product_roles";
 
   string id       = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string token_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string token_id = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.UserToken", deletion_rule: BLOCK, index: true }];
   // product — the product domain, as its (w17.domain).identity names this one.
   string product  = 3 [(w17.field) = { type: CHAR, max_len: 64 }];
   // role_key — the product's (w17.acl_roles) key.
@@ -2439,9 +2442,9 @@ message ProductRoleGrant {
   option (w17.contrib.plugin_feature) = "product_roles";
 
   string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string user_id    = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string user_id    = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.User", deletion_rule: BLOCK, index: true }];
   // org_id — the organization the role is held in; NULL = realm-wide.
-  string org_id     = 3 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { index: true }];
+  string org_id     = 3 [(w17.field) = { type: UUID, null: true }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
   // product — the product domain, as its (w17.domain).identity names this one.
   string product    = 4 [(w17.field) = { type: CHAR, max_len: 64 }];
   // role_key — the product's (w17.acl_roles) key.
@@ -2468,7 +2471,7 @@ message OrgProductAllowance {
   option (w17.contrib.plugin_feature) = "product_plans";
 
   string id         = 1 [(w17.field) = { type: UUID, pk: true, default_auto: UUID_V7 }];
-  string org_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { index: true }];
+  string org_id     = 2 [(w17.field) = { type: UUID }, (w17.db.column) = { fk: "@module.Organization", deletion_rule: BLOCK, index: true }];
   string product    = 3 [(w17.field) = { type: CHAR, max_len: 64 }];
   // role_key — the product's role; '' = every role of the product.
   string role_key   = 4 [(w17.field) = { type: CHAR, max_len: 64, blank: true, default_string: "" }];

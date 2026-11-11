@@ -1,5 +1,6 @@
 admin_languages: []
 admin_wire: CLIENT_WIRE_UNSPECIFIED
+codegen_version: ""
 connections:
     - default: true
       name: catalog-postgres
@@ -31,13 +32,13 @@ plugins:
     - git: null
       name: auth
       source: local
-      version: 0.1.0-rc.19
+      version: 0.1.0-rc.60
 project: examples-bookshop
 project_id: 1b17ac89-ad36-42b1-912c-8f87457fddd7
-sdk_version: v0.1.0-rc.64
+sdk_version: v0.1.0-rc.77
 secrets: null
 signature:
     alg: ed25519/v1
-    body: a89779a0a032d4d2d1d53c2292a8e96af1ef4fcf39d16223cb5ca7c6683bb5571c7b7df004768e76279cb77075ef9272ea5278d392d7b4660f9fbf3caebbf004
+    body: 8aea043743524b10eeb26ad30f5af4ae0b5c2b3fe28eef62b7893b96e4a4a09312470ba9fb6dc9a09658e6abca608ea54ba227ad18caed27dabf2c94860d2406
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

@@ -5,6 +5,7 @@ package pb
 
 import (
 	redact "github.com/wandering-compiler/sdk/go/lib/redact"
+	protowire "google.golang.org/protobuf/encoding/protowire"
 )
 
 // What of each message the request event stream and the telemetry sinks
@@ -15,9 +16,11 @@ func init() {
 		"w17.contrib.auth.GetUserByEmailResp":                {},
 		"w17.contrib.auth.GetUserByTokenReq":                 {},
 		"w17.contrib.auth.GetUserByTokenResp":                {},
+		"w17.contrib.auth.GetExpiredTokenReq":                {},
+		"w17.contrib.auth.GetExpiredTokenResp":               {},
 		"w17.contrib.auth.GetUserPermissionsReq":             {},
 		"w17.contrib.auth.GetUserPermissionsResp":            {},
-		"w17.contrib.auth.GetUserByTokenWithPermissionsReq":  {},
+		"w17.contrib.auth.GetUserByTokenWithPermissionsReq":  {Skip: []protowire.Number{1 /* legacy_token */}},
 		"w17.contrib.auth.GetUserRoleGrantsReq":              {},
 		"w17.contrib.auth.GetUserRoleGrantsResp":             {},
 		"w17.contrib.auth.ListRoleGrantsReq":                 {},
@@ -31,11 +34,18 @@ func init() {
 		"w17.contrib.auth.GetDefaultRolesReq":                {},
 		"w17.contrib.auth.GetDefaultRolesResp":               {},
 		"w17.contrib.auth.ListRolesReq":                      {},
+		"w17.contrib.auth.ListRealmSuperadminsReq":           {},
+		"w17.contrib.auth.ListRealmSuperadminsResp":          {},
+		"w17.contrib.auth.RealmSuperadminRow":                {},
 		"w17.contrib.auth.ListRolesResp":                     {},
 		"w17.contrib.auth.GetRoleReq":                        {},
 		"w17.contrib.auth.GetUserByIdReq":                    {},
 		"w17.contrib.auth.GetUserByIdResp":                   {},
+		"w17.contrib.auth.GetDeviceTrustRevokedAtReq":        {},
+		"w17.contrib.auth.GetDeviceTrustRevokedAtResp":       {},
+		"w17.contrib.auth.ListUserSignInEventsReq":           {},
+		"w17.contrib.auth.ListUserSignInEventsResp":          {},
 	})
 }
 
-// emit-sha256: dae41b5e6a3785268e80e0ebb85f78715375580eba0671505de93ae8197a84ee
+// emit-sha256: b44df6a664018f5244c61094489be8f527a3cd15922eaf8251f398ebb6a996c7

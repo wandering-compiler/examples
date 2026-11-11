@@ -1,5 +1,6 @@
 admin_languages: []
 admin_wire: CLIENT_WIRE_UNSPECIFIED
+codegen_version: ""
 connections:
     - default: true
       name: billing-postgres
@@ -29,13 +30,13 @@ org_id: 01a08faa-bba7-7f3c-bc4b-962c69e23b74
 org_slug: wandering-compiler
 plugins:
     - git:
-        commit: 8521cfff2befb88b50982771e22086eb42b4f5c8
-        digest: 7739875e99db4ad275ff8903e4614556e6698a3b0b6d392390adab7f6c6f6d5c
-        ref: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        commit: 190e9e7a4fb73623d9e050294fe3f90d96569a26
+        digest: f00a0d13f0333643a7a995263483f212fe48ac5b19cf324f6b99aac212d798bb
+        ref: auth/v0.1.0-rc.60
         repo: https://github.com/wandering-compiler/plugins
       name: auth
       source: git
-      version: 0.1.0-rc.25
+      version: 0.1.0-rc.60
     - git:
         commit: 09809ac3d531e0660d0905a80737292d99494b4f
         digest: e25b9ac8d677b30eea2ada552d856e2ecf4f2990283c3ad56a07e472529de5c7
@@ -46,10 +47,10 @@ plugins:
       version: 0.1.0-rc.9
 project: examples-billing
 project_id: 514a5b95-afaf-4e9a-8730-5e172520c3a2
-sdk_version: v0.1.0-rc.64
+sdk_version: v0.1.0-rc.77
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 44be79a2fa80db3ad63bbac606c102819a0562764c94a6c2119d08f5dc3af542172a0923e8df3a611511ae31804a2a0908e6173286c34a069463daf20240bd09
+    body: 6b4d1df464689a572f997f47d82cf15bd8839ad86437c4e852f602f44badf8d084667d208f6cb5d6e2f6e0f74aeffc0d3149d27b376d180633c095c51a14500e
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
