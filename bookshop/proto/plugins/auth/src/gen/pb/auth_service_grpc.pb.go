@@ -17,8 +17,7 @@
 // The plugin author's contract:
 //   - AuthReq mirrors the gateway's required shape:
 //     `map<string, string> headers = 1` (validated by the
-//     gateway parser; see srcgo/domains/gateway/parser/parser.go
-//     §validateAuthRequestShape).
+//     gateway parser when it reads the auth method).
 //   - AuthResp carries the two fields the gateway router
 //     consumes: `repeated int32 permission_ids` (the deduped
 //     numeric IDs of granted permissions from the activating
@@ -74,11 +73,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthService_Authenticate_FullMethodName = "/w17.contrib.auth.AuthService/Authenticate"
-	AuthService_SignIn_FullMethodName       = "/w17.contrib.auth.AuthService/SignIn"
-	AuthService_SignUp_FullMethodName       = "/w17.contrib.auth.AuthService/SignUp"
-	AuthService_WhoAmI_FullMethodName       = "/w17.contrib.auth.AuthService/WhoAmI"
-	AuthService_Logout_FullMethodName       = "/w17.contrib.auth.AuthService/Logout"
+	AuthService_Authenticate_FullMethodName       = "/w17.contrib.auth.AuthService/Authenticate"
+	AuthService_AuthenticateAdmin_FullMethodName  = "/w17.contrib.auth.AuthService/AuthenticateAdmin"
+	AuthService_ResolveUser_FullMethodName        = "/w17.contrib.auth.AuthService/ResolveUser"
+	AuthService_SignIn_FullMethodName             = "/w17.contrib.auth.AuthService/SignIn"
+	AuthService_SignUp_FullMethodName             = "/w17.contrib.auth.AuthService/SignUp"
+	AuthService_WhoAmI_FullMethodName             = "/w17.contrib.auth.AuthService/WhoAmI"
+	AuthService_Logout_FullMethodName             = "/w17.contrib.auth.AuthService/Logout"
+	AuthService_ListMySignInEvents_FullMethodName = "/w17.contrib.auth.AuthService/ListMySignInEvents"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -91,6 +93,22 @@ type AuthServiceClient interface {
 	// tag. Authenticate → `authenticate_turnkey`, SignIn →
 	// `sign_in_turnkey`, SignUp → `sign_up_turnkey`.
 	Authenticate(ctx context.Context, in *AuthReq, opts ...grpc.CallOption) (*AuthResp, error)
+	// AuthenticateAdmin — Authenticate for the admin plane (the admin
+	// preset's user_lookup). Only realm-wide roles count: no organization is
+	// selected, so a role scoped to one organization grants nothing in the
+	// console that spans them all.
+	AuthenticateAdmin(ctx context.Context, in *AuthReq, opts ...grpc.CallOption) (*AuthResp, error)
+	// ResolveUser — what a person holds, answered as Authenticate answers it
+	// for their session: the same roles, organization, narrowing and wildcard
+	// expansion, starting from a user id instead of a credential. For the
+	// identity domain's own code acting for someone another domain named in a
+	// request (principal.ActAs with the answer), so a check that reads the
+	// envelope — the role ceiling — judges that person. It trusts its caller
+	// with any user, so it is for code inside the domain: no preset surfaces
+	// it, and it is marked internal — codegen refuses it on every surface (a
+	// REST endpoint, an rpc or private group, an admin source, an MCP tool)
+	// and a whole-service ref leaves it out.
+	ResolveUser(ctx context.Context, in *ResolveUserReq, opts ...grpc.CallOption) (*AuthResp, error)
 	SignIn(ctx context.Context, in *SignInReq, opts ...grpc.CallOption) (*SignInResp, error)
 	SignUp(ctx context.Context, in *SignUpReq, opts ...grpc.CallOption) (*SignUpResp, error)
 	// WhoAmI — verify the current bearer + return the principal.
@@ -100,9 +118,12 @@ type AuthServiceClient interface {
 	WhoAmI(ctx context.Context, in *WhoAmIReq, opts ...grpc.CallOption) (*WhoAmIResp, error)
 	// Logout — revoke the caller's CURRENT session token (base-tier, no
 	// `devices` feature). Reads user_id + session_token_id from the gateway
-	// auth envelope and deletes that one SESSION token via
-	// AuthMutation.DeleteSessionToken. Idempotent.
+	// auth envelope and revokes that one SESSION token via
+	// AuthMutation.RevokeSessionToken (the row stays). Idempotent.
 	Logout(ctx context.Context, in *LogoutReq, opts ...grpc.CallOption) (*LogoutResp, error)
+	// ListMySignInEvents — the caller's own sign-in history (see the
+	// request). Reads AuthQuery.ListUserSignInEvents for the envelope's user.
+	ListMySignInEvents(ctx context.Context, in *ListMySignInEventsReq, opts ...grpc.CallOption) (*ListMySignInEventsResp, error)
 }
 
 type authServiceClient struct {
@@ -117,6 +138,26 @@ func (c *authServiceClient) Authenticate(ctx context.Context, in *AuthReq, opts 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AuthResp)
 	err := c.cc.Invoke(ctx, AuthService_Authenticate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) AuthenticateAdmin(ctx context.Context, in *AuthReq, opts ...grpc.CallOption) (*AuthResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AuthResp)
+	err := c.cc.Invoke(ctx, AuthService_AuthenticateAdmin_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ResolveUser(ctx context.Context, in *ResolveUserReq, opts ...grpc.CallOption) (*AuthResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AuthResp)
+	err := c.cc.Invoke(ctx, AuthService_ResolveUser_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -163,6 +204,16 @@ func (c *authServiceClient) Logout(ctx context.Context, in *LogoutReq, opts ...g
 	return out, nil
 }
 
+func (c *authServiceClient) ListMySignInEvents(ctx context.Context, in *ListMySignInEventsReq, opts ...grpc.CallOption) (*ListMySignInEventsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMySignInEventsResp)
+	err := c.cc.Invoke(ctx, AuthService_ListMySignInEvents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthServiceServer is the server API for AuthService service.
 // All implementations should embed UnimplementedAuthServiceServer
 // for forward compatibility.
@@ -173,6 +224,22 @@ type AuthServiceServer interface {
 	// tag. Authenticate → `authenticate_turnkey`, SignIn →
 	// `sign_in_turnkey`, SignUp → `sign_up_turnkey`.
 	Authenticate(context.Context, *AuthReq) (*AuthResp, error)
+	// AuthenticateAdmin — Authenticate for the admin plane (the admin
+	// preset's user_lookup). Only realm-wide roles count: no organization is
+	// selected, so a role scoped to one organization grants nothing in the
+	// console that spans them all.
+	AuthenticateAdmin(context.Context, *AuthReq) (*AuthResp, error)
+	// ResolveUser — what a person holds, answered as Authenticate answers it
+	// for their session: the same roles, organization, narrowing and wildcard
+	// expansion, starting from a user id instead of a credential. For the
+	// identity domain's own code acting for someone another domain named in a
+	// request (principal.ActAs with the answer), so a check that reads the
+	// envelope — the role ceiling — judges that person. It trusts its caller
+	// with any user, so it is for code inside the domain: no preset surfaces
+	// it, and it is marked internal — codegen refuses it on every surface (a
+	// REST endpoint, an rpc or private group, an admin source, an MCP tool)
+	// and a whole-service ref leaves it out.
+	ResolveUser(context.Context, *ResolveUserReq) (*AuthResp, error)
 	SignIn(context.Context, *SignInReq) (*SignInResp, error)
 	SignUp(context.Context, *SignUpReq) (*SignUpResp, error)
 	// WhoAmI — verify the current bearer + return the principal.
@@ -182,9 +249,12 @@ type AuthServiceServer interface {
 	WhoAmI(context.Context, *WhoAmIReq) (*WhoAmIResp, error)
 	// Logout — revoke the caller's CURRENT session token (base-tier, no
 	// `devices` feature). Reads user_id + session_token_id from the gateway
-	// auth envelope and deletes that one SESSION token via
-	// AuthMutation.DeleteSessionToken. Idempotent.
+	// auth envelope and revokes that one SESSION token via
+	// AuthMutation.RevokeSessionToken (the row stays). Idempotent.
 	Logout(context.Context, *LogoutReq) (*LogoutResp, error)
+	// ListMySignInEvents — the caller's own sign-in history (see the
+	// request). Reads AuthQuery.ListUserSignInEvents for the envelope's user.
+	ListMySignInEvents(context.Context, *ListMySignInEventsReq) (*ListMySignInEventsResp, error)
 }
 
 // UnimplementedAuthServiceServer should be embedded to have
@@ -197,6 +267,12 @@ type UnimplementedAuthServiceServer struct{}
 func (UnimplementedAuthServiceServer) Authenticate(context.Context, *AuthReq) (*AuthResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method Authenticate not implemented")
 }
+func (UnimplementedAuthServiceServer) AuthenticateAdmin(context.Context, *AuthReq) (*AuthResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method AuthenticateAdmin not implemented")
+}
+func (UnimplementedAuthServiceServer) ResolveUser(context.Context, *ResolveUserReq) (*AuthResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveUser not implemented")
+}
 func (UnimplementedAuthServiceServer) SignIn(context.Context, *SignInReq) (*SignInResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method SignIn not implemented")
 }
@@ -208,6 +284,9 @@ func (UnimplementedAuthServiceServer) WhoAmI(context.Context, *WhoAmIReq) (*WhoA
 }
 func (UnimplementedAuthServiceServer) Logout(context.Context, *LogoutReq) (*LogoutResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method Logout not implemented")
+}
+func (UnimplementedAuthServiceServer) ListMySignInEvents(context.Context, *ListMySignInEventsReq) (*ListMySignInEventsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMySignInEvents not implemented")
 }
 func (UnimplementedAuthServiceServer) testEmbeddedByValue() {}
 
@@ -243,6 +322,42 @@ func _AuthService_Authenticate_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthServiceServer).Authenticate(ctx, req.(*AuthReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_AuthenticateAdmin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).AuthenticateAdmin(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_AuthenticateAdmin_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).AuthenticateAdmin(ctx, req.(*AuthReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ResolveUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveUserReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ResolveUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ResolveUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ResolveUser(ctx, req.(*ResolveUserReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -319,6 +434,24 @@ func _AuthService_Logout_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_ListMySignInEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMySignInEventsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ListMySignInEvents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ListMySignInEvents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ListMySignInEvents(ctx, req.(*ListMySignInEventsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -329,6 +462,14 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Authenticate",
 			Handler:    _AuthService_Authenticate_Handler,
+		},
+		{
+			MethodName: "AuthenticateAdmin",
+			Handler:    _AuthService_AuthenticateAdmin_Handler,
+		},
+		{
+			MethodName: "ResolveUser",
+			Handler:    _AuthService_ResolveUser_Handler,
 		},
 		{
 			MethodName: "SignIn",
@@ -346,9 +487,13 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Logout",
 			Handler:    _AuthService_Logout_Handler,
 		},
+		{
+			MethodName: "ListMySignInEvents",
+			Handler:    _AuthService_ListMySignInEvents_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "business/auth_service.proto",
 }
 
-// emit-sha256: 54d49880a8f5063bd1a707f734502758988b986844054666b6d5d260bf10e85b
+// emit-sha256: c41cba7cea1748cbf450db556e9df0fe873bb7df37efc0dc5001081c8061868e

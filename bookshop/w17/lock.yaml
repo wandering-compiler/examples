@@ -32,13 +32,13 @@ plugins:
     - git: null
       name: auth
       source: local
-      version: 0.1.0-rc.19
+      version: 0.1.0-rc.60
 project: examples-bookshop
 project_id: 1b17ac89-ad36-42b1-912c-8f87457fddd7
 sdk_version: v0.1.0-rc.77
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 20144dbcf7a335a13ad9eb8411da9ab3b80b7399dc8bb3f89dfc26612b5f388b13066194d8fd883f84c1c7e3c314734d30549411efbff3ecb1a284e848e57402
+    body: 8aea043743524b10eeb26ad30f5af4ae0b5c2b3fe28eef62b7893b96e4a4a09312470ba9fb6dc9a09658e6abca608ea54ba227ad18caed27dabf2c94860d2406
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

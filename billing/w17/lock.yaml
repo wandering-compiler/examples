@@ -30,13 +30,13 @@ org_id: 01a08faa-bba7-7f3c-bc4b-962c69e23b74
 org_slug: wandering-compiler
 plugins:
     - git:
-        commit: 8521cfff2befb88b50982771e22086eb42b4f5c8
-        digest: 7739875e99db4ad275ff8903e4614556e6698a3b0b6d392390adab7f6c6f6d5c
-        ref: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        commit: 190e9e7a4fb73623d9e050294fe3f90d96569a26
+        digest: f00a0d13f0333643a7a995263483f212fe48ac5b19cf324f6b99aac212d798bb
+        ref: auth/v0.1.0-rc.60
         repo: https://github.com/wandering-compiler/plugins
       name: auth
       source: git
-      version: 0.1.0-rc.25
+      version: 0.1.0-rc.60
     - git:
         commit: 09809ac3d531e0660d0905a80737292d99494b4f
         digest: e25b9ac8d677b30eea2ada552d856e2ecf4f2990283c3ad56a07e472529de5c7
@@ -51,6 +51,6 @@ sdk_version: v0.1.0-rc.77
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 30a307b9c1fee2b55729a6f6560537ee49c5057715d6432285c83b6e509613d30b9df3dc9ae940a93f71480ae947487eab6f85c97e30916fc57d51c731f81609
+    body: 6b4d1df464689a572f997f47d82cf15bd8839ad86437c4e852f602f44badf8d084667d208f6cb5d6e2f6e0f74aeffc0d3149d27b376d180633c095c51a14500e
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

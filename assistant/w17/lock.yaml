@@ -42,19 +42,19 @@ plugins:
       source: git
       version: 0.1.0-rc.5
     - git:
-        commit: 8521cfff2befb88b50982771e22086eb42b4f5c8
-        digest: 7739875e99db4ad275ff8903e4614556e6698a3b0b6d392390adab7f6c6f6d5c
-        ref: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        commit: 190e9e7a4fb73623d9e050294fe3f90d96569a26
+        digest: f00a0d13f0333643a7a995263483f212fe48ac5b19cf324f6b99aac212d798bb
+        ref: auth/v0.1.0-rc.60
         repo: https://github.com/wandering-compiler/plugins
       name: auth
       source: git
-      version: 0.1.0-rc.25
+      version: 0.1.0-rc.60
 project: examples-assistant
 project_id: 69eff853-3d53-4330-bd4d-9764220f4153
 sdk_version: v0.1.0-rc.77
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 014bb17f137e070936c6ccceee180517a46e9dff058fcfdb81819c35ab033c4077ceacbf9752ba1d1edfcf9f6e6900deccd97e8f071c6e488e89b183527a0800
+    body: 52ba0948c9e39be2c61a1d250d8f44d94051e357e534d04df061ea763ff7dcdc3b215f7b931d6fc661a84677adf9f597fb7c86c02e58e0f370c13846bdaba907
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
