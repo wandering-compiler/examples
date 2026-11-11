@@ -1,0 +1,50 @@
+{
+  "rows": [],
+  "prunes": [
+    {
+      "model": "auth.RolePermission",
+      "owner_column": "role_id",
+      "owner_values": [],
+      "owner_ref": {
+        "model": "auth.Role",
+        "match_column": "preset_key",
+        "ended_column": "deleted_at",
+        "outside_values": true
+      },
+      "end_column": "removed_at",
+      "end_log": {
+        "model": "auth.RolePermissionChange",
+        "copy": {
+          "permission_id": "permission_id",
+          "role_id": "role_id"
+        },
+        "set": {
+          "changed_by": null,
+          "kind": 2
+        }
+      },
+      "warn_holders": {
+        "model": "auth.UserRole",
+        "column": "role_id",
+        "ended_column": "revoked_at",
+        "message": "w17 fixtures: a preset role no longer declared in (w17.acl_roles) is withdrawn (grants ended, sign-up flags cleared) while accounts still hold it. A renamed key withdraws the old role — keep `key`, change `name`. Preset key"
+      }
+    },
+    {
+      "model": "auth.Role",
+      "owner_column": "id",
+      "owner_values": [],
+      "owner_ref": {
+        "model": "auth.Role",
+        "match_column": "preset_key",
+        "ended_column": "deleted_at",
+        "outside_values": true
+      },
+      "set_columns": {
+        "all_permissions": false,
+        "assign_default": false,
+        "assign_first_user": false
+      }
+    }
+  ]
+}

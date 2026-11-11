@@ -19,8 +19,7 @@ import (
 // This file implements `sign_up_confirmation`: SignUp proves the address
 // before the account exists. Staged only with that feature (plugin.yaml
 // go_files), which requires `sign_up_turnkey`, so pb.SignUpReq is always here
-// when this file is. handlers/signup_confirm_tenant.go adds the tenant half
-// when `tenant_scope` is staged too.
+// when this file is.
 //
 // Why a pending row and not an unverified User: a User row HOLDS its address
 // — the email is unique — so an account created before the address is proved
@@ -36,7 +35,7 @@ const (
 	// A cap on how many codes one address may be sent is a lever anybody can
 	// pull: send that many registrations and the owner's own request is
 	// refused — the address blocked again, renewably, which is the thing this
-	// feature exists to prevent (review of #221). Floods are bounded per
+	// feature exists to prevent. Floods are bounded per
 	// CALLER instead, by the gateway's limiter on unauthenticated methods.
 	//
 	// So the space carries it: eight characters of Crockford base32 (32^8 ≈
@@ -99,19 +98,40 @@ var errSignUpConfirmInvalid = status.Error(codes.InvalidArgument,
 // stranger which addresses are registered.
 
 func init() {
+	secretDeliveryFeatures = append(secretDeliveryFeatures, "sign_up_confirmation")
 	signUpConfirmation = startSignUpConfirmation
+	erasers = append(erasers, erasePendingSignUps)
+	signInOutcomeRules = append(signInOutcomeRules,
+		outcomeRule{errSignUpConfirmInvalid, pb.SignInOutcome_SIGN_IN_OUTCOME_WRONG_CODE})
 }
 
-// pendingSignUpTenant stamps the tenant SignUp resolved on the pending row.
-// A no-op without `tenant_scope`; handlers/signup_confirm_tenant.go replaces
-// it, because the field it sets exists only with both features.
-var pendingSignUpTenant = func(_ context.Context, _ *AuthServiceHandler, _ *pb.SignUpReq, _ *pb.CreatePendingSignUpReq) error {
-	return nil
+// erasePendingSignUps is sign_up_confirmation's eraser: the registrations
+// parked for the erased address — the account's own claimed one and any
+// superseded, expired or open ones, a stranger's included — are ended and
+// lose the address and their hashes (ErasePendingSignUpAddress). They are
+// kept now rather than deleted at confirmation, so the erasure must reach
+// them. Pending rows store the address normalised; skipped when the account
+// already holds its placeholder (a retried erasure).
+func erasePendingSignUps(ctx context.Context, h *AuthServiceHandler, _, email, placeholder string) error {
+	email = normalizeEmail(email)
+	if email == "" || email == normalizeEmail(placeholder) {
+		return nil
+	}
+	_, err := h.Mutation.ErasePendingSignUpAddress(ctx, &pb.ErasePendingSignUpAddressReq{Email: email, Placeholder: placeholder})
+	return err
 }
 
-// confirmCreateUser creates the account from a claimed registration. The
-// tenant-less create here; handlers/signup_confirm_tenant.go replaces it with
-// one that writes the tenant the registration carried.
+// pendingSignUpJoin carries the organization an open registration on its
+// host joins (org_signup) on the pending row; claimedSignUpJoin reads it
+// back at confirmation. No-ops without org_signup; handlers/
+// signup_confirm_org.go replaces them, because the fields exist only with
+// both features.
+var pendingSignUpJoin = func(_ *pb.CreatePendingSignUpReq, _ *orgJoin) {}
+
+var claimedSignUpJoin = func(_ *pb.ClaimPendingSignUpResp) *orgJoin { return nil }
+
+// confirmCreateUser creates the account from a claimed registration. A var
+// so a test can stand in for the storage write.
 var confirmCreateUser = func(ctx context.Context, h *AuthServiceHandler, claimed *pb.ClaimPendingSignUpResp) (string, error) {
 	resp, err := h.Mutation.CreateUser(ctx, &pb.CreateUserReq{
 		Email:        claimed.GetEmail(),
@@ -141,12 +161,12 @@ func (h *AuthServiceHandler) signUpConfirmationTTL() time.Duration {
 // "the answer for an existing address must not differ from a new one"); the
 // code reaches only the address's owner, so only they learn it, and they are
 // the one person it is not news to.
-func startSignUpConfirmation(ctx context.Context, h *AuthServiceHandler, req *pb.SignUpReq) (*pb.SignUpResp, error) {
+func startSignUpConfirmation(ctx context.Context, h *AuthServiceHandler, req *pb.SignUpReq, join *orgJoin) (*pb.SignUpResp, error) {
 	email := normalizeEmail(req.GetEmail())
 
 	hashed, err := h.PasswordHash.Hash(req.GetPassword())
 	if err != nil {
-		return nil, err
+		return nil, hashPasswordErr(ctx, err, "password")
 	}
 	code, err := generateSignUpCode()
 	if err != nil {
@@ -157,11 +177,9 @@ func startSignUpConfirmation(ctx context.Context, h *AuthServiceHandler, req *pb
 		return nil, err
 	}
 
-	// Housekeeping for this address only: expired rows are dead anyway (every
-	// read filters on expires_at), this keeps them from piling up.
-	if _, err := h.Mutation.PurgeExpiredPendingSignUps(ctx, &pb.PurgeExpiredPendingSignUpsReq{Email: email}); err != nil {
-		return nil, err
-	}
+	// No housekeeping: an expired registration stays, refused by its
+	// expires_at in every statement that reads one (nothing in the auth tables
+	// is deleted).
 
 	// The link is claimed when the registration STARTS, because only this call
 	// carries it — the confirmation does not. An address that never confirms
@@ -188,16 +206,19 @@ func startSignUpConfirmation(ctx context.Context, h *AuthServiceHandler, req *pb
 		return fail(err)
 	}
 
+	clear, sealed, err := h.deliver(code)
+	if err != nil {
+		return fail(err)
+	}
 	create := &pb.CreatePendingSignUpReq{
 		Email:        email,
 		PasswordHash: hashed,
 		CodeHash:     codeHash,
 		ExpiresAt:    timestamppb.New(time.Now().Add(h.signUpConfirmationTTL())),
-		Code:         code,
+		Code:         clear,
+		SealedCode:   sealed,
 	}
-	if err := pendingSignUpTenant(txCtx, h, req, create); err != nil {
-		return fail(err)
-	}
+	pendingSignUpJoin(create, join)
 	created, err := h.Mutation.CreatePendingSignUp(txCtx, create)
 	if err != nil {
 		return fail(err)
@@ -221,16 +242,43 @@ func startSignUpConfirmation(ctx context.Context, h *AuthServiceHandler, req *pb
 //     check against. A zero count is no live row.
 //  2. The code is checked, and the allowlist again — on the stored address,
 //     because the list may have changed since the code was sent.
-//  3. One transaction: claim the row (DELETE … RETURNING — two confirmations
-//     racing get one account), create the User, link its roles, record the
-//     proved address, delete the address's other pending registrations, mint
-//     the session. An address registered meanwhile fails CreateUser's unique
+//  3. One transaction: claim the row (UPDATE … SET claimed_at … RETURNING,
+//     guarded on claimed_at IS NULL — two confirmations racing get one
+//     account), create the User, link its roles, record the proved address,
+//     supersede the address's other pending registrations (superseded_at),
+//     mint the session. Every row stays. An address registered meanwhile fails CreateUser's unique
 //     constraint and rolls the claim back.
-func (h *AuthServiceHandler) ConfirmSignUp(ctx context.Context, req *pb.ConfirmSignUpReq) (*pb.ConfirmSignUpResp, error) {
+//
+// Every attempt appends one SignInEvent (method SIGN_UP_CONFIRM), the
+// refusals too; the success row is written in the transaction above.
+func (h *AuthServiceHandler) ConfirmSignUp(ctx context.Context, req *pb.ConfirmSignUpReq) (_ *pb.ConfirmSignUpResp, err error) {
+	attempt := beginSignIn(ctx, pb.SignInMethod_SIGN_IN_METHOD_SIGN_UP_CONFIRM)
+	attempt.publicComputer = req.GetPublicComputer()
+	defer func() { h.endSignIn(ctx, attempt, err) }()
+
+	// The device key before the attempt is counted: a client that cannot
+	// sign must not spend one of the five guesses on a session it could
+	// never be given.
+	thumbprint, err := mintThumbprint(ctx)
+	if err != nil {
+		return nil, err
+	}
 	att, err := h.Mutation.RecordPendingSignUpAttempt(ctx, &pb.RecordPendingSignUpAttemptReq{PendingId: req.GetPendingId()})
 	if err != nil {
 		// Fail closed: an attempt that could not be counted is not granted.
+		// An outage is said as one (Unavailable), not as a wrong code: the
+		// person should retry, not register again.
+		if status.Code(err) != codes.NotFound {
+			attempt.outcome = pb.SignInOutcome_SIGN_IN_OUTCOME_ERROR
+		}
+		if operationalCode(err) != codes.OK {
+			return nil, Unauthenticated(err)
+		}
 		return nil, errSignUpConfirmInvalid
+	}
+	attempt.named(att.GetEmail())
+	if att.GetAttempts() > maxSignUpConfirmAttempts {
+		attempt.outcome = pb.SignInOutcome_SIGN_IN_OUTCOME_TOO_MANY_ATTEMPTS
 	}
 	if att.GetAttempts() == 0 || att.GetAttempts() > maxSignUpConfirmAttempts {
 		return nil, errSignUpConfirmInvalid
@@ -243,7 +291,7 @@ func (h *AuthServiceHandler) ConfirmSignUp(ctx context.Context, req *pb.ConfirmS
 	}
 
 	// Committed state, before the tx — the same reason SignUp reads it there.
-	roleIDs, err := signupResolveRoleIDs(ctx, h)
+	roles, err := signupResolveRoleIDs(ctx, h)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +303,7 @@ func (h *AuthServiceHandler) ConfirmSignUp(ctx context.Context, req *pb.ConfirmS
 			return nil, err
 		}
 	}
-	resp, err := h.confirmSignUpTx(txCtx, req.GetPendingId(), roleIDs)
+	resp, err := h.confirmSignUpTx(txCtx, req.GetPendingId(), confirmInviteToken(req), roles, thumbprint, attempt)
 	if err != nil {
 		if tx != nil {
 			_ = tx.Rollback(ctx)
@@ -270,7 +318,7 @@ func (h *AuthServiceHandler) ConfirmSignUp(ctx context.Context, req *pb.ConfirmS
 	return resp, nil
 }
 
-func (h *AuthServiceHandler) confirmSignUpTx(txCtx context.Context, pendingID string, roleIDs []string) (*pb.ConfirmSignUpResp, error) {
+func (h *AuthServiceHandler) confirmSignUpTx(txCtx context.Context, pendingID, inviteToken string, roles signupRoles, thumbprint string, attempt *signInAttempt) (*pb.ConfirmSignUpResp, error) {
 	claimed, err := h.Mutation.ClaimPendingSignUp(txCtx, &pb.ClaimPendingSignUpReq{PendingId: pendingID})
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -282,6 +330,22 @@ func (h *AuthServiceHandler) confirmSignUpTx(txCtx context.Context, pendingID st
 		// Claimed by a concurrent confirmation between the check and here.
 		return nil, errSignUpConfirmInvalid
 	}
+	// SignUp refuses the address already; a registration parked before it did
+	// is refused here, and the transaction leaves it unclaimed.
+	if err := refuseReservedEmail(txCtx, claimed.GetEmail()); err != nil {
+		return nil, err
+	}
+	// The invitation that admitted the registration must still stand: one
+	// revoked or expired since SignUp no longer lets the address in, as it
+	// would not let a new SignUp in. An open link was bound to the address
+	// when the registration started, so the address finds it here too. A
+	// registration an organization's open policy took (claimedSignUpJoin)
+	// came through no invitation and is not asked.
+	if claimedSignUpJoin(claimed) == nil {
+		if err := signupInviteGate(txCtx, h, claimed.GetEmail(), inviteToken); err != nil {
+			return nil, err
+		}
+	}
 	userID, err := confirmCreateUser(txCtx, h, claimed)
 	if err != nil {
 		if isEmailTaken(err) {
@@ -289,21 +353,46 @@ func (h *AuthServiceHandler) confirmSignUpTx(txCtx context.Context, pendingID st
 		}
 		return nil, err
 	}
-	if err := signupAssignRoleIDs(txCtx, h, userID, roleIDs); err != nil {
+	if err := signupAssignRoleIDs(txCtx, h, userID, roles); err != nil {
 		return nil, err
+	}
+	// The organization the registration joins, decided when it was
+	// requested (it is known there whether it came with an invitation).
+	if err := joinSignedUpOrg(txCtx, h, userID, claimedSignUpJoin(claimed)); err != nil {
+		return nil, err
+	}
+	if claimedSignUpJoin(claimed) == nil {
+		if err := signupAcceptInvite(txCtx, h, userID, claimed.GetEmail(), inviteToken, true); err != nil {
+			return nil, err
+		}
 	}
 	if err := markEmailConfirmed(txCtx, h, userID); err != nil {
 		return nil, err
 	}
-	if _, err := h.Mutation.DeletePendingSignUpsForEmail(txCtx, &pb.DeletePendingSignUpsForEmailReq{Email: claimed.GetEmail()}); err != nil {
+	if _, err := h.Mutation.SupersedePendingSignUpsForEmail(txCtx, &pb.SupersedePendingSignUpsForEmailReq{Email: claimed.GetEmail()}); err != nil {
 		return nil, err
 	}
-	tokResp, err := h.Mutation.IssueToken(txCtx, &pb.IssueTokenReq{UserId: userID, ExpiresAt: h.sessionTokenExpiry()})
+	dev, err := mintDevice(txCtx, h, userID, thumbprint)
 	if err != nil {
 		return nil, err
 	}
+	// The confirming request is the mint, so its public-computer choice
+	// decides the session, not the parked registration's.
+	public := attempt.publicComputer
+	token, err := h.issueBoundToken(txCtx, userID, dev, h.sessionExpiry(public), sessionGrant{public: public})
+	if err != nil {
+		return nil, err
+	}
+	if err := h.recordSignInOK(txCtx, attempt, userID, dev); err != nil {
+		return nil, err
+	}
 	return &pb.ConfirmSignUpResp{
-		UserId: userID,
-		Token:  tokResp.GetToken().GetToken(),
+		UserId:         userID,
+		Token:          token,
+		PublicComputer: public,
 	}, nil
 }
+
+// confirmInviteToken reads the invitation link a confirmation carries; the
+// field exists only with invite_accept_at_signup, which sets this.
+var confirmInviteToken = func(*pb.ConfirmSignUpReq) string { return "" }

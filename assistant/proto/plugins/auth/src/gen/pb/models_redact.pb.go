@@ -12,13 +12,16 @@ import (
 // may write: the fields left out of a record (sensitive by label or type).
 func init() {
 	redact.Register(map[string]redact.Plan{
-		"w17.contrib.auth.User":           {Skip: []protowire.Number{3 /* password_hash */}},
-		"w17.contrib.auth.UserToken":      {Skip: []protowire.Number{2 /* token */, 10 /* token_hash */}},
-		"w17.contrib.auth.Role":           {},
-		"w17.contrib.auth.RolePermission": {},
-		"w17.contrib.auth.UserRole":       {},
-		"w17.contrib.auth.BootstrapClaim": {},
+		"w17.contrib.auth.User":                 {Skip: []protowire.Number{3 /* password_hash */}},
+		"w17.contrib.auth.UserToken":            {Skip: []protowire.Number{2 /* token */, 10 /* token_hash */}},
+		"w17.contrib.auth.Device":               {},
+		"w17.contrib.auth.SignInEvent":          {},
+		"w17.contrib.auth.Role":                 {},
+		"w17.contrib.auth.RolePermission":       {},
+		"w17.contrib.auth.RolePermissionChange": {},
+		"w17.contrib.auth.UserRole":             {},
+		"w17.contrib.auth.BootstrapClaim":       {},
 	})
 }
 
-// emit-sha256: 3a4dbdc42ca170e96b545b7c067c01d5bec54e2beb237cf900e5b9e2e5815366
+// emit-sha256: af37fb6248ba7236922fe320c7da23f48307a52373dafa937ff4be70d81c8a73

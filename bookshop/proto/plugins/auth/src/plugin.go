@@ -72,6 +72,8 @@ func RegisterPlugin(cfg *gen.EnvConfig, registry gen.HandlerRegistry, clients ge
 		// verify path defaults ON.
 		TwoFactorTOTP:             cfg.TwoFactorTotp,
 		TwoFactorScope:            cfg.TwoFactorScope,
+		DeliveryRecipient:         cfg.DeliveryRecipient,
+		TwoFactorPolicy:           cfg.TwoFactorPolicy,
 		MfaCodeTTLSeconds:         cfg.MfaCodeTtlSeconds,
 		MaxMfaChallengesPerWindow: cfg.MfaMaxChallengesPerWindow,
 		MfaChallengeWindowSeconds: cfg.MfaChallengeWindowSeconds,
@@ -81,25 +83,55 @@ func RegisterPlugin(cfg *gen.EnvConfig, registry gen.HandlerRegistry, clients ge
 		// Session bearer absolute lifetime (base-tier; <=0 → 30d default
 		// applied in sessionTokenExpiry). pluginwire sets this from
 		// envInt(session_token_ttl_seconds, 2592000).
-		SessionTokenTTLSeconds: cfg.SessionTokenTtlSeconds,
+		SessionTokenTTLSeconds:  cfg.SessionTokenTtlSeconds,
+		PublicSessionTTLSeconds: cfg.PublicSessionTtlSeconds,
 
 		// oauth knob (ignored unless the `oauth` feature is staged).
 		OAuthRedirectBase: cfg.OauthRedirectBase,
 
-		// E1 token lifetimes (<=0 → the handler file's default; ignored
-		// unless the matching feature is staged).
+		// Reset / verification token lifetimes (<=0 → the handler file's
+		// default; ignored unless the matching feature is staged).
 		PasswordResetTTLSeconds:     cfg.PasswordResetTtlSeconds,
 		EmailVerificationTTLSeconds: cfg.EmailVerificationTtlSeconds,
 
-		InviteOnly:         cfg.InviteOnly,
-		EmailProofRequired: cfg.EmailProofRequired,
-		OrgInviteTTLHours:  cfg.OrgInviteTtlHours,
+		InviteOnly: cfg.InviteOnly,
+		// org_from_sole_membership (org_membership): off = an organization only
+		// ever comes from the request.
+		NoOrgFromSoleMembership: !cfg.OrgFromSoleMembership,
+		EmailProofRequired:      cfg.EmailProofRequired,
+		OrgInviteTTLHours:       cfg.OrgInviteTtlHours,
 
 		SignUpAllowlist:              cfg.SignUpAllowlist,
 		SignUpConfirmationTTLSeconds: cfg.SignUpConfirmationTtlSeconds,
 
 		// api_token: the lifetime of a token minted without an expiry.
 		APITokenDefaultTTLHours: cfg.APITokenDefaultTtlHours,
+		APITokenMaxTTLHours:     cfg.APITokenMaxTtlHours,
+		APITokenStepUpSeconds:   cfg.APITokenStepUpSeconds,
+
+		// step_up_code: whether the password still steps a session up.
+		NoPasswordStepUp: !cfg.StepUpPassword,
+
+		// oauth_server (ignored unless the feature is staged).
+		OAuthAccessTTLSeconds:    cfg.OauthAccessTtlSeconds,
+		OAuthRefreshTTLDays:      cfg.OauthRefreshTtlDays,
+		OAuthGrantMaxDays:        cfg.OauthGrantMaxDays,
+		OAuthDynamicRegistration: cfg.OauthDynamicRegistration,
+		OAuthRedirectHosts:       cfg.OauthRedirectHosts,
+		OAuthResources:           cfg.OauthResources,
+		OAuthCodeRedirect:        cfg.OauthCodeRedirect,
+
+		// SignIn's guess budget (<=0 → the defaults in signin_budget.go).
+		SignInFailureBudget:        cfg.SignInFailureBudget,
+		SignInDeviceFailureBudget:  cfg.SignInDeviceFailureBudget,
+		SignInFailureWindowSeconds: cfg.SignInFailureWindowSeconds,
+		// membership_kinds: the domain's audience table, generated from the
+		// protos (ignored unless the feature is staged).
+		Audiences: cfg.W17Audiences,
+		// org_packages: the domain's packages, generated from the protos.
+		PackagesTable: cfg.W17Packages,
+		// product_roles: the products' roles, generated from their protos.
+		ProductRolesTable: cfg.W17ProductRoles,
 	}
 	if err := handlers.ValidateConfig(h); err != nil {
 		return err

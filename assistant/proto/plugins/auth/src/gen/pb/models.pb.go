@@ -62,6 +62,11 @@ const (
 	TokenType_TOKEN_TYPE_UNSPECIFIED TokenType = 0
 	TokenType_TOKEN_TYPE_SESSION     TokenType = 1
 	TokenType_TOKEN_TYPE_API         TokenType = 2
+	// An access token the OAuth authorization server issued an MCP client
+	// (oauth_server): mcp_only, for one resource. Its permissions are the
+	// user's roles of realm `mcp`, so a bot's `api` roles never reach an MCP
+	// client and an MCP client never holds a person's session roles.
+	TokenType_TOKEN_TYPE_MCP TokenType = 3
 )
 
 // Enum value maps for TokenType.
@@ -70,11 +75,13 @@ var (
 		0: "TOKEN_TYPE_UNSPECIFIED",
 		1: "TOKEN_TYPE_SESSION",
 		2: "TOKEN_TYPE_API",
+		3: "TOKEN_TYPE_MCP",
 	}
 	TokenType_value = map[string]int32{
 		"TOKEN_TYPE_UNSPECIFIED": 0,
 		"TOKEN_TYPE_SESSION":     1,
 		"TOKEN_TYPE_API":         2,
+		"TOKEN_TYPE_MCP":         3,
 	}
 )
 
@@ -103,6 +110,124 @@ func (x TokenType) Number() protoreflect.EnumNumber {
 // Deprecated: Use TokenType.Descriptor instead.
 func (TokenType) EnumDescriptor() ([]byte, []int) {
 	return file_types_models_proto_rawDescGZIP(), []int{0}
+}
+
+// RevokeReason — why a UserToken stopped being valid before its expiry. The
+// first revocation wins: every revoking statement is guarded on
+// `revoked_at IS NULL`, so a later one never rewrites the time, the reason or
+// who did it.
+//
+// Values are explicit and never reused; a token revoked by a path added later
+// gets a new number. NONE (0) is the stored value of every live token, which is
+// why it is a real value (`zero_is_value`) rather than the proto3 sentinel.
+// Prefixed because proto enum values share the package's scope.
+type RevokeReason int32
+
+const (
+	// Not revoked.
+	RevokeReason_REVOKE_REASON_NONE RevokeReason = 0
+	// The holder signed out (Logout).
+	RevokeReason_REVOKE_REASON_LOGOUT RevokeReason = 1
+	// The owner revoked their own API token (RevokeApiToken).
+	RevokeReason_REVOKE_REASON_API_TOKEN_REVOKED RevokeReason = 2
+	// A password change signed the account out of its other sessions.
+	RevokeReason_REVOKE_REASON_PASSWORD_CHANGED RevokeReason = 3
+	// A password reset ended every token of the account.
+	RevokeReason_REVOKE_REASON_PASSWORD_RESET RevokeReason = 4
+	// The device the token is bound to was revoked (RevokeDevice and the
+	// revoke-others / revoke-all calls).
+	RevokeReason_REVOKE_REASON_DEVICE_REVOKED RevokeReason = 5
+	// A session bound to no device (minted before device binding), ended by
+	// RevokeOtherDevices / RevokeAllDevices.
+	RevokeReason_REVOKE_REASON_UNBOUND_SESSION RevokeReason = 6
+	// An operator revoked it from the admin Sessions page.
+	RevokeReason_REVOKE_REASON_ADMIN_REVOKED RevokeReason = 7
+	// The account was disabled (DisableUsers).
+	RevokeReason_REVOKE_REASON_USER_DISABLED RevokeReason = 8
+	// The account was erased (EraseUser).
+	RevokeReason_REVOKE_REASON_USER_ERASED RevokeReason = 9
+	// Project code revoked it through the low-level AuthMutation.RevokeToken
+	// (by the token itself, e.g. while rotating it).
+	RevokeReason_REVOKE_REASON_TOKEN_REVOKED RevokeReason = 10
+	// Project code revoked every token of the account through
+	// AuthMutation.RevokeAllUserTokens.
+	RevokeReason_REVOKE_REASON_ALL_TOKENS_REVOKED RevokeReason = 11
+	// A refresh token of an OAuth grant was presented after it had been used:
+	// a copy is in someone else's hands, so the whole grant ends
+	// (oauth_server, OAuth 2.1 §4.3.1).
+	RevokeReason_REVOKE_REASON_REFRESH_REUSED RevokeReason = 12
+	// The OAuth grant the token belongs to was revoked — by the user
+	// ("connected apps"), an operator, or the client (RFC 7009).
+	RevokeReason_REVOKE_REASON_GRANT_REVOKED RevokeReason = 13
+	// The authorization code that minted the session was presented again
+	// after it was redeemed: a copy in someone else's hands (OAuth 2.1
+	// §4.1.3).
+	RevokeReason_REVOKE_REASON_CODE_REPLAYED RevokeReason = 14
+)
+
+// Enum value maps for RevokeReason.
+var (
+	RevokeReason_name = map[int32]string{
+		0:  "REVOKE_REASON_NONE",
+		1:  "REVOKE_REASON_LOGOUT",
+		2:  "REVOKE_REASON_API_TOKEN_REVOKED",
+		3:  "REVOKE_REASON_PASSWORD_CHANGED",
+		4:  "REVOKE_REASON_PASSWORD_RESET",
+		5:  "REVOKE_REASON_DEVICE_REVOKED",
+		6:  "REVOKE_REASON_UNBOUND_SESSION",
+		7:  "REVOKE_REASON_ADMIN_REVOKED",
+		8:  "REVOKE_REASON_USER_DISABLED",
+		9:  "REVOKE_REASON_USER_ERASED",
+		10: "REVOKE_REASON_TOKEN_REVOKED",
+		11: "REVOKE_REASON_ALL_TOKENS_REVOKED",
+		12: "REVOKE_REASON_REFRESH_REUSED",
+		13: "REVOKE_REASON_GRANT_REVOKED",
+		14: "REVOKE_REASON_CODE_REPLAYED",
+	}
+	RevokeReason_value = map[string]int32{
+		"REVOKE_REASON_NONE":               0,
+		"REVOKE_REASON_LOGOUT":             1,
+		"REVOKE_REASON_API_TOKEN_REVOKED":  2,
+		"REVOKE_REASON_PASSWORD_CHANGED":   3,
+		"REVOKE_REASON_PASSWORD_RESET":     4,
+		"REVOKE_REASON_DEVICE_REVOKED":     5,
+		"REVOKE_REASON_UNBOUND_SESSION":    6,
+		"REVOKE_REASON_ADMIN_REVOKED":      7,
+		"REVOKE_REASON_USER_DISABLED":      8,
+		"REVOKE_REASON_USER_ERASED":        9,
+		"REVOKE_REASON_TOKEN_REVOKED":      10,
+		"REVOKE_REASON_ALL_TOKENS_REVOKED": 11,
+		"REVOKE_REASON_REFRESH_REUSED":     12,
+		"REVOKE_REASON_GRANT_REVOKED":      13,
+		"REVOKE_REASON_CODE_REPLAYED":      14,
+	}
+)
+
+func (x RevokeReason) Enum() *RevokeReason {
+	p := new(RevokeReason)
+	*p = x
+	return p
+}
+
+func (x RevokeReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RevokeReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_types_models_proto_enumTypes[1].Descriptor()
+}
+
+func (RevokeReason) Type() protoreflect.EnumType {
+	return &file_types_models_proto_enumTypes[1]
+}
+
+func (x RevokeReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RevokeReason.Descriptor instead.
+func (RevokeReason) EnumDescriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{1}
 }
 
 // AccountKind separates people from machines.
@@ -153,11 +278,11 @@ func (x EmailProof) String() string {
 }
 
 func (EmailProof) Descriptor() protoreflect.EnumDescriptor {
-	return file_types_models_proto_enumTypes[1].Descriptor()
+	return file_types_models_proto_enumTypes[2].Descriptor()
 }
 
 func (EmailProof) Type() protoreflect.EnumType {
-	return &file_types_models_proto_enumTypes[1]
+	return &file_types_models_proto_enumTypes[2]
 }
 
 func (x EmailProof) Number() protoreflect.EnumNumber {
@@ -166,7 +291,7 @@ func (x EmailProof) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use EmailProof.Descriptor instead.
 func (EmailProof) EnumDescriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{1}
+	return file_types_models_proto_rawDescGZIP(), []int{2}
 }
 
 type AccountKind int32
@@ -202,11 +327,11 @@ func (x AccountKind) String() string {
 }
 
 func (AccountKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_types_models_proto_enumTypes[2].Descriptor()
+	return file_types_models_proto_enumTypes[3].Descriptor()
 }
 
 func (AccountKind) Type() protoreflect.EnumType {
-	return &file_types_models_proto_enumTypes[2]
+	return &file_types_models_proto_enumTypes[3]
 }
 
 func (x AccountKind) Number() protoreflect.EnumNumber {
@@ -215,7 +340,448 @@ func (x AccountKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AccountKind.Descriptor instead.
 func (AccountKind) EnumDescriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{2}
+	return file_types_models_proto_rawDescGZIP(), []int{3}
+}
+
+// SignInMethod — which mint path a SignInEvent records. Values are explicit
+// and never reused; a mint path added later gets a new number. Prefixed
+// because proto enum values share the package's scope.
+type SignInMethod int32
+
+const (
+	SignInMethod_SIGN_IN_METHOD_UNSPECIFIED SignInMethod = 0
+	// SignIn: an address and a password (the admin's sign-in included).
+	SignInMethod_SIGN_IN_METHOD_PASSWORD SignInMethod = 1
+	// VerifyMfa: the second step of a password sign-in (two_factor).
+	SignInMethod_SIGN_IN_METHOD_MFA SignInMethod = 2
+	// SignUp when it issues a session (sign_up_turnkey without
+	// sign_up_confirmation). A parked registration signs nobody in and is not
+	// recorded; its ConfirmSignUp is.
+	SignInMethod_SIGN_IN_METHOD_SIGN_UP SignInMethod = 3
+	// ConfirmSignUp (sign_up_confirmation).
+	SignInMethod_SIGN_IN_METHOD_SIGN_UP_CONFIRM SignInMethod = 4
+	// OAuthExchange: the page redeems the provider's login code (oauth).
+	SignInMethod_SIGN_IN_METHOD_OAUTH SignInMethod = 5
+	// CliToken: a CLI redeems the code a signed-in browser approved
+	// (cli_login).
+	SignInMethod_SIGN_IN_METHOD_CLI SignInMethod = 6
+	// CreateApiToken: a signed-in person issues an API token bound to a
+	// program's key (api_token). Not a sign-in of the request's own client, but
+	// a credential minted for a device all the same; the row names that
+	// device, and the client address and user agent of the creating request.
+	SignInMethod_SIGN_IN_METHOD_API_TOKEN SignInMethod = 7
+	// IssueBotToken: an operator issues a machine account's token bound to its
+	// key (service_account). The row names the machine account and its device,
+	// and the operator's client address and user agent.
+	SignInMethod_SIGN_IN_METHOD_BOT_TOKEN SignInMethod = 8
+	// ExchangeOAuthToken: an application the user approved on the consent
+	// page redeems its code or refreshes its token (oauth_server) — an MCP
+	// client, or w17ctl's browser login. The row names the client.
+	SignInMethod_SIGN_IN_METHOD_AUTHORIZED_APP SignInMethod = 9
+)
+
+// Enum value maps for SignInMethod.
+var (
+	SignInMethod_name = map[int32]string{
+		0: "SIGN_IN_METHOD_UNSPECIFIED",
+		1: "SIGN_IN_METHOD_PASSWORD",
+		2: "SIGN_IN_METHOD_MFA",
+		3: "SIGN_IN_METHOD_SIGN_UP",
+		4: "SIGN_IN_METHOD_SIGN_UP_CONFIRM",
+		5: "SIGN_IN_METHOD_OAUTH",
+		6: "SIGN_IN_METHOD_CLI",
+		7: "SIGN_IN_METHOD_API_TOKEN",
+		8: "SIGN_IN_METHOD_BOT_TOKEN",
+		9: "SIGN_IN_METHOD_AUTHORIZED_APP",
+	}
+	SignInMethod_value = map[string]int32{
+		"SIGN_IN_METHOD_UNSPECIFIED":     0,
+		"SIGN_IN_METHOD_PASSWORD":        1,
+		"SIGN_IN_METHOD_MFA":             2,
+		"SIGN_IN_METHOD_SIGN_UP":         3,
+		"SIGN_IN_METHOD_SIGN_UP_CONFIRM": 4,
+		"SIGN_IN_METHOD_OAUTH":           5,
+		"SIGN_IN_METHOD_CLI":             6,
+		"SIGN_IN_METHOD_API_TOKEN":       7,
+		"SIGN_IN_METHOD_BOT_TOKEN":       8,
+		"SIGN_IN_METHOD_AUTHORIZED_APP":  9,
+	}
+)
+
+func (x SignInMethod) Enum() *SignInMethod {
+	p := new(SignInMethod)
+	*p = x
+	return p
+}
+
+func (x SignInMethod) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SignInMethod) Descriptor() protoreflect.EnumDescriptor {
+	return file_types_models_proto_enumTypes[4].Descriptor()
+}
+
+func (SignInMethod) Type() protoreflect.EnumType {
+	return &file_types_models_proto_enumTypes[4]
+}
+
+func (x SignInMethod) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SignInMethod.Descriptor instead.
+func (SignInMethod) EnumDescriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{4}
+}
+
+// SignInOutcome — how a sign-in attempt ended. One value per refusal the mint
+// paths make; what the caller was told is unchanged (most of these reach the
+// wire as the same opaque refusal — the history is the operator's, never the
+// caller's). Values are explicit and never reused.
+type SignInOutcome int32
+
+const (
+	SignInOutcome_SIGN_IN_OUTCOME_UNSPECIFIED SignInOutcome = 0
+	// A session was issued.
+	SignInOutcome_SIGN_IN_OUTCOME_OK SignInOutcome = 1
+	// The password was right and a second factor was asked for (SignIn
+	// answered mfa_required). VerifyMfa records how it ended.
+	SignInOutcome_SIGN_IN_OUTCOME_MFA_REQUIRED SignInOutcome = 2
+	// No account has the address (user_id NULL).
+	SignInOutcome_SIGN_IN_OUTCOME_UNKNOWN_ACCOUNT SignInOutcome = 3
+	// The account exists; the password was wrong.
+	SignInOutcome_SIGN_IN_OUTCOME_WRONG_PASSWORD SignInOutcome = 4
+	// The account is disabled (or erased).
+	SignInOutcome_SIGN_IN_OUTCOME_ACCOUNT_DISABLED SignInOutcome = 5
+	// A machine account (service_account) tried a password sign-in.
+	SignInOutcome_SIGN_IN_OUTCOME_MACHINE_ACCOUNT SignInOutcome = 6
+	// The request proved no device key (DEVICE_PROOF_REQUIRED).
+	SignInOutcome_SIGN_IN_OUTCOME_DEVICE_PROOF_REQUIRED SignInOutcome = 7
+	// The device key was revoked for this account (DEVICE_REVOKED; for an API
+	// or machine-account token, the key its request names: DEVICE_KEY_REVOKED).
+	SignInOutcome_SIGN_IN_OUTCOME_DEVICE_REVOKED SignInOutcome = 8
+	// A single-use code was wrong, unknown, expired or spent: the second
+	// factor's code, a sign-up confirmation code, an OAuth login code or its
+	// verifier, a CLI code, its verifier or its redirect.
+	SignInOutcome_SIGN_IN_OUTCOME_WRONG_CODE SignInOutcome = 9
+	// The code's attempt budget was spent (an MFA challenge, a pending
+	// sign-up).
+	SignInOutcome_SIGN_IN_OUTCOME_TOO_MANY_ATTEMPTS SignInOutcome = 10
+	// VerifyMfa signed by another key than the challenged sign-in.
+	SignInOutcome_SIGN_IN_OUTCOME_OTHER_DEVICE SignInOutcome = 11
+	// Too many second-factor challenges for the account in the window.
+	SignInOutcome_SIGN_IN_OUTCOME_RATE_LIMITED SignInOutcome = 12
+	// A registration named an address that has an account (EMAIL_TAKEN).
+	SignInOutcome_SIGN_IN_OUTCOME_EMAIL_TAKEN SignInOutcome = 13
+	// A registration refused by a sign-up gate: the reserved domain, the
+	// allowlist, invite-only, an invitation for another address.
+	SignInOutcome_SIGN_IN_OUTCOME_SIGN_UP_REFUSED SignInOutcome = 14
+	// OAuth refused to link an identity: the account or the provider has not
+	// verified the address.
+	SignInOutcome_SIGN_IN_OUTCOME_UNVERIFIED_EMAIL SignInOutcome = 15
+	// A registered CLI-login client failed its authentication or is revoked.
+	SignInOutcome_SIGN_IN_OUTCOME_CLIENT_REFUSED SignInOutcome = 16
+	// The service failed (a store or coordinator outage, an unexpected
+	// error): the caller was told so, or refused.
+	SignInOutcome_SIGN_IN_OUTCOME_ERROR SignInOutcome = 17
+	// Any other refusal (for example a CLI exchange after the approving
+	// session ended).
+	SignInOutcome_SIGN_IN_OUTCOME_REFUSED SignInOutcome = 18
+	// An API or machine-account token was asked for with no key, a key that is
+	// not a public P-256 or Ed25519 JWK (a private one included), or — for a
+	// machine account — another key than the one it has (DEVICE_KEY_REQUIRED,
+	// DEVICE_KEY_INVALID, BOT_KEY_MISMATCH).
+	SignInOutcome_SIGN_IN_OUTCOME_KEY_REFUSED SignInOutcome = 19
+	// SignIn's guess budget was spent: the account's, from a key that never
+	// signed in to it, or the device's own (sign-in/failure-budget).
+	SignInOutcome_SIGN_IN_OUTCOME_THROTTLED SignInOutcome = 20
+)
+
+// Enum value maps for SignInOutcome.
+var (
+	SignInOutcome_name = map[int32]string{
+		0:  "SIGN_IN_OUTCOME_UNSPECIFIED",
+		1:  "SIGN_IN_OUTCOME_OK",
+		2:  "SIGN_IN_OUTCOME_MFA_REQUIRED",
+		3:  "SIGN_IN_OUTCOME_UNKNOWN_ACCOUNT",
+		4:  "SIGN_IN_OUTCOME_WRONG_PASSWORD",
+		5:  "SIGN_IN_OUTCOME_ACCOUNT_DISABLED",
+		6:  "SIGN_IN_OUTCOME_MACHINE_ACCOUNT",
+		7:  "SIGN_IN_OUTCOME_DEVICE_PROOF_REQUIRED",
+		8:  "SIGN_IN_OUTCOME_DEVICE_REVOKED",
+		9:  "SIGN_IN_OUTCOME_WRONG_CODE",
+		10: "SIGN_IN_OUTCOME_TOO_MANY_ATTEMPTS",
+		11: "SIGN_IN_OUTCOME_OTHER_DEVICE",
+		12: "SIGN_IN_OUTCOME_RATE_LIMITED",
+		13: "SIGN_IN_OUTCOME_EMAIL_TAKEN",
+		14: "SIGN_IN_OUTCOME_SIGN_UP_REFUSED",
+		15: "SIGN_IN_OUTCOME_UNVERIFIED_EMAIL",
+		16: "SIGN_IN_OUTCOME_CLIENT_REFUSED",
+		17: "SIGN_IN_OUTCOME_ERROR",
+		18: "SIGN_IN_OUTCOME_REFUSED",
+		19: "SIGN_IN_OUTCOME_KEY_REFUSED",
+		20: "SIGN_IN_OUTCOME_THROTTLED",
+	}
+	SignInOutcome_value = map[string]int32{
+		"SIGN_IN_OUTCOME_UNSPECIFIED":           0,
+		"SIGN_IN_OUTCOME_OK":                    1,
+		"SIGN_IN_OUTCOME_MFA_REQUIRED":          2,
+		"SIGN_IN_OUTCOME_UNKNOWN_ACCOUNT":       3,
+		"SIGN_IN_OUTCOME_WRONG_PASSWORD":        4,
+		"SIGN_IN_OUTCOME_ACCOUNT_DISABLED":      5,
+		"SIGN_IN_OUTCOME_MACHINE_ACCOUNT":       6,
+		"SIGN_IN_OUTCOME_DEVICE_PROOF_REQUIRED": 7,
+		"SIGN_IN_OUTCOME_DEVICE_REVOKED":        8,
+		"SIGN_IN_OUTCOME_WRONG_CODE":            9,
+		"SIGN_IN_OUTCOME_TOO_MANY_ATTEMPTS":     10,
+		"SIGN_IN_OUTCOME_OTHER_DEVICE":          11,
+		"SIGN_IN_OUTCOME_RATE_LIMITED":          12,
+		"SIGN_IN_OUTCOME_EMAIL_TAKEN":           13,
+		"SIGN_IN_OUTCOME_SIGN_UP_REFUSED":       14,
+		"SIGN_IN_OUTCOME_UNVERIFIED_EMAIL":      15,
+		"SIGN_IN_OUTCOME_CLIENT_REFUSED":        16,
+		"SIGN_IN_OUTCOME_ERROR":                 17,
+		"SIGN_IN_OUTCOME_REFUSED":               18,
+		"SIGN_IN_OUTCOME_KEY_REFUSED":           19,
+		"SIGN_IN_OUTCOME_THROTTLED":             20,
+	}
+)
+
+func (x SignInOutcome) Enum() *SignInOutcome {
+	p := new(SignInOutcome)
+	*p = x
+	return p
+}
+
+func (x SignInOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SignInOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_types_models_proto_enumTypes[5].Descriptor()
+}
+
+func (SignInOutcome) Type() protoreflect.EnumType {
+	return &file_types_models_proto_enumTypes[5]
+}
+
+func (x SignInOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SignInOutcome.Descriptor instead.
+func (SignInOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{5}
+}
+
+// RolePermissionChangeKind — what a RolePermissionChange row records.
+type RolePermissionChangeKind int32
+
+const (
+	RolePermissionChangeKind_ROLE_PERMISSION_CHANGE_KIND_UNSPECIFIED RolePermissionChangeKind = 0
+	RolePermissionChangeKind_ROLE_PERMISSION_CHANGE_KIND_ADDED       RolePermissionChangeKind = 1
+	RolePermissionChangeKind_ROLE_PERMISSION_CHANGE_KIND_REMOVED     RolePermissionChangeKind = 2
+)
+
+// Enum value maps for RolePermissionChangeKind.
+var (
+	RolePermissionChangeKind_name = map[int32]string{
+		0: "ROLE_PERMISSION_CHANGE_KIND_UNSPECIFIED",
+		1: "ROLE_PERMISSION_CHANGE_KIND_ADDED",
+		2: "ROLE_PERMISSION_CHANGE_KIND_REMOVED",
+	}
+	RolePermissionChangeKind_value = map[string]int32{
+		"ROLE_PERMISSION_CHANGE_KIND_UNSPECIFIED": 0,
+		"ROLE_PERMISSION_CHANGE_KIND_ADDED":       1,
+		"ROLE_PERMISSION_CHANGE_KIND_REMOVED":     2,
+	}
+)
+
+func (x RolePermissionChangeKind) Enum() *RolePermissionChangeKind {
+	p := new(RolePermissionChangeKind)
+	*p = x
+	return p
+}
+
+func (x RolePermissionChangeKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RolePermissionChangeKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_types_models_proto_enumTypes[6].Descriptor()
+}
+
+func (RolePermissionChangeKind) Type() protoreflect.EnumType {
+	return &file_types_models_proto_enumTypes[6]
+}
+
+func (x RolePermissionChangeKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RolePermissionChangeKind.Descriptor instead.
+func (RolePermissionChangeKind) EnumDescriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{6}
+}
+
+// OAuthClientKind — how a client came to be known.
+type OAuthClientKind int32
+
+const (
+	OAuthClientKind_OAUTH_CLIENT_KIND_UNSPECIFIED OAuthClientKind = 0
+	// Registered itself at the registration endpoint (RFC 7591); its
+	// client_id is one this server minted.
+	OAuthClientKind_OAUTH_CLIENT_KIND_DCR OAuthClientKind = 1
+	// Its client_id is an https URL serving its metadata (Client ID Metadata
+	// Document), fetched by this server.
+	OAuthClientKind_OAUTH_CLIENT_KIND_CIMD OAuthClientKind = 2
+)
+
+// Enum value maps for OAuthClientKind.
+var (
+	OAuthClientKind_name = map[int32]string{
+		0: "OAUTH_CLIENT_KIND_UNSPECIFIED",
+		1: "OAUTH_CLIENT_KIND_DCR",
+		2: "OAUTH_CLIENT_KIND_CIMD",
+	}
+	OAuthClientKind_value = map[string]int32{
+		"OAUTH_CLIENT_KIND_UNSPECIFIED": 0,
+		"OAUTH_CLIENT_KIND_DCR":         1,
+		"OAUTH_CLIENT_KIND_CIMD":        2,
+	}
+)
+
+func (x OAuthClientKind) Enum() *OAuthClientKind {
+	p := new(OAuthClientKind)
+	*p = x
+	return p
+}
+
+func (x OAuthClientKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OAuthClientKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_types_models_proto_enumTypes[7].Descriptor()
+}
+
+func (OAuthClientKind) Type() protoreflect.EnumType {
+	return &file_types_models_proto_enumTypes[7]
+}
+
+func (x OAuthClientKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OAuthClientKind.Descriptor instead.
+func (OAuthClientKind) EnumDescriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{7}
+}
+
+// OAuthGrantKind — what an authorization yields.
+type OAuthGrantKind int32
+
+const (
+	OAuthGrantKind_OAUTH_GRANT_KIND_UNSPECIFIED OAuthGrantKind = 0
+	// An mcp_only access token for one resource, with a refresh token: what an
+	// MCP client asks for (a `resource` on the request).
+	OAuthGrantKind_OAUTH_GRANT_KIND_MCP OAuthGrantKind = 1
+	// A session bound to the key of the program redeeming the code (DPoP),
+	// with no refresh token: w17ctl's browser login (no `resource`, a loopback
+	// redirect, a DPoP proof at the token endpoint).
+	OAuthGrantKind_OAUTH_GRANT_KIND_SESSION OAuthGrantKind = 2
+)
+
+// Enum value maps for OAuthGrantKind.
+var (
+	OAuthGrantKind_name = map[int32]string{
+		0: "OAUTH_GRANT_KIND_UNSPECIFIED",
+		1: "OAUTH_GRANT_KIND_MCP",
+		2: "OAUTH_GRANT_KIND_SESSION",
+	}
+	OAuthGrantKind_value = map[string]int32{
+		"OAUTH_GRANT_KIND_UNSPECIFIED": 0,
+		"OAUTH_GRANT_KIND_MCP":         1,
+		"OAUTH_GRANT_KIND_SESSION":     2,
+	}
+)
+
+func (x OAuthGrantKind) Enum() *OAuthGrantKind {
+	p := new(OAuthGrantKind)
+	*p = x
+	return p
+}
+
+func (x OAuthGrantKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OAuthGrantKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_types_models_proto_enumTypes[8].Descriptor()
+}
+
+func (OAuthGrantKind) Type() protoreflect.EnumType {
+	return &file_types_models_proto_enumTypes[8]
+}
+
+func (x OAuthGrantKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OAuthGrantKind.Descriptor instead.
+func (OAuthGrantKind) EnumDescriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{8}
+}
+
+// OAuthDecision — what the user decided on the consent page.
+type OAuthDecision int32
+
+const (
+	OAuthDecision_OAUTH_DECISION_UNDECIDED OAuthDecision = 0
+	OAuthDecision_OAUTH_DECISION_APPROVED  OAuthDecision = 1
+	OAuthDecision_OAUTH_DECISION_DENIED    OAuthDecision = 2
+)
+
+// Enum value maps for OAuthDecision.
+var (
+	OAuthDecision_name = map[int32]string{
+		0: "OAUTH_DECISION_UNDECIDED",
+		1: "OAUTH_DECISION_APPROVED",
+		2: "OAUTH_DECISION_DENIED",
+	}
+	OAuthDecision_value = map[string]int32{
+		"OAUTH_DECISION_UNDECIDED": 0,
+		"OAUTH_DECISION_APPROVED":  1,
+		"OAUTH_DECISION_DENIED":    2,
+	}
+)
+
+func (x OAuthDecision) Enum() *OAuthDecision {
+	p := new(OAuthDecision)
+	*p = x
+	return p
+}
+
+func (x OAuthDecision) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OAuthDecision) Descriptor() protoreflect.EnumDescriptor {
+	return file_types_models_proto_enumTypes[9].Descriptor()
+}
+
+func (OAuthDecision) Type() protoreflect.EnumType {
+	return &file_types_models_proto_enumTypes[9]
+}
+
+func (x OAuthDecision) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OAuthDecision.Descriptor instead.
+func (OAuthDecision) EnumDescriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{9}
 }
 
 // User — the project-wide identity record. One row per
@@ -229,13 +795,36 @@ func (AccountKind) EnumDescriptor() ([]byte, []int) {
 // name `user` collides with the Postgres reserved keyword;
 // the activation prefix sidesteps that.
 type User struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
-	PasswordHash  string                 `protobuf:"bytes,3,opt,name=password_hash,json=passwordHash,proto3" json:"password_hash,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Id           string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Email        string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	PasswordHash string                 `protobuf:"bytes,3,opt,name=password_hash,json=passwordHash,proto3" json:"password_hash,omitempty"`
+	CreatedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// device_trust_revoked_at — when this account's device trust was last
+	// revoked as a whole. A Device trusted at or before this instant no longer
+	// counts as trusted (`two_factor_scope=new_devices` challenges it again).
+	// NULL = never revoked.
+	//
+	// Written by the statements that end an account's credentials, in the same
+	// statement: a password CHANGE (UpdateUserPasswordIfUnchanged) and
+	// disabling the account (DisableUsers). A changed password usually means
+	// "someone else may have the old one", and a device that person signed in
+	// from must not keep skipping the second factor. A stamp on the account,
+	// not a write to every Device row: those statements belong to other
+	// features and stay single-statement.
+	//
+	// Base tier since device identity became base (it was gated `devices`).
+	DeviceTrustRevokedAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=device_trust_revoked_at,json=deviceTrustRevokedAt,proto3" json:"device_trust_revoked_at,omitempty"`
+	// sign_in_failures / sign_in_window_at — SignIn's per-account guess
+	// budget (sign-in/failure-budget): the password attempts counted since
+	// sign_in_window_at, the start of the current window. Every attempt is
+	// counted before its password is checked, in one statement
+	// (CountSignInAttempt); a correct password resets both
+	// (ResetSignInAttempts). Base tier.
+	SignInFailures int64                  `protobuf:"varint,15,opt,name=sign_in_failures,json=signInFailures,proto3" json:"sign_in_failures,omitempty"`
+	SignInWindowAt *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=sign_in_window_at,json=signInWindowAt,proto3" json:"sign_in_window_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *User) Reset() {
@@ -296,20 +885,53 @@ func (x *User) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *User) GetDeviceTrustRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DeviceTrustRevokedAt
+	}
+	return nil
+}
+
+func (x *User) GetSignInFailures() int64 {
+	if x != nil {
+		return x.SignInFailures
+	}
+	return 0
+}
+
+func (x *User) GetSignInWindowAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SignInWindowAt
+	}
+	return nil
+}
+
 // UserToken — bearer-token record. Project clients trade an
 // (email, password) sign-in for a long-lived token they send
-// on subsequent requests. v1: tokens are immortal until
-// explicitly revoked or rotated.
+// on subsequent requests. A token ends when it expires or is
+// revoked, and in both cases the row STAYS: revoking sets
+// revoked_at (+ revoked_by, revoke_reason), and nothing deletes a
+// token, so the table is the history of every credential the
+// account ever held.
 //
-// v1 LIMITATION — no DB-level FK constraint on `user_id`. The
-// FK target table name is `<registered_as>_user`, but plugin
-// authoring time can't see the per-activation rename, and
-// w17's current `fk:` syntax doesn't carry an activation-aware
-// placeholder. Application-layer code enforces the link via
-// the AuthService handler. Lifting this requires extending the
-// FK syntax with a plugin-aware reference (parked). Same
-// caveat applies to every cross-table id reference in this
-// plugin (User↔Role + Role's permission grants via RolePermission).
+// References — every id column that names a row of this activation's own
+// tables carries a foreign key, `fk: "@module.<Model>"`. Staging expands
+// `@module` to the activation's registered_as, so the key names the
+// activation's own `<registered_as>_<model>` table whatever it is called. A
+// reference the plugin's code got wrong — a grant written for a role that does
+// not exist — is refused by the store instead of stored silently. Every one is
+// `deletion_rule: BLOCK` (ON DELETE RESTRICT): nothing in this plugin deletes
+// a row — an account is erased, a role, an organization or a grant is ended —
+// so a delete that would strand a reference is refused, never cascaded.
+//
+// Two kinds of reference are deliberately NOT keyed:
+//   - the actor columns (`revoked_by`, `removed_by`, `invited_by`,
+//     `granted_by`, `ended_by`, …): the actor may be an operator of ANOTHER
+//     activation — an admin realm signs in against its own User table — so
+//     the id need not be a row of this one;
+//   - `UserToken.oauth_org_id`, `OAuthAuthorization.org_id` and
+//     `OAuthGrant.org_id`: `oauth_server` stages without `org_membership`, and
+//     then there is no Organization table to point at.
 type UserToken struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -330,15 +952,83 @@ type UserToken struct {
 	// enforce `expires_at IS NULL OR expires_at > NOW()`, so the NULL
 	// case keeps never-expiring tokens valid across every config.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// device_id — the Device this token is BOUND to (DPoP's `cnf.jkt`, kept
+	// as a reference to the Device row whose `thumbprint` is the binding).
+	// Every session mint path (SignIn, SignUp, ConfirmSignUp, VerifyMfa,
+	// OAuthExchange, CliToken) stamps it from the request's proof of
+	// possession; an API token (CreateApiToken, IssueBotToken) from the public
+	// key its request names — the program that will use it. Authenticate
+	// refuses a token whose device's thumbprint is not the one the request's
+	// proof was signed with, and a token with none.
+	// Nullable only for rows minted before device binding (refused by
+	// Authenticate, so their holders sign in once more) and for MCP-flow
+	// tokens (mcp_only).
+	DeviceId string `protobuf:"bytes,9,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	// mcp_only — a token issued by the MCP OAuth 2.1 flow, for MCP clients,
+	// which cannot sign DPoP proofs yet. It is accepted WITHOUT a proof, and
+	// only on the MCP surface: Authenticate takes a proofless request only
+	// when the gateway marks it `x-w17-surface: mcp` (a gateway-owned key no
+	// client can set), and only for a token with this flag. Refused on every
+	// other surface, with or without a proof (it is bound to no device). The
+	// authorization server that mints it sets it; nothing else does — every
+	// other mint leaves the FALSE default. Base tier.
+	McpOnly bool `protobuf:"varint,11,opt,name=mcp_only,json=mcpOnly,proto3" json:"mcp_only,omitempty"`
 	// token_hash — sha256 (hex) of the bearer token, the only form a token is
 	// stored in. The handler that mints a token generates it, stores this
 	// hash and hands the token to the caller once; a lookup hashes the
 	// presented bearer and compares. Whoever reads the table or a backup gets
 	// nothing they can present. SECRET keeps it out of admin list views even
 	// so. NULL only on a legacy row (see `token`).
-	TokenHash     string `protobuf:"bytes,10,opt,name=token_hash,json=tokenHash,proto3" json:"token_hash,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	TokenHash string `protobuf:"bytes,10,opt,name=token_hash,json=tokenHash,proto3" json:"token_hash,omitempty"`
+	// revoked_at — when the token was revoked; NULL = not revoked. BASE-TIER,
+	// like expires_at: revocation applies to every token. Every revoking
+	// statement is an UPDATE guarded on `revoked_at IS NULL`, so the first
+	// revocation's time, reason and actor stand and a later one changes
+	// nothing. Every token lookup refuses a revoked token exactly as it refuses
+	// an expired one (`revoked_at IS NULL` beside the expiry predicate), and the
+	// miss-path lookup reads the row so the key's holder hears SESSION_EXPIRED
+	// (or DEVICE_REVOKED) as for an expired token, and anyone else the opaque
+	// refusal. Never cleared: a revoked token is not revived.
+	RevokedAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
+	// revoked_by — the account that revoked it: the holder for a logout, a
+	// password change or a device revocation, the operator for an admin
+	// revocation or erasure. NULL when the system did it (a password reset, a
+	// disable, the low-level RevokeToken primitive). An actor column, so no
+	// foreign key (see "References" above).
+	RevokedBy string `protobuf:"bytes,13,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
+	// revoke_reason — why (RevokeReason). NONE on a live token. Written in the
+	// same statement as revoked_at, so the two never disagree.
+	RevokeReason RevokeReason `protobuf:"varint,14,opt,name=revoke_reason,json=revokeReason,proto3,enum=w17.contrib.auth.RevokeReason" json:"revoke_reason,omitempty"`
+	// public_computer — the session was signed in with "this is a public
+	// computer" (SignIn, VerifyMfa through its challenge, OAuthExchange,
+	// SignUp, ConfirmSignUp): it got the public session lifetime
+	// (public_session_ttl_seconds) and its device was not made trusted. Shown
+	// on the admin Sessions page; the client keeps such a token in session
+	// storage only. FALSE for every other token. Base tier.
+	PublicComputer bool `protobuf:"varint,15,opt,name=public_computer,json=publicComputer,proto3" json:"public_computer,omitempty"`
+	// approved_by_device_id — the Device row of the session that AUTHORIZED a
+	// token bound to another key: for a CLI session (cli_login's CliToken) the
+	// browser session that approved the login (CliAuthorize); for an API token
+	// the caller's device that created it (CreateApiToken) or, for a machine
+	// account's token, the operator's device that issued it (IssueBotToken).
+	// The token itself is bound to the CLI's, the program's or the machine
+	// account's own key (device_id); the authorizing device is a different one
+	// and is recorded here, so an operator can see "approved from device X".
+	// Revoking that device revokes the tokens it approved of the same owner: a
+	// stolen session could otherwise approve a key of the thief's that outlives
+	// the revocation. CLI sessions end with every revocation of the device
+	// (RevokeDeviceTokens' "approved" op); API tokens when that ONE device is
+	// revoked on purpose — the owner's RevokeDevice, the admin Devices revoke
+	// (RevokeApprovedApiTokens) — and not by RevokeOtherDevices /
+	// RevokeAllDevices, which spare API tokens. A machine account's token is
+	// owned by the machine account, not the operator, so revoking the
+	// operator's device leaves it (it is bound to the account's one key; revoke
+	// the account's device to end it). NULL on every
+	// other token, and when the authorizing request was bound to no device. Base
+	// tier.
+	ApprovedByDeviceId string `protobuf:"bytes,16,opt,name=approved_by_device_id,json=approvedByDeviceId,proto3" json:"approved_by_device_id,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *UserToken) Reset() {
@@ -406,11 +1096,407 @@ func (x *UserToken) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *UserToken) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *UserToken) GetMcpOnly() bool {
+	if x != nil {
+		return x.McpOnly
+	}
+	return false
+}
+
 func (x *UserToken) GetTokenHash() string {
 	if x != nil {
 		return x.TokenHash
 	}
 	return ""
+}
+
+func (x *UserToken) GetRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RevokedAt
+	}
+	return nil
+}
+
+func (x *UserToken) GetRevokedBy() string {
+	if x != nil {
+		return x.RevokedBy
+	}
+	return ""
+}
+
+func (x *UserToken) GetRevokeReason() RevokeReason {
+	if x != nil {
+		return x.RevokeReason
+	}
+	return RevokeReason_REVOKE_REASON_NONE
+}
+
+func (x *UserToken) GetPublicComputer() bool {
+	if x != nil {
+		return x.PublicComputer
+	}
+	return false
+}
+
+func (x *UserToken) GetApprovedByDeviceId() string {
+	if x != nil {
+		return x.ApprovedByDeviceId
+	}
+	return ""
+}
+
+// Device — one (user, device key) pair. Base tier: every session is bound
+// to one.
+//
+// A device is identified by the RFC 7638 JWK thumbprint of the public key
+// its client signs DPoP proofs with (base64url SHA-256, 43 characters). The
+// gateway verifies the proof and hands the thumbprint to the plugin as the
+// `x-w17-dpop-jkt` metadata; no header, body field or envelope value a
+// client sends can name a device. The private key never leaves the client.
+//
+// Keyed by (user_id, thumbprint), not by the thumbprint alone: trust and
+// revocation belong to the pair, so one browser shared by two accounts is
+// two rows, and one account's trust never carries over to the other.
+//
+// `trusted_at` is the signal `two_factor_scope=new_devices` reads: set by a
+// sign-in that passed the second factor, renewed by a later one, and void
+// when it is not later than User.device_trust_revoked_at. Holding the key
+// is the proof, so there is no separate trust token to steal.
+//
+// `revoked_at` ends the pair for good: every token bound to it is refused,
+// and a sign-in with the same key is refused with DEVICE_REVOKED. The row
+// is never deleted and never revived — a client answers DEVICE_REVOKED by
+// generating a new key, which is a new device (and passes the second factor
+// like any new device).
+type Device struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// RFC 7638 JWK thumbprint of the device's public key: base64url (no
+	// padding) of a SHA-256, always 43 characters. NULL only on a LEGACY row —
+	// a device recorded before device binding, named by a client-chosen id
+	// and never by a key. Such rows are kept as history (nothing in the auth
+	// tables is deleted) and can never be used: no key matches them, so
+	// RegisterDevice never finds one, a token bound to one resolves with no
+	// thumbprint and is refused, and ListUserDevices leaves them out. The
+	// unique (user_id, thumbprint) index does not make NULLs collide (the
+	// default NULLS DISTINCT of every supported dialect), so any number of
+	// legacy rows coexist while live keys stay unique per user.
+	Thumbprint string `protobuf:"bytes,10,opt,name=thumbprint,proto3" json:"thumbprint,omitempty"`
+	Label      string `protobuf:"bytes,4,opt,name=label,proto3" json:"label,omitempty"` // UA-derived friendly name
+	// IP-as-string (CHAR, not INET): the request may carry no client IP
+	// (absent X-Forwarded-For), and an empty string is a valid CHAR but not a
+	// valid INET. Stored for display in ListDevices only.
+	Ip         string                 `protobuf:"bytes,5,opt,name=ip,proto3" json:"ip,omitempty"`
+	TrustedAt  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=trusted_at,json=trustedAt,proto3" json:"trusted_at,omitempty"`
+	LastSeenAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
+	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// When the pair was revoked; NULL = live. Set once, never cleared.
+	RevokedAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
+	// api_key — a PROGRAM's key, named in an API-token request (CreateApiToken,
+	// IssueBotToken) rather than proved by a sign-in. Set when the row is
+	// created and never changed: a key is a program's or a signed-in client's
+	// for good. A program key never signs in (every sign-in mint refuses it),
+	// a signed-in client's key is never taken for an API token, and the
+	// owner's device management (`devices`: ListDevices, RevokeOtherDevices,
+	// RevokeAllDevices) lists and revokes signed-in devices only — an API
+	// token ends by RevokeApiToken, by revoking its device on the admin
+	// Devices page, or by revoking the one device that created it. Base tier.
+	ApiKey bool `protobuf:"varint,12,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
+	// sign_in_failures / sign_in_window_at — the device's own guess budget
+	// for its account, spent only while the account's is (sign-in/
+	// failure-budget): then only a key that already signed in to the account
+	// may try, and this bounds how often. Reset with the account's by a
+	// correct password. Base tier.
+	SignInFailures int64                  `protobuf:"varint,13,opt,name=sign_in_failures,json=signInFailures,proto3" json:"sign_in_failures,omitempty"`
+	SignInWindowAt *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=sign_in_window_at,json=signInWindowAt,proto3" json:"sign_in_window_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *Device) Reset() {
+	*x = Device{}
+	mi := &file_types_models_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Device) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Device) ProtoMessage() {}
+
+func (x *Device) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Device.ProtoReflect.Descriptor instead.
+func (*Device) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Device) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Device) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *Device) GetThumbprint() string {
+	if x != nil {
+		return x.Thumbprint
+	}
+	return ""
+}
+
+func (x *Device) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *Device) GetIp() string {
+	if x != nil {
+		return x.Ip
+	}
+	return ""
+}
+
+func (x *Device) GetTrustedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.TrustedAt
+	}
+	return nil
+}
+
+func (x *Device) GetLastSeenAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSeenAt
+	}
+	return nil
+}
+
+func (x *Device) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *Device) GetRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RevokedAt
+	}
+	return nil
+}
+
+func (x *Device) GetApiKey() bool {
+	if x != nil {
+		return x.ApiKey
+	}
+	return false
+}
+
+func (x *Device) GetSignInFailures() int64 {
+	if x != nil {
+		return x.SignInFailures
+	}
+	return 0
+}
+
+func (x *Device) GetSignInWindowAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SignInWindowAt
+	}
+	return nil
+}
+
+// SignInEvent — the sign-in history: one row per sign-in attempt on every
+// mint path (SignInMethod above), whatever its outcome, failures included.
+// Base tier.
+//
+// APPEND-ONLY. A row is written once (RecordSignInEvent) and never updated
+// or deleted, with one exception: an erasure (user_admin's EraseUsers)
+// pseudonymises the personal columns of the erased account's rows — address,
+// ip and user_agent — in place (EraseSignInEvents), and the row stays.
+//
+// A successful sign-in writes its row in the transaction that mints the
+// session, so a session never exists without its history row; a refusal
+// writes it on its own, and a failure to write it is logged and does not
+// change the refusal the caller gets. An attempt at an account erased
+// before it is written without the client's address and user agent, and
+// with the account's placeholder address.
+//
+//	user_id     the account the attempt reached; NULL when it reached none
+//	            (an unknown address, or a refusal before any account was
+//	            looked up).
+//	address     what the attempt named, normalised (trimmed, lower-case):
+//	            the typed address of a password sign-in or registration,
+//	            the provider's address of an OAuth one; blank when the path
+//	            names none (VerifyMfa, CliToken).
+//	device_id   the Device ROW's UUID the attempt registered or found (as
+//	            UserToken.device_id is, for the session it issued); NULL
+//	            when it got no further (a wrong password registers no
+//	            device). NOT the device_id of events and AuthResp: that
+//	            one is the key thumbprint, the column below.
+//	thumbprint  the key that signed the request's proof (the gateway's
+//	            x-w17-dpop-jkt), even with no Device row; NULL without a
+//	            proof. This is the id the events and AuthResp.device_id
+//	            carry, so it is the column to match them on.
+//	ip, user_agent  the client address (first X-Forwarded-For hop) and user
+//	            agent, as Device.ip / Device.label take them. Display only.
+//
+// user_id / device_id are foreign keys (see "References" above UserToken): a
+// refusal's row names an account and a device only when they exist.
+type SignInEvent struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UserId     string                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Address    string                 `protobuf:"bytes,4,opt,name=address,proto3" json:"address,omitempty"`
+	DeviceId   string                 `protobuf:"bytes,5,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	Thumbprint string                 `protobuf:"bytes,6,opt,name=thumbprint,proto3" json:"thumbprint,omitempty"`
+	Ip         string                 `protobuf:"bytes,7,opt,name=ip,proto3" json:"ip,omitempty"`
+	UserAgent  string                 `protobuf:"bytes,8,opt,name=user_agent,json=userAgent,proto3" json:"user_agent,omitempty"`
+	Method     SignInMethod           `protobuf:"varint,9,opt,name=method,proto3,enum=w17.contrib.auth.SignInMethod" json:"method,omitempty"`
+	Outcome    SignInOutcome          `protobuf:"varint,10,opt,name=outcome,proto3,enum=w17.contrib.auth.SignInOutcome" json:"outcome,omitempty"`
+	// The attempt asked for a public-computer session (SignIn, OAuthExchange,
+	// SignUp, ConfirmSignUp; VerifyMfa takes it from its challenge). Recorded
+	// whatever the outcome.
+	PublicComputer bool `protobuf:"varint,11,opt,name=public_computer,json=publicComputer,proto3" json:"public_computer,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SignInEvent) Reset() {
+	*x = SignInEvent{}
+	mi := &file_types_models_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SignInEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SignInEvent) ProtoMessage() {}
+
+func (x *SignInEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SignInEvent.ProtoReflect.Descriptor instead.
+func (*SignInEvent) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SignInEvent) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SignInEvent) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *SignInEvent) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *SignInEvent) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *SignInEvent) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *SignInEvent) GetThumbprint() string {
+	if x != nil {
+		return x.Thumbprint
+	}
+	return ""
+}
+
+func (x *SignInEvent) GetIp() string {
+	if x != nil {
+		return x.Ip
+	}
+	return ""
+}
+
+func (x *SignInEvent) GetUserAgent() string {
+	if x != nil {
+		return x.UserAgent
+	}
+	return ""
+}
+
+func (x *SignInEvent) GetMethod() SignInMethod {
+	if x != nil {
+		return x.Method
+	}
+	return SignInMethod_SIGN_IN_METHOD_UNSPECIFIED
+}
+
+func (x *SignInEvent) GetOutcome() SignInOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return SignInOutcome_SIGN_IN_OUTCOME_UNSPECIFIED
+}
+
+func (x *SignInEvent) GetPublicComputer() bool {
+	if x != nil {
+		return x.PublicComputer
+	}
+	return false
 }
 
 // Role — a named bundle of permissions. Projects typically
@@ -419,6 +1505,16 @@ func (x *UserToken) GetTokenHash() string {
 // CRUD them at runtime. Role assignment to users goes through
 // UserRole; role's permission membership goes through
 // RolePermission.
+//
+// A role is never deleted. DeleteRole stamps deleted_at, revokes every grant
+// of the role (UserRole) and releases its name: ended_key moves from ” to the
+// row's own id, and `name` is unique only together with it, so a new role may
+// take the name. A PRESET role (preset_key set) may be deleted too and keeps
+// its preset_key: the role seed matches the row by that key and rewrites only
+// the columns it declares, never deleted_at, so a deleted preset stays deleted
+// across re-seeds (declare it under a new key to bring it back). The deleted
+// row keeps its id, name, flags and RolePermission rows as the record of what
+// it granted. Every role reader reads live roles only.
 type Role struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -492,14 +1588,29 @@ type Role struct {
 	// transaction, since apply runs every statement in one. Splitting the
 	// technical identity from the label removes both failures, and means
 	// the seed needs no per-column upsert policy.
-	DisplayName   string `protobuf:"bytes,10,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	DisplayName string `protobuf:"bytes,10,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// deleted_at — when DeleteRole retired the role. NULL = live.
+	DeletedAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
+	// ended_key — ” while the row is live, the row's own id once it has ended
+	// (here: deleted). It is part of the unique index over the row's natural
+	// key, so the ended row keeps every column and still frees that key for a
+	// new live row: every live row shares the one value ”, so two live rows
+	// still collide, and every ended row carries a value of its own.
+	//
+	// The mechanism every auth table whose key must be reusable after a removal
+	// uses (Role.name, Organization.slug, UserRole, OrgMembership,
+	// UserTotpSecret): a full index, which every dialect builds — a partial
+	// `WHERE deleted_at IS NULL` index is refused on MySQL — and a re-add is a
+	// plain INSERT of a new row, so no row is ever rewritten back to live and the
+	// ended rows are the history.
+	EndedKey      string `protobuf:"bytes,13,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Role) Reset() {
 	*x = Role{}
-	mi := &file_types_models_proto_msgTypes[2]
+	mi := &file_types_models_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -511,7 +1622,7 @@ func (x *Role) String() string {
 func (*Role) ProtoMessage() {}
 
 func (x *Role) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[2]
+	mi := &file_types_models_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -524,7 +1635,7 @@ func (x *Role) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Role.ProtoReflect.Descriptor instead.
 func (*Role) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{2}
+	return file_types_models_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Role) GetId() string {
@@ -590,6 +1701,20 @@ func (x *Role) GetDisplayName() string {
 	return ""
 }
 
+func (x *Role) GetDeletedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DeletedAt
+	}
+	return nil
+}
+
+func (x *Role) GetEndedKey() string {
+	if x != nil {
+		return x.EndedKey
+	}
+	return ""
+}
+
 // RolePermission — M2M link tuple (role_id, permission_id).
 // `permission_id` is an INT32 referencing the activating
 // domain's generated `AclPermission` enum from
@@ -605,24 +1730,39 @@ func (x *Role) GetDisplayName() string {
 // drift) is refused at the storage layer with
 // VALIDATION_CHECK_CONSTRAINT mapped to InvalidArgument.
 //
-// v1 LIMITATION — no DB-level FK constraint on `role_id`
-// (activation-rename caveat; see UserToken). `permission_id`
-// has no FK target by design (the catalog is a proto enum,
+// `role_id` is a foreign key to Role (see "References" above UserToken): a
+// grant written for a role that does not exist is refused, not stored.
+// `permission_id` has no FK target by design (the catalog is a proto enum,
 // not a DB table); the CHECK constraint covers the integrity
 // the FK would have provided.
+//
+// A permission is never deleted from a role. RemovePermissionFromRole stamps
+// removed_at (and removed_by), and every permission reader skips a removed
+// row. Unlike the other re-addable tables (see Role.ended_key), RolePermission
+// keeps ONE row per (role, permission) for good, and adding a removed
+// permission back REVIVES it (AddPermissionToRole: an UPSERT that clears
+// removed_at): the unique (role_id, permission_id) index is the conflict
+// target of the platform's role seed (`upsert_on: [role_id, permission_id]`),
+// so it cannot take an ended_key column without breaking every seed. What the
+// revive overwrites is kept in RolePermissionChange, which both mutations
+// append to.
 type RolePermission struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	RoleId        string                 `protobuf:"bytes,2,opt,name=role_id,json=roleId,proto3" json:"role_id,omitempty"`
-	PermissionId  int32                  `protobuf:"varint,3,opt,name=permission_id,json=permissionId,proto3" json:"permission_id,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Id           string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	RoleId       string                 `protobuf:"bytes,2,opt,name=role_id,json=roleId,proto3" json:"role_id,omitempty"`
+	PermissionId int32                  `protobuf:"varint,3,opt,name=permission_id,json=permissionId,proto3" json:"permission_id,omitempty"`
+	CreatedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// removed_at / removed_by — the permission was taken from the role, and by
+	// whom (NULL when the caller named nobody). NULL removed_at = granted.
+	RemovedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	RemovedBy     string                 `protobuf:"bytes,6,opt,name=removed_by,json=removedBy,proto3" json:"removed_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RolePermission) Reset() {
 	*x = RolePermission{}
-	mi := &file_types_models_proto_msgTypes[3]
+	mi := &file_types_models_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -634,7 +1774,7 @@ func (x *RolePermission) String() string {
 func (*RolePermission) ProtoMessage() {}
 
 func (x *RolePermission) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[3]
+	mi := &file_types_models_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -647,7 +1787,7 @@ func (x *RolePermission) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RolePermission.ProtoReflect.Descriptor instead.
 func (*RolePermission) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{3}
+	return file_types_models_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RolePermission) GetId() string {
@@ -678,6 +1818,118 @@ func (x *RolePermission) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *RolePermission) GetRemovedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RemovedAt
+	}
+	return nil
+}
+
+func (x *RolePermission) GetRemovedBy() string {
+	if x != nil {
+		return x.RemovedBy
+	}
+	return ""
+}
+
+// RolePermissionChange — the append-only log of AddPermissionToRole and
+// RemovePermissionFromRole. RolePermission keeps one row per pair and an add
+// revives a removed one (see RolePermission), so the row alone shows only the
+// latest state; this table keeps every change. Written in the same statement
+// list (one transaction) as the change itself, never updated, never deleted.
+// The platform's role seed writes RolePermission directly: with this table
+// present it logs its own changes here (changed_by NULL), each in the same
+// statement as the change; a role seed older than that logs nothing.
+//
+// permission_id is a plain number, not CHECK-constrained to the deployed
+// catalogue like RolePermission's: a log row must survive a permission that
+// was later dropped from the lock.
+type RolePermissionChange struct {
+	state        protoimpl.MessageState   `protogen:"open.v1"`
+	Id           string                   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	RoleId       string                   `protobuf:"bytes,2,opt,name=role_id,json=roleId,proto3" json:"role_id,omitempty"`
+	PermissionId int32                    `protobuf:"varint,3,opt,name=permission_id,json=permissionId,proto3" json:"permission_id,omitempty"`
+	Kind         RolePermissionChangeKind `protobuf:"varint,4,opt,name=kind,proto3,enum=w17.contrib.auth.RolePermissionChangeKind" json:"kind,omitempty"`
+	// changed_by — the account that made the change; NULL when the caller
+	// named nobody (an admin binding, project code).
+	ChangedBy     string                 `protobuf:"bytes,5,opt,name=changed_by,json=changedBy,proto3" json:"changed_by,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RolePermissionChange) Reset() {
+	*x = RolePermissionChange{}
+	mi := &file_types_models_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RolePermissionChange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RolePermissionChange) ProtoMessage() {}
+
+func (x *RolePermissionChange) ProtoReflect() protoreflect.Message {
+	mi := &file_types_models_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RolePermissionChange.ProtoReflect.Descriptor instead.
+func (*RolePermissionChange) Descriptor() ([]byte, []int) {
+	return file_types_models_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RolePermissionChange) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *RolePermissionChange) GetRoleId() string {
+	if x != nil {
+		return x.RoleId
+	}
+	return ""
+}
+
+func (x *RolePermissionChange) GetPermissionId() int32 {
+	if x != nil {
+		return x.PermissionId
+	}
+	return 0
+}
+
+func (x *RolePermissionChange) GetKind() RolePermissionChangeKind {
+	if x != nil {
+		return x.Kind
+	}
+	return RolePermissionChangeKind_ROLE_PERMISSION_CHANGE_KIND_UNSPECIFIED
+}
+
+func (x *RolePermissionChange) GetChangedBy() string {
+	if x != nil {
+		return x.ChangedBy
+	}
+	return ""
+}
+
+func (x *RolePermissionChange) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
 // UserRole — M2M link User ↔ Role. Composite uniqueness prevents
 // duplicate assignments. Same per-column index rationale as
 // RolePermission.
@@ -698,21 +1950,35 @@ func (x *RolePermission) GetCreatedAt() *timestamppb.Timestamp {
 // indexes are PG + SQLite only, which is the same support surface the
 // rest of this plugin's `where:` usage has.
 //
-// v1 LIMITATION — no DB-level FK on `user_id` / `role_id` / `org_id`
-// (activation-rename caveat applies; see UserToken).
+// `user_id` / `role_id` / `org_id` are foreign keys (see "References" above
+// UserToken).
+//
+// A grant is never deleted. Revoking one (RevokeRoleFromUser, a membership's
+// role change or removal, DeleteRole, DeleteOrganization) stamps revoked_at
+// (and revoked_by when the caller is known) and moves ended_key from ” to the
+// row's own id; every index above includes ended_key, so the revoked row stays
+// as the record of the grant while the same grant can be written again — as a
+// NEW row, by the same plain INSERT (see Role.ended_key). Every permission
+// reader counts live grants only (`revoked_at IS NULL`).
 type UserRole struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	RoleId        string                 `protobuf:"bytes,3,opt,name=role_id,json=roleId,proto3" json:"role_id,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId    string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	RoleId    string                 `protobuf:"bytes,3,opt,name=role_id,json=roleId,proto3" json:"role_id,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// revoked_at / revoked_by — the grant was revoked, and by whom (NULL when
+	// the caller named nobody: an admin binding, a cascade, project code).
+	RevokedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
+	RevokedBy string                 `protobuf:"bytes,7,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
+	// ended_key — ” while live, the row's own id once revoked (Role.ended_key).
+	EndedKey      string `protobuf:"bytes,8,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UserRole) Reset() {
 	*x = UserRole{}
-	mi := &file_types_models_proto_msgTypes[4]
+	mi := &file_types_models_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -724,7 +1990,7 @@ func (x *UserRole) String() string {
 func (*UserRole) ProtoMessage() {}
 
 func (x *UserRole) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[4]
+	mi := &file_types_models_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -737,7 +2003,7 @@ func (x *UserRole) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserRole.ProtoReflect.Descriptor instead.
 func (*UserRole) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{4}
+	return file_types_models_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *UserRole) GetId() string {
@@ -768,6 +2034,27 @@ func (x *UserRole) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *UserRole) GetRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RevokedAt
+	}
+	return nil
+}
+
+func (x *UserRole) GetRevokedBy() string {
+	if x != nil {
+		return x.RevokedBy
+	}
+	return ""
+}
+
+func (x *UserRole) GetEndedKey() string {
+	if x != nil {
+		return x.EndedKey
+	}
+	return ""
+}
+
 // BootstrapClaim — the one row that says the bootstrap administrator has
 // been handed out (rbac).
 //
@@ -791,7 +2078,7 @@ type BootstrapClaim struct {
 
 func (x *BootstrapClaim) Reset() {
 	*x = BootstrapClaim{}
-	mi := &file_types_models_proto_msgTypes[5]
+	mi := &file_types_models_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -803,7 +2090,7 @@ func (x *BootstrapClaim) String() string {
 func (*BootstrapClaim) ProtoMessage() {}
 
 func (x *BootstrapClaim) ProtoReflect() protoreflect.Message {
-	mi := &file_types_models_proto_msgTypes[5]
+	mi := &file_types_models_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -816,7 +2103,7 @@ func (x *BootstrapClaim) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapClaim.ProtoReflect.Descriptor instead.
 func (*BootstrapClaim) Descriptor() ([]byte, []int) {
-	return file_types_models_proto_rawDescGZIP(), []int{5}
+	return file_types_models_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *BootstrapClaim) GetSlot() string {
@@ -844,28 +2131,98 @@ var File_types_models_proto protoreflect.FileDescriptor
 
 const file_types_models_proto_rawDesc = "" +
 	"\n" +
-	"\x12types/models.proto\x12\x10w17.contrib.auth\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11w17/contrib.proto\x1a\fw17/db.proto\x1a\x0fw17/field.proto\"\xc1\x01\n" +
+	"\x12types/models.proto\x12\x10w17.contrib.auth\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11w17/contrib.proto\x1a\fw17/db.proto\x1a\x0fw17/field.proto\"\xaa\x03\n" +
 	"\x04User\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12!\n" +
 	"\x05email\x18\x02 \x01(\tB\v\xca\xf3\x18\a\b\x048\x01@\xc0\x02R\x05email\x12+\n" +
 	"\rpassword_hash\x18\x03 \x01(\tB\x06\xca\xf3\x18\x02\bBR\fpasswordHash\x12F\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\x04\xc2\xf3\x18\x00\"\xb3\x02\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12[\n" +
+	"\x17device_trust_revoked_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x14deviceTrustRevokedAt\x123\n" +
+	"\x10sign_in_failures\x18\x0f \x01(\x03B\t\xca\xf3\x18\x05\b\f\xa8\x01\x00R\x0esignInFailures\x12O\n" +
+	"\x11sign_in_window_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x0esignInWindowAt:\x04\xc2\xf3\x18\x00J\x04\b\x05\x10\x06\"\x85\x06\n" +
 	"\tUserToken\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\"\n" +
-	"\x05token\x18\x02 \x01(\tB\f\xca\xf3\x18\b\bC(\x018\x01@@R\x05token\x12%\n" +
-	"\auser_id\x18\x03 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06userId\x12F\n" +
+	"\x05token\x18\x02 \x01(\tB\f\xca\xf3\x18\b\bC(\x018\x01@@R\x05token\x125\n" +
+	"\auser_id\x18\x03 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.User \x03R\x06userId\x12F\n" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12C\n" +
 	"\n" +
-	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\texpiresAt\x12+\n" +
+	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\texpiresAt\x12=\n" +
+	"\tdevice_id\x18\t \x01(\tB \xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x14\b\x01\x1a\x0e@module.Device \x03R\bdeviceId\x12\"\n" +
+	"\bmcp_only\x18\v \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\amcpOnly\x12+\n" +
 	"\n" +
 	"token_hash\x18\n" +
-	" \x01(\tB\f\xca\xf3\x18\b\bC(\x018\x01@@R\ttokenHash:\x04\xc2\xf3\x18\x00\"\xbb\x03\n" +
+	" \x01(\tB\f\xca\xf3\x18\b\bC(\x018\x01@@R\ttokenHash\x12C\n" +
+	"\n" +
+	"revoked_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\trevokedAt\x12'\n" +
+	"\n" +
+	"revoked_by\x18\r \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\trevokedBy\x12Q\n" +
+	"\rrevoke_reason\x18\x0e \x01(\x0e2\x1e.w17.contrib.auth.RevokeReasonB\f\xca\xf3\x18\b\b2\x90\x02\x01\xa8\x01\x00R\frevokeReason\x120\n" +
+	"\x0fpublic_computer\x18\x0f \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\x0epublicComputer\x12j\n" +
+	"\x15approved_by_device_id\x18\x10 \x01(\tB7\xca\xf3\x18\x1d\b\x03(\x01\xda\x01\x16approved_usertoken_set\xd2\xf3\x18\x12\x1a\x0e@module.Device \x03R\x12approvedByDeviceId:\x04\xc2\xf3\x18\x00\"\xd7\x05\n" +
+	"\x06Device\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x125\n" +
+	"\auser_id\x18\x02 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.User \x03R\x06userId\x12*\n" +
+	"\n" +
+	"thumbprint\x18\n" +
+	" \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x01(\x01@+R\n" +
+	"thumbprint\x12!\n" +
+	"\x05label\x18\x04 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\xff\x01R\x05label\x12\x1a\n" +
+	"\x02ip\x18\x05 \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x010\x01@-R\x02ip\x12C\n" +
+	"\n" +
+	"trusted_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\ttrustedAt\x12G\n" +
+	"\flast_seen_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\t\xca\xf3\x18\x05\b\x16\xb8\x01\x01R\n" +
+	"lastSeenAt\x12F\n" +
+	"\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12C\n" +
+	"\n" +
+	"revoked_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\trevokedAt\x12 \n" +
+	"\aapi_key\x18\f \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\x06apiKey\x123\n" +
+	"\x10sign_in_failures\x18\r \x01(\x03B\t\xca\xf3\x18\x05\b\f\xa8\x01\x00R\x0esignInFailures\x12O\n" +
+	"\x11sign_in_window_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\x0esignInWindowAt:!\xc2\xf3\x18\x1d\x12\x1b\n" +
+	"\t\n" +
+	"\auser_id\n" +
+	"\f\n" +
+	"\n" +
+	"thumbprint\x10\x01J\x04\b\x03\x10\x04J\x04\b\t\x10\n" +
+	"R\n" +
+	"identifierR\x10trust_token_hash\"\xf8\x04\n" +
+	"\vSignInEvent\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12L\n" +
+	"\n" +
+	"created_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x11\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01\xd2\xf3\x18\x02\b\x01R\tcreatedAt\x125\n" +
+	"\auser_id\x18\x03 \x01(\tB\x1c\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x10\x1a\f@module.User \x03R\x06userId\x12%\n" +
+	"\aaddress\x18\x04 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\xc0\x02R\aaddress\x12;\n" +
+	"\tdevice_id\x18\x05 \x01(\tB\x1e\xca\xf3\x18\x04\b\x03(\x01\xd2\xf3\x18\x12\x1a\x0e@module.Device \x03R\bdeviceId\x12*\n" +
+	"\n" +
+	"thumbprint\x18\x06 \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x01(\x01@+R\n" +
+	"thumbprint\x12\x1a\n" +
+	"\x02ip\x18\a \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x010\x01@-R\x02ip\x12*\n" +
+	"\n" +
+	"user_agent\x18\b \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\xff\x01R\tuserAgent\x12>\n" +
+	"\x06method\x18\t \x01(\x0e2\x1e.w17.contrib.auth.SignInMethodB\x06\xca\xf3\x18\x02\b2R\x06method\x12A\n" +
+	"\aoutcome\x18\n" +
+	" \x01(\x0e2\x1f.w17.contrib.auth.SignInOutcomeB\x06\xca\xf3\x18\x02\b2R\aoutcome\x120\n" +
+	"\x0fpublic_computer\x18\v \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1fR\x0epublicComputer::\xc2\xf3\x186\x12\x19\n" +
+	"\t\n" +
+	"\auser_id\n" +
+	"\f\n" +
+	"\n" +
+	"created_at\x12\x19\n" +
+	"\t\n" +
+	"\aaddress\n" +
+	"\f\n" +
+	"\n" +
+	"created_at\"\xc3\x04\n" +
 	"\x04Role\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\x1e\n" +
-	"\x04name\x18\x02 \x01(\tB\n" +
-	"\xca\xf3\x18\x06\b\x068\x01@dR\x04name\x12-\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\x1c\n" +
+	"\x04name\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x06@dR\x04name\x12-\n" +
 	"\vdescription\x18\x03 \x01(\tB\v\xca\xf3\x18\a\b\x020\x01@\xf4\x03R\vdescription\x12F\n" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x120\n" +
@@ -876,38 +2233,84 @@ const file_types_models_proto_rawDesc = "" +
 	"preset_key\x18\t \x01(\tB\f\xca\xf3\x18\b\b\x06(\x018\x01@dR\tpresetKey\x12-\n" +
 	"\fdisplay_name\x18\n" +
 	" \x01(\tB\n" +
-	"\xca\xf3\x18\x06\b\x010\x01@dR\vdisplayName:\f\xc2\xf3\x18\x00\xfa\xf4\x18\x04rbac\"\x80\x02\n" +
+	"\xca\xf3\x18\x06\b\x010\x01@dR\vdisplayName\x12C\n" +
+	"\n" +
+	"deleted_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\tdeletedAt\x12*\n" +
+	"\tended_key\x18\r \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@$\xa2\x01\x00R\bendedKey:%\xc2\xf3\x18\x19\x12\x17\n" +
+	"\x06\n" +
+	"\x04name\n" +
+	"\v\n" +
+	"\tended_key\x10\x01\xfa\xf4\x18\x04rbac\"\xfe\x02\n" +
 	"\x0eRolePermission\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12%\n" +
-	"\arole_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06roleId\x124\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x125\n" +
+	"\arole_id\x18\x02 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.Role \x03R\x06roleId\x124\n" +
 	"\rpermission_id\x18\x03 \x01(\x05B\x0f\xca\xf3\x18\x05\b\n" +
 	"\xf8\x01\x02\xd2\xf3\x18\x02\b\x01R\fpermissionId\x12F\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:,\xc2\xf3\x18 \x12\x1e\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12C\n" +
+	"\n" +
+	"removed_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\tremovedAt\x12'\n" +
+	"\n" +
+	"removed_by\x18\x06 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\tremovedBy:,\xc2\xf3\x18 \x12\x1e\n" +
 	"\t\n" +
 	"\arole_id\n" +
 	"\x0f\n" +
-	"\rpermission_id\x10\x01\xfa\xf4\x18\x04rbac\"\xf5\x01\n" +
-	"\bUserRole\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12%\n" +
-	"\auser_id\x18\x02 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06userId\x12%\n" +
-	"\arole_id\x18\x03 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\x06roleId\x12F\n" +
+	"\rpermission_id\x10\x01\xfa\xf4\x18\x04rbac\"\xde\x02\n" +
+	"\x14RolePermissionChange\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x125\n" +
+	"\arole_id\x18\x02 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.Role \x03R\x06roleId\x12+\n" +
+	"\rpermission_id\x18\x03 \x01(\x05B\x06\xca\xf3\x18\x02\b\n" +
+	"R\fpermissionId\x12F\n" +
+	"\x04kind\x18\x04 \x01(\x0e2*.w17.contrib.auth.RolePermissionChangeKindB\x06\xca\xf3\x18\x02\b2R\x04kind\x12'\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:6\xc2\xf3\x18*\x12(\n" +
+	"changed_by\x18\x05 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\tchangedBy\x12F\n" +
+	"\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\f\xc2\xf3\x18\x00\xfa\xf4\x18\x04rbac\"\xbc\x03\n" +
+	"\bUserRole\x12\x1b\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x125\n" +
+	"\auser_id\x18\x02 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.User \x03R\x06userId\x125\n" +
+	"\arole_id\x18\x03 \x01(\tB\x1c\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x12\b\x01\x1a\f@module.Role \x03R\x06roleId\x12F\n" +
+	"\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt\x12C\n" +
+	"\n" +
+	"revoked_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\trevokedAt\x12'\n" +
+	"\n" +
+	"revoked_by\x18\a \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\trevokedBy\x12*\n" +
+	"\tended_key\x18\b \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@$\xa2\x01\x00R\bendedKey:C\xc2\xf3\x187\x125\n" +
 	"\t\n" +
 	"\auser_id\n" +
 	"\t\n" +
-	"\arole_id\x10\x01R\x0eorg_membership\xfa\xf4\x18\x04rbac\"\xa7\x01\n" +
+	"\arole_id\n" +
+	"\v\n" +
+	"\tended_key\x10\x01R\x0eorg_membership\xfa\xf4\x18\x04rbac\"\xbb\x01\n" +
 	"\x0eBootstrapClaim\x12\x1e\n" +
 	"\x04slot\x18\x01 \x01(\tB\n" +
-	"\xca\xf3\x18\x06\b\x06\x10\x01@ R\x04slot\x12\x1f\n" +
-	"\auser_id\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12F\n" +
+	"\xca\xf3\x18\x06\b\x06\x10\x01@ R\x04slot\x123\n" +
+	"\auser_id\x18\x02 \x01(\tB\x1a\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x10\x1a\f@module.User \x03R\x06userId\x12F\n" +
 	"\n" +
-	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\f\xc2\xf3\x18\x00\xfa\xf4\x18\x04rbac*S\n" +
+	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\tcreatedAt:\f\xc2\xf3\x18\x00\xfa\xf4\x18\x04rbac*g\n" +
 	"\tTokenType\x12\x1a\n" +
 	"\x16TOKEN_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12TOKEN_TYPE_SESSION\x10\x01\x12\x12\n" +
-	"\x0eTOKEN_TYPE_API\x10\x02*G\n" +
+	"\x0eTOKEN_TYPE_API\x10\x02\x12\x12\n" +
+	"\x0eTOKEN_TYPE_MCP\x10\x03*\xfc\x03\n" +
+	"\fRevokeReason\x12\x16\n" +
+	"\x12REVOKE_REASON_NONE\x10\x00\x12\x18\n" +
+	"\x14REVOKE_REASON_LOGOUT\x10\x01\x12#\n" +
+	"\x1fREVOKE_REASON_API_TOKEN_REVOKED\x10\x02\x12\"\n" +
+	"\x1eREVOKE_REASON_PASSWORD_CHANGED\x10\x03\x12 \n" +
+	"\x1cREVOKE_REASON_PASSWORD_RESET\x10\x04\x12 \n" +
+	"\x1cREVOKE_REASON_DEVICE_REVOKED\x10\x05\x12!\n" +
+	"\x1dREVOKE_REASON_UNBOUND_SESSION\x10\x06\x12\x1f\n" +
+	"\x1bREVOKE_REASON_ADMIN_REVOKED\x10\a\x12\x1f\n" +
+	"\x1bREVOKE_REASON_USER_DISABLED\x10\b\x12\x1d\n" +
+	"\x19REVOKE_REASON_USER_ERASED\x10\t\x12\x1f\n" +
+	"\x1bREVOKE_REASON_TOKEN_REVOKED\x10\n" +
+	"\x12$\n" +
+	" REVOKE_REASON_ALL_TOKENS_REVOKED\x10\v\x12 \n" +
+	"\x1cREVOKE_REASON_REFRESH_REUSED\x10\f\x12\x1f\n" +
+	"\x1bREVOKE_REASON_GRANT_REVOKED\x10\r\x12\x1f\n" +
+	"\x1bREVOKE_REASON_CODE_REPLAYED\x10\x0e*G\n" +
 	"\n" +
 	"EmailProof\x12\f\n" +
 	"\bUNPROVEN\x10\x00\x12\x17\n" +
@@ -915,7 +2318,57 @@ const file_types_models_proto_rawDesc = "" +
 	"\x0eSELF_CONFIRMED\x10\x02*!\n" +
 	"\vAccountKind\x12\t\n" +
 	"\x05HUMAN\x10\x00\x12\a\n" +
-	"\x03BOT\x10\x01B\xb8\x01\n" +
+	"\x03BOT\x10\x01*\xb4\x02\n" +
+	"\fSignInMethod\x12\x1e\n" +
+	"\x1aSIGN_IN_METHOD_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17SIGN_IN_METHOD_PASSWORD\x10\x01\x12\x16\n" +
+	"\x12SIGN_IN_METHOD_MFA\x10\x02\x12\x1a\n" +
+	"\x16SIGN_IN_METHOD_SIGN_UP\x10\x03\x12\"\n" +
+	"\x1eSIGN_IN_METHOD_SIGN_UP_CONFIRM\x10\x04\x12\x18\n" +
+	"\x14SIGN_IN_METHOD_OAUTH\x10\x05\x12\x16\n" +
+	"\x12SIGN_IN_METHOD_CLI\x10\x06\x12\x1c\n" +
+	"\x18SIGN_IN_METHOD_API_TOKEN\x10\a\x12\x1c\n" +
+	"\x18SIGN_IN_METHOD_BOT_TOKEN\x10\b\x12!\n" +
+	"\x1dSIGN_IN_METHOD_AUTHORIZED_APP\x10\t*\xe0\x05\n" +
+	"\rSignInOutcome\x12\x1f\n" +
+	"\x1bSIGN_IN_OUTCOME_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12SIGN_IN_OUTCOME_OK\x10\x01\x12 \n" +
+	"\x1cSIGN_IN_OUTCOME_MFA_REQUIRED\x10\x02\x12#\n" +
+	"\x1fSIGN_IN_OUTCOME_UNKNOWN_ACCOUNT\x10\x03\x12\"\n" +
+	"\x1eSIGN_IN_OUTCOME_WRONG_PASSWORD\x10\x04\x12$\n" +
+	" SIGN_IN_OUTCOME_ACCOUNT_DISABLED\x10\x05\x12#\n" +
+	"\x1fSIGN_IN_OUTCOME_MACHINE_ACCOUNT\x10\x06\x12)\n" +
+	"%SIGN_IN_OUTCOME_DEVICE_PROOF_REQUIRED\x10\a\x12\"\n" +
+	"\x1eSIGN_IN_OUTCOME_DEVICE_REVOKED\x10\b\x12\x1e\n" +
+	"\x1aSIGN_IN_OUTCOME_WRONG_CODE\x10\t\x12%\n" +
+	"!SIGN_IN_OUTCOME_TOO_MANY_ATTEMPTS\x10\n" +
+	"\x12 \n" +
+	"\x1cSIGN_IN_OUTCOME_OTHER_DEVICE\x10\v\x12 \n" +
+	"\x1cSIGN_IN_OUTCOME_RATE_LIMITED\x10\f\x12\x1f\n" +
+	"\x1bSIGN_IN_OUTCOME_EMAIL_TAKEN\x10\r\x12#\n" +
+	"\x1fSIGN_IN_OUTCOME_SIGN_UP_REFUSED\x10\x0e\x12$\n" +
+	" SIGN_IN_OUTCOME_UNVERIFIED_EMAIL\x10\x0f\x12\"\n" +
+	"\x1eSIGN_IN_OUTCOME_CLIENT_REFUSED\x10\x10\x12\x19\n" +
+	"\x15SIGN_IN_OUTCOME_ERROR\x10\x11\x12\x1b\n" +
+	"\x17SIGN_IN_OUTCOME_REFUSED\x10\x12\x12\x1f\n" +
+	"\x1bSIGN_IN_OUTCOME_KEY_REFUSED\x10\x13\x12\x1d\n" +
+	"\x19SIGN_IN_OUTCOME_THROTTLED\x10\x14*\x97\x01\n" +
+	"\x18RolePermissionChangeKind\x12+\n" +
+	"'ROLE_PERMISSION_CHANGE_KIND_UNSPECIFIED\x10\x00\x12%\n" +
+	"!ROLE_PERMISSION_CHANGE_KIND_ADDED\x10\x01\x12'\n" +
+	"#ROLE_PERMISSION_CHANGE_KIND_REMOVED\x10\x02*k\n" +
+	"\x0fOAuthClientKind\x12!\n" +
+	"\x1dOAUTH_CLIENT_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15OAUTH_CLIENT_KIND_DCR\x10\x01\x12\x1a\n" +
+	"\x16OAUTH_CLIENT_KIND_CIMD\x10\x02*j\n" +
+	"\x0eOAuthGrantKind\x12 \n" +
+	"\x1cOAUTH_GRANT_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14OAUTH_GRANT_KIND_MCP\x10\x01\x12\x1c\n" +
+	"\x18OAUTH_GRANT_KIND_SESSION\x10\x02*e\n" +
+	"\rOAuthDecision\x12\x1c\n" +
+	"\x18OAUTH_DECISION_UNDECIDED\x10\x00\x12\x1b\n" +
+	"\x17OAUTH_DECISION_APPROVED\x10\x01\x12\x19\n" +
+	"\x15OAUTH_DECISION_DENIED\x10\x02B\xb8\x01\n" +
 	"\x14com.w17.contrib.authB\vModelsProtoP\x01Z1github.com/wandering-compiler/plugins/auth/gen/pb\xa2\x02\x03WCA\xaa\x02\x10W17.Contrib.Auth\xca\x02\x10W17\\Contrib\\Auth\xe2\x02\x1cW17\\Contrib\\Auth\\GPBMetadata\xea\x02\x12W17::Contrib::Authb\x06proto3"
 
 var (
@@ -930,33 +2383,60 @@ func file_types_models_proto_rawDescGZIP() []byte {
 	return file_types_models_proto_rawDescData
 }
 
-var file_types_models_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_types_models_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_types_models_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
+var file_types_models_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_types_models_proto_goTypes = []any{
 	(TokenType)(0),                // 0: w17.contrib.auth.TokenType
-	(EmailProof)(0),               // 1: w17.contrib.auth.EmailProof
-	(AccountKind)(0),              // 2: w17.contrib.auth.AccountKind
-	(*User)(nil),                  // 3: w17.contrib.auth.User
-	(*UserToken)(nil),             // 4: w17.contrib.auth.UserToken
-	(*Role)(nil),                  // 5: w17.contrib.auth.Role
-	(*RolePermission)(nil),        // 6: w17.contrib.auth.RolePermission
-	(*UserRole)(nil),              // 7: w17.contrib.auth.UserRole
-	(*BootstrapClaim)(nil),        // 8: w17.contrib.auth.BootstrapClaim
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
+	(RevokeReason)(0),             // 1: w17.contrib.auth.RevokeReason
+	(EmailProof)(0),               // 2: w17.contrib.auth.EmailProof
+	(AccountKind)(0),              // 3: w17.contrib.auth.AccountKind
+	(SignInMethod)(0),             // 4: w17.contrib.auth.SignInMethod
+	(SignInOutcome)(0),            // 5: w17.contrib.auth.SignInOutcome
+	(RolePermissionChangeKind)(0), // 6: w17.contrib.auth.RolePermissionChangeKind
+	(OAuthClientKind)(0),          // 7: w17.contrib.auth.OAuthClientKind
+	(OAuthGrantKind)(0),           // 8: w17.contrib.auth.OAuthGrantKind
+	(OAuthDecision)(0),            // 9: w17.contrib.auth.OAuthDecision
+	(*User)(nil),                  // 10: w17.contrib.auth.User
+	(*UserToken)(nil),             // 11: w17.contrib.auth.UserToken
+	(*Device)(nil),                // 12: w17.contrib.auth.Device
+	(*SignInEvent)(nil),           // 13: w17.contrib.auth.SignInEvent
+	(*Role)(nil),                  // 14: w17.contrib.auth.Role
+	(*RolePermission)(nil),        // 15: w17.contrib.auth.RolePermission
+	(*RolePermissionChange)(nil),  // 16: w17.contrib.auth.RolePermissionChange
+	(*UserRole)(nil),              // 17: w17.contrib.auth.UserRole
+	(*BootstrapClaim)(nil),        // 18: w17.contrib.auth.BootstrapClaim
+	(*timestamppb.Timestamp)(nil), // 19: google.protobuf.Timestamp
 }
 var file_types_models_proto_depIdxs = []int32{
-	9, // 0: w17.contrib.auth.User.created_at:type_name -> google.protobuf.Timestamp
-	9, // 1: w17.contrib.auth.UserToken.created_at:type_name -> google.protobuf.Timestamp
-	9, // 2: w17.contrib.auth.UserToken.expires_at:type_name -> google.protobuf.Timestamp
-	9, // 3: w17.contrib.auth.Role.created_at:type_name -> google.protobuf.Timestamp
-	9, // 4: w17.contrib.auth.RolePermission.created_at:type_name -> google.protobuf.Timestamp
-	9, // 5: w17.contrib.auth.UserRole.created_at:type_name -> google.protobuf.Timestamp
-	9, // 6: w17.contrib.auth.BootstrapClaim.created_at:type_name -> google.protobuf.Timestamp
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	19, // 0: w17.contrib.auth.User.created_at:type_name -> google.protobuf.Timestamp
+	19, // 1: w17.contrib.auth.User.device_trust_revoked_at:type_name -> google.protobuf.Timestamp
+	19, // 2: w17.contrib.auth.User.sign_in_window_at:type_name -> google.protobuf.Timestamp
+	19, // 3: w17.contrib.auth.UserToken.created_at:type_name -> google.protobuf.Timestamp
+	19, // 4: w17.contrib.auth.UserToken.expires_at:type_name -> google.protobuf.Timestamp
+	19, // 5: w17.contrib.auth.UserToken.revoked_at:type_name -> google.protobuf.Timestamp
+	1,  // 6: w17.contrib.auth.UserToken.revoke_reason:type_name -> w17.contrib.auth.RevokeReason
+	19, // 7: w17.contrib.auth.Device.trusted_at:type_name -> google.protobuf.Timestamp
+	19, // 8: w17.contrib.auth.Device.last_seen_at:type_name -> google.protobuf.Timestamp
+	19, // 9: w17.contrib.auth.Device.created_at:type_name -> google.protobuf.Timestamp
+	19, // 10: w17.contrib.auth.Device.revoked_at:type_name -> google.protobuf.Timestamp
+	19, // 11: w17.contrib.auth.Device.sign_in_window_at:type_name -> google.protobuf.Timestamp
+	19, // 12: w17.contrib.auth.SignInEvent.created_at:type_name -> google.protobuf.Timestamp
+	4,  // 13: w17.contrib.auth.SignInEvent.method:type_name -> w17.contrib.auth.SignInMethod
+	5,  // 14: w17.contrib.auth.SignInEvent.outcome:type_name -> w17.contrib.auth.SignInOutcome
+	19, // 15: w17.contrib.auth.Role.created_at:type_name -> google.protobuf.Timestamp
+	19, // 16: w17.contrib.auth.Role.deleted_at:type_name -> google.protobuf.Timestamp
+	19, // 17: w17.contrib.auth.RolePermission.created_at:type_name -> google.protobuf.Timestamp
+	19, // 18: w17.contrib.auth.RolePermission.removed_at:type_name -> google.protobuf.Timestamp
+	6,  // 19: w17.contrib.auth.RolePermissionChange.kind:type_name -> w17.contrib.auth.RolePermissionChangeKind
+	19, // 20: w17.contrib.auth.RolePermissionChange.created_at:type_name -> google.protobuf.Timestamp
+	19, // 21: w17.contrib.auth.UserRole.created_at:type_name -> google.protobuf.Timestamp
+	19, // 22: w17.contrib.auth.UserRole.revoked_at:type_name -> google.protobuf.Timestamp
+	19, // 23: w17.contrib.auth.BootstrapClaim.created_at:type_name -> google.protobuf.Timestamp
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_types_models_proto_init() }
@@ -969,8 +2449,8 @@ func file_types_models_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_types_models_proto_rawDesc), len(file_types_models_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   6,
+			NumEnums:      10,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
@@ -984,4 +2464,4 @@ func file_types_models_proto_init() {
 	file_types_models_proto_depIdxs = nil
 }
 
-// emit-sha256: d835fa44cb368c1268d6c6c0ea1ed2d24651d974179fbd636f4cfad759ee32e5
+// emit-sha256: b887776e8b0fa88069a21336ed956ebd2ee021fe53ba992e73748b2f2aa4b79b

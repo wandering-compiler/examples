@@ -33,15 +33,19 @@ const (
 	AuthQuery_GetUserByEmail_FullMethodName                = "/w17.contrib.auth.AuthQuery/GetUserByEmail"
 	AuthQuery_GetUserByToken_FullMethodName                = "/w17.contrib.auth.AuthQuery/GetUserByToken"
 	AuthQuery_GetUserPermissions_FullMethodName            = "/w17.contrib.auth.AuthQuery/GetUserPermissions"
+	AuthQuery_GetExpiredToken_FullMethodName               = "/w17.contrib.auth.AuthQuery/GetExpiredToken"
 	AuthQuery_GetUserByTokenWithPermissions_FullMethodName = "/w17.contrib.auth.AuthQuery/GetUserByTokenWithPermissions"
 	AuthQuery_GetUserRoleGrants_FullMethodName             = "/w17.contrib.auth.AuthQuery/GetUserRoleGrants"
 	AuthQuery_ListRoleGrants_FullMethodName                = "/w17.contrib.auth.AuthQuery/ListRoleGrants"
 	AuthQuery_CountUsers_FullMethodName                    = "/w17.contrib.auth.AuthQuery/CountUsers"
 	AuthQuery_GetFirstUserRoles_FullMethodName             = "/w17.contrib.auth.AuthQuery/GetFirstUserRoles"
 	AuthQuery_GetDefaultRoles_FullMethodName               = "/w17.contrib.auth.AuthQuery/GetDefaultRoles"
+	AuthQuery_ListRealmSuperadmins_FullMethodName          = "/w17.contrib.auth.AuthQuery/ListRealmSuperadmins"
 	AuthQuery_ListRoles_FullMethodName                     = "/w17.contrib.auth.AuthQuery/ListRoles"
 	AuthQuery_GetRole_FullMethodName                       = "/w17.contrib.auth.AuthQuery/GetRole"
 	AuthQuery_GetUserById_FullMethodName                   = "/w17.contrib.auth.AuthQuery/GetUserById"
+	AuthQuery_GetDeviceTrustRevokedAt_FullMethodName       = "/w17.contrib.auth.AuthQuery/GetDeviceTrustRevokedAt"
+	AuthQuery_ListUserSignInEvents_FullMethodName          = "/w17.contrib.auth.AuthQuery/ListUserSignInEvents"
 )
 
 // AuthQueryClient is the client API for AuthQuery service.
@@ -63,38 +67,18 @@ type AuthQueryClient interface {
 	// `array_agg(DISTINCT …)` isn't expressible — the DQL has no
 	// aggregate-DISTINCT — and matches GetUserByTokenWithPermissions).
 	GetUserPermissions(ctx context.Context, in *GetUserPermissionsReq, opts ...grpc.CallOption) (*GetUserPermissionsResp, error)
-	// GetUserByTokenWithPermissions — the canonical auth-backend
-	// lookup. ONE round-trip resolves the bearer token into the
-	// User row + the deduped permission IDs the user holds.
-	// Hand-written Authenticate composes:
-	//
-	//	resp, _ := authQuery.GetUserByTokenWithPermissions(...)
-	//	return &AuthResp{PermissionIds: resp.GetPermissionIds()}
-	//
-	// Notes on the DQL:
-	//   - LEFT JOIN through UserRole / RolePermission means a
-	//     user with no roles still yields one row (rather than
-	//     NotFound); the ROWS_TO_ARRAY then carries an empty
-	//     list. The token JOIN stays inner — no token, no row,
-	//     and the consumer's gateway middleware returns 401.
-	//   - GROUP BY pins the row to the User's primary identity
-	//     so the aggregate folds the join cross-product into one
-	//     row per user.
-	//   - ROWS_TO_ARRAY (Phase E1) maps per-dialect to PG
-	//     `array_agg + FILTER + COALESCE`, MySQL `JSON_ARRAYAGG`,
-	//     SQLite `json_group_array` — always returns a list,
-	//     never NULL. The repeated-scalar scan path (Phase E2)
-	//     decodes the column into `[]int32` regardless of which
-	//     wire shape the dialect chose.
-	//   - DISTINCT-equivalent dedup: the M2M topology guarantees
-	//     unique (user_id, permission_id) pairs via the composite-
-	//     unique indexes on UserRole + RolePermission, so the
-	//     aggregate doesn't observe duplicates even across
-	//     multiple roles overlapping on a permission.
-	//
-	// Permission table is gone (the activating domain's
-	// AclPermission proto enum IS the catalog). RolePermission.
-	// permission_id carries the int32 enum value directly.
+	// GetExpiredToken — see the request. Matches the same two keys as the live
+	// lookup (hash, or the legacy clear token) and only rows that have ENDED:
+	// expired (`expires_at <= NOW()` never matches a NULL, never-expiring row)
+	// or revoked — exactly the rows the live lookup's two predicates refuse.
+	// Read only — an ended row is never moved to the hash or otherwise touched.
+	GetExpiredToken(ctx context.Context, in *GetExpiredTokenReq, opts ...grpc.CallOption) (*GetExpiredTokenResp, error)
+	// GetUserByTokenWithPermissions — Authenticate's bearer lookup: the live
+	// token (by its hash, or the legacy plaintext column), its user, and the
+	// device it is bound to. Despite the name it returns no permissions: those
+	// are a second read, GetUserRoleGrants, which the resolver narrows (realm,
+	// organization, token subset). The token JOIN is inner — no live token, no
+	// row (NotFound), and the gateway answers 401.
 	GetUserByTokenWithPermissions(ctx context.Context, in *GetUserByTokenWithPermissionsReq, opts ...grpc.CallOption) (*GetUserByTokenWithPermissionsResp, error)
 	// GetUserRoleGrants — every role this user holds, role-attributed.
 	//
@@ -117,6 +101,8 @@ type AuthQueryClient interface {
 	// `(w17.acl_roles) { default: true }`). Granted to every signup after
 	// the first.
 	GetDefaultRoles(ctx context.Context, in *GetDefaultRolesReq, opts ...grpc.CallOption) (*GetDefaultRolesResp, error)
+	// ListRealmSuperadmins — see its request message.
+	ListRealmSuperadmins(ctx context.Context, in *ListRealmSuperadminsReq, opts ...grpc.CallOption) (*ListRealmSuperadminsResp, error)
 	ListRoles(ctx context.Context, in *ListRolesReq, opts ...grpc.CallOption) (*ListRolesResp, error)
 	// GetRole — one role for the admin detail view.
 	// GetRole — one role for the admin detail view. Returns the Role
@@ -124,12 +110,22 @@ type AuthQueryClient interface {
 	// "returns a single <model> instance", and its readonly_fields resolve
 	// against the response's top-level fields.
 	GetRole(ctx context.Context, in *GetRoleReq, opts ...grpc.CallOption) (*Role, error)
-	// GetUserById — resolve a user by id, password_hash included. Two
-	// callers today: the EnrollTotp otpauth label (which wants the email)
-	// and ChangePassword (which must verify the CURRENT password of the
+	// GetUserById — resolve a user by id, password_hash included. Callers
+	// include ResolveUser (the account a principal is answered for), the
+	// EnrollTotp otpauth label (which wants the email) and ChangePassword (which must verify the CURRENT password of the
 	// authenticated principal, and must not look that principal up by an
 	// address the request supplied). Ungated — see the messages above.
 	GetUserById(ctx context.Context, in *GetUserByIdReq, opts ...grpc.CallOption) (*GetUserByIdResp, error)
+	// GetDeviceTrustRevokedAt — when the account's device trust was last
+	// revoked (a password change or a disable stamps it). The sign-in resolver
+	// and ListDevices count a device as trusted only when its trusted_at is
+	// later. Base tier, like the Device table.
+	GetDeviceTrustRevokedAt(ctx context.Context, in *GetDeviceTrustRevokedAtReq, opts ...grpc.CallOption) (*GetDeviceTrustRevokedAtResp, error)
+	// ListUserSignInEvents — one account's own sign-in history, newest first,
+	// the latest 100 (AuthService.ListMySignInEvents, which passes the
+	// caller's id). Served by the (user_id, created_at) index. Gated
+	// authenticate_turnkey, the feature that knows the caller.
+	ListUserSignInEvents(ctx context.Context, in *ListUserSignInEventsReq, opts ...grpc.CallOption) (*ListUserSignInEventsResp, error)
 }
 
 type authQueryClient struct {
@@ -164,6 +160,16 @@ func (c *authQueryClient) GetUserPermissions(ctx context.Context, in *GetUserPer
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetUserPermissionsResp)
 	err := c.cc.Invoke(ctx, AuthQuery_GetUserPermissions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) GetExpiredToken(ctx context.Context, in *GetExpiredTokenReq, opts ...grpc.CallOption) (*GetExpiredTokenResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetExpiredTokenResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetExpiredToken_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -230,6 +236,16 @@ func (c *authQueryClient) GetDefaultRoles(ctx context.Context, in *GetDefaultRol
 	return out, nil
 }
 
+func (c *authQueryClient) ListRealmSuperadmins(ctx context.Context, in *ListRealmSuperadminsReq, opts ...grpc.CallOption) (*ListRealmSuperadminsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListRealmSuperadminsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListRealmSuperadmins_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authQueryClient) ListRoles(ctx context.Context, in *ListRolesReq, opts ...grpc.CallOption) (*ListRolesResp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListRolesResp)
@@ -260,6 +276,26 @@ func (c *authQueryClient) GetUserById(ctx context.Context, in *GetUserByIdReq, o
 	return out, nil
 }
 
+func (c *authQueryClient) GetDeviceTrustRevokedAt(ctx context.Context, in *GetDeviceTrustRevokedAtReq, opts ...grpc.CallOption) (*GetDeviceTrustRevokedAtResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDeviceTrustRevokedAtResp)
+	err := c.cc.Invoke(ctx, AuthQuery_GetDeviceTrustRevokedAt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authQueryClient) ListUserSignInEvents(ctx context.Context, in *ListUserSignInEventsReq, opts ...grpc.CallOption) (*ListUserSignInEventsResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListUserSignInEventsResp)
+	err := c.cc.Invoke(ctx, AuthQuery_ListUserSignInEvents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthQueryServer is the server API for AuthQuery service.
 // All implementations should embed UnimplementedAuthQueryServer
 // for forward compatibility.
@@ -279,38 +315,18 @@ type AuthQueryServer interface {
 	// `array_agg(DISTINCT …)` isn't expressible — the DQL has no
 	// aggregate-DISTINCT — and matches GetUserByTokenWithPermissions).
 	GetUserPermissions(context.Context, *GetUserPermissionsReq) (*GetUserPermissionsResp, error)
-	// GetUserByTokenWithPermissions — the canonical auth-backend
-	// lookup. ONE round-trip resolves the bearer token into the
-	// User row + the deduped permission IDs the user holds.
-	// Hand-written Authenticate composes:
-	//
-	//	resp, _ := authQuery.GetUserByTokenWithPermissions(...)
-	//	return &AuthResp{PermissionIds: resp.GetPermissionIds()}
-	//
-	// Notes on the DQL:
-	//   - LEFT JOIN through UserRole / RolePermission means a
-	//     user with no roles still yields one row (rather than
-	//     NotFound); the ROWS_TO_ARRAY then carries an empty
-	//     list. The token JOIN stays inner — no token, no row,
-	//     and the consumer's gateway middleware returns 401.
-	//   - GROUP BY pins the row to the User's primary identity
-	//     so the aggregate folds the join cross-product into one
-	//     row per user.
-	//   - ROWS_TO_ARRAY (Phase E1) maps per-dialect to PG
-	//     `array_agg + FILTER + COALESCE`, MySQL `JSON_ARRAYAGG`,
-	//     SQLite `json_group_array` — always returns a list,
-	//     never NULL. The repeated-scalar scan path (Phase E2)
-	//     decodes the column into `[]int32` regardless of which
-	//     wire shape the dialect chose.
-	//   - DISTINCT-equivalent dedup: the M2M topology guarantees
-	//     unique (user_id, permission_id) pairs via the composite-
-	//     unique indexes on UserRole + RolePermission, so the
-	//     aggregate doesn't observe duplicates even across
-	//     multiple roles overlapping on a permission.
-	//
-	// Permission table is gone (the activating domain's
-	// AclPermission proto enum IS the catalog). RolePermission.
-	// permission_id carries the int32 enum value directly.
+	// GetExpiredToken — see the request. Matches the same two keys as the live
+	// lookup (hash, or the legacy clear token) and only rows that have ENDED:
+	// expired (`expires_at <= NOW()` never matches a NULL, never-expiring row)
+	// or revoked — exactly the rows the live lookup's two predicates refuse.
+	// Read only — an ended row is never moved to the hash or otherwise touched.
+	GetExpiredToken(context.Context, *GetExpiredTokenReq) (*GetExpiredTokenResp, error)
+	// GetUserByTokenWithPermissions — Authenticate's bearer lookup: the live
+	// token (by its hash, or the legacy plaintext column), its user, and the
+	// device it is bound to. Despite the name it returns no permissions: those
+	// are a second read, GetUserRoleGrants, which the resolver narrows (realm,
+	// organization, token subset). The token JOIN is inner — no live token, no
+	// row (NotFound), and the gateway answers 401.
 	GetUserByTokenWithPermissions(context.Context, *GetUserByTokenWithPermissionsReq) (*GetUserByTokenWithPermissionsResp, error)
 	// GetUserRoleGrants — every role this user holds, role-attributed.
 	//
@@ -333,6 +349,8 @@ type AuthQueryServer interface {
 	// `(w17.acl_roles) { default: true }`). Granted to every signup after
 	// the first.
 	GetDefaultRoles(context.Context, *GetDefaultRolesReq) (*GetDefaultRolesResp, error)
+	// ListRealmSuperadmins — see its request message.
+	ListRealmSuperadmins(context.Context, *ListRealmSuperadminsReq) (*ListRealmSuperadminsResp, error)
 	ListRoles(context.Context, *ListRolesReq) (*ListRolesResp, error)
 	// GetRole — one role for the admin detail view.
 	// GetRole — one role for the admin detail view. Returns the Role
@@ -340,12 +358,22 @@ type AuthQueryServer interface {
 	// "returns a single <model> instance", and its readonly_fields resolve
 	// against the response's top-level fields.
 	GetRole(context.Context, *GetRoleReq) (*Role, error)
-	// GetUserById — resolve a user by id, password_hash included. Two
-	// callers today: the EnrollTotp otpauth label (which wants the email)
-	// and ChangePassword (which must verify the CURRENT password of the
+	// GetUserById — resolve a user by id, password_hash included. Callers
+	// include ResolveUser (the account a principal is answered for), the
+	// EnrollTotp otpauth label (which wants the email) and ChangePassword (which must verify the CURRENT password of the
 	// authenticated principal, and must not look that principal up by an
 	// address the request supplied). Ungated — see the messages above.
 	GetUserById(context.Context, *GetUserByIdReq) (*GetUserByIdResp, error)
+	// GetDeviceTrustRevokedAt — when the account's device trust was last
+	// revoked (a password change or a disable stamps it). The sign-in resolver
+	// and ListDevices count a device as trusted only when its trusted_at is
+	// later. Base tier, like the Device table.
+	GetDeviceTrustRevokedAt(context.Context, *GetDeviceTrustRevokedAtReq) (*GetDeviceTrustRevokedAtResp, error)
+	// ListUserSignInEvents — one account's own sign-in history, newest first,
+	// the latest 100 (AuthService.ListMySignInEvents, which passes the
+	// caller's id). Served by the (user_id, created_at) index. Gated
+	// authenticate_turnkey, the feature that knows the caller.
+	ListUserSignInEvents(context.Context, *ListUserSignInEventsReq) (*ListUserSignInEventsResp, error)
 }
 
 // UnimplementedAuthQueryServer should be embedded to have
@@ -363,6 +391,9 @@ func (UnimplementedAuthQueryServer) GetUserByToken(context.Context, *GetUserByTo
 }
 func (UnimplementedAuthQueryServer) GetUserPermissions(context.Context, *GetUserPermissionsReq) (*GetUserPermissionsResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserPermissions not implemented")
+}
+func (UnimplementedAuthQueryServer) GetExpiredToken(context.Context, *GetExpiredTokenReq) (*GetExpiredTokenResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetExpiredToken not implemented")
 }
 func (UnimplementedAuthQueryServer) GetUserByTokenWithPermissions(context.Context, *GetUserByTokenWithPermissionsReq) (*GetUserByTokenWithPermissionsResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserByTokenWithPermissions not implemented")
@@ -382,6 +413,9 @@ func (UnimplementedAuthQueryServer) GetFirstUserRoles(context.Context, *GetFirst
 func (UnimplementedAuthQueryServer) GetDefaultRoles(context.Context, *GetDefaultRolesReq) (*GetDefaultRolesResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDefaultRoles not implemented")
 }
+func (UnimplementedAuthQueryServer) ListRealmSuperadmins(context.Context, *ListRealmSuperadminsReq) (*ListRealmSuperadminsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListRealmSuperadmins not implemented")
+}
 func (UnimplementedAuthQueryServer) ListRoles(context.Context, *ListRolesReq) (*ListRolesResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListRoles not implemented")
 }
@@ -390,6 +424,12 @@ func (UnimplementedAuthQueryServer) GetRole(context.Context, *GetRoleReq) (*Role
 }
 func (UnimplementedAuthQueryServer) GetUserById(context.Context, *GetUserByIdReq) (*GetUserByIdResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserById not implemented")
+}
+func (UnimplementedAuthQueryServer) GetDeviceTrustRevokedAt(context.Context, *GetDeviceTrustRevokedAtReq) (*GetDeviceTrustRevokedAtResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDeviceTrustRevokedAt not implemented")
+}
+func (UnimplementedAuthQueryServer) ListUserSignInEvents(context.Context, *ListUserSignInEventsReq) (*ListUserSignInEventsResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListUserSignInEvents not implemented")
 }
 func (UnimplementedAuthQueryServer) testEmbeddedByValue() {}
 
@@ -461,6 +501,24 @@ func _AuthQuery_GetUserPermissions_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthQueryServer).GetUserPermissions(ctx, req.(*GetUserPermissionsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_GetExpiredToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetExpiredTokenReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetExpiredToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetExpiredToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetExpiredToken(ctx, req.(*GetExpiredTokenReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -573,6 +631,24 @@ func _AuthQuery_GetDefaultRoles_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthQuery_ListRealmSuperadmins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRealmSuperadminsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListRealmSuperadmins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListRealmSuperadmins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListRealmSuperadmins(ctx, req.(*ListRealmSuperadminsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthQuery_ListRoles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListRolesReq)
 	if err := dec(in); err != nil {
@@ -627,6 +703,42 @@ func _AuthQuery_GetUserById_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthQuery_GetDeviceTrustRevokedAt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDeviceTrustRevokedAtReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).GetDeviceTrustRevokedAt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_GetDeviceTrustRevokedAt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).GetDeviceTrustRevokedAt(ctx, req.(*GetDeviceTrustRevokedAtReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthQuery_ListUserSignInEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListUserSignInEventsReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthQueryServer).ListUserSignInEvents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthQuery_ListUserSignInEvents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthQueryServer).ListUserSignInEvents(ctx, req.(*ListUserSignInEventsReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthQuery_ServiceDesc is the grpc.ServiceDesc for AuthQuery service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -645,6 +757,10 @@ var AuthQuery_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetUserPermissions",
 			Handler:    _AuthQuery_GetUserPermissions_Handler,
+		},
+		{
+			MethodName: "GetExpiredToken",
+			Handler:    _AuthQuery_GetExpiredToken_Handler,
 		},
 		{
 			MethodName: "GetUserByTokenWithPermissions",
@@ -671,6 +787,10 @@ var AuthQuery_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthQuery_GetDefaultRoles_Handler,
 		},
 		{
+			MethodName: "ListRealmSuperadmins",
+			Handler:    _AuthQuery_ListRealmSuperadmins_Handler,
+		},
+		{
 			MethodName: "ListRoles",
 			Handler:    _AuthQuery_ListRoles_Handler,
 		},
@@ -682,9 +802,17 @@ var AuthQuery_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetUserById",
 			Handler:    _AuthQuery_GetUserById_Handler,
 		},
+		{
+			MethodName: "GetDeviceTrustRevokedAt",
+			Handler:    _AuthQuery_GetDeviceTrustRevokedAt_Handler,
+		},
+		{
+			MethodName: "ListUserSignInEvents",
+			Handler:    _AuthQuery_ListUserSignInEvents_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "queries/auth_query.proto",
 }
 
-// emit-sha256: ed9cbcc4738194e0452dc57bff60d61999adf6779b80f79bd259c4c963fe232c
+// emit-sha256: 536247d07e0f319cd1a248007225b03c744d53a5512fba4f2fcc021283cfd4aa

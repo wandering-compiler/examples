@@ -12,12 +12,16 @@ import (
 // may write: the fields left out of a record (sensitive by label or type).
 func init() {
 	redact.Register(map[string]redact.Plan{
-		"w17.contrib.auth.User":           {Skip: []protowire.Number{3 /* password_hash */}},
-		"w17.contrib.auth.UserToken":      {Skip: []protowire.Number{2 /* token */}},
-		"w17.contrib.auth.Role":           {},
-		"w17.contrib.auth.RolePermission": {},
-		"w17.contrib.auth.UserRole":       {},
+		"w17.contrib.auth.User":                 {Skip: []protowire.Number{3 /* password_hash */}},
+		"w17.contrib.auth.UserToken":            {Skip: []protowire.Number{2 /* token */, 10 /* token_hash */}},
+		"w17.contrib.auth.Device":               {},
+		"w17.contrib.auth.SignInEvent":          {},
+		"w17.contrib.auth.Role":                 {},
+		"w17.contrib.auth.RolePermission":       {},
+		"w17.contrib.auth.RolePermissionChange": {},
+		"w17.contrib.auth.UserRole":             {},
+		"w17.contrib.auth.BootstrapClaim":       {},
 	})
 }
 
-// emit-sha256: 94912387a40370bcb3ceab22b8f908ee0e1f2f005a35209253ee08c308db0a7c
+// emit-sha256: af37fb6248ba7236922fe320c7da23f48307a52373dafa937ff4be70d81c8a73

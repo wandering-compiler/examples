@@ -5,7 +5,6 @@ import (
 	"errors"
 	distxpb "github.com/wandering-compiler/sdk/go/pb/common/distx"
 	"github.com/wandering-compiler/sdk/go/service/tx/distx"
-	"strings"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -53,12 +52,17 @@ func (h *AuthServiceHandler) RequestEmailVerification(ctx context.Context, req *
 		return nil, err
 	}
 	expiresAt := timestamppb.New(time.Now().Add(h.emailVerificationTTL()))
+	clear, sealed, err := h.deliver(token)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := h.Mutation.CreateEmailVerificationToken(ctx, &pb.CreateEmailVerificationTokenReq{
-		UserId:    user.GetId(),
-		TokenHash: sha256Hex(token),
-		ExpiresAt: expiresAt,
-		Email:     user.GetEmail(),
-		Token:     token,
+		UserId:      user.GetId(),
+		TokenHash:   sha256Hex(token),
+		ExpiresAt:   expiresAt,
+		Email:       user.GetEmail(),
+		Token:       clear,
+		SealedToken: sealed,
 	}); err != nil {
 		return nil, err
 	}
@@ -120,9 +124,23 @@ func (h *AuthServiceHandler) consumeAndMarkVerified(txCtx context.Context, token
 // `email_verification` is active, which is what makes the field reference
 // below safe to compile — `User.email_verified_at` does not exist otherwise.
 func init() {
+	secretDeliveryFeatures = append(secretDeliveryFeatures, "email_verification")
 	inviteVerifiedEmailGate = inviteVerifiedEmailGateImpl
+	emailProofEnforced = true
 	markEmailDerived = markEmailDerivedImpl
 	markEmailConfirmed = markEmailConfirmedImpl
+	erasers = append(erasers, spendVerificationLinks)
+	spendVerifyLinks = func(ctx context.Context, h *AuthServiceHandler, userID string) error {
+		return spendVerificationLinks(ctx, h, userID, "", "")
+	}
+}
+
+// spendVerificationLinks is email_verification's eraser: every live
+// verification link of the account is marked used, so none can stamp the
+// erased account verified (SpendEmailVerificationTokens). The rows stay.
+func spendVerificationLinks(ctx context.Context, h *AuthServiceHandler, userID, _, _ string) error {
+	_, err := h.Mutation.SpendEmailVerificationTokens(ctx, &pb.SpendEmailVerificationTokensReq{UserId: userID})
+	return err
 }
 
 // markEmailConfirmedImpl records a SELF_CONFIRMED address through the same
@@ -165,9 +183,12 @@ const MsgInviteNeedsVerifiedEmail = "Confirm your email address before accepting
 // Reads the knob at CALL time rather than at install time, the same way
 // invite_only is read: a deployment that turns it on should not have to
 // restart to mean it.
-func inviteVerifiedEmailGateImpl(ctx context.Context, h *AuthServiceHandler, userID string, inviteBindsAddress bool) error {
-	floor := strings.TrimSpace(strings.ToLower(h.EmailProofRequired))
-	if floor == "" || floor == emailProofNone {
+func inviteVerifiedEmailGateImpl(ctx context.Context, h *AuthServiceHandler, userID, orgID string, inviteBindsAddress bool) error {
+	floor, err := emailProofFloorOf(ctx, h, orgID)
+	if err != nil {
+		return err
+	}
+	if !floorAsksProof(floor) {
 		return nil
 	}
 
@@ -206,12 +227,3 @@ func inviteVerifiedEmailGateImpl(ctx context.Context, h *AuthServiceHandler, use
 		CodeEmailNotVerified, MsgInviteNeedsVerifiedEmail,
 	).Err()
 }
-
-// The three floors, weakest first. Strings rather than an enum because the knob
-// is an env var an operator types, and a typo has to be readable in the refusal
-// rather than silently becoming zero.
-const (
-	emailProofNone    = "none"
-	emailProofDerived = "derived"
-	emailProofFull    = "full"
-)

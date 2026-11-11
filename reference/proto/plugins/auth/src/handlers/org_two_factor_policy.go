@@ -14,16 +14,17 @@ import (
 // own second-factor policy, per kind of membership, over the activation's
 // two_factor_policy (OrgTwoFactorPolicy).
 //
-// A policy is required (every account is challenged), optional (an account
-// that confirmed an authenticator is) or disabled (nobody is, and nobody can
-// enrol). Kind '' is the organization's own and covers every kind without a
+// A policy is required (every account is challenged), enrol (so is every
+// account, and one without an authenticator sets it up at sign-in), optional
+// (an account that confirmed an authenticator is) or disabled (nobody is, and
+// nobody can enrol). Kind '' is the organization's own and covers every kind without a
 // row of its own, and every member when memberships have no kinds.
 //
 // Which organization a request is for:
 //
 //   - a password sign-in: the one it arrives for, decided as Authenticate
 //     decides the active organization (chooseOrg) — the host bound to it
-//     through an audience that takes the tenant from the host, the W17-Org
+//     through an audience that takes the organization from the host, the W17-Org
 //     selector, or the person's only organization. The person's membership
 //     there gives the kind. Not a member of it, or no organization at all:
 //     the activation's default;
@@ -65,7 +66,7 @@ func orgTwoFactorPolicyOf(ctx context.Context, h *AuthServiceHandler, userID str
 func signInOrg(ctx context.Context, h *AuthServiceHandler, orgs []*pb.UserOrg) (*pb.UserOrg, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	headers := map[string]string{}
-	for _, k := range []string{tenantFromHeader, hostHeader} {
+	for _, k := range []string{orgFromHeader, hostHeader} {
 		// Gateway-owned keys: only a gateway writes `x-w17-*`.
 		if v := md.Get(k); len(v) > 0 && v[0] != "" {
 			headers[k] = v[0]
@@ -148,11 +149,17 @@ func (h *AuthServiceHandler) requireTwoFactorPolicyGate(ctx context.Context, met
 	return nil
 }
 
-// checkTwoFactorPolicyRequest holds a policy's value and kind.
-func checkTwoFactorPolicyRequest(ctx context.Context, kind, policy string) error {
+// checkTwoFactorPolicyRequest holds a policy's value and kind. enrol needs
+// two_factor_enrolment and the built-in authenticator, as the activation's
+// own does (checkTwoFactorPolicy).
+func (h *AuthServiceHandler) checkTwoFactorPolicyRequest(ctx context.Context, kind, policy string) error {
 	if !validTwoFactorPolicy(policy) {
-		return refusal(ctx, codes.InvalidArgument, "org_two_factor_policy: policy is none of required, optional, disabled",
+		return refusal(ctx, codes.InvalidArgument, "org_two_factor_policy: policy is none of required, enrol, optional, disabled",
 			CodeTwoFactorPolicyInvalid, "policy", MsgTwoFactorPolicyValue, nil)
+	}
+	if policy == policyEnrol && !h.enrolOffered() {
+		return refusal(ctx, codes.InvalidArgument, "org_two_factor_policy: enrol needs the two_factor_enrolment feature and the built-in authenticator (two_factor_totp)",
+			CodeTwoFactorPolicyInvalid, "policy", MsgTwoFactorEnrolUnavailable, nil)
 	}
 	return checkTwoFactorPolicyKind(ctx, kind)
 }
@@ -212,7 +219,7 @@ func (h *AuthServiceHandler) SetOrgTwoFactorPolicy(ctx context.Context, req *pb.
 	if err := h.refuseTwoFactorPoliciesInsideOrg(ctx, "SetOrgTwoFactorPolicy"); err != nil {
 		return nil, err
 	}
-	if err := checkTwoFactorPolicyRequest(ctx, req.GetKind(), req.GetPolicy()); err != nil {
+	if err := h.checkTwoFactorPolicyRequest(ctx, req.GetKind(), req.GetPolicy()); err != nil {
 		return nil, err
 	}
 	if err := h.setTwoFactorPolicy(ctx, caller, req.GetOrgId(), req.GetKind(), req.GetPolicy()); err != nil {
@@ -240,7 +247,8 @@ func (h *AuthServiceHandler) ClearOrgTwoFactorPolicy(ctx context.Context, req *p
 }
 
 // ListOrgTwoFactorPolicies — the backoffice's, realm-wide.
-func (h *AuthServiceHandler) ListOrgTwoFactorPolicies(ctx context.Context, req *pb.ListOrgTwoFactorPoliciesReq) (*pb.ListOrgTwoFactorPoliciesResp, error) {
+func (h *AuthServiceHandler) ListOrgTwoFactorPolicies(ctx context.Context, req *pb.ListOrgTwoFactorPoliciesReq) (_ *pb.ListOrgTwoFactorPoliciesResp, err error) {
+	defer markReplaySafe(&err)
 	if _, err := callerUserID(ctx); err != nil {
 		return nil, Unauthenticated(err)
 	}
@@ -273,7 +281,7 @@ func (h *AuthServiceHandler) SetMyOrgTwoFactorPolicy(ctx context.Context, req *p
 	if err != nil {
 		return nil, err
 	}
-	if err := checkTwoFactorPolicyRequest(ctx, req.GetKind(), req.GetPolicy()); err != nil {
+	if err := h.checkTwoFactorPolicyRequest(ctx, req.GetKind(), req.GetPolicy()); err != nil {
 		return nil, err
 	}
 	if err := h.setTwoFactorPolicy(ctx, caller, orgID, req.GetKind(), req.GetPolicy()); err != nil {
@@ -298,7 +306,8 @@ func (h *AuthServiceHandler) ClearMyOrgTwoFactorPolicy(ctx context.Context, req 
 }
 
 // ListMyOrgTwoFactorPolicies — the organization's own, from inside it.
-func (h *AuthServiceHandler) ListMyOrgTwoFactorPolicies(ctx context.Context, req *pb.ListMyOrgTwoFactorPoliciesReq) (*pb.ListOrgTwoFactorPoliciesResp, error) {
+func (h *AuthServiceHandler) ListMyOrgTwoFactorPolicies(ctx context.Context, req *pb.ListMyOrgTwoFactorPoliciesReq) (_ *pb.ListOrgTwoFactorPoliciesResp, err error) {
+	defer markReplaySafe(&err)
 	_, orgID, err := h.myOrgForTwoFactorPolicy(ctx, req.GetOrg(), "ListMyOrgTwoFactorPolicies")
 	if err != nil {
 		return nil, err

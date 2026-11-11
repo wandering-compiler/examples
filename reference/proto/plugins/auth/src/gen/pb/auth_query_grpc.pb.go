@@ -163,12 +163,10 @@ type AuthQueryClient interface {
 	// ListOrgScopedRoles — the role catalogue restricted to roles that mean
 	// something INSIDE an organization.
 	//
-	// Separate from ListRoles rather than a flag on it, and the comment above
-	// that RPC is the reason: `org_scoped` only exists as a column when the
-	// `org_membership` feature is on, so naming it in the shared query fails
-	// the typecheck for every project without that feature. This one is GATED
-	// on org_membership, so the column is guaranteed to be there — the same
-	// shape GetUserOrgPermissions already uses.
+	// Separate from ListRoles rather than a flag on it: `org_scoped` only
+	// exists as a column when the `org_membership` feature is on, and this
+	// read is GATED on org_membership, so it can FILTER on the column (not
+	// only project it) — the same shape GetUserOrgPermissions already uses.
 	//
 	// Exists so an invitation UI can offer choices instead of asking a person
 	// to type a role name and find out afterwards whether it was one.
@@ -249,7 +247,7 @@ type AuthQueryClient interface {
 	// decorator has validated membership and resolved the active org, and
 	// its answer REPLACES the unfiltered set — the unfiltered set is the
 	// union across every org the user belongs to, which is precisely what
-	// must not leak between tenants.
+	// must not leak between organizations.
 	//
 	// This is the ONLY query that names `UserRole.org_id`, which is why it
 	// is the only one that had to be gated: the column is dropped when
@@ -309,9 +307,10 @@ type AuthQueryClient interface {
 	// User) + the org's NAME (LEFT JOIN Organization, linked to the
 	// Organizations page by the page's AdminColumnRef) instead of the two
 	// raw UUIDs the link table stores. LEFT JOINs + COALESCE so a membership
-	// whose user or org was hard-deleted (no DB-level FK) still lists with an
-	// empty handle instead of erroring the whole page (a NULL join scanned
-	// into a Go string is a scan error). Gated org_membership.
+	// whose user or org row is missing still lists with an empty handle
+	// instead of erroring the whole page (a NULL join scanned into a Go string
+	// is a scan error). The foreign keys make that impossible for new rows; the
+	// COALESCE stays as the page's own guarantee. Gated org_membership.
 	ListOrgMemberships(ctx context.Context, in *ListOrgMembershipsReq, opts ...grpc.CallOption) (*ListOrgMembershipsResp, error)
 	// GetOrgMembership — one membership for the admin detail view. Returns
 	// the OrgMembership model DIRECTLY. Gated org_membership.
@@ -347,7 +346,7 @@ type AuthQueryClient interface {
 	GetOAuthGrantByAuthorization(ctx context.Context, in *GetOAuthGrantByAuthorizationReq, opts ...grpc.CallOption) (*GetOAuthGrantByAuthorizationResp, error)
 	// GetOrgOfHost — the live organization a host is bound to (org_hosts);
 	// NotFound when the host is unbound or its organization deleted. Read on
-	// every Authenticate through an audience that takes the tenant from the
+	// every Authenticate through an audience that takes the organization from the
 	// host.
 	GetOrgOfHost(ctx context.Context, in *GetOrgOfHostReq, opts ...grpc.CallOption) (*OrgHostRow, error)
 	// ListOrgHostRows — every live binding, by host.
@@ -974,12 +973,10 @@ type AuthQueryServer interface {
 	// ListOrgScopedRoles — the role catalogue restricted to roles that mean
 	// something INSIDE an organization.
 	//
-	// Separate from ListRoles rather than a flag on it, and the comment above
-	// that RPC is the reason: `org_scoped` only exists as a column when the
-	// `org_membership` feature is on, so naming it in the shared query fails
-	// the typecheck for every project without that feature. This one is GATED
-	// on org_membership, so the column is guaranteed to be there — the same
-	// shape GetUserOrgPermissions already uses.
+	// Separate from ListRoles rather than a flag on it: `org_scoped` only
+	// exists as a column when the `org_membership` feature is on, and this
+	// read is GATED on org_membership, so it can FILTER on the column (not
+	// only project it) — the same shape GetUserOrgPermissions already uses.
 	//
 	// Exists so an invitation UI can offer choices instead of asking a person
 	// to type a role name and find out afterwards whether it was one.
@@ -1060,7 +1057,7 @@ type AuthQueryServer interface {
 	// decorator has validated membership and resolved the active org, and
 	// its answer REPLACES the unfiltered set — the unfiltered set is the
 	// union across every org the user belongs to, which is precisely what
-	// must not leak between tenants.
+	// must not leak between organizations.
 	//
 	// This is the ONLY query that names `UserRole.org_id`, which is why it
 	// is the only one that had to be gated: the column is dropped when
@@ -1120,9 +1117,10 @@ type AuthQueryServer interface {
 	// User) + the org's NAME (LEFT JOIN Organization, linked to the
 	// Organizations page by the page's AdminColumnRef) instead of the two
 	// raw UUIDs the link table stores. LEFT JOINs + COALESCE so a membership
-	// whose user or org was hard-deleted (no DB-level FK) still lists with an
-	// empty handle instead of erroring the whole page (a NULL join scanned
-	// into a Go string is a scan error). Gated org_membership.
+	// whose user or org row is missing still lists with an empty handle
+	// instead of erroring the whole page (a NULL join scanned into a Go string
+	// is a scan error). The foreign keys make that impossible for new rows; the
+	// COALESCE stays as the page's own guarantee. Gated org_membership.
 	ListOrgMemberships(context.Context, *ListOrgMembershipsReq) (*ListOrgMembershipsResp, error)
 	// GetOrgMembership — one membership for the admin detail view. Returns
 	// the OrgMembership model DIRECTLY. Gated org_membership.
@@ -1158,7 +1156,7 @@ type AuthQueryServer interface {
 	GetOAuthGrantByAuthorization(context.Context, *GetOAuthGrantByAuthorizationReq) (*GetOAuthGrantByAuthorizationResp, error)
 	// GetOrgOfHost — the live organization a host is bound to (org_hosts);
 	// NotFound when the host is unbound or its organization deleted. Read on
-	// every Authenticate through an audience that takes the tenant from the
+	// every Authenticate through an audience that takes the organization from the
 	// host.
 	GetOrgOfHost(context.Context, *GetOrgOfHostReq) (*OrgHostRow, error)
 	// ListOrgHostRows — every live binding, by host.
@@ -2533,4 +2531,4 @@ var AuthQuery_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "queries/auth_query.proto",
 }
 
-// emit-sha256: aa9825a654ae4bb53df1aa48cfac1ef190b9b336e21607e0b59400ed170789ca
+// emit-sha256: cb5cb68ba132776fd79725294ca93a9e44a4db5d3229902a86ddebc25c89d8f2

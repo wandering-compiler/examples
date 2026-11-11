@@ -3,24 +3,6 @@
   "statements": [
     {
       "args": [
-        "00000000-0000-0000-0000-0000000000b5",
-        "00000000-0000-0000-0000-0000000000b6",
-        "member",
-        "00000000-0000-0000-0000-0000000000a2"
-      ],
-      "sql": "INSERT INTO \"admin_auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
-    },
-    {
-      "args": [
-        "00000000-0000-0000-0000-0000000000c4",
-        "00000000-0000-0000-0000-0000000000b6",
-        "member",
-        "00000000-0000-0000-0000-0000000000c3"
-      ],
-      "sql": "INSERT INTO \"admin_auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
-    },
-    {
-      "args": [
         "00000000-0000-0000-0000-0000000000b4",
         "company",
         "E2E Throwaway Org",
@@ -104,6 +86,24 @@
     },
     {
       "args": [
+        "00000000-0000-0000-0000-0000000000b5",
+        "00000000-0000-0000-0000-0000000000b6",
+        "member",
+        "00000000-0000-0000-0000-0000000000a2"
+      ],
+      "sql": "INSERT INTO \"admin_auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "00000000-0000-0000-0000-0000000000c4",
+        "00000000-0000-0000-0000-0000000000b6",
+        "member",
+        "00000000-0000-0000-0000-0000000000c3"
+      ],
+      "sql": "INSERT INTO \"admin_auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
         "00000000-0000-0000-0000-0000000000a4",
         "00000000-0000-0000-0000-0000000000a1",
         "00000000-0000-0000-0000-0000000000a2"
@@ -138,6 +138,30 @@
     },
     {
       "args": [
+        "11111111-1111-1111-1111-111111111111",
+        "org-alpha",
+        "org-alpha"
+      ],
+      "sql": "INSERT INTO \"auth_organization\" (\"id\", \"name\", \"slug\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\", \"slug\" = EXCLUDED.\"slug\""
+    },
+    {
+      "args": [
+        "22222222-2222-2222-2222-222222222222",
+        "org-beta",
+        "org-beta"
+      ],
+      "sql": "INSERT INTO \"auth_organization\" (\"id\", \"name\", \"slug\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\", \"slug\" = EXCLUDED.\"slug\""
+    },
+    {
+      "args": [
+        "33333333-3333-3333-3333-333333333333",
+        "org-gamma",
+        "org-gamma"
+      ],
+      "sql": "INSERT INTO \"auth_organization\" (\"id\", \"name\", \"slug\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\", \"slug\" = EXCLUDED.\"slug\""
+    },
+    {
+      "args": [
         "44444444-4444-4444-4444-000000000001",
         "org-alpha.reference.test",
         "11111111-1111-1111-1111-111111111111"
@@ -159,33 +183,6 @@
         "33333333-3333-3333-3333-333333333333"
       ],
       "sql": "INSERT INTO \"auth_orghost\" (\"id\", \"host\", \"org_id\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"host\" = EXCLUDED.\"host\", \"org_id\" = EXCLUDED.\"org_id\""
-    },
-    {
-      "args": [
-        "66666666-6666-6666-6666-000000000001",
-        "11111111-1111-1111-1111-111111111111",
-        "member",
-        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-      ],
-      "sql": "INSERT INTO \"auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
-    },
-    {
-      "args": [
-        "66666666-6666-6666-6666-000000000002",
-        "22222222-2222-2222-2222-222222222222",
-        "member",
-        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-      ],
-      "sql": "INSERT INTO \"auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
-    },
-    {
-      "args": [
-        "66666666-6666-6666-6666-000000000003",
-        "11111111-1111-1111-1111-111111111111",
-        "member",
-        "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
-      ],
-      "sql": "INSERT INTO \"auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
     },
     {
       "args": [
@@ -213,30 +210,6 @@
         "member"
       ],
       "sql": "INSERT INTO \"auth_orgsignuppolicy\" (\"id\", \"open\", \"org_id\", \"role\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"open\" = EXCLUDED.\"open\", \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\""
-    },
-    {
-      "args": [
-        "11111111-1111-1111-1111-111111111111",
-        "org-alpha",
-        "org-alpha"
-      ],
-      "sql": "INSERT INTO \"auth_organization\" (\"id\", \"name\", \"slug\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\", \"slug\" = EXCLUDED.\"slug\""
-    },
-    {
-      "args": [
-        "22222222-2222-2222-2222-222222222222",
-        "org-beta",
-        "org-beta"
-      ],
-      "sql": "INSERT INTO \"auth_organization\" (\"id\", \"name\", \"slug\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\", \"slug\" = EXCLUDED.\"slug\""
-    },
-    {
-      "args": [
-        "33333333-3333-3333-3333-333333333333",
-        "org-gamma",
-        "org-gamma"
-      ],
-      "sql": "INSERT INTO \"auth_organization\" (\"id\", \"name\", \"slug\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\", \"slug\" = EXCLUDED.\"slug\""
     },
     {
       "args": [
@@ -269,6 +242,33 @@
         "$argon2id$v=19$m=65536,t=3,p=4$eAyVBiZxo/4mxea3pDJjHg$TcMNRrDhi1NCKCe1rzv1I+ColO5VoSoW0w0XwTkp5nk"
       ],
       "sql": "INSERT INTO \"auth_user\" (\"id\", \"email\", \"password_hash\") VALUES ($1, $2, $3) ON CONFLICT (\"id\") DO UPDATE SET \"email\" = EXCLUDED.\"email\", \"password_hash\" = EXCLUDED.\"password_hash\""
+    },
+    {
+      "args": [
+        "66666666-6666-6666-6666-000000000001",
+        "11111111-1111-1111-1111-111111111111",
+        "member",
+        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+      ],
+      "sql": "INSERT INTO \"auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "66666666-6666-6666-6666-000000000002",
+        "22222222-2222-2222-2222-222222222222",
+        "member",
+        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      ],
+      "sql": "INSERT INTO \"auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
+    },
+    {
+      "args": [
+        "66666666-6666-6666-6666-000000000003",
+        "11111111-1111-1111-1111-111111111111",
+        "member",
+        "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+      ],
+      "sql": "INSERT INTO \"auth_orgmembership\" (\"id\", \"org_id\", \"role\", \"user_id\") VALUES ($1, $2, $3, $4) ON CONFLICT (\"id\") DO UPDATE SET \"org_id\" = EXCLUDED.\"org_id\", \"role\" = EXCLUDED.\"role\", \"user_id\" = EXCLUDED.\"user_id\""
     },
     {
       "args": [

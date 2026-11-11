@@ -5656,12 +5656,14 @@ func (x *IssueOAuthAccessTokenResp) GetId() string {
 }
 
 type SetOrgSignUpPolicyRowReq struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
-	Open          bool                   `protobuf:"varint,3,opt,name=open,proto3" json:"open,omitempty"`
-	Role          string                 `protobuf:"bytes,4,opt,name=role,proto3" json:"role,omitempty"`
-	SetBy         string                 `protobuf:"bytes,5,opt,name=set_by,json=setBy,proto3" json:"set_by,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Kind  string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Open  bool                   `protobuf:"varint,3,opt,name=open,proto3" json:"open,omitempty"`
+	Role  string                 `protobuf:"bytes,4,opt,name=role,proto3" json:"role,omitempty"`
+	SetBy string                 `protobuf:"bytes,5,opt,name=set_by,json=setBy,proto3" json:"set_by,omitempty"`
+	// See OrgSignUpPolicy.role_snapshot (” on a closed policy).
+	RoleSnapshot  string `protobuf:"bytes,7,opt,name=role_snapshot,json=roleSnapshot,proto3" json:"role_snapshot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5731,6 +5733,13 @@ func (x *SetOrgSignUpPolicyRowReq) GetSetBy() string {
 	return ""
 }
 
+func (x *SetOrgSignUpPolicyRowReq) GetRoleSnapshot() string {
+	if x != nil {
+		return x.RoleSnapshot
+	}
+	return ""
+}
+
 type SetOrgSignUpPolicyRowResp struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -5775,6 +5784,110 @@ func (x *SetOrgSignUpPolicyRowResp) GetId() string {
 	return ""
 }
 
+type PinOrgSignUpPolicySnapshotRowReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	RoleSnapshot  string                 `protobuf:"bytes,3,opt,name=role_snapshot,json=roleSnapshot,proto3" json:"role_snapshot,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PinOrgSignUpPolicySnapshotRowReq) Reset() {
+	*x = PinOrgSignUpPolicySnapshotRowReq{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[98]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PinOrgSignUpPolicySnapshotRowReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PinOrgSignUpPolicySnapshotRowReq) ProtoMessage() {}
+
+func (x *PinOrgSignUpPolicySnapshotRowReq) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[98]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PinOrgSignUpPolicySnapshotRowReq.ProtoReflect.Descriptor instead.
+func (*PinOrgSignUpPolicySnapshotRowReq) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{98}
+}
+
+func (x *PinOrgSignUpPolicySnapshotRowReq) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *PinOrgSignUpPolicySnapshotRowReq) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *PinOrgSignUpPolicySnapshotRowReq) GetRoleSnapshot() string {
+	if x != nil {
+		return x.RoleSnapshot
+	}
+	return ""
+}
+
+type PinOrgSignUpPolicySnapshotRowResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PinOrgSignUpPolicySnapshotRowResp) Reset() {
+	*x = PinOrgSignUpPolicySnapshotRowResp{}
+	mi := &file_mutations_auth_mutation_proto_msgTypes[99]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PinOrgSignUpPolicySnapshotRowResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PinOrgSignUpPolicySnapshotRowResp) ProtoMessage() {}
+
+func (x *PinOrgSignUpPolicySnapshotRowResp) ProtoReflect() protoreflect.Message {
+	mi := &file_mutations_auth_mutation_proto_msgTypes[99]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PinOrgSignUpPolicySnapshotRowResp.ProtoReflect.Descriptor instead.
+func (*PinOrgSignUpPolicySnapshotRowResp) Descriptor() ([]byte, []int) {
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{99}
+}
+
+func (x *PinOrgSignUpPolicySnapshotRowResp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 type EndOrgSignUpPolicyRowReq struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
@@ -5786,7 +5899,7 @@ type EndOrgSignUpPolicyRowReq struct {
 
 func (x *EndOrgSignUpPolicyRowReq) Reset() {
 	*x = EndOrgSignUpPolicyRowReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[98]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5798,7 +5911,7 @@ func (x *EndOrgSignUpPolicyRowReq) String() string {
 func (*EndOrgSignUpPolicyRowReq) ProtoMessage() {}
 
 func (x *EndOrgSignUpPolicyRowReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[98]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5811,7 +5924,7 @@ func (x *EndOrgSignUpPolicyRowReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EndOrgSignUpPolicyRowReq.ProtoReflect.Descriptor instead.
 func (*EndOrgSignUpPolicyRowReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{98}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *EndOrgSignUpPolicyRowReq) GetOrgId() string {
@@ -5844,7 +5957,7 @@ type EndOrgSignUpPolicyRowResp struct {
 
 func (x *EndOrgSignUpPolicyRowResp) Reset() {
 	*x = EndOrgSignUpPolicyRowResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[99]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5856,7 +5969,7 @@ func (x *EndOrgSignUpPolicyRowResp) String() string {
 func (*EndOrgSignUpPolicyRowResp) ProtoMessage() {}
 
 func (x *EndOrgSignUpPolicyRowResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[99]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5869,7 +5982,7 @@ func (x *EndOrgSignUpPolicyRowResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EndOrgSignUpPolicyRowResp.ProtoReflect.Descriptor instead.
 func (*EndOrgSignUpPolicyRowResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{99}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *EndOrgSignUpPolicyRowResp) GetId() string {
@@ -5890,7 +6003,7 @@ type BindOrgHostRowReq struct {
 
 func (x *BindOrgHostRowReq) Reset() {
 	*x = BindOrgHostRowReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[100]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5902,7 +6015,7 @@ func (x *BindOrgHostRowReq) String() string {
 func (*BindOrgHostRowReq) ProtoMessage() {}
 
 func (x *BindOrgHostRowReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[100]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5915,7 +6028,7 @@ func (x *BindOrgHostRowReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BindOrgHostRowReq.ProtoReflect.Descriptor instead.
 func (*BindOrgHostRowReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{100}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *BindOrgHostRowReq) GetHost() string {
@@ -5948,7 +6061,7 @@ type BindOrgHostRowResp struct {
 
 func (x *BindOrgHostRowResp) Reset() {
 	*x = BindOrgHostRowResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[101]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5960,7 +6073,7 @@ func (x *BindOrgHostRowResp) String() string {
 func (*BindOrgHostRowResp) ProtoMessage() {}
 
 func (x *BindOrgHostRowResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[101]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5973,7 +6086,7 @@ func (x *BindOrgHostRowResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BindOrgHostRowResp.ProtoReflect.Descriptor instead.
 func (*BindOrgHostRowResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{101}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *BindOrgHostRowResp) GetId() string {
@@ -5993,7 +6106,7 @@ type EndOrgHostRowReq struct {
 
 func (x *EndOrgHostRowReq) Reset() {
 	*x = EndOrgHostRowReq{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[102]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6005,7 +6118,7 @@ func (x *EndOrgHostRowReq) String() string {
 func (*EndOrgHostRowReq) ProtoMessage() {}
 
 func (x *EndOrgHostRowReq) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[102]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6018,7 +6131,7 @@ func (x *EndOrgHostRowReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EndOrgHostRowReq.ProtoReflect.Descriptor instead.
 func (*EndOrgHostRowReq) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{102}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *EndOrgHostRowReq) GetHost() string {
@@ -6044,7 +6157,7 @@ type EndOrgHostRowResp struct {
 
 func (x *EndOrgHostRowResp) Reset() {
 	*x = EndOrgHostRowResp{}
-	mi := &file_mutations_auth_mutation_proto_msgTypes[103]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6056,7 +6169,7 @@ func (x *EndOrgHostRowResp) String() string {
 func (*EndOrgHostRowResp) ProtoMessage() {}
 
 func (x *EndOrgHostRowResp) ProtoReflect() protoreflect.Message {
-	mi := &file_mutations_auth_mutation_proto_msgTypes[103]
+	mi := &file_mutations_auth_mutation_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6069,7 +6182,7 @@ func (x *EndOrgHostRowResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EndOrgHostRowResp.ProtoReflect.Descriptor instead.
 func (*EndOrgHostRowResp) Descriptor() ([]byte, []int) {
-	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{103}
+	return file_mutations_auth_mutation_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *EndOrgHostRowResp) GetId() string {
@@ -6083,10 +6196,10 @@ var File_mutations_auth_mutation_proto protoreflect.FileDescriptor
 
 const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\n" +
-	"\x1dmutations/auth_mutation.proto\x12\x10w17.contrib.auth\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x12types/models.proto\x1a\x18events/auth_events.proto\x1a\x11w17/contrib.proto\x1a\fw17/db.proto\x1a\x0fw17/event.proto\x1a\x0fw17/field.proto\"]\n" +
+	"\x1dmutations/auth_mutation.proto\x12\x10w17.contrib.auth\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x12types/models.proto\x1a\x18events/auth_events.proto\x1a\x11w17/contrib.proto\x1a\fw17/db.proto\x1a\x0fw17/event.proto\x1a\x0fw17/field.proto\"c\n" +
 	"\rCreateUserReq\x12\x1f\n" +
 	"\x05email\x18\x01 \x01(\tB\t\xca\xf3\x18\x05\b\x04@\xc0\x02R\x05email\x12+\n" +
-	"\rpassword_hash\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\bBR\fpasswordHash\"<\n" +
+	"\rpassword_hash\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\bBR\fpasswordHashJ\x04\b\x03\x10\x04\"<\n" +
 	"\x0eCreateUserResp\x12*\n" +
 	"\x04user\x18\x01 \x01(\v2\x16.w17.contrib.auth.UserR\x04user\"\xb7\x02\n" +
 	"\rIssueTokenReq\x12\x17\n" +
@@ -6495,16 +6608,26 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\x15approved_by_device_id\x18\a \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x12approvedByDeviceId\x12\x1f\n" +
 	"\x04name\x18\b \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x01R\x04name:\x10\xfa\xf4\x18\foauth_server\"=\n" +
 	"\x19IssueOAuthAccessTokenResp\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id:\x10\xfa\xf4\x18\foauth_server\"\xbf\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id:\x10\xfa\xf4\x18\foauth_server\"\xee\x01\n" +
 	"\x18SetOrgSignUpPolicyRowReq\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x05orgId\x12\x1e\n" +
 	"\x04kind\x18\x02 \x01(\tB\n" +
 	"\xca\xf3\x18\x06\b\x010\x01@ R\x04kind\x12\x12\n" +
 	"\x04open\x18\x03 \x01(\bR\x04open\x12\x1f\n" +
 	"\x04role\x18\x04 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x01R\x04role\x12\x1f\n" +
-	"\x06set_by\x18\x05 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05setBy:\x0e\xfa\xf4\x18\n" +
+	"\x06set_by\x18\x05 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\x05setBy\x12-\n" +
+	"\rrole_snapshot\x18\a \x01(\tB\b\xca\xf3\x18\x04\b\x020\x01R\froleSnapshot:\x0e\xfa\xf4\x18\n" +
 	"org_signup\";\n" +
 	"\x19SetOrgSignUpPolicyRowResp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id:\x0e\xfa\xf4\x18\n" +
+	"org_signup\"\x9e\x01\n" +
+	" PinOrgSignUpPolicySnapshotRowReq\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x05orgId\x12\x1e\n" +
+	"\x04kind\x18\x02 \x01(\tB\n" +
+	"\xca\xf3\x18\x06\b\x010\x01@ R\x04kind\x12+\n" +
+	"\rrole_snapshot\x18\x03 \x01(\tB\x06\xca\xf3\x18\x02\b\x02R\froleSnapshot:\x0e\xfa\xf4\x18\n" +
+	"org_signup\"C\n" +
+	"!PinOrgSignUpPolicySnapshotRowResp\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id:\x0e\xfa\xf4\x18\n" +
 	"org_signup\"\x8e\x01\n" +
 	"\x18EndOrgSignUpPolicyRowReq\x12\x1d\n" +
@@ -6526,11 +6649,10 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\x04host\x18\x01 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\xfd\x01R\x04host\x12#\n" +
 	"\bended_by\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x03(\x01R\aendedBy:\r\xfa\xf4\x18\torg_hosts\"2\n" +
 	"\x11EndOrgHostRowResp\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id:\r\xfa\xf4\x18\torg_hosts2\xf3\xdc\x01\n" +
-	"\fAuthMutation\x12\x96\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id:\r\xfa\xf4\x18\torg_hosts2\xf6\xe4\x01\n" +
+	"\fAuthMutation\x12\xa9\t\n" +
 	"\n" +
-	"\n" +
-	"CreateUser\x12\x1f.w17.contrib.auth.CreateUserReq\x1a .w17.contrib.auth.CreateUserResp\"\xc4\t\x9a\xbd\x18u\n" +
+	"CreateUser\x12\x1f.w17.contrib.auth.CreateUserReq\x1a .w17.contrib.auth.CreateUserResp\"\xd7\b\x9a\xbd\x18u\n" +
 	"\vUserCreated\x12f\n" +
 	"\x1c\n" +
 	"\auser_id\x12\x11$response.user.id\n" +
@@ -6538,8 +6660,8 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\x05email\x12\x14$response.user.email\n" +
 	"'\n" +
 	"\n" +
-	"created_at\x12\x19$response.user.created_at\xf2\xf3\x18\xc6\bB\xc3\b\n" +
-	"\x04main\x12\xba\bINSERT INTO @module.User SET email = :email, password_hash = :password_hash, ?feature(tenant_scope) tenant_id = :tenant_id RETURNING id AS user.id,           email AS user.email,           password_hash AS user.password_hash,           created_at AS user.created_at,           ?feature(email_verification) email_verified_at AS user.email_verified_at,           ?feature(email_verification) email_proof AS user.email_proof,           ?feature(tenant_scope) tenant_id AS user.tenant_id,           ?feature(user_admin) disabled_at AS user.disabled_at,           ?feature(service_account) kind AS user.kind,           device_trust_revoked_at AS user.device_trust_revoked_at,           ?feature(user_admin) erased_at AS user.erased_at,           ?feature(marketing_consent) marketing_consent AS user.marketing_consent,           ?feature(marketing_consent) marketing_consent_at AS user.marketing_consent_at,           ?feature(bot_token_guard) allowed_cidrs AS user.allowed_cidrs,           sign_in_failures AS user.sign_in_failures,           sign_in_window_at AS user.sign_in_window_at\x12\xb3\x0e\n" +
+	"created_at\x12\x19$response.user.created_at\xf2\xf3\x18\xd9\aB\xd6\a\n" +
+	"\x04main\x12\xcd\aINSERT INTO @module.User SET email = :email, password_hash = :password_hash RETURNING id AS user.id,           email AS user.email,           password_hash AS user.password_hash,           created_at AS user.created_at,           ?feature(email_verification) email_verified_at AS user.email_verified_at,           ?feature(email_verification) email_proof AS user.email_proof,           ?feature(user_admin) disabled_at AS user.disabled_at,           ?feature(service_account) kind AS user.kind,           device_trust_revoked_at AS user.device_trust_revoked_at,           ?feature(user_admin) erased_at AS user.erased_at,           ?feature(marketing_consent) marketing_consent AS user.marketing_consent,           ?feature(marketing_consent) marketing_consent_at AS user.marketing_consent_at,           ?feature(bot_token_guard) allowed_cidrs AS user.allowed_cidrs,           sign_in_failures AS user.sign_in_failures,           sign_in_window_at AS user.sign_in_window_at\x12\xb3\x0e\n" +
 	"\n" +
 	"IssueToken\x12\x1f.w17.contrib.auth.IssueTokenReq\x1a .w17.contrib.auth.IssueTokenResp\"\xe1\r\x9a\xbd\x18\x9f\x01\n" +
 	"\vTokenIssued\x12\x8f\x01\n" +
@@ -6633,12 +6755,15 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\vRoleUpdated\x12\x1e\n" +
 	"\x1c\n" +
 	"\arole_id\x12\x11$response.role_id\xf2\xf3\x18\x8f\x01B\x8c\x01\n" +
-	"\x04main\x12\x83\x01UPDATE @module.Role SET name = :name, description = :description WHERE id = :role_id AND deleted_at IS NULL RETURNING id AS role_id\x8a\xf5\x18\x04rbac\x12\x92\x03\n" +
+	"\x04main\x12\x83\x01UPDATE @module.Role SET name = :name, description = :description WHERE id = :role_id AND deleted_at IS NULL RETURNING id AS role_id\x8a\xf5\x18\x04rbac\x12\xaf\b\n" +
 	"\n" +
-	"DeleteRole\x12\x1f.w17.contrib.auth.DeleteRoleReq\x1a .w17.contrib.auth.DeleteRoleResp\"\xc0\x02\x9a\xbd\x18-\n" +
+	"DeleteRole\x12\x1f.w17.contrib.auth.DeleteRoleReq\x1a .w17.contrib.auth.DeleteRoleResp\"\xdd\a\x9a\xbd\x18-\n" +
 	"\vRoleDeleted\x12\x1e\n" +
 	"\x1c\n" +
-	"\arole_id\x12\x11$response.role_id\xf2\xf3\x18\x82\x02Bx\n" +
+	"\arole_id\x12\x11$response.role_id\xf2\xf3\x18\x9f\aB[\n" +
+	"\x04lock\x12SUPDATE @module.Role SET id = id WHERE all_permissions = TRUE AND deleted_at IS NULLB\xbd\x04\n" +
+	"\n" +
+	"last_admin\x12\xa5\x03SELECT h.id AS id FROM @module.UserRole h JOIN @module.Role r ON r.id = h.role_id WHERE h.role_id = :role_id AND h.revoked_at IS NULL AND r.all_permissions = TRUE AND r.deleted_at IS NULL AND NOT EXISTS (SELECT o.id FROM @module.UserRole o JOIN @module.Role w ON w.id = o.role_id WHERE o.user_id = h.user_id AND o.role_id <> :role_id AND o.revoked_at IS NULL AND w.all_permissions = TRUE AND w.deleted_at IS NULL) LIMIT 1\"\x86\x01\b\x01\x12\x0fLAST_ADMIN_ROLE\x1aqSomeone holds no other administrator role than this one. Give them another administrator role before retiring it.Bx\n" +
 	"\x06grants\x12nUPDATE @module.UserRole SET revoked_at = NOW(), ended_key = id WHERE role_id = :role_id AND revoked_at IS NULLB\x85\x01\n" +
 	"\x04main\x12}UPDATE @module.Role SET deleted_at = NOW(), ended_key = id WHERE id = :role_id AND deleted_at IS NULL RETURNING id AS role_id\x8a\xf5\x18\x04rbac\x12\xf2\a\n" +
 	"\x10AssignRoleToUser\x12%.w17.contrib.auth.AssignRoleToUserReq\x1a&.w17.contrib.auth.AssignRoleToUserResp\"\x8e\a\x9a\xbd\x18\xf2\x01\n" +
@@ -6692,8 +6817,8 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\x12RehashUserPassword\x12'.w17.contrib.auth.RehashUserPasswordReq\x1a(.w17.contrib.auth.RehashUserPasswordResp\"\x95\x01\xf2\xf3\x18\x90\x01B\x8d\x01\n" +
 	"\x04main\x12\x84\x01UPDATE @module.User SET password_hash = :password_hash WHERE id = :user_id AND password_hash = :current_hash RETURNING id AS user_id\x12\xe7\x01\n" +
 	"\x13ClaimBootstrapAdmin\x12(.w17.contrib.auth.ClaimBootstrapAdminReq\x1a).w17.contrib.auth.ClaimBootstrapAdminResp\"{\xf2\xf3\x18oBm\n" +
-	"\x04main\x12eUPSERT INTO @module.BootstrapClaim SET slot = :slot, user_id = :user_id ON CONFLICT (slot) DO NOTHING\x8a\xf5\x18\x04rbac\x12\xdc\x05\n" +
-	"\x12CreateOrganization\x12'.w17.contrib.auth.CreateOrganizationReq\x1a(.w17.contrib.auth.CreateOrganizationResp\"\xf2\x04\x9a\xbd\x18\xdd\x01\n" +
+	"\x04main\x12eUPSERT INTO @module.BootstrapClaim SET slot = :slot, user_id = :user_id ON CONFLICT (slot) DO NOTHING\x8a\xf5\x18\x04rbac\x12\xaa\x06\n" +
+	"\x12CreateOrganization\x12'.w17.contrib.auth.CreateOrganizationReq\x1a(.w17.contrib.auth.CreateOrganizationResp\"\xc0\x05\x9a\xbd\x18\xdd\x01\n" +
 	"\x13OrganizationCreated\x12\xc5\x01\n" +
 	"#\n" +
 	"\x06org_id\x12\x19$response.organization.id\n" +
@@ -6705,8 +6830,8 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\x04kind\x12\x1b$response.organization.kind\n" +
 	"/\n" +
 	"\n" +
-	"created_at\x12!$response.organization.created_at\xf2\xf3\x18\xf9\x02B\xf6\x02\n" +
-	"\x04main\x12\xed\x02INSERT INTO @module.Organization SET slug = :slug, name = :name, kind = :kind RETURNING id AS organization.id,           slug AS organization.slug,           name AS organization.name,           kind AS organization.kind,           created_at AS organization.created_at,           deleted_at AS organization.deleted_at,           ended_key AS organization.ended_key\x8a\xf5\x18\x0eorg_membership\x12\xf9\x06\n" +
+	"created_at\x12!$response.organization.created_at\xf2\xf3\x18\xc7\x03B\xc4\x03\n" +
+	"\x04main\x12\xbb\x03INSERT INTO @module.Organization SET slug = :slug, name = :name, kind = :kind RETURNING id AS organization.id,           slug AS organization.slug,           name AS organization.name,           kind AS organization.kind,           created_at AS organization.created_at,           deleted_at AS organization.deleted_at,           ?feature(org_suspension) suspended_at AS organization.suspended_at,           ended_key AS organization.ended_key\x8a\xf5\x18\x0eorg_membership\x12\xf9\x06\n" +
 	"\x10AddOrgMembership\x12%.w17.contrib.auth.AddOrgMembershipReq\x1a&.w17.contrib.auth.AddOrgMembershipResp\"\x95\x06\x9a\xbd\x18\xe3\x01\n" +
 	"\x12OrgMembershipAdded\x12\xcc\x01\n" +
 	"(\n" +
@@ -6803,9 +6928,12 @@ const file_mutations_auth_mutation_proto_rawDesc = "" +
 	"\x0eBindOrgHostRow\x12#.w17.contrib.auth.BindOrgHostRowReq\x1a$.w17.contrib.auth.BindOrgHostRowResp\"\x82\x01\xf2\xf3\x18qBo\n" +
 	"\x04main\x12gINSERT INTO @module.OrgHost SET host = :host, org_id = :org_id, bound_by = :bound_by RETURNING id AS id\x8a\xf5\x18\torg_hosts\x12\x85\x02\n" +
 	"\rEndOrgHostRow\x12\".w17.contrib.auth.EndOrgHostRowReq\x1a#.w17.contrib.auth.EndOrgHostRowResp\"\xaa\x01\xf2\xf3\x18\x98\x01B\x95\x01\n" +
-	"\x04main\x12\x8c\x01UPDATE @module.OrgHost SET ended_at = NOW(), ended_by = :ended_by, ended_key = id WHERE host = :host AND ended_at IS NULL RETURNING id AS id\x8a\xf5\x18\torg_hosts\x12\xd1\x02\n" +
-	"\x15SetOrgSignUpPolicyRow\x12*.w17.contrib.auth.SetOrgSignUpPolicyRowReq\x1a+.w17.contrib.auth.SetOrgSignUpPolicyRowResp\"\xde\x01\xf2\xf3\x18\xcb\x01B\xc8\x01\n" +
-	"\x04main\x12\xbf\x01INSERT INTO @module.OrgSignUpPolicy SET org_id = :org_id, kind = :kind, open = :open, role = :role, set_by = :set_by, ?feature(product_roles) product_roles = :product_roles RETURNING id AS id\x8a\xf5\x18\n" +
+	"\x04main\x12\x8c\x01UPDATE @module.OrgHost SET ended_at = NOW(), ended_by = :ended_by, ended_key = id WHERE host = :host AND ended_at IS NULL RETURNING id AS id\x8a\xf5\x18\torg_hosts\x12\xf1\x02\n" +
+	"\x15SetOrgSignUpPolicyRow\x12*.w17.contrib.auth.SetOrgSignUpPolicyRowReq\x1a+.w17.contrib.auth.SetOrgSignUpPolicyRowResp\"\xfe\x01\xf2\xf3\x18\xeb\x01B\xe8\x01\n" +
+	"\x04main\x12\xdf\x01INSERT INTO @module.OrgSignUpPolicy SET org_id = :org_id, kind = :kind, open = :open, role = :role, set_by = :set_by, role_snapshot = :role_snapshot, ?feature(product_roles) product_roles = :product_roles RETURNING id AS id\x8a\xf5\x18\n" +
+	"org_signup\x12\xe2\x02\n" +
+	"\x1dPinOrgSignUpPolicySnapshotRow\x122.w17.contrib.auth.PinOrgSignUpPolicySnapshotRowReq\x1a3.w17.contrib.auth.PinOrgSignUpPolicySnapshotRowResp\"\xd7\x01\xf2\xf3\x18\xc4\x01B\xc1\x01\n" +
+	"\x04main\x12\xb8\x01UPDATE @module.OrgSignUpPolicy SET role_snapshot = :role_snapshot WHERE org_id = :org_id AND kind = :kind AND ended_at IS NULL AND open = TRUE AND role_snapshot = '' RETURNING id AS id\x8a\xf5\x18\n" +
 	"org_signup\x12\xbb\x02\n" +
 	"\x15EndOrgSignUpPolicyRow\x12*.w17.contrib.auth.EndOrgSignUpPolicyRowReq\x1a+.w17.contrib.auth.EndOrgSignUpPolicyRowResp\"\xc8\x01\xf2\xf3\x18\xb5\x01B\xb2\x01\n" +
 	"\x04main\x12\xa9\x01UPDATE @module.OrgSignUpPolicy SET ended_at = NOW(), ended_by = :ended_by, ended_key = id WHERE org_id = :org_id AND kind = :kind AND ended_at IS NULL RETURNING id AS id\x8a\xf5\x18\n" +
@@ -6824,172 +6952,174 @@ func file_mutations_auth_mutation_proto_rawDescGZIP() []byte {
 	return file_mutations_auth_mutation_proto_rawDescData
 }
 
-var file_mutations_auth_mutation_proto_msgTypes = make([]protoimpl.MessageInfo, 104)
+var file_mutations_auth_mutation_proto_msgTypes = make([]protoimpl.MessageInfo, 106)
 var file_mutations_auth_mutation_proto_goTypes = []any{
-	(*CreateUserReq)(nil),                  // 0: w17.contrib.auth.CreateUserReq
-	(*CreateUserResp)(nil),                 // 1: w17.contrib.auth.CreateUserResp
-	(*IssueTokenReq)(nil),                  // 2: w17.contrib.auth.IssueTokenReq
-	(*IssueTokenResp)(nil),                 // 3: w17.contrib.auth.IssueTokenResp
-	(*RevokeTokenReq)(nil),                 // 4: w17.contrib.auth.RevokeTokenReq
-	(*UpgradeTokenHashReq)(nil),            // 5: w17.contrib.auth.UpgradeTokenHashReq
-	(*UpgradeTokenHashResp)(nil),           // 6: w17.contrib.auth.UpgradeTokenHashResp
-	(*TouchTokenLastUsedReq)(nil),          // 7: w17.contrib.auth.TouchTokenLastUsedReq
-	(*TouchTokenLastUsedResp)(nil),         // 8: w17.contrib.auth.TouchTokenLastUsedResp
-	(*RevokeTokenResp)(nil),                // 9: w17.contrib.auth.RevokeTokenResp
-	(*RevokeSessionTokenReq)(nil),          // 10: w17.contrib.auth.RevokeSessionTokenReq
-	(*RevokeSessionTokenResp)(nil),         // 11: w17.contrib.auth.RevokeSessionTokenResp
-	(*IssueApiTokenReq)(nil),               // 12: w17.contrib.auth.IssueApiTokenReq
-	(*IssueApiTokenResp)(nil),              // 13: w17.contrib.auth.IssueApiTokenResp
-	(*AddTokenPermissionReq)(nil),          // 14: w17.contrib.auth.AddTokenPermissionReq
-	(*AddTokenPermissionResp)(nil),         // 15: w17.contrib.auth.AddTokenPermissionResp
-	(*MarkApiTokenRevokedReq)(nil),         // 16: w17.contrib.auth.MarkApiTokenRevokedReq
-	(*MarkApiTokenRevokedResp)(nil),        // 17: w17.contrib.auth.MarkApiTokenRevokedResp
-	(*UpdateUserPasswordReq)(nil),          // 18: w17.contrib.auth.UpdateUserPasswordReq
-	(*UpdateUserPasswordResp)(nil),         // 19: w17.contrib.auth.UpdateUserPasswordResp
-	(*RehashUserPasswordReq)(nil),          // 20: w17.contrib.auth.RehashUserPasswordReq
-	(*RehashUserPasswordResp)(nil),         // 21: w17.contrib.auth.RehashUserPasswordResp
-	(*RegisterDeviceReq)(nil),              // 22: w17.contrib.auth.RegisterDeviceReq
-	(*RegisterDeviceResp)(nil),             // 23: w17.contrib.auth.RegisterDeviceResp
-	(*CountSignInAttemptReq)(nil),          // 24: w17.contrib.auth.CountSignInAttemptReq
-	(*CountSignInAttemptResp)(nil),         // 25: w17.contrib.auth.CountSignInAttemptResp
-	(*CountDeviceSignInAttemptReq)(nil),    // 26: w17.contrib.auth.CountDeviceSignInAttemptReq
-	(*CountDeviceSignInAttemptResp)(nil),   // 27: w17.contrib.auth.CountDeviceSignInAttemptResp
-	(*ResetSignInAttemptsReq)(nil),         // 28: w17.contrib.auth.ResetSignInAttemptsReq
-	(*ResetSignInAttemptsResp)(nil),        // 29: w17.contrib.auth.ResetSignInAttemptsResp
-	(*RecordSignInEventReq)(nil),           // 30: w17.contrib.auth.RecordSignInEventReq
-	(*RecordSignInEventResp)(nil),          // 31: w17.contrib.auth.RecordSignInEventResp
-	(*TrustDeviceReq)(nil),                 // 32: w17.contrib.auth.TrustDeviceReq
-	(*TrustDeviceResp)(nil),                // 33: w17.contrib.auth.TrustDeviceResp
-	(*RevokeDeviceTokensReq)(nil),          // 34: w17.contrib.auth.RevokeDeviceTokensReq
-	(*RevokeDeviceTokensResp)(nil),         // 35: w17.contrib.auth.RevokeDeviceTokensResp
-	(*RevokeApprovedApiTokensReq)(nil),     // 36: w17.contrib.auth.RevokeApprovedApiTokensReq
-	(*RevokeApprovedApiTokensResp)(nil),    // 37: w17.contrib.auth.RevokeApprovedApiTokensResp
-	(*MarkDeviceRevokedReq)(nil),           // 38: w17.contrib.auth.MarkDeviceRevokedReq
-	(*MarkDeviceRevokedResp)(nil),          // 39: w17.contrib.auth.MarkDeviceRevokedResp
-	(*CreateRoleReq)(nil),                  // 40: w17.contrib.auth.CreateRoleReq
-	(*CreateRoleResp)(nil),                 // 41: w17.contrib.auth.CreateRoleResp
-	(*DeleteRoleReq)(nil),                  // 42: w17.contrib.auth.DeleteRoleReq
-	(*DeleteRoleResp)(nil),                 // 43: w17.contrib.auth.DeleteRoleResp
-	(*UpdateRoleReq)(nil),                  // 44: w17.contrib.auth.UpdateRoleReq
-	(*UpdateRoleResp)(nil),                 // 45: w17.contrib.auth.UpdateRoleResp
-	(*AssignRoleToUserReq)(nil),            // 46: w17.contrib.auth.AssignRoleToUserReq
-	(*AssignRoleToUserResp)(nil),           // 47: w17.contrib.auth.AssignRoleToUserResp
-	(*RevokeRoleFromUserReq)(nil),          // 48: w17.contrib.auth.RevokeRoleFromUserReq
-	(*RevokeRoleFromUserResp)(nil),         // 49: w17.contrib.auth.RevokeRoleFromUserResp
-	(*AddPermissionToRoleReq)(nil),         // 50: w17.contrib.auth.AddPermissionToRoleReq
-	(*AddPermissionToRoleResp)(nil),        // 51: w17.contrib.auth.AddPermissionToRoleResp
-	(*RemovePermissionFromRoleReq)(nil),    // 52: w17.contrib.auth.RemovePermissionFromRoleReq
-	(*RemovePermissionFromRoleResp)(nil),   // 53: w17.contrib.auth.RemovePermissionFromRoleResp
-	(*ClaimBootstrapAdminReq)(nil),         // 54: w17.contrib.auth.ClaimBootstrapAdminReq
-	(*ClaimBootstrapAdminResp)(nil),        // 55: w17.contrib.auth.ClaimBootstrapAdminResp
-	(*CreateOrganizationReq)(nil),          // 56: w17.contrib.auth.CreateOrganizationReq
-	(*CreateOrganizationResp)(nil),         // 57: w17.contrib.auth.CreateOrganizationResp
-	(*AddOrgMembershipReq)(nil),            // 58: w17.contrib.auth.AddOrgMembershipReq
-	(*AddOrgMembershipResp)(nil),           // 59: w17.contrib.auth.AddOrgMembershipResp
-	(*DeleteOrganizationReq)(nil),          // 60: w17.contrib.auth.DeleteOrganizationReq
-	(*DeleteOrganizationResp)(nil),         // 61: w17.contrib.auth.DeleteOrganizationResp
-	(*MarkOrgMembershipRemovedReq)(nil),    // 62: w17.contrib.auth.MarkOrgMembershipRemovedReq
-	(*MarkOrgMembershipRemovedResp)(nil),   // 63: w17.contrib.auth.MarkOrgMembershipRemovedResp
-	(*UpdateOrganizationReq)(nil),          // 64: w17.contrib.auth.UpdateOrganizationReq
-	(*UpdateOrganizationResp)(nil),         // 65: w17.contrib.auth.UpdateOrganizationResp
-	(*UpdateOrgMembershipReq)(nil),         // 66: w17.contrib.auth.UpdateOrgMembershipReq
-	(*UpdateOrgMembershipResp)(nil),        // 67: w17.contrib.auth.UpdateOrgMembershipResp
-	(*CreateOAuthClientReq)(nil),           // 68: w17.contrib.auth.CreateOAuthClientReq
-	(*CreateOAuthClientResp)(nil),          // 69: w17.contrib.auth.CreateOAuthClientResp
-	(*RefreshOAuthClientMetadataReq)(nil),  // 70: w17.contrib.auth.RefreshOAuthClientMetadataReq
-	(*RefreshOAuthClientMetadataResp)(nil), // 71: w17.contrib.auth.RefreshOAuthClientMetadataResp
-	(*CreateOAuthAuthorizationReq)(nil),    // 72: w17.contrib.auth.CreateOAuthAuthorizationReq
-	(*CreateOAuthAuthorizationResp)(nil),   // 73: w17.contrib.auth.CreateOAuthAuthorizationResp
-	(*DecideOAuthAuthorizationReq)(nil),    // 74: w17.contrib.auth.DecideOAuthAuthorizationReq
-	(*DecideOAuthAuthorizationResp)(nil),   // 75: w17.contrib.auth.DecideOAuthAuthorizationResp
-	(*ConsumeOAuthCodeReq)(nil),            // 76: w17.contrib.auth.ConsumeOAuthCodeReq
-	(*ConsumeOAuthCodeResp)(nil),           // 77: w17.contrib.auth.ConsumeOAuthCodeResp
-	(*CreateOAuthGrantReq)(nil),            // 78: w17.contrib.auth.CreateOAuthGrantReq
-	(*CreateOAuthGrantResp)(nil),           // 79: w17.contrib.auth.CreateOAuthGrantResp
-	(*CreateOAuthRefreshTokenReq)(nil),     // 80: w17.contrib.auth.CreateOAuthRefreshTokenReq
-	(*CreateOAuthRefreshTokenResp)(nil),    // 81: w17.contrib.auth.CreateOAuthRefreshTokenResp
-	(*UseOAuthRefreshTokenReq)(nil),        // 82: w17.contrib.auth.UseOAuthRefreshTokenReq
-	(*UseOAuthRefreshTokenResp)(nil),       // 83: w17.contrib.auth.UseOAuthRefreshTokenResp
-	(*LinkOAuthSessionReq)(nil),            // 84: w17.contrib.auth.LinkOAuthSessionReq
-	(*LinkOAuthSessionResp)(nil),           // 85: w17.contrib.auth.LinkOAuthSessionResp
-	(*RevokeOAuthCodeSessionReq)(nil),      // 86: w17.contrib.auth.RevokeOAuthCodeSessionReq
-	(*RevokeOAuthCodeSessionResp)(nil),     // 87: w17.contrib.auth.RevokeOAuthCodeSessionResp
-	(*TouchOAuthGrantReq)(nil),             // 88: w17.contrib.auth.TouchOAuthGrantReq
-	(*TouchOAuthGrantResp)(nil),            // 89: w17.contrib.auth.TouchOAuthGrantResp
-	(*RevokeOAuthGrantReq)(nil),            // 90: w17.contrib.auth.RevokeOAuthGrantReq
-	(*RevokeOAuthGrantResp)(nil),           // 91: w17.contrib.auth.RevokeOAuthGrantResp
-	(*RevokeUserOAuthGrantsReq)(nil),       // 92: w17.contrib.auth.RevokeUserOAuthGrantsReq
-	(*RevokeUserOAuthGrantsResp)(nil),      // 93: w17.contrib.auth.RevokeUserOAuthGrantsResp
-	(*IssueOAuthAccessTokenReq)(nil),       // 94: w17.contrib.auth.IssueOAuthAccessTokenReq
-	(*IssueOAuthAccessTokenResp)(nil),      // 95: w17.contrib.auth.IssueOAuthAccessTokenResp
-	(*SetOrgSignUpPolicyRowReq)(nil),       // 96: w17.contrib.auth.SetOrgSignUpPolicyRowReq
-	(*SetOrgSignUpPolicyRowResp)(nil),      // 97: w17.contrib.auth.SetOrgSignUpPolicyRowResp
-	(*EndOrgSignUpPolicyRowReq)(nil),       // 98: w17.contrib.auth.EndOrgSignUpPolicyRowReq
-	(*EndOrgSignUpPolicyRowResp)(nil),      // 99: w17.contrib.auth.EndOrgSignUpPolicyRowResp
-	(*BindOrgHostRowReq)(nil),              // 100: w17.contrib.auth.BindOrgHostRowReq
-	(*BindOrgHostRowResp)(nil),             // 101: w17.contrib.auth.BindOrgHostRowResp
-	(*EndOrgHostRowReq)(nil),               // 102: w17.contrib.auth.EndOrgHostRowReq
-	(*EndOrgHostRowResp)(nil),              // 103: w17.contrib.auth.EndOrgHostRowResp
-	(*User)(nil),                           // 104: w17.contrib.auth.User
-	(*timestamppb.Timestamp)(nil),          // 105: google.protobuf.Timestamp
-	(*UserToken)(nil),                      // 106: w17.contrib.auth.UserToken
-	(TokenType)(0),                         // 107: w17.contrib.auth.TokenType
-	(*TokenPermission)(nil),                // 108: w17.contrib.auth.TokenPermission
-	(*Device)(nil),                         // 109: w17.contrib.auth.Device
-	(SignInMethod)(0),                      // 110: w17.contrib.auth.SignInMethod
-	(SignInOutcome)(0),                     // 111: w17.contrib.auth.SignInOutcome
-	(*Role)(nil),                           // 112: w17.contrib.auth.Role
-	(*UserRole)(nil),                       // 113: w17.contrib.auth.UserRole
-	(*RolePermission)(nil),                 // 114: w17.contrib.auth.RolePermission
-	(*Organization)(nil),                   // 115: w17.contrib.auth.Organization
-	(*OrgMembership)(nil),                  // 116: w17.contrib.auth.OrgMembership
-	(OAuthClientKind)(0),                   // 117: w17.contrib.auth.OAuthClientKind
-	(OAuthGrantKind)(0),                    // 118: w17.contrib.auth.OAuthGrantKind
-	(OAuthDecision)(0),                     // 119: w17.contrib.auth.OAuthDecision
-	(RevokeReason)(0),                      // 120: w17.contrib.auth.RevokeReason
+	(*CreateUserReq)(nil),                     // 0: w17.contrib.auth.CreateUserReq
+	(*CreateUserResp)(nil),                    // 1: w17.contrib.auth.CreateUserResp
+	(*IssueTokenReq)(nil),                     // 2: w17.contrib.auth.IssueTokenReq
+	(*IssueTokenResp)(nil),                    // 3: w17.contrib.auth.IssueTokenResp
+	(*RevokeTokenReq)(nil),                    // 4: w17.contrib.auth.RevokeTokenReq
+	(*UpgradeTokenHashReq)(nil),               // 5: w17.contrib.auth.UpgradeTokenHashReq
+	(*UpgradeTokenHashResp)(nil),              // 6: w17.contrib.auth.UpgradeTokenHashResp
+	(*TouchTokenLastUsedReq)(nil),             // 7: w17.contrib.auth.TouchTokenLastUsedReq
+	(*TouchTokenLastUsedResp)(nil),            // 8: w17.contrib.auth.TouchTokenLastUsedResp
+	(*RevokeTokenResp)(nil),                   // 9: w17.contrib.auth.RevokeTokenResp
+	(*RevokeSessionTokenReq)(nil),             // 10: w17.contrib.auth.RevokeSessionTokenReq
+	(*RevokeSessionTokenResp)(nil),            // 11: w17.contrib.auth.RevokeSessionTokenResp
+	(*IssueApiTokenReq)(nil),                  // 12: w17.contrib.auth.IssueApiTokenReq
+	(*IssueApiTokenResp)(nil),                 // 13: w17.contrib.auth.IssueApiTokenResp
+	(*AddTokenPermissionReq)(nil),             // 14: w17.contrib.auth.AddTokenPermissionReq
+	(*AddTokenPermissionResp)(nil),            // 15: w17.contrib.auth.AddTokenPermissionResp
+	(*MarkApiTokenRevokedReq)(nil),            // 16: w17.contrib.auth.MarkApiTokenRevokedReq
+	(*MarkApiTokenRevokedResp)(nil),           // 17: w17.contrib.auth.MarkApiTokenRevokedResp
+	(*UpdateUserPasswordReq)(nil),             // 18: w17.contrib.auth.UpdateUserPasswordReq
+	(*UpdateUserPasswordResp)(nil),            // 19: w17.contrib.auth.UpdateUserPasswordResp
+	(*RehashUserPasswordReq)(nil),             // 20: w17.contrib.auth.RehashUserPasswordReq
+	(*RehashUserPasswordResp)(nil),            // 21: w17.contrib.auth.RehashUserPasswordResp
+	(*RegisterDeviceReq)(nil),                 // 22: w17.contrib.auth.RegisterDeviceReq
+	(*RegisterDeviceResp)(nil),                // 23: w17.contrib.auth.RegisterDeviceResp
+	(*CountSignInAttemptReq)(nil),             // 24: w17.contrib.auth.CountSignInAttemptReq
+	(*CountSignInAttemptResp)(nil),            // 25: w17.contrib.auth.CountSignInAttemptResp
+	(*CountDeviceSignInAttemptReq)(nil),       // 26: w17.contrib.auth.CountDeviceSignInAttemptReq
+	(*CountDeviceSignInAttemptResp)(nil),      // 27: w17.contrib.auth.CountDeviceSignInAttemptResp
+	(*ResetSignInAttemptsReq)(nil),            // 28: w17.contrib.auth.ResetSignInAttemptsReq
+	(*ResetSignInAttemptsResp)(nil),           // 29: w17.contrib.auth.ResetSignInAttemptsResp
+	(*RecordSignInEventReq)(nil),              // 30: w17.contrib.auth.RecordSignInEventReq
+	(*RecordSignInEventResp)(nil),             // 31: w17.contrib.auth.RecordSignInEventResp
+	(*TrustDeviceReq)(nil),                    // 32: w17.contrib.auth.TrustDeviceReq
+	(*TrustDeviceResp)(nil),                   // 33: w17.contrib.auth.TrustDeviceResp
+	(*RevokeDeviceTokensReq)(nil),             // 34: w17.contrib.auth.RevokeDeviceTokensReq
+	(*RevokeDeviceTokensResp)(nil),            // 35: w17.contrib.auth.RevokeDeviceTokensResp
+	(*RevokeApprovedApiTokensReq)(nil),        // 36: w17.contrib.auth.RevokeApprovedApiTokensReq
+	(*RevokeApprovedApiTokensResp)(nil),       // 37: w17.contrib.auth.RevokeApprovedApiTokensResp
+	(*MarkDeviceRevokedReq)(nil),              // 38: w17.contrib.auth.MarkDeviceRevokedReq
+	(*MarkDeviceRevokedResp)(nil),             // 39: w17.contrib.auth.MarkDeviceRevokedResp
+	(*CreateRoleReq)(nil),                     // 40: w17.contrib.auth.CreateRoleReq
+	(*CreateRoleResp)(nil),                    // 41: w17.contrib.auth.CreateRoleResp
+	(*DeleteRoleReq)(nil),                     // 42: w17.contrib.auth.DeleteRoleReq
+	(*DeleteRoleResp)(nil),                    // 43: w17.contrib.auth.DeleteRoleResp
+	(*UpdateRoleReq)(nil),                     // 44: w17.contrib.auth.UpdateRoleReq
+	(*UpdateRoleResp)(nil),                    // 45: w17.contrib.auth.UpdateRoleResp
+	(*AssignRoleToUserReq)(nil),               // 46: w17.contrib.auth.AssignRoleToUserReq
+	(*AssignRoleToUserResp)(nil),              // 47: w17.contrib.auth.AssignRoleToUserResp
+	(*RevokeRoleFromUserReq)(nil),             // 48: w17.contrib.auth.RevokeRoleFromUserReq
+	(*RevokeRoleFromUserResp)(nil),            // 49: w17.contrib.auth.RevokeRoleFromUserResp
+	(*AddPermissionToRoleReq)(nil),            // 50: w17.contrib.auth.AddPermissionToRoleReq
+	(*AddPermissionToRoleResp)(nil),           // 51: w17.contrib.auth.AddPermissionToRoleResp
+	(*RemovePermissionFromRoleReq)(nil),       // 52: w17.contrib.auth.RemovePermissionFromRoleReq
+	(*RemovePermissionFromRoleResp)(nil),      // 53: w17.contrib.auth.RemovePermissionFromRoleResp
+	(*ClaimBootstrapAdminReq)(nil),            // 54: w17.contrib.auth.ClaimBootstrapAdminReq
+	(*ClaimBootstrapAdminResp)(nil),           // 55: w17.contrib.auth.ClaimBootstrapAdminResp
+	(*CreateOrganizationReq)(nil),             // 56: w17.contrib.auth.CreateOrganizationReq
+	(*CreateOrganizationResp)(nil),            // 57: w17.contrib.auth.CreateOrganizationResp
+	(*AddOrgMembershipReq)(nil),               // 58: w17.contrib.auth.AddOrgMembershipReq
+	(*AddOrgMembershipResp)(nil),              // 59: w17.contrib.auth.AddOrgMembershipResp
+	(*DeleteOrganizationReq)(nil),             // 60: w17.contrib.auth.DeleteOrganizationReq
+	(*DeleteOrganizationResp)(nil),            // 61: w17.contrib.auth.DeleteOrganizationResp
+	(*MarkOrgMembershipRemovedReq)(nil),       // 62: w17.contrib.auth.MarkOrgMembershipRemovedReq
+	(*MarkOrgMembershipRemovedResp)(nil),      // 63: w17.contrib.auth.MarkOrgMembershipRemovedResp
+	(*UpdateOrganizationReq)(nil),             // 64: w17.contrib.auth.UpdateOrganizationReq
+	(*UpdateOrganizationResp)(nil),            // 65: w17.contrib.auth.UpdateOrganizationResp
+	(*UpdateOrgMembershipReq)(nil),            // 66: w17.contrib.auth.UpdateOrgMembershipReq
+	(*UpdateOrgMembershipResp)(nil),           // 67: w17.contrib.auth.UpdateOrgMembershipResp
+	(*CreateOAuthClientReq)(nil),              // 68: w17.contrib.auth.CreateOAuthClientReq
+	(*CreateOAuthClientResp)(nil),             // 69: w17.contrib.auth.CreateOAuthClientResp
+	(*RefreshOAuthClientMetadataReq)(nil),     // 70: w17.contrib.auth.RefreshOAuthClientMetadataReq
+	(*RefreshOAuthClientMetadataResp)(nil),    // 71: w17.contrib.auth.RefreshOAuthClientMetadataResp
+	(*CreateOAuthAuthorizationReq)(nil),       // 72: w17.contrib.auth.CreateOAuthAuthorizationReq
+	(*CreateOAuthAuthorizationResp)(nil),      // 73: w17.contrib.auth.CreateOAuthAuthorizationResp
+	(*DecideOAuthAuthorizationReq)(nil),       // 74: w17.contrib.auth.DecideOAuthAuthorizationReq
+	(*DecideOAuthAuthorizationResp)(nil),      // 75: w17.contrib.auth.DecideOAuthAuthorizationResp
+	(*ConsumeOAuthCodeReq)(nil),               // 76: w17.contrib.auth.ConsumeOAuthCodeReq
+	(*ConsumeOAuthCodeResp)(nil),              // 77: w17.contrib.auth.ConsumeOAuthCodeResp
+	(*CreateOAuthGrantReq)(nil),               // 78: w17.contrib.auth.CreateOAuthGrantReq
+	(*CreateOAuthGrantResp)(nil),              // 79: w17.contrib.auth.CreateOAuthGrantResp
+	(*CreateOAuthRefreshTokenReq)(nil),        // 80: w17.contrib.auth.CreateOAuthRefreshTokenReq
+	(*CreateOAuthRefreshTokenResp)(nil),       // 81: w17.contrib.auth.CreateOAuthRefreshTokenResp
+	(*UseOAuthRefreshTokenReq)(nil),           // 82: w17.contrib.auth.UseOAuthRefreshTokenReq
+	(*UseOAuthRefreshTokenResp)(nil),          // 83: w17.contrib.auth.UseOAuthRefreshTokenResp
+	(*LinkOAuthSessionReq)(nil),               // 84: w17.contrib.auth.LinkOAuthSessionReq
+	(*LinkOAuthSessionResp)(nil),              // 85: w17.contrib.auth.LinkOAuthSessionResp
+	(*RevokeOAuthCodeSessionReq)(nil),         // 86: w17.contrib.auth.RevokeOAuthCodeSessionReq
+	(*RevokeOAuthCodeSessionResp)(nil),        // 87: w17.contrib.auth.RevokeOAuthCodeSessionResp
+	(*TouchOAuthGrantReq)(nil),                // 88: w17.contrib.auth.TouchOAuthGrantReq
+	(*TouchOAuthGrantResp)(nil),               // 89: w17.contrib.auth.TouchOAuthGrantResp
+	(*RevokeOAuthGrantReq)(nil),               // 90: w17.contrib.auth.RevokeOAuthGrantReq
+	(*RevokeOAuthGrantResp)(nil),              // 91: w17.contrib.auth.RevokeOAuthGrantResp
+	(*RevokeUserOAuthGrantsReq)(nil),          // 92: w17.contrib.auth.RevokeUserOAuthGrantsReq
+	(*RevokeUserOAuthGrantsResp)(nil),         // 93: w17.contrib.auth.RevokeUserOAuthGrantsResp
+	(*IssueOAuthAccessTokenReq)(nil),          // 94: w17.contrib.auth.IssueOAuthAccessTokenReq
+	(*IssueOAuthAccessTokenResp)(nil),         // 95: w17.contrib.auth.IssueOAuthAccessTokenResp
+	(*SetOrgSignUpPolicyRowReq)(nil),          // 96: w17.contrib.auth.SetOrgSignUpPolicyRowReq
+	(*SetOrgSignUpPolicyRowResp)(nil),         // 97: w17.contrib.auth.SetOrgSignUpPolicyRowResp
+	(*PinOrgSignUpPolicySnapshotRowReq)(nil),  // 98: w17.contrib.auth.PinOrgSignUpPolicySnapshotRowReq
+	(*PinOrgSignUpPolicySnapshotRowResp)(nil), // 99: w17.contrib.auth.PinOrgSignUpPolicySnapshotRowResp
+	(*EndOrgSignUpPolicyRowReq)(nil),          // 100: w17.contrib.auth.EndOrgSignUpPolicyRowReq
+	(*EndOrgSignUpPolicyRowResp)(nil),         // 101: w17.contrib.auth.EndOrgSignUpPolicyRowResp
+	(*BindOrgHostRowReq)(nil),                 // 102: w17.contrib.auth.BindOrgHostRowReq
+	(*BindOrgHostRowResp)(nil),                // 103: w17.contrib.auth.BindOrgHostRowResp
+	(*EndOrgHostRowReq)(nil),                  // 104: w17.contrib.auth.EndOrgHostRowReq
+	(*EndOrgHostRowResp)(nil),                 // 105: w17.contrib.auth.EndOrgHostRowResp
+	(*User)(nil),                              // 106: w17.contrib.auth.User
+	(*timestamppb.Timestamp)(nil),             // 107: google.protobuf.Timestamp
+	(*UserToken)(nil),                         // 108: w17.contrib.auth.UserToken
+	(TokenType)(0),                            // 109: w17.contrib.auth.TokenType
+	(*TokenPermission)(nil),                   // 110: w17.contrib.auth.TokenPermission
+	(*Device)(nil),                            // 111: w17.contrib.auth.Device
+	(SignInMethod)(0),                         // 112: w17.contrib.auth.SignInMethod
+	(SignInOutcome)(0),                        // 113: w17.contrib.auth.SignInOutcome
+	(*Role)(nil),                              // 114: w17.contrib.auth.Role
+	(*UserRole)(nil),                          // 115: w17.contrib.auth.UserRole
+	(*RolePermission)(nil),                    // 116: w17.contrib.auth.RolePermission
+	(*Organization)(nil),                      // 117: w17.contrib.auth.Organization
+	(*OrgMembership)(nil),                     // 118: w17.contrib.auth.OrgMembership
+	(OAuthClientKind)(0),                      // 119: w17.contrib.auth.OAuthClientKind
+	(OAuthGrantKind)(0),                       // 120: w17.contrib.auth.OAuthGrantKind
+	(OAuthDecision)(0),                        // 121: w17.contrib.auth.OAuthDecision
+	(RevokeReason)(0),                         // 122: w17.contrib.auth.RevokeReason
 }
 var file_mutations_auth_mutation_proto_depIdxs = []int32{
-	104, // 0: w17.contrib.auth.CreateUserResp.user:type_name -> w17.contrib.auth.User
-	105, // 1: w17.contrib.auth.IssueTokenReq.expires_at:type_name -> google.protobuf.Timestamp
-	106, // 2: w17.contrib.auth.IssueTokenResp.token:type_name -> w17.contrib.auth.UserToken
-	105, // 3: w17.contrib.auth.TouchTokenLastUsedReq.cutoff:type_name -> google.protobuf.Timestamp
-	105, // 4: w17.contrib.auth.TouchTokenLastUsedReq.used_at:type_name -> google.protobuf.Timestamp
-	107, // 5: w17.contrib.auth.RevokeSessionTokenReq.token_type:type_name -> w17.contrib.auth.TokenType
-	107, // 6: w17.contrib.auth.IssueApiTokenReq.token_type:type_name -> w17.contrib.auth.TokenType
-	105, // 7: w17.contrib.auth.IssueApiTokenReq.expires_at:type_name -> google.protobuf.Timestamp
-	106, // 8: w17.contrib.auth.IssueApiTokenResp.token:type_name -> w17.contrib.auth.UserToken
-	108, // 9: w17.contrib.auth.AddTokenPermissionResp.token_permission:type_name -> w17.contrib.auth.TokenPermission
-	107, // 10: w17.contrib.auth.MarkApiTokenRevokedReq.token_type:type_name -> w17.contrib.auth.TokenType
-	109, // 11: w17.contrib.auth.RegisterDeviceResp.device:type_name -> w17.contrib.auth.Device
-	105, // 12: w17.contrib.auth.CountSignInAttemptReq.now:type_name -> google.protobuf.Timestamp
-	105, // 13: w17.contrib.auth.CountSignInAttemptReq.cutoff:type_name -> google.protobuf.Timestamp
-	105, // 14: w17.contrib.auth.CountDeviceSignInAttemptReq.now:type_name -> google.protobuf.Timestamp
-	105, // 15: w17.contrib.auth.CountDeviceSignInAttemptReq.cutoff:type_name -> google.protobuf.Timestamp
-	110, // 16: w17.contrib.auth.RecordSignInEventReq.method:type_name -> w17.contrib.auth.SignInMethod
-	111, // 17: w17.contrib.auth.RecordSignInEventReq.outcome:type_name -> w17.contrib.auth.SignInOutcome
-	105, // 18: w17.contrib.auth.TrustDeviceReq.not_revoked_after:type_name -> google.protobuf.Timestamp
-	107, // 19: w17.contrib.auth.RevokeApprovedApiTokensReq.token_type:type_name -> w17.contrib.auth.TokenType
-	112, // 20: w17.contrib.auth.CreateRoleResp.role:type_name -> w17.contrib.auth.Role
-	113, // 21: w17.contrib.auth.AssignRoleToUserResp.user_role:type_name -> w17.contrib.auth.UserRole
-	114, // 22: w17.contrib.auth.AddPermissionToRoleResp.role_permission:type_name -> w17.contrib.auth.RolePermission
-	115, // 23: w17.contrib.auth.CreateOrganizationResp.organization:type_name -> w17.contrib.auth.Organization
-	116, // 24: w17.contrib.auth.AddOrgMembershipResp.membership:type_name -> w17.contrib.auth.OrgMembership
-	117, // 25: w17.contrib.auth.CreateOAuthClientReq.kind:type_name -> w17.contrib.auth.OAuthClientKind
-	105, // 26: w17.contrib.auth.CreateOAuthClientReq.metadata_fetched_at:type_name -> google.protobuf.Timestamp
-	105, // 27: w17.contrib.auth.CreateOAuthClientResp.created_at:type_name -> google.protobuf.Timestamp
-	118, // 28: w17.contrib.auth.CreateOAuthAuthorizationReq.kind:type_name -> w17.contrib.auth.OAuthGrantKind
-	105, // 29: w17.contrib.auth.CreateOAuthAuthorizationReq.expires_at:type_name -> google.protobuf.Timestamp
-	119, // 30: w17.contrib.auth.DecideOAuthAuthorizationReq.decision:type_name -> w17.contrib.auth.OAuthDecision
-	105, // 31: w17.contrib.auth.DecideOAuthAuthorizationReq.session_expires_at:type_name -> google.protobuf.Timestamp
-	105, // 32: w17.contrib.auth.DecideOAuthAuthorizationReq.code_expires_at:type_name -> google.protobuf.Timestamp
-	118, // 33: w17.contrib.auth.ConsumeOAuthCodeResp.kind:type_name -> w17.contrib.auth.OAuthGrantKind
-	105, // 34: w17.contrib.auth.ConsumeOAuthCodeResp.session_expires_at:type_name -> google.protobuf.Timestamp
-	105, // 35: w17.contrib.auth.CreateOAuthGrantReq.expires_at:type_name -> google.protobuf.Timestamp
-	105, // 36: w17.contrib.auth.CreateOAuthGrantResp.created_at:type_name -> google.protobuf.Timestamp
-	105, // 37: w17.contrib.auth.CreateOAuthRefreshTokenReq.expires_at:type_name -> google.protobuf.Timestamp
-	120, // 38: w17.contrib.auth.RevokeOAuthGrantReq.reason:type_name -> w17.contrib.auth.RevokeReason
-	120, // 39: w17.contrib.auth.RevokeUserOAuthGrantsReq.reason:type_name -> w17.contrib.auth.RevokeReason
-	105, // 40: w17.contrib.auth.IssueOAuthAccessTokenReq.expires_at:type_name -> google.protobuf.Timestamp
+	106, // 0: w17.contrib.auth.CreateUserResp.user:type_name -> w17.contrib.auth.User
+	107, // 1: w17.contrib.auth.IssueTokenReq.expires_at:type_name -> google.protobuf.Timestamp
+	108, // 2: w17.contrib.auth.IssueTokenResp.token:type_name -> w17.contrib.auth.UserToken
+	107, // 3: w17.contrib.auth.TouchTokenLastUsedReq.cutoff:type_name -> google.protobuf.Timestamp
+	107, // 4: w17.contrib.auth.TouchTokenLastUsedReq.used_at:type_name -> google.protobuf.Timestamp
+	109, // 5: w17.contrib.auth.RevokeSessionTokenReq.token_type:type_name -> w17.contrib.auth.TokenType
+	109, // 6: w17.contrib.auth.IssueApiTokenReq.token_type:type_name -> w17.contrib.auth.TokenType
+	107, // 7: w17.contrib.auth.IssueApiTokenReq.expires_at:type_name -> google.protobuf.Timestamp
+	108, // 8: w17.contrib.auth.IssueApiTokenResp.token:type_name -> w17.contrib.auth.UserToken
+	110, // 9: w17.contrib.auth.AddTokenPermissionResp.token_permission:type_name -> w17.contrib.auth.TokenPermission
+	109, // 10: w17.contrib.auth.MarkApiTokenRevokedReq.token_type:type_name -> w17.contrib.auth.TokenType
+	111, // 11: w17.contrib.auth.RegisterDeviceResp.device:type_name -> w17.contrib.auth.Device
+	107, // 12: w17.contrib.auth.CountSignInAttemptReq.now:type_name -> google.protobuf.Timestamp
+	107, // 13: w17.contrib.auth.CountSignInAttemptReq.cutoff:type_name -> google.protobuf.Timestamp
+	107, // 14: w17.contrib.auth.CountDeviceSignInAttemptReq.now:type_name -> google.protobuf.Timestamp
+	107, // 15: w17.contrib.auth.CountDeviceSignInAttemptReq.cutoff:type_name -> google.protobuf.Timestamp
+	112, // 16: w17.contrib.auth.RecordSignInEventReq.method:type_name -> w17.contrib.auth.SignInMethod
+	113, // 17: w17.contrib.auth.RecordSignInEventReq.outcome:type_name -> w17.contrib.auth.SignInOutcome
+	107, // 18: w17.contrib.auth.TrustDeviceReq.not_revoked_after:type_name -> google.protobuf.Timestamp
+	109, // 19: w17.contrib.auth.RevokeApprovedApiTokensReq.token_type:type_name -> w17.contrib.auth.TokenType
+	114, // 20: w17.contrib.auth.CreateRoleResp.role:type_name -> w17.contrib.auth.Role
+	115, // 21: w17.contrib.auth.AssignRoleToUserResp.user_role:type_name -> w17.contrib.auth.UserRole
+	116, // 22: w17.contrib.auth.AddPermissionToRoleResp.role_permission:type_name -> w17.contrib.auth.RolePermission
+	117, // 23: w17.contrib.auth.CreateOrganizationResp.organization:type_name -> w17.contrib.auth.Organization
+	118, // 24: w17.contrib.auth.AddOrgMembershipResp.membership:type_name -> w17.contrib.auth.OrgMembership
+	119, // 25: w17.contrib.auth.CreateOAuthClientReq.kind:type_name -> w17.contrib.auth.OAuthClientKind
+	107, // 26: w17.contrib.auth.CreateOAuthClientReq.metadata_fetched_at:type_name -> google.protobuf.Timestamp
+	107, // 27: w17.contrib.auth.CreateOAuthClientResp.created_at:type_name -> google.protobuf.Timestamp
+	120, // 28: w17.contrib.auth.CreateOAuthAuthorizationReq.kind:type_name -> w17.contrib.auth.OAuthGrantKind
+	107, // 29: w17.contrib.auth.CreateOAuthAuthorizationReq.expires_at:type_name -> google.protobuf.Timestamp
+	121, // 30: w17.contrib.auth.DecideOAuthAuthorizationReq.decision:type_name -> w17.contrib.auth.OAuthDecision
+	107, // 31: w17.contrib.auth.DecideOAuthAuthorizationReq.session_expires_at:type_name -> google.protobuf.Timestamp
+	107, // 32: w17.contrib.auth.DecideOAuthAuthorizationReq.code_expires_at:type_name -> google.protobuf.Timestamp
+	120, // 33: w17.contrib.auth.ConsumeOAuthCodeResp.kind:type_name -> w17.contrib.auth.OAuthGrantKind
+	107, // 34: w17.contrib.auth.ConsumeOAuthCodeResp.session_expires_at:type_name -> google.protobuf.Timestamp
+	107, // 35: w17.contrib.auth.CreateOAuthGrantReq.expires_at:type_name -> google.protobuf.Timestamp
+	107, // 36: w17.contrib.auth.CreateOAuthGrantResp.created_at:type_name -> google.protobuf.Timestamp
+	107, // 37: w17.contrib.auth.CreateOAuthRefreshTokenReq.expires_at:type_name -> google.protobuf.Timestamp
+	122, // 38: w17.contrib.auth.RevokeOAuthGrantReq.reason:type_name -> w17.contrib.auth.RevokeReason
+	122, // 39: w17.contrib.auth.RevokeUserOAuthGrantsReq.reason:type_name -> w17.contrib.auth.RevokeReason
+	107, // 40: w17.contrib.auth.IssueOAuthAccessTokenReq.expires_at:type_name -> google.protobuf.Timestamp
 	0,   // 41: w17.contrib.auth.AuthMutation.CreateUser:input_type -> w17.contrib.auth.CreateUserReq
 	2,   // 42: w17.contrib.auth.AuthMutation.IssueToken:input_type -> w17.contrib.auth.IssueTokenReq
 	4,   // 43: w17.contrib.auth.AuthMutation.RevokeToken:input_type -> w17.contrib.auth.RevokeTokenReq
@@ -7038,64 +7168,66 @@ var file_mutations_auth_mutation_proto_depIdxs = []int32{
 	90,  // 86: w17.contrib.auth.AuthMutation.RevokeOAuthGrant:input_type -> w17.contrib.auth.RevokeOAuthGrantReq
 	92,  // 87: w17.contrib.auth.AuthMutation.RevokeUserOAuthGrants:input_type -> w17.contrib.auth.RevokeUserOAuthGrantsReq
 	94,  // 88: w17.contrib.auth.AuthMutation.IssueOAuthAccessToken:input_type -> w17.contrib.auth.IssueOAuthAccessTokenReq
-	100, // 89: w17.contrib.auth.AuthMutation.BindOrgHostRow:input_type -> w17.contrib.auth.BindOrgHostRowReq
-	102, // 90: w17.contrib.auth.AuthMutation.EndOrgHostRow:input_type -> w17.contrib.auth.EndOrgHostRowReq
+	102, // 89: w17.contrib.auth.AuthMutation.BindOrgHostRow:input_type -> w17.contrib.auth.BindOrgHostRowReq
+	104, // 90: w17.contrib.auth.AuthMutation.EndOrgHostRow:input_type -> w17.contrib.auth.EndOrgHostRowReq
 	96,  // 91: w17.contrib.auth.AuthMutation.SetOrgSignUpPolicyRow:input_type -> w17.contrib.auth.SetOrgSignUpPolicyRowReq
-	98,  // 92: w17.contrib.auth.AuthMutation.EndOrgSignUpPolicyRow:input_type -> w17.contrib.auth.EndOrgSignUpPolicyRowReq
-	1,   // 93: w17.contrib.auth.AuthMutation.CreateUser:output_type -> w17.contrib.auth.CreateUserResp
-	3,   // 94: w17.contrib.auth.AuthMutation.IssueToken:output_type -> w17.contrib.auth.IssueTokenResp
-	9,   // 95: w17.contrib.auth.AuthMutation.RevokeToken:output_type -> w17.contrib.auth.RevokeTokenResp
-	6,   // 96: w17.contrib.auth.AuthMutation.UpgradeTokenHash:output_type -> w17.contrib.auth.UpgradeTokenHashResp
-	8,   // 97: w17.contrib.auth.AuthMutation.TouchTokenLastUsed:output_type -> w17.contrib.auth.TouchTokenLastUsedResp
-	11,  // 98: w17.contrib.auth.AuthMutation.RevokeSessionToken:output_type -> w17.contrib.auth.RevokeSessionTokenResp
-	13,  // 99: w17.contrib.auth.AuthMutation.IssueApiToken:output_type -> w17.contrib.auth.IssueApiTokenResp
-	15,  // 100: w17.contrib.auth.AuthMutation.AddTokenPermission:output_type -> w17.contrib.auth.AddTokenPermissionResp
-	17,  // 101: w17.contrib.auth.AuthMutation.MarkApiTokenRevoked:output_type -> w17.contrib.auth.MarkApiTokenRevokedResp
-	37,  // 102: w17.contrib.auth.AuthMutation.RevokeApprovedApiTokens:output_type -> w17.contrib.auth.RevokeApprovedApiTokensResp
-	25,  // 103: w17.contrib.auth.AuthMutation.CountSignInAttempt:output_type -> w17.contrib.auth.CountSignInAttemptResp
-	27,  // 104: w17.contrib.auth.AuthMutation.CountDeviceSignInAttempt:output_type -> w17.contrib.auth.CountDeviceSignInAttemptResp
-	29,  // 105: w17.contrib.auth.AuthMutation.ResetSignInAttempts:output_type -> w17.contrib.auth.ResetSignInAttemptsResp
-	23,  // 106: w17.contrib.auth.AuthMutation.RegisterDevice:output_type -> w17.contrib.auth.RegisterDeviceResp
-	31,  // 107: w17.contrib.auth.AuthMutation.RecordSignInEvent:output_type -> w17.contrib.auth.RecordSignInEventResp
-	33,  // 108: w17.contrib.auth.AuthMutation.TrustDevice:output_type -> w17.contrib.auth.TrustDeviceResp
-	35,  // 109: w17.contrib.auth.AuthMutation.RevokeDeviceTokens:output_type -> w17.contrib.auth.RevokeDeviceTokensResp
-	39,  // 110: w17.contrib.auth.AuthMutation.MarkDeviceRevoked:output_type -> w17.contrib.auth.MarkDeviceRevokedResp
-	41,  // 111: w17.contrib.auth.AuthMutation.CreateRole:output_type -> w17.contrib.auth.CreateRoleResp
-	45,  // 112: w17.contrib.auth.AuthMutation.UpdateRole:output_type -> w17.contrib.auth.UpdateRoleResp
-	43,  // 113: w17.contrib.auth.AuthMutation.DeleteRole:output_type -> w17.contrib.auth.DeleteRoleResp
-	47,  // 114: w17.contrib.auth.AuthMutation.AssignRoleToUser:output_type -> w17.contrib.auth.AssignRoleToUserResp
-	49,  // 115: w17.contrib.auth.AuthMutation.RevokeRoleFromUser:output_type -> w17.contrib.auth.RevokeRoleFromUserResp
-	51,  // 116: w17.contrib.auth.AuthMutation.AddPermissionToRole:output_type -> w17.contrib.auth.AddPermissionToRoleResp
-	53,  // 117: w17.contrib.auth.AuthMutation.RemovePermissionFromRole:output_type -> w17.contrib.auth.RemovePermissionFromRoleResp
-	19,  // 118: w17.contrib.auth.AuthMutation.UpdateUserPassword:output_type -> w17.contrib.auth.UpdateUserPasswordResp
-	21,  // 119: w17.contrib.auth.AuthMutation.RehashUserPassword:output_type -> w17.contrib.auth.RehashUserPasswordResp
-	55,  // 120: w17.contrib.auth.AuthMutation.ClaimBootstrapAdmin:output_type -> w17.contrib.auth.ClaimBootstrapAdminResp
-	57,  // 121: w17.contrib.auth.AuthMutation.CreateOrganization:output_type -> w17.contrib.auth.CreateOrganizationResp
-	59,  // 122: w17.contrib.auth.AuthMutation.AddOrgMembership:output_type -> w17.contrib.auth.AddOrgMembershipResp
-	65,  // 123: w17.contrib.auth.AuthMutation.UpdateOrganization:output_type -> w17.contrib.auth.UpdateOrganizationResp
-	61,  // 124: w17.contrib.auth.AuthMutation.DeleteOrganization:output_type -> w17.contrib.auth.DeleteOrganizationResp
-	67,  // 125: w17.contrib.auth.AuthMutation.UpdateOrgMembership:output_type -> w17.contrib.auth.UpdateOrgMembershipResp
-	63,  // 126: w17.contrib.auth.AuthMutation.MarkOrgMembershipRemoved:output_type -> w17.contrib.auth.MarkOrgMembershipRemovedResp
-	69,  // 127: w17.contrib.auth.AuthMutation.CreateOAuthClient:output_type -> w17.contrib.auth.CreateOAuthClientResp
-	71,  // 128: w17.contrib.auth.AuthMutation.RefreshOAuthClientMetadata:output_type -> w17.contrib.auth.RefreshOAuthClientMetadataResp
-	73,  // 129: w17.contrib.auth.AuthMutation.CreateOAuthAuthorization:output_type -> w17.contrib.auth.CreateOAuthAuthorizationResp
-	75,  // 130: w17.contrib.auth.AuthMutation.DecideOAuthAuthorization:output_type -> w17.contrib.auth.DecideOAuthAuthorizationResp
-	77,  // 131: w17.contrib.auth.AuthMutation.ConsumeOAuthCode:output_type -> w17.contrib.auth.ConsumeOAuthCodeResp
-	79,  // 132: w17.contrib.auth.AuthMutation.CreateOAuthGrant:output_type -> w17.contrib.auth.CreateOAuthGrantResp
-	81,  // 133: w17.contrib.auth.AuthMutation.CreateOAuthRefreshToken:output_type -> w17.contrib.auth.CreateOAuthRefreshTokenResp
-	83,  // 134: w17.contrib.auth.AuthMutation.UseOAuthRefreshToken:output_type -> w17.contrib.auth.UseOAuthRefreshTokenResp
-	85,  // 135: w17.contrib.auth.AuthMutation.LinkOAuthSession:output_type -> w17.contrib.auth.LinkOAuthSessionResp
-	87,  // 136: w17.contrib.auth.AuthMutation.RevokeOAuthCodeSession:output_type -> w17.contrib.auth.RevokeOAuthCodeSessionResp
-	89,  // 137: w17.contrib.auth.AuthMutation.TouchOAuthGrant:output_type -> w17.contrib.auth.TouchOAuthGrantResp
-	91,  // 138: w17.contrib.auth.AuthMutation.RevokeOAuthGrant:output_type -> w17.contrib.auth.RevokeOAuthGrantResp
-	93,  // 139: w17.contrib.auth.AuthMutation.RevokeUserOAuthGrants:output_type -> w17.contrib.auth.RevokeUserOAuthGrantsResp
-	95,  // 140: w17.contrib.auth.AuthMutation.IssueOAuthAccessToken:output_type -> w17.contrib.auth.IssueOAuthAccessTokenResp
-	101, // 141: w17.contrib.auth.AuthMutation.BindOrgHostRow:output_type -> w17.contrib.auth.BindOrgHostRowResp
-	103, // 142: w17.contrib.auth.AuthMutation.EndOrgHostRow:output_type -> w17.contrib.auth.EndOrgHostRowResp
-	97,  // 143: w17.contrib.auth.AuthMutation.SetOrgSignUpPolicyRow:output_type -> w17.contrib.auth.SetOrgSignUpPolicyRowResp
-	99,  // 144: w17.contrib.auth.AuthMutation.EndOrgSignUpPolicyRow:output_type -> w17.contrib.auth.EndOrgSignUpPolicyRowResp
-	93,  // [93:145] is the sub-list for method output_type
-	41,  // [41:93] is the sub-list for method input_type
+	98,  // 92: w17.contrib.auth.AuthMutation.PinOrgSignUpPolicySnapshotRow:input_type -> w17.contrib.auth.PinOrgSignUpPolicySnapshotRowReq
+	100, // 93: w17.contrib.auth.AuthMutation.EndOrgSignUpPolicyRow:input_type -> w17.contrib.auth.EndOrgSignUpPolicyRowReq
+	1,   // 94: w17.contrib.auth.AuthMutation.CreateUser:output_type -> w17.contrib.auth.CreateUserResp
+	3,   // 95: w17.contrib.auth.AuthMutation.IssueToken:output_type -> w17.contrib.auth.IssueTokenResp
+	9,   // 96: w17.contrib.auth.AuthMutation.RevokeToken:output_type -> w17.contrib.auth.RevokeTokenResp
+	6,   // 97: w17.contrib.auth.AuthMutation.UpgradeTokenHash:output_type -> w17.contrib.auth.UpgradeTokenHashResp
+	8,   // 98: w17.contrib.auth.AuthMutation.TouchTokenLastUsed:output_type -> w17.contrib.auth.TouchTokenLastUsedResp
+	11,  // 99: w17.contrib.auth.AuthMutation.RevokeSessionToken:output_type -> w17.contrib.auth.RevokeSessionTokenResp
+	13,  // 100: w17.contrib.auth.AuthMutation.IssueApiToken:output_type -> w17.contrib.auth.IssueApiTokenResp
+	15,  // 101: w17.contrib.auth.AuthMutation.AddTokenPermission:output_type -> w17.contrib.auth.AddTokenPermissionResp
+	17,  // 102: w17.contrib.auth.AuthMutation.MarkApiTokenRevoked:output_type -> w17.contrib.auth.MarkApiTokenRevokedResp
+	37,  // 103: w17.contrib.auth.AuthMutation.RevokeApprovedApiTokens:output_type -> w17.contrib.auth.RevokeApprovedApiTokensResp
+	25,  // 104: w17.contrib.auth.AuthMutation.CountSignInAttempt:output_type -> w17.contrib.auth.CountSignInAttemptResp
+	27,  // 105: w17.contrib.auth.AuthMutation.CountDeviceSignInAttempt:output_type -> w17.contrib.auth.CountDeviceSignInAttemptResp
+	29,  // 106: w17.contrib.auth.AuthMutation.ResetSignInAttempts:output_type -> w17.contrib.auth.ResetSignInAttemptsResp
+	23,  // 107: w17.contrib.auth.AuthMutation.RegisterDevice:output_type -> w17.contrib.auth.RegisterDeviceResp
+	31,  // 108: w17.contrib.auth.AuthMutation.RecordSignInEvent:output_type -> w17.contrib.auth.RecordSignInEventResp
+	33,  // 109: w17.contrib.auth.AuthMutation.TrustDevice:output_type -> w17.contrib.auth.TrustDeviceResp
+	35,  // 110: w17.contrib.auth.AuthMutation.RevokeDeviceTokens:output_type -> w17.contrib.auth.RevokeDeviceTokensResp
+	39,  // 111: w17.contrib.auth.AuthMutation.MarkDeviceRevoked:output_type -> w17.contrib.auth.MarkDeviceRevokedResp
+	41,  // 112: w17.contrib.auth.AuthMutation.CreateRole:output_type -> w17.contrib.auth.CreateRoleResp
+	45,  // 113: w17.contrib.auth.AuthMutation.UpdateRole:output_type -> w17.contrib.auth.UpdateRoleResp
+	43,  // 114: w17.contrib.auth.AuthMutation.DeleteRole:output_type -> w17.contrib.auth.DeleteRoleResp
+	47,  // 115: w17.contrib.auth.AuthMutation.AssignRoleToUser:output_type -> w17.contrib.auth.AssignRoleToUserResp
+	49,  // 116: w17.contrib.auth.AuthMutation.RevokeRoleFromUser:output_type -> w17.contrib.auth.RevokeRoleFromUserResp
+	51,  // 117: w17.contrib.auth.AuthMutation.AddPermissionToRole:output_type -> w17.contrib.auth.AddPermissionToRoleResp
+	53,  // 118: w17.contrib.auth.AuthMutation.RemovePermissionFromRole:output_type -> w17.contrib.auth.RemovePermissionFromRoleResp
+	19,  // 119: w17.contrib.auth.AuthMutation.UpdateUserPassword:output_type -> w17.contrib.auth.UpdateUserPasswordResp
+	21,  // 120: w17.contrib.auth.AuthMutation.RehashUserPassword:output_type -> w17.contrib.auth.RehashUserPasswordResp
+	55,  // 121: w17.contrib.auth.AuthMutation.ClaimBootstrapAdmin:output_type -> w17.contrib.auth.ClaimBootstrapAdminResp
+	57,  // 122: w17.contrib.auth.AuthMutation.CreateOrganization:output_type -> w17.contrib.auth.CreateOrganizationResp
+	59,  // 123: w17.contrib.auth.AuthMutation.AddOrgMembership:output_type -> w17.contrib.auth.AddOrgMembershipResp
+	65,  // 124: w17.contrib.auth.AuthMutation.UpdateOrganization:output_type -> w17.contrib.auth.UpdateOrganizationResp
+	61,  // 125: w17.contrib.auth.AuthMutation.DeleteOrganization:output_type -> w17.contrib.auth.DeleteOrganizationResp
+	67,  // 126: w17.contrib.auth.AuthMutation.UpdateOrgMembership:output_type -> w17.contrib.auth.UpdateOrgMembershipResp
+	63,  // 127: w17.contrib.auth.AuthMutation.MarkOrgMembershipRemoved:output_type -> w17.contrib.auth.MarkOrgMembershipRemovedResp
+	69,  // 128: w17.contrib.auth.AuthMutation.CreateOAuthClient:output_type -> w17.contrib.auth.CreateOAuthClientResp
+	71,  // 129: w17.contrib.auth.AuthMutation.RefreshOAuthClientMetadata:output_type -> w17.contrib.auth.RefreshOAuthClientMetadataResp
+	73,  // 130: w17.contrib.auth.AuthMutation.CreateOAuthAuthorization:output_type -> w17.contrib.auth.CreateOAuthAuthorizationResp
+	75,  // 131: w17.contrib.auth.AuthMutation.DecideOAuthAuthorization:output_type -> w17.contrib.auth.DecideOAuthAuthorizationResp
+	77,  // 132: w17.contrib.auth.AuthMutation.ConsumeOAuthCode:output_type -> w17.contrib.auth.ConsumeOAuthCodeResp
+	79,  // 133: w17.contrib.auth.AuthMutation.CreateOAuthGrant:output_type -> w17.contrib.auth.CreateOAuthGrantResp
+	81,  // 134: w17.contrib.auth.AuthMutation.CreateOAuthRefreshToken:output_type -> w17.contrib.auth.CreateOAuthRefreshTokenResp
+	83,  // 135: w17.contrib.auth.AuthMutation.UseOAuthRefreshToken:output_type -> w17.contrib.auth.UseOAuthRefreshTokenResp
+	85,  // 136: w17.contrib.auth.AuthMutation.LinkOAuthSession:output_type -> w17.contrib.auth.LinkOAuthSessionResp
+	87,  // 137: w17.contrib.auth.AuthMutation.RevokeOAuthCodeSession:output_type -> w17.contrib.auth.RevokeOAuthCodeSessionResp
+	89,  // 138: w17.contrib.auth.AuthMutation.TouchOAuthGrant:output_type -> w17.contrib.auth.TouchOAuthGrantResp
+	91,  // 139: w17.contrib.auth.AuthMutation.RevokeOAuthGrant:output_type -> w17.contrib.auth.RevokeOAuthGrantResp
+	93,  // 140: w17.contrib.auth.AuthMutation.RevokeUserOAuthGrants:output_type -> w17.contrib.auth.RevokeUserOAuthGrantsResp
+	95,  // 141: w17.contrib.auth.AuthMutation.IssueOAuthAccessToken:output_type -> w17.contrib.auth.IssueOAuthAccessTokenResp
+	103, // 142: w17.contrib.auth.AuthMutation.BindOrgHostRow:output_type -> w17.contrib.auth.BindOrgHostRowResp
+	105, // 143: w17.contrib.auth.AuthMutation.EndOrgHostRow:output_type -> w17.contrib.auth.EndOrgHostRowResp
+	97,  // 144: w17.contrib.auth.AuthMutation.SetOrgSignUpPolicyRow:output_type -> w17.contrib.auth.SetOrgSignUpPolicyRowResp
+	99,  // 145: w17.contrib.auth.AuthMutation.PinOrgSignUpPolicySnapshotRow:output_type -> w17.contrib.auth.PinOrgSignUpPolicySnapshotRowResp
+	101, // 146: w17.contrib.auth.AuthMutation.EndOrgSignUpPolicyRow:output_type -> w17.contrib.auth.EndOrgSignUpPolicyRowResp
+	94,  // [94:147] is the sub-list for method output_type
+	41,  // [41:94] is the sub-list for method input_type
 	41,  // [41:41] is the sub-list for extension type_name
 	41,  // [41:41] is the sub-list for extension extendee
 	0,   // [0:41] is the sub-list for field type_name
@@ -7115,7 +7247,7 @@ func file_mutations_auth_mutation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mutations_auth_mutation_proto_rawDesc), len(file_mutations_auth_mutation_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   104,
+			NumMessages:   106,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
@@ -7128,4 +7260,4 @@ func file_mutations_auth_mutation_proto_init() {
 	file_mutations_auth_mutation_proto_depIdxs = nil
 }
 
-// emit-sha256: a871a5a9a48b9c1453f3c3f4a3b277496bc58ccdd6a3118232cb62c8babb5e14
+// emit-sha256: 790205ead30078922d3c8880cb07bf94e05a4ef8bbf3072138b2f20ff6d43984

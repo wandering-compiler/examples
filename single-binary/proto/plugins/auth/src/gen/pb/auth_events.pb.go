@@ -8,8 +8,8 @@
 //
 // Three notifications fire post-mutation: user creation, token
 // issuance, token revocation. Token rotation is consumer-composed
-// (GetUserByToken → DeleteToken → IssueToken) and fires the
-// IssueToken event + the DeleteToken event independently.
+// (GetUserByToken → RevokeToken → IssueToken) and fires only the
+// IssueToken event (RevokeToken emits nothing; see it).
 //
 // Channel reference uses the plugin-internal alias `events`;
 // activation maps the alias to a real project channel. Plugin authors don't bake in a real channel name —
@@ -19,6 +19,14 @@
 // Every id field on every event is a UUID (string carrier) —
 // mirrors the plugin's UUID-native identifier strategy
 // (types/models.proto §"Identifier strategy").
+//
+// device_id is the exception: on the token, sign-in and MFA events it is the
+// key thumbprint of the device that caused the event (RFC 7638, 43
+// characters) — the value AuthResp.device_id and principal.DeviceID carry,
+// so a subscriber can match it against the device of any request — not the
+// Device row's UUID. Each emit fills it from its request's event-only
+// `thumbprint`. The sign-in attempts themselves are not events: they are the
+// SignInEvent rows (types/models.proto).
 
 package pb
 
@@ -107,10 +115,14 @@ func (x *UserCreated) GetCreatedAt() *timestamppb.Timestamp {
 // issuance, populate a per-user session count, fan out to a
 // "new device" notification path, etc.
 type TokenIssued struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TokenId       string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	IssuedAt      *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	TokenId  string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	UserId   string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	IssuedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
+	// device_id — the key thumbprint of the device that caused it (the value
+	// AuthResp.device_id and principal.DeviceID carry): the device the token
+	// is bound to, which signed the sign-in.
+	DeviceId      string `protobuf:"bytes,4,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -166,17 +178,28 @@ func (x *TokenIssued) GetIssuedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-// TokenRevoked — emitted on AuthMutation.DeleteSessionToken (the live
+func (x *TokenIssued) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+// TokenRevoked — emitted on AuthMutation.RevokeSessionToken (the live
 // logout path; the eventbus allows one emit site per event and the
-// uncalled DeleteToken primitive no longer emits). Idempotent upstream
-// → the event fires only when an actual row DELETE occurred; a
-// no-such-token logout doesn't emit (Phase D gates emit on
+// uncalled RevokeToken primitive does not emit). Idempotent upstream
+// → the event fires only when a live token was actually revoked; a
+// logout of an already revoked token doesn't emit (emit is gated on
 // RowsAffected > 0 via the storage codegen's per-mutation conditional
 // emit path).
 type TokenRevoked struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TokenId       string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	TokenId string                 `protobuf:"bytes,1,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	UserId  string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// device_id — the key thumbprint of the device that caused it (the value
+	// AuthResp.device_id and principal.DeviceID carry): the device that
+	// signed out.
+	DeviceId      string `protobuf:"bytes,3,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -221,6 +244,13 @@ func (x *TokenRevoked) GetTokenId() string {
 func (x *TokenRevoked) GetUserId() string {
 	if x != nil {
 		return x.UserId
+	}
+	return ""
+}
+
+func (x *TokenRevoked) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
 	}
 	return ""
 }
@@ -285,6 +315,9 @@ func (x *RoleCreated) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// RoleDeleted — emitted on AuthMutation.DeleteRole. The role row stays,
+// stamped deleted_at, and every grant of it was revoked in the same
+// transaction (no UserRoleRevoked is emitted for those).
 type RoleDeleted struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RoleId        string                 `protobuf:"bytes,1,opt,name=role_id,json=roleId,proto3" json:"role_id,omitempty"`
@@ -444,6 +477,8 @@ func (x *UserRoleAssigned) GetAssignedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// UserRoleRevoked — emitted on AuthMutation.RevokeRoleFromUser. The grant
+// row stays, stamped revoked_at.
 type UserRoleRevoked struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -496,6 +531,9 @@ func (x *UserRoleRevoked) GetRoleId() string {
 	return ""
 }
 
+// RolePermissionAdded — emitted when AuthMutation.AddPermissionToRole grants
+// a permission: a new pair, or a removed one revived. Not for a refusal (a
+// deleted role, a permission the role already carries): nothing changed.
 type RolePermissionAdded struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	RolePermissionId string                 `protobuf:"bytes,1,opt,name=role_permission_id,json=rolePermissionId,proto3" json:"role_permission_id,omitempty"`
@@ -568,6 +606,8 @@ func (x *RolePermissionAdded) GetAddedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// RolePermissionRemoved — emitted on AuthMutation.RemovePermissionFromRole.
+// The row stays, stamped removed_at.
 type RolePermissionRemoved struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	RoleId string                 `protobuf:"bytes,1,opt,name=role_id,json=roleId,proto3" json:"role_id,omitempty"`
@@ -625,21 +665,23 @@ var File_events_auth_events_proto protoreflect.FileDescriptor
 
 const file_events_auth_events_proto_rawDesc = "" +
 	"\n" +
-	"\x18events/auth_events.proto\x12\x10w17.contrib.auth\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11w17/contrib.proto\x1a\x0fw17/event.proto\"\x98\x01\n" +
+	"\x18events/auth_events.proto\x12\x10w17.contrib.auth\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11w17/contrib.proto\x1a\x0fw17/field.proto\x1a\x0fw17/event.proto\"\x98\x01\n" +
 	"\vUserCreated\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x129\n" +
 	"\n" +
 	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt:\x1f\x92\xbd\x18\x1b\n" +
-	"\x06events\x12\x11auth.user.created\"\x9b\x01\n" +
+	"\x06events\x12\x11auth.user.created\"\xb8\x01\n" +
 	"\vTokenIssued\x12\x19\n" +
 	"\btoken_id\x18\x01 \x01(\tR\atokenId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x127\n" +
-	"\tissued_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\bissuedAt:\x1f\x92\xbd\x18\x1b\n" +
-	"\x06events\x12\x11auth.token.issued\"|\n" +
+	"\tissued_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\bissuedAt\x12\x1b\n" +
+	"\tdevice_id\x18\x04 \x01(\tR\bdeviceId:\x1f\x92\xbd\x18\x1b\n" +
+	"\x06events\x12\x11auth.token.issued\"\x99\x01\n" +
 	"\fTokenRevoked\x12\x19\n" +
 	"\btoken_id\x18\x01 \x01(\tR\atokenId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId:8\x92\xbd\x18\x1c\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1b\n" +
+	"\tdevice_id\x18\x03 \x01(\tR\bdeviceId:8\x92\xbd\x18\x1c\n" +
 	"\x06events\x12\x12auth.token.revoked\xfa\xf4\x18\x14authenticate_turnkey\"\x9e\x01\n" +
 	"\vRoleCreated\x12\x17\n" +
 	"\arole_id\x18\x01 \x01(\tR\x06roleId\x12\x12\n" +
@@ -740,4 +782,4 @@ func file_events_auth_events_proto_init() {
 	file_events_auth_events_proto_depIdxs = nil
 }
 
-// emit-sha256: 9405608d3dc009ac91380a559e4ce7cc466169053e80accd0610efdc60c67117
+// emit-sha256: 01d020326dfcb9fa5a22c1f3526aba7295ca957d6fa91d4cc4be838bbc6f9eb4

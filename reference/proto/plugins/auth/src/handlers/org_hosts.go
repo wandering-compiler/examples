@@ -17,8 +17,8 @@ import (
 // co-brand) bound to the organization it serves. The backoffice binds and
 // unbinds hosts realm-wide; anyone may ask which organization a host serves.
 //
-// What reads it: an audience that takes the tenant from the host
-// (w17/audience.proto TENANT_SOURCE_HOST). Its gateway hands Authenticate the
+// What reads it: an audience that takes the organization from the host
+// (w17/audience.proto ORG_SOURCE_HOST). Its gateway hands Authenticate the
 // host the request arrived on (x-w17-host), and resolveOrgScope acts
 // in the organization the host is bound to — through orgSlugOfHost, which
 // this file installs. The caller still needs a membership there: the host
@@ -116,7 +116,7 @@ func (h *AuthServiceHandler) BindOrgHost(ctx context.Context, req *pb.BindOrgHos
 }
 
 // UnbindOrgHost ends a host's binding; the organization's requests arriving
-// on it take the tenant from the audience's next source from then on.
+// on it take the organization from the audience's next source from then on.
 // Unbinding a host bound to nothing changes nothing.
 func (h *AuthServiceHandler) UnbindOrgHost(ctx context.Context, req *pb.UnbindOrgHostReq) (*pb.UnbindOrgHostResp, error) {
 	caller, err := callerUserID(ctx)
@@ -137,7 +137,8 @@ func (h *AuthServiceHandler) UnbindOrgHost(ctx context.Context, req *pb.UnbindOr
 }
 
 // ListOrgHosts is every live binding, by host.
-func (h *AuthServiceHandler) ListOrgHosts(ctx context.Context, _ *pb.ListOrgHostsReq) (*pb.ListOrgHostsResp, error) {
+func (h *AuthServiceHandler) ListOrgHosts(ctx context.Context, _ *pb.ListOrgHostsReq) (_ *pb.ListOrgHostsResp, err error) {
+	defer markReplaySafe(&err)
 	if _, err := callerUserID(ctx); err != nil {
 		return nil, Unauthenticated(err)
 	}
@@ -159,7 +160,8 @@ func (h *AuthServiceHandler) ListOrgHosts(ctx context.Context, _ *pb.ListOrgHost
 // on a white-label host renders it before anyone signs in. A host bound to
 // none — or no host at all — is found = false, never an error, so the answer
 // tells a caller nothing it could not see by visiting the host.
-func (h *AuthServiceHandler) GetHostOrg(ctx context.Context, req *pb.GetHostOrgReq) (*pb.HostOrgResp, error) {
+func (h *AuthServiceHandler) GetHostOrg(ctx context.Context, req *pb.GetHostOrgReq) (_ *pb.HostOrgResp, err error) {
+	defer markReplaySafe(&err)
 	host, err := normalHost(ctx, req.GetHost())
 	if err != nil {
 		return &pb.HostOrgResp{}, nil

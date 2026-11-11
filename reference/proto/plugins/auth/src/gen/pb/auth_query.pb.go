@@ -1311,7 +1311,12 @@ func (x *GetDefaultRolesResp) GetRoleIds() []string {
 // column absent from the base Role table); the always-present rbac
 // columns carry the management view.
 type ListRolesReq struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Narrow to the role a declared preset seeded. ABSENT lists the whole
+	// catalogue (the admin page's call). A caller that wants ONE preset role
+	// names it here instead of scanning the paged list for it, which would
+	// miss the preset once the catalogue grows past the first page.
+	PresetKey     *string `protobuf:"bytes,1,opt,name=preset_key,json=presetKey,proto3,oneof" json:"preset_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1344,6 +1349,13 @@ func (x *ListRolesReq) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListRolesReq.ProtoReflect.Descriptor instead.
 func (*ListRolesReq) Descriptor() ([]byte, []int) {
 	return file_queries_auth_query_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ListRolesReq) GetPresetKey() string {
+	if x != nil && x.PresetKey != nil {
+		return *x.PresetKey
+	}
+	return ""
 }
 
 type ListOrgScopedRolesReq struct {
@@ -1612,11 +1624,6 @@ func (x *ListOrgSuperadminsResp) GetGrants() []*OrgSuperadminRow {
 	return nil
 }
 
-// LockOrganizationReq — the organization whose row a change that can take a
-// superadmin away locks first (SELECT … FOR UPDATE), in the transaction that
-// then checks the last-superadmin rule and writes the change. Every such
-// change takes the same lock, so two of them in one organization run one after
-// the other and the second one's check sees what the first one ended.
 type LockOrganizationReq struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
@@ -6249,11 +6256,13 @@ func (x *ListOrgSignUpPolicyRowsResp) GetPolicies() []*OrgSignUpPolicyRow {
 }
 
 type OrgSignUpPolicyRow struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
-	Open          bool                   `protobuf:"varint,2,opt,name=open,proto3" json:"open,omitempty"`
-	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
-	SetAt         *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=set_at,json=setAt,proto3" json:"set_at,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	Open  bool                   `protobuf:"varint,2,opt,name=open,proto3" json:"open,omitempty"`
+	Role  string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	SetAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=set_at,json=setAt,proto3" json:"set_at,omitempty"`
+	// See OrgSignUpPolicy.role_snapshot.
+	RoleSnapshot  string `protobuf:"bytes,6,opt,name=role_snapshot,json=roleSnapshot,proto3" json:"role_snapshot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6314,6 +6323,13 @@ func (x *OrgSignUpPolicyRow) GetSetAt() *timestamppb.Timestamp {
 		return x.SetAt
 	}
 	return nil
+}
+
+func (x *OrgSignUpPolicyRow) GetRoleSnapshot() string {
+	if x != nil {
+		return x.RoleSnapshot
+	}
+	return ""
 }
 
 var File_queries_auth_query_proto protoreflect.FileDescriptor
@@ -6386,8 +6402,11 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\brole_ids\x18\x01 \x03(\tR\aroleIds:\b\xfa\xf4\x18\x04rbac\"\x1e\n" +
 	"\x12GetDefaultRolesReq:\b\xfa\xf4\x18\x04rbac\":\n" +
 	"\x13GetDefaultRolesResp\x12\x19\n" +
-	"\brole_ids\x18\x01 \x03(\tR\aroleIds:\b\xfa\xf4\x18\x04rbac\"\x18\n" +
-	"\fListRolesReq:\b\xfa\xf4\x18\x04rbac\"+\n" +
+	"\brole_ids\x18\x01 \x03(\tR\aroleIds:\b\xfa\xf4\x18\x04rbac\"U\n" +
+	"\fListRolesReq\x12,\n" +
+	"\n" +
+	"preset_key\x18\x01 \x01(\tB\b\xca\xf3\x18\x04\b\x06@dH\x00R\tpresetKey\x88\x01\x01:\b\xfa\xf4\x18\x04rbacB\r\n" +
+	"\v_preset_key\"+\n" +
 	"\x15ListOrgScopedRolesReq:\x12\xfa\xf4\x18\x0eorg_membership\"c\n" +
 	"\x16ListOrgScopedRolesResp\x125\n" +
 	"\x05roles\x18\x01 \x03(\v2\x1f.w17.contrib.auth.OrgScopedRoleR\x05roles:\x12\xfa\xf4\x18\x0eorg_membership\"\xd7\x01\n" +
@@ -6477,14 +6496,14 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\x1bGetTokenPermissionSubsetReq\x12\x19\n" +
 	"\btoken_id\x18\x01 \x01(\tR\atokenId:\r\xfa\xf4\x18\tapi_token\"T\n" +
 	"\x1cGetTokenPermissionSubsetResp\x12%\n" +
-	"\x0epermission_ids\x18\x01 \x03(\x05R\rpermissionIds:\r\xfa\xf4\x18\tapi_token\"\x92\x04\n" +
+	"\x0epermission_ids\x18\x01 \x03(\x05R\rpermissionIds:\r\xfa\xf4\x18\tapi_token\"\xa2\x04\n" +
 	"\fApiTokenInfo\x12\x16\n" +
 	"\x02id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12<\n" +
-	"\flast_used_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastUsedAt\x129\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12D\n" +
+	"\flast_used_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02(\x01R\n" +
+	"lastUsedAt\x12A\n" +
 	"\n" +
-	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x129\n" +
+	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02(\x01R\texpiresAt\x129\n" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12C\n" +
 	"\n" +
@@ -6516,9 +6535,9 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\x0fGetUserByIdResp\x12*\n" +
 	"\x04user\x18\x01 \x01(\v2\x16.w17.contrib.auth.UserR\x04user\"5\n" +
 	"\x1aGetDeviceTrustRevokedAtReq\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\"p\n" +
-	"\x1bGetDeviceTrustRevokedAtResp\x12Q\n" +
-	"\x17device_trust_revoked_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x14deviceTrustRevokedAt\"\x9a\x01\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"x\n" +
+	"\x1bGetDeviceTrustRevokedAtResp\x12Y\n" +
+	"\x17device_trust_revoked_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02(\x01R\x14deviceTrustRevokedAt\"\x9a\x01\n" +
 	"\aUserOrg\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12\x12\n" +
@@ -6723,35 +6742,38 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"org_signup\"o\n" +
 	"\x1bListOrgSignUpPolicyRowsResp\x12@\n" +
 	"\bpolicies\x18\x01 \x03(\v2$.w17.contrib.auth.OrgSignUpPolicyRowR\bpolicies:\x0e\xfa\xf4\x18\n" +
-	"org_signup\"\x93\x01\n" +
+	"org_signup\"\xb8\x01\n" +
 	"\x12OrgSignUpPolicyRow\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04open\x18\x02 \x01(\bR\x04open\x12\x12\n" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x121\n" +
-	"\x06set_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x05setAt:\x0e\xfa\xf4\x18\n" +
-	"org_signup2\xf4\xe4\x01\n" +
-	"\tAuthQuery\x12\xc9\b\n" +
-	"\x0eGetUserByEmail\x12#.w17.contrib.auth.GetUserByEmailReq\x1a$.w17.contrib.auth.GetUserByEmailResp\"\xeb\a\xf2\xf3\x18\xe6\aB\xe3\a\n" +
-	"\x04main\x12\xda\aSELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        u.created_at AS user.created_at,        ?feature(service_account) u.kind AS user.kind,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        ?feature(tenant_scope) u.tenant_id AS user.tenant_id,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u WHERE u.email = :email\x12\xa1\n" +
-	"\n" +
-	"\x0eGetUserByToken\x12#.w17.contrib.auth.GetUserByTokenReq\x1a$.w17.contrib.auth.GetUserByTokenResp\"\xc3\t\xf2\xf3\x18\xbe\tB\xbb\t\n" +
-	"\x04main\x12\xb2\tSELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        ?feature(service_account) u.kind AS user.kind,        u.created_at AS user.created_at,        COALESCE(t.token_hash, '') AS stored_token_hash,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        ?feature(tenant_scope) u.tenant_id AS user.tenant_id,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u JOIN @module.UserToken t ON t.user_id = u.id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL\x12\xa0\x03\n" +
+	"\x06set_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x05setAt\x12#\n" +
+	"\rrole_snapshot\x18\x06 \x01(\tR\froleSnapshot:\x0e\xfa\xf4\x18\n" +
+	"org_signup2\xcd\xe3\x01\n" +
+	"\tAuthQuery\x12\x8c\b\n" +
+	"\x0eGetUserByEmail\x12#.w17.contrib.auth.GetUserByEmailReq\x1a$.w17.contrib.auth.GetUserByEmailResp\"\xae\a\xf2\xf3\x18\xa9\aB\xa6\a\n" +
+	"\x04main\x12\x9d\aSELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        u.created_at AS user.created_at,        ?feature(service_account) u.kind AS user.kind,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u WHERE u.email = :email\x12\xe4\t\n" +
+	"\x0eGetUserByToken\x12#.w17.contrib.auth.GetUserByTokenReq\x1a$.w17.contrib.auth.GetUserByTokenResp\"\x86\t\xf2\xf3\x18\x81\tB\xfe\b\n" +
+	"\x04main\x12\xf5\bSELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        ?feature(service_account) u.kind AS user.kind,        u.created_at AS user.created_at,        COALESCE(t.token_hash, '') AS stored_token_hash,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u JOIN @module.UserToken t ON t.user_id = u.id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL\x12\xa0\x03\n" +
 	"\x12GetUserPermissions\x12'.w17.contrib.auth.GetUserPermissionsReq\x1a(.w17.contrib.auth.GetUserPermissionsResp\"\xb6\x02\xf2\xf3\x18\xa9\x02B\xa6\x02\n" +
 	"\x04main\x12\x9d\x02SELECT ROWS_TO_ARRAY(rp.permission_id) AS permission_ids FROM @module.RolePermission rp JOIN @module.UserRole ur ON ur.role_id = rp.role_id JOIN @module.Role r ON r.id = rp.role_id WHERE ur.user_id = :user_id AND ur.revoked_at IS NULL AND rp.removed_at IS NULL AND r.deleted_at IS NULL\x8a\xf5\x18\x04rbac\x12\xd8\x03\n" +
 	"\x0fGetExpiredToken\x12$.w17.contrib.auth.GetExpiredTokenReq\x1a%.w17.contrib.auth.GetExpiredTokenResp\"\xf7\x02\xf2\xf3\x18\xf2\x02B\xef\x02\n" +
-	"\x04main\x12\xe6\x02SELECT t.expires_at AS expires_at,        COALESCE(d.thumbprint, '') AS device_thumbprint,        t.revoked_at AS revoked_at,        d.revoked_at AS device_revoked_at FROM @module.UserToken t LEFT JOIN @module.Device d ON d.id = t.device_id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at <= NOW() OR t.revoked_at IS NOT NULL)\x12\xa1\f\n" +
-	"\x1dGetUserByTokenWithPermissions\x122.w17.contrib.auth.GetUserByTokenWithPermissionsReq\x1a3.w17.contrib.auth.GetUserByTokenWithPermissionsResp\"\x96\v\xf2\xf3\x18\x89\vB\x86\v\n" +
-	"\x04main\x12\xfd\n" +
-	"SELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        ?feature(service_account) u.kind AS user.kind,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        u.created_at AS user.created_at,        t.id AS token_id,        COALESCE(t.token_hash, '') AS stored_token_hash,        COALESCE(d.thumbprint, '') AS device_thumbprint,        d.revoked_at AS device_revoked_at,        t.mcp_only AS mcp_only,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        ?feature(tenant_scope) u.tenant_id AS user.tenant_id,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u JOIN @module.UserToken t ON t.user_id = u.id LEFT JOIN @module.Device d ON d.id = t.device_id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL\x8a\xf5\x18\x04rbac\x12\x94\x04\n" +
+	"\x04main\x12\xe6\x02SELECT t.expires_at AS expires_at,        COALESCE(d.thumbprint, '') AS device_thumbprint,        t.revoked_at AS revoked_at,        d.revoked_at AS device_revoked_at FROM @module.UserToken t LEFT JOIN @module.Device d ON d.id = t.device_id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at <= NOW() OR t.revoked_at IS NOT NULL)\x12\xe4\v\n" +
+	"\x1dGetUserByTokenWithPermissions\x122.w17.contrib.auth.GetUserByTokenWithPermissionsReq\x1a3.w17.contrib.auth.GetUserByTokenWithPermissionsResp\"\xd9\n" +
+	"\xf2\xf3\x18\xcc\n" +
+	"B\xc9\n" +
+	"\n" +
+	"\x04main\x12\xc0\n" +
+	"SELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        ?feature(service_account) u.kind AS user.kind,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        u.created_at AS user.created_at,        t.id AS token_id,        COALESCE(t.token_hash, '') AS stored_token_hash,        COALESCE(d.thumbprint, '') AS device_thumbprint,        d.revoked_at AS device_revoked_at,        t.mcp_only AS mcp_only,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u JOIN @module.UserToken t ON t.user_id = u.id LEFT JOIN @module.Device d ON d.id = t.device_id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL\x8a\xf5\x18\x04rbac\x12\x94\x04\n" +
 	"\x11GetUserRoleGrants\x12&.w17.contrib.auth.GetUserRoleGrantsReq\x1a'.w17.contrib.auth.GetUserRoleGrantsResp\"\xad\x03\xf2\xf3\x18\xa0\x03B\x9d\x03\n" +
 	"\x04main\x12\x94\x03SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.UserRole ur JOIN @module.Role r ON r.id = ur.role_id LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL WHERE ur.user_id = :user_id AND ur.revoked_at IS NULL AND r.deleted_at IS NULL GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x04rbac\x12\xa9\x03\n" +
 	"\x0eListRoleGrants\x12#.w17.contrib.auth.ListRoleGrantsReq\x1a$.w17.contrib.auth.ListRoleGrantsResp\"\xcb\x02\xf2\xf3\x18\xbe\x02B\xbb\x02\n" +
 	"\x04main\x12\xb2\x02SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.Role r LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL WHERE r.deleted_at IS NULL GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x04rbac\x12\x93\x01\n" +
 	"\n" +
 	"CountUsers\x12\x1f.w17.contrib.auth.CountUsersReq\x1a .w17.contrib.auth.CountUsersResp\"B\xf2\xf3\x186B4\n" +
-	"\x04main\x12,SELECT COUNT(*) AS count FROM @module.User u\x8a\xf5\x18\x04rbac\x12\x89\t\n" +
-	"\x15ListOrgMemberAccounts\x12*.w17.contrib.auth.ListOrgMemberAccountsReq\x1a+.w17.contrib.auth.ListOrgMemberAccountsResp\"\x96\b\xf2\xf3\x18\xff\aB\xfc\a\n" +
-	"\x04main\x12\xf3\aSELECT u.id AS id, u.email AS email,        ?feature(service_account) u.kind AS kind,        ?feature(user_admin) u.disabled_at AS disabled_at,        ?feature(tenant_scope) u.tenant_id AS tenant_id,        u.created_at AS created_at,        u.password_hash AS password_hash,        ?feature(email_verification) u.email_verified_at AS email_verified_at,        ?feature(email_verification) u.email_proof AS email_proof,        u.device_trust_revoked_at AS device_trust_revoked_at,        ?feature(user_admin) u.erased_at AS erased_at,        ?feature(marketing_consent) u.marketing_consent AS marketing_consent,        ?feature(marketing_consent) u.marketing_consent_at AS marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS allowed_cidrs,        u.sign_in_failures AS sign_in_failures,        u.sign_in_window_at AS sign_in_window_at FROM @module.User u JOIN @module.OrgMembership m ON m.user_id = u.id AND m.org_id = :org_id AND m.removed_at IS NULL ORDER BY u.created_at DESC, u.id DESC\x8a\xf5\x18\x0eorg_membership\x12\x9c\x02\n" +
+	"\x04main\x12,SELECT COUNT(*) AS count FROM @module.User u\x8a\xf5\x18\x04rbac\x12\xd1\b\n" +
+	"\x15ListOrgMemberAccounts\x12*.w17.contrib.auth.ListOrgMemberAccountsReq\x1a+.w17.contrib.auth.ListOrgMemberAccountsResp\"\xde\a\xf2\xf3\x18\xc7\aB\xc4\a\n" +
+	"\x04main\x12\xbb\aSELECT u.id AS id, u.email AS email,        ?feature(service_account) u.kind AS kind,        ?feature(user_admin) u.disabled_at AS disabled_at,        u.created_at AS created_at,        u.password_hash AS password_hash,        ?feature(email_verification) u.email_verified_at AS email_verified_at,        ?feature(email_verification) u.email_proof AS email_proof,        u.device_trust_revoked_at AS device_trust_revoked_at,        ?feature(user_admin) u.erased_at AS erased_at,        ?feature(marketing_consent) u.marketing_consent AS marketing_consent,        ?feature(marketing_consent) u.marketing_consent_at AS marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS allowed_cidrs,        u.sign_in_failures AS sign_in_failures,        u.sign_in_window_at AS sign_in_window_at FROM @module.User u JOIN @module.OrgMembership m ON m.user_id = u.id AND m.org_id = :org_id AND m.removed_at IS NULL ORDER BY u.created_at DESC, u.id DESC\x8a\xf5\x18\x0eorg_membership\x12\x9c\x02\n" +
 	"\fGetOrgMember\x12!.w17.contrib.auth.GetOrgMemberReq\x1a\".w17.contrib.auth.GetOrgMemberResp\"\xc4\x01\xf2\xf3\x18\xad\x01B\xaa\x01\n" +
 	"\x04main\x12\xa1\x01SELECT u.id AS user_id FROM @module.User u JOIN @module.OrgMembership m ON m.user_id = u.id AND m.org_id = :org_id AND m.removed_at IS NULL WHERE u.id = :user_id\x8a\xf5\x18\x0eorg_membership\x12\xf1\x01\n" +
 	"\x11GetFirstUserRoles\x12&.w17.contrib.auth.GetFirstUserRolesReq\x1a'.w17.contrib.auth.GetFirstUserRolesResp\"\x8a\x01\xf2\xf3\x18~B|\n" +
@@ -6767,13 +6789,13 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\x12ListOrgSuperadmins\x12'.w17.contrib.auth.ListOrgSuperadminsReq\x1a(.w17.contrib.auth.ListOrgSuperadminsResp\"\xc6\x05\xf2\xf3\x18\xaf\x05B\xac\x05\n" +
 	"\x04main\x12\xa3\x05SELECT ur.user_id AS user_id, r.id AS role_id, '' AS team_id,        ?feature(user_admin) u.disabled_at AS disabled_at,        ?unless(user_admin) NULL AS disabled_at,        ?feature(user_admin) u.erased_at AS erased_at,        ?unless(user_admin) NULL AS erased_at,        ?feature(api_token) r.token_type AS token_type FROM @module.UserRole ur JOIN @module.Role r ON r.id = ur.role_id JOIN @module.OrgMembership m ON m.user_id = ur.user_id AND m.org_id = ur.org_id AND m.removed_at IS NULL JOIN @module.User u ON u.id = ur.user_id WHERE ur.org_id = :org_id AND ur.revoked_at IS NULL   AND r.all_permissions = TRUE AND r.deleted_at IS NULL ORDER BY ur.user_id ASC, r.id ASC\x8a\xf5\x18\x0eorg_membership\x12\x9c\x05\n" +
 	"\x14ListRealmSuperadmins\x12).w17.contrib.auth.ListRealmSuperadminsReq\x1a*.w17.contrib.auth.ListRealmSuperadminsResp\"\xac\x04\xf2\xf3\x18\x9f\x04B\x9c\x04\n" +
-	"\x04main\x12\x93\x04SELECT ur.user_id AS user_id, r.id AS role_id,        ?feature(user_admin) u.disabled_at AS disabled_at,        ?unless(user_admin) NULL AS disabled_at,        ?feature(user_admin) u.erased_at AS erased_at,        ?unless(user_admin) NULL AS erased_at,        ?feature(api_token) r.token_type AS token_type FROM @module.User u JOIN @module.UserRole ur ON ur.user_id = u.id JOIN @module.Role r ON r.id = ur.role_id WHERE ur.revoked_at IS NULL   AND r.all_permissions = TRUE AND r.deleted_at IS NULL ORDER BY ur.user_id ASC, r.id ASC\x8a\xf5\x18\x04rbac\x12\xd0\x05\n" +
-	"\tListRoles\x12\x1e.w17.contrib.auth.ListRolesReq\x1a\x1f.w17.contrib.auth.ListRolesResp\"\x81\x05\xf2\xf3\x18\xf4\x04B\xf1\x04\n" +
-	"\x04main\x12\xe8\x04SELECT r.id AS id, r.name AS name, r.description AS description,        r.display_name AS display_name,        r.all_permissions AS all_permissions,        r.assign_first_user AS assign_first_user,        r.assign_default AS assign_default,        r.preset_key AS preset_key,        r.created_at AS created_at,        ?feature(api_token) r.token_type AS token_type,        ?feature(org_membership) r.org_scoped AS org_scoped,        r.deleted_at AS deleted_at,        r.ended_key AS ended_key,        ?feature(org_roles) r.org_id AS org_id FROM @module.Role r WHERE r.deleted_at IS NULL ORDER BY r.name ASC, r.id ASC\x8a\xf5\x18\x04rbac\x12\xbb\x05\n" +
+	"\x04main\x12\x93\x04SELECT ur.user_id AS user_id, r.id AS role_id,        ?feature(user_admin) u.disabled_at AS disabled_at,        ?unless(user_admin) NULL AS disabled_at,        ?feature(user_admin) u.erased_at AS erased_at,        ?unless(user_admin) NULL AS erased_at,        ?feature(api_token) r.token_type AS token_type FROM @module.User u JOIN @module.UserRole ur ON ur.user_id = u.id JOIN @module.Role r ON r.id = ur.role_id WHERE ur.revoked_at IS NULL   AND r.all_permissions = TRUE AND r.deleted_at IS NULL ORDER BY ur.user_id ASC, r.id ASC\x8a\xf5\x18\x04rbac\x12\xf0\x05\n" +
+	"\tListRoles\x12\x1e.w17.contrib.auth.ListRolesReq\x1a\x1f.w17.contrib.auth.ListRolesResp\"\xa1\x05\xf2\xf3\x18\x94\x05B\x91\x05\n" +
+	"\x04main\x12\x88\x05SELECT r.id AS id, r.name AS name, r.description AS description,        r.display_name AS display_name,        r.all_permissions AS all_permissions,        r.assign_first_user AS assign_first_user,        r.assign_default AS assign_default,        r.preset_key AS preset_key,        r.created_at AS created_at,        ?feature(api_token) r.token_type AS token_type,        ?feature(org_membership) r.org_scoped AS org_scoped,        r.deleted_at AS deleted_at,        r.ended_key AS ended_key,        ?feature(org_roles) r.org_id AS org_id FROM @module.Role r WHERE r.deleted_at IS NULL AND ?r.preset_key = :preset_key ORDER BY r.name ASC, r.id ASC\x8a\xf5\x18\x04rbac\x12\xbb\x05\n" +
 	"\aGetRole\x12\x1c.w17.contrib.auth.GetRoleReq\x1a\x16.w17.contrib.auth.Role\"\xf9\x04\xf2\xf3\x18\xec\x04B\xe9\x04\n" +
-	"\x04main\x12\xe0\x04SELECT r.id AS id, r.name AS name,        r.description AS description,        r.display_name AS display_name,        r.all_permissions AS all_permissions,        r.assign_first_user AS assign_first_user,        r.assign_default AS assign_default,        r.preset_key AS preset_key,        r.created_at AS created_at,        ?feature(api_token) r.token_type AS token_type,        ?feature(org_membership) r.org_scoped AS org_scoped,        r.deleted_at AS deleted_at,        r.ended_key AS ended_key,        ?feature(org_roles) r.org_id AS org_id FROM @module.Role r WHERE r.id = :id AND r.deleted_at IS NULL\x8a\xf5\x18\x04rbac\x12\xb1\x10\n" +
-	"\x10GetTokenWithType\x12%.w17.contrib.auth.GetTokenWithTypeReq\x1a&.w17.contrib.auth.GetTokenWithTypeResp\"\xcd\x0f\xf2\xf3\x18\xbb\x0fB\xb8\x0f\n" +
-	"\x04main\x12\xaf\x0fSELECT t.user_id AS user_id,        t.id AS token_id,        t.token_type AS token_type,        COALESCE(t.token_hash, '') AS stored_token_hash,        u.id AS user.id,        ?feature(service_account) u.kind AS user.kind,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        t.last_used_at AS last_used_at,        COALESCE(d.thumbprint, '') AS device_thumbprint,        d.revoked_at AS device_revoked_at,        ?feature(service_account) t.bearer AS bearer,        ?unless(service_account) FALSE AS bearer,        ?feature(oauth_server) COALESCE(t.resource, '') AS oauth_resource,        ?unless(oauth_server) '' AS oauth_resource,        ?feature(oauth_server) t.oauth_org_id AS oauth_org_id,        ?unless(oauth_server) NULL AS oauth_org_id,        ?feature(oauth_server) t.oauth_grant_id AS oauth_grant_id,        ?unless(oauth_server) NULL AS oauth_grant_id,        t.mcp_only AS mcp_only,        u.email AS user.email,        u.password_hash AS user.password_hash,        u.created_at AS user.created_at,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        ?feature(tenant_scope) u.tenant_id AS user.tenant_id,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.UserToken t JOIN @module.User u ON u.id = t.user_id LEFT JOIN @module.Device d ON d.id = t.device_id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL\x8a\xf5\x18\tapi_token\x12\x86\x05\n" +
+	"\x04main\x12\xe0\x04SELECT r.id AS id, r.name AS name,        r.description AS description,        r.display_name AS display_name,        r.all_permissions AS all_permissions,        r.assign_first_user AS assign_first_user,        r.assign_default AS assign_default,        r.preset_key AS preset_key,        r.created_at AS created_at,        ?feature(api_token) r.token_type AS token_type,        ?feature(org_membership) r.org_scoped AS org_scoped,        r.deleted_at AS deleted_at,        r.ended_key AS ended_key,        ?feature(org_roles) r.org_id AS org_id FROM @module.Role r WHERE r.id = :id AND r.deleted_at IS NULL\x8a\xf5\x18\x04rbac\x12\xf4\x0f\n" +
+	"\x10GetTokenWithType\x12%.w17.contrib.auth.GetTokenWithTypeReq\x1a&.w17.contrib.auth.GetTokenWithTypeResp\"\x90\x0f\xf2\xf3\x18\xfe\x0eB\xfb\x0e\n" +
+	"\x04main\x12\xf2\x0eSELECT t.user_id AS user_id,        t.id AS token_id,        t.token_type AS token_type,        COALESCE(t.token_hash, '') AS stored_token_hash,        u.id AS user.id,        ?feature(service_account) u.kind AS user.kind,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        t.last_used_at AS last_used_at,        COALESCE(d.thumbprint, '') AS device_thumbprint,        d.revoked_at AS device_revoked_at,        ?feature(service_account) t.bearer AS bearer,        ?unless(service_account) FALSE AS bearer,        ?feature(oauth_server) COALESCE(t.resource, '') AS oauth_resource,        ?unless(oauth_server) '' AS oauth_resource,        ?feature(oauth_server) t.oauth_org_id AS oauth_org_id,        ?unless(oauth_server) NULL AS oauth_org_id,        ?feature(oauth_server) t.oauth_grant_id AS oauth_grant_id,        ?unless(oauth_server) NULL AS oauth_grant_id,        t.mcp_only AS mcp_only,        u.email AS user.email,        u.password_hash AS user.password_hash,        u.created_at AS user.created_at,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.UserToken t JOIN @module.User u ON u.id = t.user_id LEFT JOIN @module.Device d ON d.id = t.device_id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL\x8a\xf5\x18\tapi_token\x12\x86\x05\n" +
 	"\x17GetExpiredTokenWithType\x12,.w17.contrib.auth.GetExpiredTokenWithTypeReq\x1a-.w17.contrib.auth.GetExpiredTokenWithTypeResp\"\x8d\x04\xf2\xf3\x18\xfb\x03B\xf8\x03\n" +
 	"\x04main\x12\xef\x03SELECT t.expires_at AS expires_at,        t.token_type AS token_type,        COALESCE(d.thumbprint, '') AS device_thumbprint,        t.revoked_at AS revoked_at,        ?feature(service_account) t.bearer AS bearer,        ?unless(service_account) FALSE AS bearer,        d.revoked_at AS device_revoked_at FROM @module.UserToken t LEFT JOIN @module.Device d ON d.id = t.device_id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at <= NOW() OR t.revoked_at IS NOT NULL)\x8a\xf5\x18\tapi_token\x12\xdc\x04\n" +
 	"\x1dGetUserRolePermissionsByRealm\x122.w17.contrib.auth.GetUserRolePermissionsByRealmReq\x1a3.w17.contrib.auth.GetUserRolePermissionsByRealmResp\"\xd1\x03\xf2\xf3\x18\xbf\x03B\xbc\x03\n" +
@@ -6785,9 +6807,9 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\x19GetUserDeviceByThumbprint\x12..w17.contrib.auth.GetUserDeviceByThumbprintReq\x1a/.w17.contrib.auth.GetUserDeviceByThumbprintResp\"\x9f\x01\xf2\xf3\x18\x8d\x01B\x8a\x01\n" +
 	"\x04main\x12\x81\x01SELECT d.id AS device_id FROM @module.Device d WHERE d.user_id = :user_id AND d.thumbprint = :thumbprint AND d.revoked_at IS NULL\x8a\xf5\x18\tapi_token\x12\x88\x02\n" +
 	"\x12GetSessionApprover\x12'.w17.contrib.auth.GetSessionApproverReq\x1a(.w17.contrib.auth.GetSessionApproverResp\"\x9e\x01\xf2\xf3\x18\x8c\x01B\x89\x01\n" +
-	"\x04main\x12\x80\x01SELECT t.approved_by_device_id AS approved_by_device_id FROM @module.UserToken t WHERE t.id = :token_id AND t.user_id = :user_id\x8a\xf5\x18\tapi_token\x12\xbf\b\n" +
-	"\vGetUserById\x12 .w17.contrib.auth.GetUserByIdReq\x1a!.w17.contrib.auth.GetUserByIdResp\"\xea\a\xf2\xf3\x18\xe5\aB\xe2\a\n" +
-	"\x04main\x12\xd9\aSELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        ?feature(service_account) u.kind AS user.kind,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(tenant_scope) u.tenant_id AS user.tenant_id,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        u.created_at AS user.created_at,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u WHERE u.id = :user_id\x12\xeb\x01\n" +
+	"\x04main\x12\x80\x01SELECT t.approved_by_device_id AS approved_by_device_id FROM @module.UserToken t WHERE t.id = :token_id AND t.user_id = :user_id\x8a\xf5\x18\tapi_token\x12\x82\b\n" +
+	"\vGetUserById\x12 .w17.contrib.auth.GetUserByIdReq\x1a!.w17.contrib.auth.GetUserByIdResp\"\xad\a\xf2\xf3\x18\xa8\aB\xa5\a\n" +
+	"\x04main\x12\x9c\aSELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        ?feature(service_account) u.kind AS user.kind,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        u.created_at AS user.created_at,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u WHERE u.id = :user_id\x12\xeb\x01\n" +
 	"\x17GetDeviceTrustRevokedAt\x12,.w17.contrib.auth.GetDeviceTrustRevokedAtReq\x1a-.w17.contrib.auth.GetDeviceTrustRevokedAtResp\"s\xf2\xf3\x18oBm\n" +
 	"\x04main\x12eSELECT u.device_trust_revoked_at AS device_trust_revoked_at FROM @module.User u WHERE u.id = :user_id\x12\xed\x03\n" +
 	"\fListUserOrgs\x12!.w17.contrib.auth.ListUserOrgsReq\x1a\".w17.contrib.auth.ListUserOrgsResp\"\x95\x03\xf2\xf3\x18\xfe\x02B\xfb\x02\n" +
@@ -6799,11 +6821,11 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\x1bGetUserRealmWidePermissions\x120.w17.contrib.auth.GetUserRealmWidePermissionsReq\x1a1.w17.contrib.auth.GetUserRealmWidePermissionsResp\"\xea\x03\xf2\xf3\x18\xd3\x03B\xd0\x03\n" +
 	"\x04main\x12\xc7\x03SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.UserRole ur JOIN @module.Role r ON r.id = ur.role_id LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL WHERE ur.user_id = :user_id   AND ur.org_id IS NULL AND r.org_scoped = FALSE   AND ur.revoked_at IS NULL AND r.deleted_at IS NULL GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x0eorg_membership\x12\xd8\x02\n" +
 	"\x10GetUserOrgBySlug\x12%.w17.contrib.auth.GetUserOrgBySlugReq\x1a&.w17.contrib.auth.GetUserOrgBySlugResp\"\xf4\x01\xf2\xf3\x18\xdd\x01B\xda\x01\n" +
-	"\x04main\x12\xd1\x01SELECT o.id AS org_id, m.role AS role FROM @module.OrgMembership m JOIN @module.Organization o ON o.id = m.org_id WHERE m.user_id = :user_id AND o.slug = :slug AND m.removed_at IS NULL AND o.deleted_at IS NULL\x8a\xf5\x18\x0eorg_membership\x12\x87\x03\n" +
-	"\x11ListOrganizations\x12&.w17.contrib.auth.ListOrganizationsReq\x1a'.w17.contrib.auth.ListOrganizationsResp\"\xa0\x02\xf2\xf3\x18\x89\x02B\x86\x02\n" +
-	"\x04main\x12\xfd\x01SELECT o.id AS id, o.slug AS slug, o.name AS name,        o.kind AS kind, o.created_at AS created_at,        o.deleted_at AS deleted_at,        o.ended_key AS ended_key FROM @module.Organization o WHERE o.deleted_at IS NULL ORDER BY o.name ASC, o.id ASC\x8a\xf5\x18\x0eorg_membership\x12\xeb\x02\n" +
-	"\x0fGetOrganization\x12$.w17.contrib.auth.GetOrganizationReq\x1a\x1e.w17.contrib.auth.Organization\"\x91\x02\xf2\xf3\x18\xfa\x01B\xf7\x01\n" +
-	"\x04main\x12\xee\x01SELECT o.id AS id, o.slug AS slug, o.name AS name,        o.kind AS kind, o.created_at AS created_at,        o.deleted_at AS deleted_at,        o.ended_key AS ended_key FROM @module.Organization o WHERE o.id = :id AND o.deleted_at IS NULL\x8a\xf5\x18\x0eorg_membership\x12\xf4\x03\n" +
+	"\x04main\x12\xd1\x01SELECT o.id AS org_id, m.role AS role FROM @module.OrgMembership m JOIN @module.Organization o ON o.id = m.org_id WHERE m.user_id = :user_id AND o.slug = :slug AND m.removed_at IS NULL AND o.deleted_at IS NULL\x8a\xf5\x18\x0eorg_membership\x12\xc7\x03\n" +
+	"\x11ListOrganizations\x12&.w17.contrib.auth.ListOrganizationsReq\x1a'.w17.contrib.auth.ListOrganizationsResp\"\xe0\x02\xf2\xf3\x18\xc9\x02B\xc6\x02\n" +
+	"\x04main\x12\xbd\x02SELECT o.id AS id, o.slug AS slug, o.name AS name,        o.kind AS kind, o.created_at AS created_at,        o.deleted_at AS deleted_at,        ?feature(org_suspension) o.suspended_at AS suspended_at,        o.ended_key AS ended_key FROM @module.Organization o WHERE o.deleted_at IS NULL ORDER BY o.name ASC, o.id ASC\x8a\xf5\x18\x0eorg_membership\x12\xab\x03\n" +
+	"\x0fGetOrganization\x12$.w17.contrib.auth.GetOrganizationReq\x1a\x1e.w17.contrib.auth.Organization\"\xd1\x02\xf2\xf3\x18\xba\x02B\xb7\x02\n" +
+	"\x04main\x12\xae\x02SELECT o.id AS id, o.slug AS slug, o.name AS name,        o.kind AS kind, o.created_at AS created_at,        o.deleted_at AS deleted_at,        ?feature(org_suspension) o.suspended_at AS suspended_at,        o.ended_key AS ended_key FROM @module.Organization o WHERE o.id = :id AND o.deleted_at IS NULL\x8a\xf5\x18\x0eorg_membership\x12\xf4\x03\n" +
 	"\x12ListOrgMemberships\x12'.w17.contrib.auth.ListOrgMembershipsReq\x1a(.w17.contrib.auth.ListOrgMembershipsResp\"\x8a\x03\xf2\xf3\x18\xf3\x02B\xf0\x02\n" +
 	"\x04main\x12\xe7\x02SELECT m.id AS id, COALESCE(u.email, '') AS member,        m.org_id AS organization, COALESCE(o.name, '') AS org_name,        m.role AS role, m.created_at AS created_at FROM @module.OrgMembership m LEFT JOIN @module.User u ON u.id = m.user_id LEFT JOIN @module.Organization o ON o.id = m.org_id WHERE m.removed_at IS NULL ORDER BY m.created_at DESC, m.id DESC\x8a\xf5\x18\x0eorg_membership\x12\xce\x03\n" +
 	"\x10GetOrgMembership\x12%.w17.contrib.auth.GetOrgMembershipReq\x1a\x1f.w17.contrib.auth.OrgMembership\"\xf1\x02\xf2\xf3\x18\xda\x02B\xd7\x02\n" +
@@ -6839,9 +6861,9 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\fGetOrgOfHost\x12!.w17.contrib.auth.GetOrgOfHostReq\x1a\x1c.w17.contrib.auth.OrgHostRow\"\xfa\x01\xf2\xf3\x18\xe8\x01B\xe5\x01\n" +
 	"\x04main\x12\xdc\x01SELECT h.host AS host, h.org_id AS org_id, o.slug AS slug, h.bound_at AS bound_at FROM @module.OrgHost h JOIN @module.Organization o ON o.id = h.org_id WHERE h.host = :host AND h.ended_at IS NULL AND o.deleted_at IS NULL\x8a\xf5\x18\torg_hosts\x12\xdc\x02\n" +
 	"\x0fListOrgHostRows\x12$.w17.contrib.auth.ListOrgHostRowsReq\x1a%.w17.contrib.auth.ListOrgHostRowsResp\"\xfb\x01\xf2\xf3\x18\xe9\x01B\xe6\x01\n" +
-	"\x04main\x12\xdd\x01SELECT h.host AS host, h.org_id AS org_id, o.slug AS slug, h.bound_at AS bound_at FROM @module.OrgHost h JOIN @module.Organization o ON o.id = h.org_id WHERE h.ended_at IS NULL AND o.deleted_at IS NULL ORDER BY h.host ASC\x8a\xf5\x18\torg_hosts\x12\xfe\x02\n" +
-	"\x17ListOrgSignUpPolicyRows\x12,.w17.contrib.auth.ListOrgSignUpPolicyRowsReq\x1a-.w17.contrib.auth.ListOrgSignUpPolicyRowsResp\"\x85\x02\xf2\xf3\x18\xf2\x01B\xef\x01\n" +
-	"\x04main\x12\xe6\x01SELECT p.kind AS kind, p.open AS open, p.role AS role, p.set_at AS set_at, ?feature(product_roles) p.product_roles AS product_roles FROM @module.OrgSignUpPolicy p WHERE p.org_id = :org_id AND p.ended_at IS NULL ORDER BY p.kind ASC\x8a\xf5\x18\n" +
+	"\x04main\x12\xdd\x01SELECT h.host AS host, h.org_id AS org_id, o.slug AS slug, h.bound_at AS bound_at FROM @module.OrgHost h JOIN @module.Organization o ON o.id = h.org_id WHERE h.ended_at IS NULL AND o.deleted_at IS NULL ORDER BY h.host ASC\x8a\xf5\x18\torg_hosts\x12\xa0\x03\n" +
+	"\x17ListOrgSignUpPolicyRows\x12,.w17.contrib.auth.ListOrgSignUpPolicyRowsReq\x1a-.w17.contrib.auth.ListOrgSignUpPolicyRowsResp\"\xa7\x02\xf2\xf3\x18\x94\x02B\x91\x02\n" +
+	"\x04main\x12\x88\x02SELECT p.kind AS kind, p.open AS open, p.role AS role, p.set_at AS set_at, p.role_snapshot AS role_snapshot, ?feature(product_roles) p.product_roles AS product_roles FROM @module.OrgSignUpPolicy p WHERE p.org_id = :org_id AND p.ended_at IS NULL ORDER BY p.kind ASC\x8a\xf5\x18\n" +
 	"org_signupB\xbb\x01\n" +
 	"\x14com.w17.contrib.authB\x0eAuthQueryProtoP\x01Z1github.com/wandering-compiler/plugins/auth/gen/pb\xa2\x02\x03WCA\xaa\x02\x10W17.Contrib.Auth\xca\x02\x10W17\\Contrib\\Auth\xe2\x02\x1cW17\\Contrib\\Auth\\GPBMetadata\xea\x02\x12W17::Contrib::Authb\x06proto3"
 
@@ -7183,6 +7205,7 @@ func file_queries_auth_query_proto_init() {
 		return
 	}
 	file_types_models_proto_init()
+	file_queries_auth_query_proto_msgTypes[25].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
@@ -7202,4 +7225,4 @@ func file_queries_auth_query_proto_init() {
 	file_queries_auth_query_proto_depIdxs = nil
 }
 
-// emit-sha256: 69901f3883ddf3f6bf89ddbd38ae2bc6a53e3f0d97d00c7f22bf284ee538fb22
+// emit-sha256: 0d761cfbdefd4596bbfdfb07ef4a151d7c09cedde323668edd84103d188a762f

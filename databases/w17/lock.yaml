@@ -1,5 +1,6 @@
 admin_languages: []
 admin_wire: CLIENT_WIRE_UNSPECIFIED
+codegen_version: ""
 connections:
     - default: true
       name: catalog-postgres
@@ -38,10 +39,10 @@ org_slug: wandering-compiler
 plugins: []
 project: examples-databases
 project_id: 6660fe96-cf06-4803-96ee-8ddb9997c494
-sdk_version: v0.1.0-rc.64
+sdk_version: v0.1.0-rc.77
 secrets: null
 signature:
     alg: ed25519/v1
-    body: d5a544e6b37a569b21af0a045d304983daf85b638e7ffbc56062bb7f8194f7879f28045535b1cc0c0b258019ed76f7f15d29b192df97053cfef9d28221387907
+    body: 9015943e314236e34652393e2711d3e5471412bd981a4b138f4b72d0d7a3785d0d07e2a7239f4d3e8ce0690c9d93680f4312552ed81d3af2231b387031240a07
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

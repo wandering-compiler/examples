@@ -1,4 +1,4 @@
-github.com/wandering-compiler/sdk/go v0.1.0-rc.64 h1:Y5pbvuIykagznu5SWIrnpRABxB/Lm0cGPHTAvBx46lk=
-github.com/wandering-compiler/sdk/go v0.1.0-rc.64/go.mod h1:npcTg9d1kQ3HefDoPwC+YAUXfLPlgR19LqVF3P4A+bM=
+github.com/wandering-compiler/sdk/go v0.1.0-rc.77 h1:FqCr5jfvpecmMfDEEpAQ4mn0nSJ1bWsO2ggosNE4Ogo=
+github.com/wandering-compiler/sdk/go v0.1.0-rc.77/go.mod h1:po53Rz9PftT++MgbghTb4ZucMabv05OY0H0112LpfQ0=
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d h1:IL4hdHzcUv2l/gcg98/Rj3FbtE6axwqslOW8SW0C+S0=
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d/go.mod h1:4Hqkh8ycfw05ld/3BWL7rJOSfebL2Q+DVDeRgYgxUU8=

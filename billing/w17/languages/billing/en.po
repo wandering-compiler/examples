@@ -1,14 +1,26 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-10-14 11:58+0000\n"
+"POT-Creation-Date: 2026-11-11 22:49+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+msgid "A machine account is not a team member. Give it its roles directly."
+msgstr "A machine account is not a team member. Give it its roles directly."
+
+msgid "A plan with this name already exists. Choose another name."
+msgstr "A plan with this name already exists. Choose another name."
+
+msgid "A token can last at most {days} days. Choose an earlier date."
+msgstr "A token can last at most {days} days. Choose an earlier date."
+
 msgid "A token cannot expire in the past. Choose a later date."
 msgstr ""
+
+msgid "A token without a key must expire within a year. Choose an earlier date."
+msgstr "A token without a key must expire within a year. Choose an earlier date."
 
 msgid "An account with this address already exists. Sign in instead."
 msgstr ""
@@ -19,6 +31,9 @@ msgstr ""
 msgid "An account with this email address exists, and the sign-in provider has not verified the address. Sign in with your password instead."
 msgstr ""
 
+msgid "An organization's plan is changed by the platform, not from inside the organization."
+msgstr "An organization's plan is changed by the platform, not from inside the organization."
+
 msgid "Another change reached this first. Please try again."
 msgstr ""
 
@@ -28,8 +43,53 @@ msgstr ""
 msgid "Authenticator apps are not available here. Your sign-in codes arrive by message instead."
 msgstr ""
 
+msgid "Choose at least one permission for the role."
+msgstr "Choose at least one permission for the role."
+
+msgid "Choose none, derived or full."
+msgstr "Choose none, derived or full."
+
+msgid "Choose one of your organizations for this application."
+msgstr "Choose one of your organizations for this application."
+
+msgid "Choose required, enrol, optional or disabled."
+msgstr "Choose required, enrol, optional or disabled."
+
+msgid "Choose the organization to act in: name it in the W17-Org header (the organization's slug) and try again."
+msgstr "Choose the organization to act in: name it in the W17-Org header (the organization's slug) and try again."
+
+msgid "Choose the role people get when they register."
+msgstr "Choose the role people get when they register."
+
+msgid "Confirm it is you before creating a token."
+msgstr "Confirm it is you before creating a token."
+
+msgid "Confirm it is you with your authenticator app or the code we email you."
+msgstr "Confirm it is you with your authenticator app or the code we email you."
+
 msgid "Confirm your email address before accepting this invitation."
 msgstr ""
+
+msgid "Every organization has this package; it is not given or taken."
+msgstr "Every organization has this package; it is not given or taken."
+
+msgid "From inside an organization, change its email verification in the organization's own settings."
+msgstr "From inside an organization, change its email verification in the organization's own settings."
+
+msgid "From inside an organization, change its two-step sign-in in the organization's own settings."
+msgstr "From inside an organization, change its two-step sign-in in the organization's own settings."
+
+msgid "Give the public key of the program that will use this token."
+msgstr "Give the public key of the program that will use this token."
+
+msgid "Give the role a name."
+msgstr "Give the role a name."
+
+msgid "Give the team a name."
+msgstr "Give the team a name."
+
+msgid "Name the kind of membership this applies to."
+msgstr "Name the kind of membership this applies to."
 
 msgid "No file was attached."
 msgstr "No file was attached."
@@ -37,14 +97,38 @@ msgstr "No file was attached."
 msgid "No permissions are in effect for you here. If access is scoped by organization, choose one and try again."
 msgstr ""
 
+msgid "No product has this permission."
+msgstr "No product has this permission."
+
+msgid "Only a member of this organization can join one of its teams."
+msgstr "Only a member of this organization can join one of its teams."
+
+msgid "Organizations are on this plan. Move them to another plan first."
+msgstr "Organizations are on this plan. Move them to another plan first."
+
+msgid "Permission {permission} is not part of this deployment."
+msgstr "Permission {permission} is not part of this deployment."
+
+msgid "Registration here is not set up correctly. Contact the organization."
+msgstr "Registration here is not set up correctly. Contact the organization."
+
+msgid "Registration here is paused until the organization confirms its settings again. Contact the organization."
+msgstr "Registration here is paused until the organization confirms its settings again. Contact the organization."
+
 msgid "Registration is by invitation only. Ask the organization you are joining to invite you."
 msgstr ""
 
 msgid "Registration is not open for this email address."
 msgstr ""
 
+msgid "Role {role} is not one this organization's teams can hold."
+msgstr "Role {role} is not one this organization's teams can hold."
+
 msgid "Set up an authenticator app first. Recovery codes belong to it."
 msgstr ""
+
+msgid "Setting up an authenticator at sign-in is not available here."
+msgstr "Setting up an authenticator at sign-in is not available here."
 
 msgid "Sign in to do this. An API token cannot create credentials."
 msgstr ""
@@ -52,20 +136,68 @@ msgstr ""
 msgid "Signing in with the provider did not complete. Please start again."
 msgstr ""
 
+msgid "Someone holds no other administrator role than this one. Give them another administrator role before retiring it."
+msgstr "Someone holds no other administrator role than this one. Give them another administrator role before retiring it."
+
+msgid "Someone still holds this role, directly or through a team. Give them another role first."
+msgstr "Someone still holds this role, directly or through a team. Give them another role first."
+
 msgid "Something went wrong on our side."
 msgstr ""
+
+msgid "That code is not right, or it has expired. Ask for a new one."
+msgstr "That code is not right, or it has expired. Ask for a new one."
+
+msgid "That code is not valid. Check it and try again, or request a new one."
+msgstr "That code is not valid. Check it and try again, or request a new one."
 
 msgid "That expiry date is not a valid date."
 msgstr ""
 
+msgid "That is not your password. Type the password you sign in with."
+msgstr "That is not your password. Type the password you sign in with."
+
+msgid "That key belongs to a device that was revoked. Generate a new key for the program."
+msgstr "That key belongs to a device that was revoked. Generate a new key for the program."
+
+msgid "That key belongs to a device you sign in with. Generate a separate key for the program."
+msgstr "That key belongs to a device you sign in with. Generate a separate key for the program."
+
+msgid "That key contains its private part. Give only the public key, and keep the private key where the program runs."
+msgstr "That key contains its private part. Give only the public key, and keep the private key where the program runs."
+
+msgid "That public key cannot be used. Give a P-256 or Ed25519 public key as a JWK."
+msgstr "That public key cannot be used. Give a P-256 or Ed25519 public key as a JWK."
+
 msgid "That role carries permissions you do not hold. A role can be granted only by someone who holds everything it grants."
 msgstr ""
+
+msgid "That role does not exist, or it was deleted."
+msgstr "That role does not exist, or it was deleted."
+
+msgid "That role is not one of this organization's own roles, so it cannot be changed here."
+msgstr "That role is not one of this organization's own roles, so it cannot be changed here."
+
+msgid "The captcha could not be checked. Try again later."
+msgstr "The captcha could not be checked. Try again later."
+
+msgid "The captcha was not accepted. Solve it again."
+msgstr "The captcha was not accepted. Solve it again."
 
 msgid "The file is too large."
 msgstr "The file is too large."
 
 msgid "The item you asked for does not exist."
 msgstr ""
+
+msgid "The list is too long: at most {max} entries."
+msgstr "The list is too long: at most {max} entries."
+
+msgid "The organization is taken from the address here, not chosen."
+msgstr "The organization is taken from the address here, not chosen."
+
+msgid "The product has no such role."
+msgstr "The product has no such role."
 
 msgid "The request could not be accepted as sent."
 msgstr ""
@@ -76,29 +208,83 @@ msgstr ""
 msgid "The request was cancelled before it finished."
 msgstr ""
 
+msgid "The role already carries that permission."
+msgstr "The role already carries that permission."
+
 msgid "The service is temporarily unavailable."
 msgstr ""
 
 msgid "There is no organization role named {role}."
 msgstr ""
 
+msgid "There is no such package."
+msgstr "There is no such package."
+
+msgid "There is no such plan."
+msgstr "There is no such plan."
+
+msgid "There is no such product."
+msgstr "There is no such product."
+
+msgid "There is no such team in this organization."
+msgstr "There is no such team in this organization."
+
+msgid "This API token expired on {date}. Create a new token."
+msgstr "This API token expired on {date}. Create a new token."
+
 msgid "This account has been disabled."
 msgstr ""
 
-msgid "This address does not belong to any organization here. Check the address you registered on."
-msgstr ""
+msgid "This address belongs to another organization than the one you chose."
+msgstr "This address belongs to another organization than the one you chose."
+
+msgid "This app did not prove which device it runs on. Reload or update it, then sign in again."
+msgstr "This app did not prove which device it runs on. Reload or update it, then sign in again."
 
 msgid "This authenticator app is already set up. To get new recovery codes, generate them."
 msgstr ""
 
+msgid "This callback was registered under this client ID and revoked. Register it under a new client ID."
+msgstr "This callback was registered under this client ID and revoked. Register it under a new client ID."
+
 msgid "This cannot be done in the current state."
 msgstr ""
+
+msgid "This connected app is not one of yours, or was already disconnected."
+msgstr "This connected app is not one of yours, or was already disconnected."
+
+msgid "This deployment has no kinds of membership; leave the kind empty."
+msgstr "This deployment has no kinds of membership; leave the kind empty."
+
+msgid "This device was signed out for good. Sign in again to use it as a new device."
+msgstr "This device was signed out for good. Sign in again to use it as a new device."
+
+msgid "This email address cannot be used. Use another address."
+msgstr "This email address cannot be used. Use another address."
+
+msgid "This host already serves another organization."
+msgstr "This host already serves another organization."
 
 msgid "This invitation is for a different email address, or has already been used. Ask for a new invitation."
 msgstr ""
 
+msgid "This invitation offers a role with permissions you do not have, so you cannot withdraw it."
+msgstr "This invitation offers a role with permissions you do not have, so you cannot withdraw it."
+
+msgid "This is managed by the platform, not from inside an organization."
+msgstr "This is managed by the platform, not from inside an organization."
+
+msgid "This is not a host name."
+msgstr "This is not a host name."
+
 msgid "This is not available."
 msgstr ""
+
+msgid "This is the organization's last superadmin. Make someone else a superadmin first."
+msgstr "This is the organization's last superadmin. Make someone else a superadmin first."
+
+msgid "This machine account already has a different key. Use that key, or revoke the account's device to replace it."
+msgstr "This machine account already has a different key. Use that key, or revoke the account's device to replace it."
 
 msgid "This machine account holds a role with permissions you do not hold, so you cannot issue a token for it."
 msgstr ""
@@ -109,8 +295,47 @@ msgstr ""
 msgid "This membership belongs to another organization."
 msgstr ""
 
+msgid "This organization admits only a confirmed email address, and this registration cannot confirm one."
+msgstr "This organization admits only a confirmed email address, and this registration cannot confirm one."
+
+msgid "This organization already has a team named {name}."
+msgstr "This organization already has a team named {name}."
+
+msgid "This organization is suspended by the operators of the service. Contact them to have it restored."
+msgstr "This organization is suspended by the operators of the service. Contact them to have it restored."
+
+msgid "This part of the service is not open to you: none of your memberships is of a kind it admits."
+msgstr "This part of the service is not open to you: none of your memberships is of a kind it admits."
+
+msgid "This password is too long. Use a shorter one."
+msgstr "This password is too long. Use a shorter one."
+
+msgid "This person is already a member of the organization."
+msgstr "This person is already a member of the organization."
+
+msgid "This person is already in the team."
+msgstr "This person is already in the team."
+
+msgid "This person is not a member of the organization."
+msgstr "This person is not a member of the organization."
+
+msgid "This registration names another address than the one it arrived on."
+msgstr "This registration names another address than the one it arrived on."
+
 msgid "This request names two different organizations. Name one."
 msgstr ""
+
+msgid "This request needs a solved captcha."
+msgstr "This request needs a solved captcha."
+
+msgid "This role is held across the whole platform, not in one organization."
+msgstr "This role is held across the whole platform, not in one organization."
+
+msgid "This sign-in request has expired or was already answered. Start again from the application."
+msgstr "This sign-in request has expired or was already answered. Start again from the application."
+
+msgid "This team holds a role with permissions you do not have, so you cannot change its members or delete it."
+msgstr "This team holds a role with permissions you do not have, so you cannot change its members or delete it."
 
 msgid "This type of file is not accepted."
 msgstr "This type of file is not accepted."
@@ -118,11 +343,29 @@ msgstr "This type of file is not accepted."
 msgid "This value is not in the expected format."
 msgstr ""
 
+msgid "This would leave no active account able to administer the realm. Give someone else an administrator role first."
+msgstr "This would leave no active account able to administer the realm. Give someone else an administrator role first."
+
 msgid "Too many requests. Please wait and try again."
 msgstr ""
 
 msgid "Too many wrong codes. Wait 15 minutes and try again."
 msgstr ""
+
+msgid "Too many wrong passwords. Wait 15 minutes and try again."
+msgstr "Too many wrong passwords. Wait 15 minutes and try again."
+
+msgid "Too many wrong passwords. Wait a while and try again."
+msgstr "Too many wrong passwords. Wait a while and try again."
+
+msgid "Two-step sign-in is switched off here."
+msgstr "Two-step sign-in is switched off here."
+
+msgid "Which organization a host serves is set by the platform, not from inside an organization."
+msgstr "Which organization a host serves is set by the platform, not from inside an organization."
+
+msgid "Who may register into an organization is set by the platform, not from inside the organization."
+msgstr "Who may register into an organization is set by the platform, not from inside the organization."
 
 msgid "Wrong email or password."
 msgstr ""
@@ -133,8 +376,26 @@ msgstr ""
 msgid "You are not signed in."
 msgstr ""
 
+msgid "You can only give a role that your own role includes."
+msgstr "You can only give a role that your own role includes."
+
+msgid "You cannot disable or erase your own account. Ask another administrator."
+msgstr "You cannot disable or erase your own account. Ask another administrator."
+
+msgid "You cannot invite someone as this kind of member."
+msgstr "You cannot invite someone as this kind of member."
+
 msgid "You do not have access to this."
 msgstr ""
+
+msgid "Your organization's plan does not include this part of the service."
+msgstr "Your organization's plan does not include this part of the service."
+
+msgid "Your organization's plan does not include this role."
+msgstr "Your organization's plan does not include this role."
+
+msgid "Your session expired on {date}. Sign in again."
+msgstr "Your session expired on {date}. Sign in again."
 
 msgid "already exists"
 msgstr ""
@@ -211,5 +472,11 @@ msgstr ""
 msgid "value violates constraint"
 msgstr ""
 
+msgid "{entry} is not an address or a network (for example 203.0.113.7 or 203.0.113.0/24)."
+msgstr "{entry} is not an address or a network (for example 203.0.113.7 or 203.0.113.0/24)."
+
 msgid "{role} is a realm-wide role. An organization membership can only carry an organization-scoped role."
 msgstr ""
+
+msgid "{role} is a role for machine accounts. A person's membership carries a person's role."
+msgstr "{role} is a role for machine accounts. A person's membership carries a person's role."

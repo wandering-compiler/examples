@@ -40,6 +40,27 @@ message GetUserByTokenResp {
   string stored_token_hash = 2;
 }
 
+// GetExpiredToken — the miss-path lookup of the default (single-realm)
+// Authenticate: the presented token is a row that EXISTS and has ENDED —
+// past its expires_at, or revoked. Run only after the live lookup found
+// nothing, so a valid token never pays for it. A revoked token is answered
+// exactly as an expired one (the earlier of the two instants is when it
+// ended). See GetExpiredTokenWithType for the api_token twin.
+message GetExpiredTokenReq  { string legacy_token = 1; string token_hash = 2; }
+message GetExpiredTokenResp {
+  // NULL for a never-expiring token that was revoked.
+  google.protobuf.Timestamp expires_at = 1 [(w17.field) = { type: DATETIME, null: true }];
+  // The key the expired token is bound to ('' for none): SESSION_EXPIRED is
+  // said only to a request whose proof is by that key.
+  string device_thumbprint = 2;
+  // When the token was revoked; NULL = not revoked (it expired).
+  google.protobuf.Timestamp revoked_at = 3 [(w17.field) = { type: DATETIME, null: true }];
+  // When the device it is bound to was revoked; NULL = live (or bound to
+  // none). The key's holder then hears DEVICE_REVOKED, as a live token of a
+  // revoked device answers.
+  google.protobuf.Timestamp device_revoked_at = 4 [(w17.field) = { type: DATETIME, null: true }];
+}
+
 message GetUserPermissionsReq {
   option (w17.contrib.plugin_feature) = "rbac";
   string user_id = 1;
@@ -56,7 +77,7 @@ message GetUserPermissionsResp {
 message GetUserByTokenWithPermissionsReq {
   option (w17.contrib.plugin_feature) = "rbac";
   // See GetUserByTokenReq.
-  string legacy_token = 1;
+  string legacy_token = 1 [(w17.field) = { blank: true, sensitive: true }];
   string token_hash   = 2;
 }
 // UserWithPermissions packs identity + the deduped permission
@@ -131,6 +152,15 @@ message GetUserByTokenWithPermissionsResp {
   // row to the hash (UpgradeTokenHash).
   string stored_token_hash = 6;
 
+  // The device the token is bound to: its key thumbprint (empty for a token
+  // bound to none — minted before device binding, or an API token) and when
+  // it was revoked (NULL = live). Authenticate compares the thumbprint with
+  // the request's proof and refuses a revoked device.
+  string device_thumbprint = 7;
+  google.protobuf.Timestamp device_revoked_at = 8 [(w17.field) = { type: DATETIME, null: true }];
+  // UserToken.mcp_only: accepted without a proof on the MCP surface only.
+  bool mcp_only = 9;
+
   // The role grants are NOT here: they come from GetUserRoleGrants.
   //
   // They were, and the emitted scan code did not compile — a response that
@@ -167,9 +197,48 @@ message CountUsersResp {
 message ListUsersReq {
   option (w17.contrib.plugin_feature) = "user_admin";
 }
+
+// UserAccount — an account as the admin pages read it: every User column
+// except password_hash, which never leaves storage into an admin view. A
+// generated query fills every field of its response, so the admin lists and
+// detail read answer with this message rather than with User and an empty
+// hash. The fields, their types and their feature gates are User's.
+message UserAccount {
+  option (w17.contrib.plugin_feature) = "user_admin";
+  string id = 1 [(w17.field) = { type: UUID }];
+  string email = 2 [(w17.field) = { type: EMAIL, max_len: 320 }];
+  google.protobuf.Timestamp created_at = 4 [(w17.field) = { type: DATETIME }];
+  google.protobuf.Timestamp email_verified_at = 6 [
+    (w17.field) = { type: DATETIME, null: true },
+    (w17.contrib.plugin_feature_field) = "email_verification"
+  ];
+  EmailProof email_proof = 9 [
+    (w17.field) = { type: ENUM, zero_is_value: true },
+    (w17.contrib.plugin_feature_field) = "email_verification"
+  ];
+  reserved 5;
+  google.protobuf.Timestamp disabled_at = 7 [(w17.field) = { type: DATETIME, null: true }];
+  AccountKind kind = 8 [
+    (w17.field) = { zero_is_value: true },
+    (w17.contrib.plugin_feature_field) = "service_account"
+  ];
+  google.protobuf.Timestamp device_trust_revoked_at = 10 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp erased_at = 11 [(w17.field) = { type: DATETIME, null: true }];
+  bool marketing_consent = 12 [(w17.contrib.plugin_feature_field) = "marketing_consent"];
+  google.protobuf.Timestamp marketing_consent_at = 13 [
+    (w17.field) = { type: DATETIME, null: true },
+    (w17.contrib.plugin_feature_field) = "marketing_consent"
+  ];
+  string allowed_cidrs = 14 [
+    (w17.field) = { type: CHAR, max_len: 2048, blank: true },
+    (w17.contrib.plugin_feature_field) = "bot_token_guard"
+  ];
+  int64 sign_in_failures = 15;
+  google.protobuf.Timestamp sign_in_window_at = 16 [(w17.field) = { type: DATETIME, null: true }];
+}
 message ListUsersResp {
   option (w17.contrib.plugin_feature) = "user_admin";
-  repeated User users = 1;
+  repeated UserAccount users = 1;
 
   // Cursor-paged (admin-only): the `w17.Paging` field on the response IS
   // the declaration — this list has no public REST endpoint to hang a
@@ -218,7 +287,7 @@ message ListBotAccountsReq {
 }
 message ListBotAccountsResp {
   option (w17.contrib.plugin_feature) = "service_account";
-  repeated User bots = 1;
+  repeated UserAccount bots = 1;
 
   // Cursor-paged admin-only, like ListUsersResp — see there.
   w17.Paging paging = 2;
@@ -270,28 +339,12 @@ message GetDefaultRolesResp {
 // columns carry the management view.
 message ListRolesReq {
   option (w17.contrib.plugin_feature) = "rbac";
+  // Narrow to the role a declared preset seeded. ABSENT lists the whole
+  // catalogue (the admin page's call). A caller that wants ONE preset role
+  // names it here instead of scanning the paged list for it, which would
+  // miss the preset once the catalogue grows past the first page.
+  optional string preset_key = 1 [(w17.field) = { type: SLUG, max_len: 100 }];
 }
-message GetUserOwnsAnyOrgReq {
-  option (w17.contrib.plugin_feature) = "org_membership";
-  string user_id = 1 [(w17.field) = { type: UUID }];
-}
-message GetUserOwnsAnyOrgResp {
-  option (w17.contrib.plugin_feature) = "org_membership";
-  bool owns = 1;
-}
-
-message GetOwnedOrgBySlugReq {
-  option (w17.contrib.plugin_feature) = "org_membership";
-  string user_id = 1 [(w17.field) = { type: UUID }];
-  string slug    = 2;
-}
-message GetOwnedOrgBySlugResp {
-  option (w17.contrib.plugin_feature) = "org_membership";
-  // Empty org_id = no organization with this slug is OWNED by this user
-  // (unknown slug, or a real org someone else owns).
-  string org_id = 1;
-}
-
 message ListOrgScopedRolesReq {
   option (w17.contrib.plugin_feature) = "org_membership";
 }
@@ -304,9 +357,165 @@ message ListOrgScopedRolesResp {
 // flags are not a chooser's business.
 message OrgScopedRole {
   option (w17.contrib.plugin_feature) = "org_membership";
-  string id          = 1;
-  string name        = 2;
-  string description = 3;
+  string id           = 1;
+  string name         = 2;
+  string description  = 3;
+  // display_name — the label to show; blank falls back to name (Role.display_name).
+  string display_name = 4;
+  // token_type — the role's realm. A membership carries a SESSION-realm role:
+  // an API-realm one (a bot's) is filtered out of every org-role catalogue in
+  // Go (assignableRoles), because the column exists only with api_token.
+  TokenType token_type = 5 [(w17.contrib.plugin_feature_field) = "api_token"];
+}
+
+// ListOrgRoleRows — the org-scoped roles ONE organization may use: every shared
+// (seeded) org role plus the custom roles that organization composed
+// (Role.org_id). With `org_roles` on, this replaces ListOrgScopedRoles as the
+// catalogue every org-role grant reads (handlers/org_roles.go), because that
+// one cannot tell one company's custom roles from another's.
+message ListOrgRoleRowsReq {
+  option (w17.contrib.plugin_feature) = "org_roles";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListOrgRoleRowsResp {
+  option (w17.contrib.plugin_feature) = "org_roles";
+  repeated OrgRoleRow roles = 1;
+}
+message OrgRoleRow {
+  option (w17.contrib.plugin_feature) = "org_roles";
+  string id              = 1;
+  string name            = 2;
+  string description     = 3;
+  string display_name    = 4;
+  // custom — the organization's own role (Role.org_id set): editable by it.
+  // FALSE for a shared role, which the seed owns.
+  bool   custom          = 5;
+  bool   all_permissions = 6;
+  // token_type — the role's realm. A membership carries a SESSION-realm role:
+  // an API-realm one (a bot's) is filtered out of every org-role catalogue in
+  // Go (assignableRoles), because the column exists only with api_token.
+  TokenType token_type = 7 [(w17.contrib.plugin_feature_field) = "api_token"];
+}
+
+// CountRoleGrants — the live grants of one role, wherever they apply. A custom
+// role still held by someone is not deleted (DeleteOrgRole): deleting it would
+// silently take every holder's permissions away.
+message CountRoleGrantsReq {
+  option (w17.contrib.plugin_feature) = "org_roles";
+  string role_id = 1 [(w17.field) = { type: UUID }];
+}
+message CountRoleGrantsResp {
+  option (w17.contrib.plugin_feature) = "org_roles";
+  int64 count = 1;
+}
+
+// ListOrgSuperadmins — the organization's superadmins who can act, one row per
+// live grant of a wildcard role (all_permissions) held there DIRECTLY. With
+// the rows of every other source (a team's wildcard role,
+// ListOrgTeamSuperadmins) it is the ONE definition of "the organization's
+// superadmins" the last-superadmin rule reads (handlers/org_membership_role.go,
+// orgSuperadmins): a membership change, a removal and the team methods each
+// drop the rows they would end and refuse when none is left.
+//
+// Only a superadmin who can act counts: a live grant of a live role, on a live
+// membership, of an account that is neither disabled nor erased (user_admin:
+// the query projects both stamps and orgSuperadmins drops such rows), of a
+// session-realm role (api_token: the realm is projected the same way; a bot's
+// API-realm wildcard is no superadmin who administers the organization).
+// A disabled superadmin holds no working credential, so counting one let the
+// last ACTIVE superadmin leave an organization nobody could administer.
+message ListOrgSuperadminsReq {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListOrgSuperadminsResp {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  repeated OrgSuperadminRow grants = 1;
+}
+// LockOrganizationReq — the organization whose row a change that can take a
+// superadmin away locks first (SELECT … FOR UPDATE), in the transaction that
+// then checks the last-superadmin rule and writes the change. Every such
+// change takes the same lock, so two of them in one organization run one after
+// the other and the second one's check sees what the first one ended.
+// GetOrgSuspension — whether an organization is suspended (org_suspension).
+message GetOrgSuspensionReq {
+  option (w17.contrib.plugin_feature) = "org_suspension";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message GetOrgSuspensionResp {
+  option (w17.contrib.plugin_feature) = "org_suspension";
+  string org_id = 1;
+  // NULL while the organization is not suspended.
+  google.protobuf.Timestamp suspended_at = 2 [(w17.field) = { null: true }];
+}
+
+message LockOrganizationReq {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message LockOrganizationResp {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  string org_id = 1;
+}
+
+// OrgSuperadminRow — one wildcard grant a superadmin holds in an organization:
+// directly (team_id empty) or through a team.
+message OrgSuperadminRow {
+  option (w17.contrib.plugin_feature) = "org_membership";
+  string user_id = 1;
+  string role_id = 2;
+  // team_id — the team the role is held through; empty for a direct grant.
+  string team_id = 3;
+  // disabled_at / erased_at — the account's (user_admin; unset without it).
+  // A row of a disabled or erased account is no superadmin who can act, and
+  // orgSuperadmins drops it.
+  google.protobuf.Timestamp disabled_at = 4 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp erased_at   = 5 [(w17.field) = { type: DATETIME, null: true }];
+  // token_type — the role's realm (api_token; unset without it). An API-realm
+  // wildcard is a machine account's: it administers nothing through a
+  // session, and SetBotRoles takes it away unasked, so orgSuperadmins drops
+  // the row. A team's roles are session-realm by construction.
+  TokenType token_type = 6 [(w17.contrib.plugin_feature_field) = "api_token"];
+}
+
+// ListRealmSuperadmins — every account that can administer the realm: one row
+// per live grant of a live wildcard role (all_permissions), in any
+// organization or none. The last-admin rule of DisableAccounts / EraseUsers
+// reads it (handlers/admin_lockout_rbac.go): disabling or erasing the accounts
+// it would leave with none is refused. The rule locks the accounts it finds
+// (LockUsers) and reads again, so two operators disabling each other at once
+// run one after the other and the second sees what the first disabled.
+//
+// The account's disabled_at / erased_at exist only with user_admin and the
+// role's realm only with api_token, so they are PROJECTED behind gates and
+// the handler drops a disabled or erased account and an API-realm grant (a
+// machine account's wildcard administers nothing through a session).
+message LockUsersReq {
+  option (w17.contrib.plugin_feature) = "user_admin";
+  repeated string ids = 1;
+}
+message LockUsersResp {
+  option (w17.contrib.plugin_feature) = "user_admin";
+  repeated LockedUser users = 1;
+}
+message LockedUser {
+  option (w17.contrib.plugin_feature) = "user_admin";
+  string user_id = 1;
+}
+message ListRealmSuperadminsReq {
+  option (w17.contrib.plugin_feature) = "rbac";
+}
+message ListRealmSuperadminsResp {
+  option (w17.contrib.plugin_feature) = "rbac";
+  repeated RealmSuperadminRow grants = 1;
+}
+message RealmSuperadminRow {
+  option (w17.contrib.plugin_feature) = "rbac";
+  string user_id = 1;
+  string role_id = 2;
+  google.protobuf.Timestamp disabled_at = 3 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp erased_at   = 4 [(w17.field) = { type: DATETIME, null: true }];
+  TokenType token_type = 5 [(w17.contrib.plugin_feature_field) = "api_token"];
 }
 
 message ListRolesResp {
@@ -336,7 +545,7 @@ message GetRoleReq {
 message GetTokenWithTypeReq {
   option (w17.contrib.plugin_feature) = "api_token";
   // See GetUserByTokenReq.
-  string legacy_token = 1;
+  string legacy_token = 1 [(w17.field) = { blank: true, sensitive: true }];
   string token_hash   = 2;
 }
 message GetTokenWithTypeResp {
@@ -351,6 +560,51 @@ message GetTokenWithTypeResp {
   // (under `user_admin`, whether the account is disabled) plus `kind`, which
   // every User-filling query projects so no gate reads an unset one as HUMAN.
   User user = 7;
+  // When the token was last presented, so Authenticate can skip the
+  // last_used_at write within the throttle window without a round trip.
+  // NULL = never recorded.
+  google.protobuf.Timestamp last_used_at = 8 [(w17.field) = { type: DATETIME, null: true }];
+
+  // The device the token is bound to: its key thumbprint (empty for a token
+  // bound to none — minted before device binding, or an API token) and when
+  // it was revoked (NULL = live). Authenticate compares the thumbprint with
+  // the request's proof and refuses a revoked device.
+  string device_thumbprint = 9;
+  google.protobuf.Timestamp device_revoked_at = 10 [(w17.field) = { type: DATETIME, null: true }];
+  // UserToken.mcp_only: accepted without a proof on the MCP surface only.
+  bool mcp_only = 11;
+  // UserToken.bearer: a machine account's token, accepted without a proof
+  // (device/bot-bearer). Under service_account only; false without it.
+  bool bearer = 12;
+  // An OAuth access token's resource, organization and grant (oauth_server);
+  // empty on every other token and without the feature.
+  string oauth_resource = 13;
+  string oauth_org_id = 14 [(w17.field) = { type: UUID, null: true }];
+  string oauth_grant_id = 15 [(w17.field) = { type: UUID, null: true }];
+}
+
+// GetExpiredTokenWithType — the lookup Authenticate runs only after
+// GetTokenWithType found nothing: is the presented token a row that EXISTS
+// and is past its expires_at, or revoked? Tells "your session expired" (sign in again)
+// apart from "no such token". The caller already holds the token, so the
+// expiry and the kind are nothing it could not have known. Gated api_token.
+message GetExpiredTokenWithTypeReq {
+  option (w17.contrib.plugin_feature) = "api_token";
+  // See GetUserByTokenReq.
+  string legacy_token = 1 [(w17.field) = { blank: true, sensitive: true }];
+  string token_hash   = 2;
+}
+message GetExpiredTokenWithTypeResp {
+  option (w17.contrib.plugin_feature) = "api_token";
+  // See GetExpiredTokenResp for every field.
+  google.protobuf.Timestamp expires_at = 1 [(w17.field) = { type: DATETIME, null: true }];
+  TokenType                 token_type = 2;
+  string device_thumbprint = 3;
+  google.protobuf.Timestamp revoked_at = 4 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp device_revoked_at = 5 [(w17.field) = { type: DATETIME, null: true }];
+  // UserToken.bearer: its holder is whoever presents it, so an ended bearer
+  // token says so without a proof (device/bot-bearer).
+  bool bearer = 6;
 }
 
 message GetUserRolePermissionsByRealmReq {
@@ -380,14 +634,25 @@ message GetTokenPermissionSubsetResp {
 
 // ApiTokenInfo — one API token's management view: id + label + audit
 // timestamps, NEVER the secret token string. ListApiTokensByUser
-// returns these for the token-management UI. api_token-gated.
+// returns these for the token-management UI. A revoked token is listed
+// too (nothing is deleted), with revoked_at and revoke_reason set, so the
+// UI shows it as revoked rather than losing it. api_token-gated.
 message ApiTokenInfo {
   option (w17.contrib.plugin_feature) = "api_token";
   string                    id           = 1 [(w17.field) = { type: UUID }];
   string                    name         = 2;
-  google.protobuf.Timestamp last_used_at = 3;
-  google.protobuf.Timestamp expires_at   = 4;
+  google.protobuf.Timestamp last_used_at = 3 [(w17.field) = { null: true }];
+  google.protobuf.Timestamp expires_at   = 4 [(w17.field) = { null: true }];
   google.protobuf.Timestamp created_at   = 5;
+  // NULL = live.
+  google.protobuf.Timestamp revoked_at   = 6 [(w17.field) = { type: DATETIME, null: true }];
+  RevokeReason              revoke_reason = 7;
+  // The key the token is bound to (its device's thumbprint, the device id
+  // Authenticate answers for it); NULL for a token minted before binding.
+  string                    device_thumbprint = 8 [(w17.field) = { type: CHAR, max_len: 43, null: true }];
+  // When that device was revoked; NULL = live. A token of a revoked device
+  // is refused like a revoked token.
+  google.protobuf.Timestamp device_revoked_at = 9 [(w17.field) = { type: DATETIME, null: true }];
 }
 message ListApiTokensByUserReq {
   option (w17.contrib.plugin_feature) = "api_token";
@@ -397,6 +662,98 @@ message ListApiTokensByUserReq {
 message ListApiTokensByUserResp {
   option (w17.contrib.plugin_feature) = "api_token";
   repeated ApiTokenInfo tokens = 1;
+}
+
+// GetUserDeviceByThumbprint — the caller's own Device row for the key its
+// request was proved with (the envelope's device_id), recorded as the
+// approver of an API token it creates. A revoked or unknown pair is no row:
+// Authenticate already refused a revoked device.
+message GetUserDeviceByThumbprintReq {
+  option (w17.contrib.plugin_feature) = "api_token";
+  string user_id    = 1 [(w17.field) = { type: UUID }];
+  string thumbprint = 2 [(w17.field) = { type: CHAR, max_len: 43 }];
+}
+message GetUserDeviceByThumbprintResp {
+  option (w17.contrib.plugin_feature) = "api_token";
+  string device_id = 1;
+}
+
+// GetSessionApprover — the device that approved the caller's own session
+// (UserToken.approved_by_device_id: a CLI session's approving browser), so a
+// token the session creates records that ROOT approver and ends when it is
+// revoked. A session approved by nothing answers NULL (empty).
+message GetSessionApproverReq {
+  option (w17.contrib.plugin_feature) = "api_token";
+  string token_id = 1 [(w17.field) = { type: UUID }];
+  string user_id  = 2 [(w17.field) = { type: UUID }];
+}
+message GetSessionApproverResp {
+  option (w17.contrib.plugin_feature) = "api_token";
+  string approved_by_device_id = 1 [(w17.field) = { type: UUID, null: true }];
+}
+
+// LockMachineAccount takes a row lock on the machine account for the rest of
+// the caller's transaction, so two IssueBotToken calls for ONE account
+// serialise: each reads the account's key (ListMachineKeys) and registers
+// one only when there is none, and that read-then-write is the one-key rule
+// only when nothing runs beside it. Two concurrent first tokens with
+// different keys would otherwise both read "no key" and register both. The
+// account row always exists by then (the handler just read it), so it is the
+// row to serialise on — the key row may not exist yet.
+message LockMachineAccountReq {
+  option (w17.contrib.plugin_feature) = "service_account";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+}
+message LockMachineAccountResp {
+  option (w17.contrib.plugin_feature) = "service_account";
+  string user_id = 1;
+}
+
+// ListMachineKeys — a machine account's LIVE keyed devices (not revoked,
+// with a thumbprint): at most one by device/bot-one-key.
+message ListMachineKeysReq {
+  option (w17.contrib.plugin_feature) = "service_account";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+}
+message MachineKey {
+  option (w17.contrib.plugin_feature) = "service_account";
+  string id         = 1;
+  string thumbprint = 2;
+}
+message ListMachineKeysResp {
+  option (w17.contrib.plugin_feature) = "service_account";
+  repeated MachineKey keys = 1;
+}
+
+// --- bot_token_guard: a machine account's allowlist and where it is used ---
+// GetBotAllowedCidrs — a machine account's allowlist (User.allowed_cidrs).
+// NotFound for an account that is not a bot.
+message GetBotAllowedCidrsReq {
+  option (w17.contrib.plugin_feature) = "bot_token_guard";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+}
+message GetBotAllowedCidrsResp {
+  option (w17.contrib.plugin_feature) = "bot_token_guard";
+  string allowed_cidrs = 1;
+}
+// ListBotTokenUses — every (token, address, surface, method) a machine
+// account's bearer tokens were used with, the latest first.
+message ListBotTokenUsesReq {
+  option (w17.contrib.plugin_feature) = "bot_token_guard";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+}
+message BotTokenUseRow {
+  option (w17.contrib.plugin_feature) = "bot_token_guard";
+  string token_id = 1;
+  string address  = 2;
+  string surface  = 3;
+  string method   = 4;
+  google.protobuf.Timestamp first_used_at = 5;
+  google.protobuf.Timestamp last_used_at  = 6;
+}
+message ListBotTokenUsesResp {
+  option (w17.contrib.plugin_feature) = "bot_token_guard";
+  repeated BotTokenUseRow rows = 1;
 }
 
 // --- oauth feature: provider + identity lookups ---
@@ -412,7 +769,7 @@ message GetRegisteredRedirectReq {
 }
 message GetRegisteredRedirectResp {
   option (w17.contrib.plugin_feature) = "cli_login";
-  AuthClient client = 1;
+  AuthClientRow client = 1;
 }
 
 // GetAuthClientSecret is the ONLY reader of the stored secret hash, and it
@@ -428,8 +785,58 @@ message GetAuthClientSecretReq {
 }
 message GetAuthClientSecretResp {
   option (w17.contrib.plugin_feature) = "cli_login";
-  string client_secret = 1; // argon2id PHC hash — verified against, never returned to a caller
+  string client_secret = 1 [(w17.field) = { blank: true, sensitive: true }]; // argon2id PHC hash — verified against, never returned to a caller
   bool   enabled       = 2;
+}
+
+// GetLiveSessionExpiry reads the expiry of the session approving a CLI login,
+// so the session CliToken mints can inherit it. Keyed on the token id the
+// gateway envelope carries AND the caller's user id, and on live rows only: a
+// session revoked or expired by the time it approves is no approval at all.
+// GetAuthClientRevocation — whether the registration of one
+// (client_id, redirect_uri) pair is revoked, live or not. Read by
+// RegisterClient only after a collision, to say a revoked pair stays taken.
+message GetAuthClientRevocationReq {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  string client_id    = 1 [(w17.field) = { type: SLUG, max_len: 64 }];
+  string redirect_uri = 2 [(w17.field) = { type: URL, max_len: 2048 }];
+}
+message GetAuthClientRevocationResp {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  string id = 1;
+  // NULL = live.
+  google.protobuf.Timestamp revoked_at = 2 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+message GetLiveSessionExpiryReq {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  string token_id = 1 [(w17.field) = { type: UUID }];
+  string user_id  = 2 [(w17.field) = { type: UUID }];
+}
+// GetCliApproverRevocation — whether the device that approved a CLI code
+// has been revoked since (cli_login). CliToken refuses a code whose approver
+// was revoked during the code's short life.
+message GetCliApproverRevocationReq {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  string device_id = 1 [(w17.field) = { type: UUID }];
+}
+message GetCliApproverRevocationResp {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  // Echoed so the handler can tell "found, live" from "no row".
+  string device_id = 1;
+  google.protobuf.Timestamp revoked_at = 2 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+message GetLiveSessionExpiryResp {
+  option (w17.contrib.plugin_feature) = "cli_login";
+  // Echoed so the handler can tell "found, never expires" (NULL expires_at)
+  // from "no row".
+  string token_id = 1;
+  // NULL = the session never expires. Declared so a SQL NULL scans.
+  google.protobuf.Timestamp expires_at = 2 [(w17.field) = { type: DATETIME, null: true }];
+  // The Device row the approving session is bound to — recorded on the code
+  // as the approver of the CLI login. NULL (empty) when it has none.
+  string device_id = 3 [(w17.field) = { type: UUID, null: true }];
 }
 
 message ListAuthClientsReq {
@@ -437,19 +844,51 @@ message ListAuthClientsReq {
 }
 message ListAuthClientsResp {
   option (w17.contrib.plugin_feature) = "cli_login";
-  repeated AuthClient clients = 1;
+  repeated AuthClientRow clients = 1;
 }
 
 message GetProviderByNameReq {
   option (w17.contrib.plugin_feature) = "oauth";
   string name = 1;
 }
+// OAuthProviderRow — the provider row as GetProviderByName reads it: every
+// OAuthProvider column but `secret`, which is CRYPTED_SECRET and decrypts only
+// into a top-level target (GetProviderByNameResp.secret). A generated query
+// fills every field of its response, so the row carries no field the read
+// cannot fill; providerOf (handlers) puts the two back together.
+message OAuthProviderRow {
+  option (w17.contrib.plugin_feature) = "oauth";
+  string id            = 1 [(w17.field) = { type: UUID }];
+  string name          = 2 [(w17.field) = { type: SLUG, max_len: 64 }];
+  string display_name  = 3 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
+  string client_id     = 4 [(w17.field) = { type: CHAR, max_len: 255 }];
+  string client_secret = 5 [(w17.field) = { type: SECRET, null: true }];
+  string authorize_url = 6 [(w17.field) = { type: URL }];
+  string token_url     = 7 [(w17.field) = { type: URL }];
+  string userinfo_url  = 8 [(w17.field) = { type: URL, blank: true }];
+  string scopes        = 9 [(w17.field) = { type: CHAR, max_len: 512, blank: true }];
+  string subject_path  = 10 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
+  string email_path    = 11 [(w17.field) = { type: CHAR, max_len: 128, blank: true }];
+  bool   enabled       = 12;
+  google.protobuf.Timestamp created_at = 13 [(w17.field) = { type: DATETIME }];
+  // 14 held a column of a retired feature.
+  reserved 14;
+  string response_mode = 16 [(w17.field) = { type: CHAR, max_len: 16, blank: true }];
+  string team_id = 17 [(w17.field) = { type: CHAR, max_len: 64, blank: true }];
+  string key_id  = 18 [(w17.field) = { type: CHAR, max_len: 64, blank: true }];
+}
+
 message GetProviderByNameResp {
   option (w17.contrib.plugin_feature) = "oauth";
-  OAuthProvider provider = 1;
+  OAuthProviderRow provider = 1;
   // The decrypted client secret (OAuthProvider.secret) — top-level because an
   // encrypted column decrypts only into a single-segment target.
-  string secret = 2;
+  // NULL for a provider still on the legacy plaintext `client_secret`
+  // (rc.19 and earlier): declared so the absence is not mistaken for a
+  // secret. loadEnabledProvider moves the legacy value here, and refuses a
+  // provider that has neither — an empty HMAC key would make the state
+  // token forgeable.
+  string secret = 2 [(w17.field) = { null: true, blank: true, sensitive: true }];
 }
 
 message GetOAuthIdentityReq {
@@ -480,16 +919,51 @@ message GetUserByIdResp {
   User user = 1;
 }
 
+// The caller's marketing consent, for SetMarketingConsent's reader. Gated
+// marketing_consent.
+message GetUserMarketingConsentReq {
+  option (w17.contrib.plugin_feature) = "marketing_consent";
+  string user_id = 1;
+}
+message GetUserMarketingConsentResp {
+  option (w17.contrib.plugin_feature) = "marketing_consent";
+  bool                      consent    = 1;
+  google.protobuf.Timestamp decided_at = 2 [(w17.field) = { null: true }];
+}
+
 message GetTotpSecretReq {
   option (w17.contrib.plugin_feature) = "two_factor";
   string user_id = 1;
 }
+// TotpSecretRow — the authenticator row as GetTotpSecret reads it: every
+// UserTotpSecret column but `seed`. The seed is CRYPTED_SECRET, which is
+// decrypted only as a top-level column (GetTotpSecretResp.seed), so a row
+// carrying a `seed` field would leave it unfilled; totpSecretOf (handlers)
+// puts the two back together.
+message TotpSecretRow {
+  option (w17.contrib.plugin_feature) = "two_factor";
+  string id      = 1 [(w17.field) = { type: UUID }];
+  string user_id = 2 [(w17.field) = { type: UUID }];
+  string secret  = 3 [(w17.field) = { type: CHAR, max_len: 512, null: true }];
+  google.protobuf.Timestamp confirmed_at = 4 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp created_at   = 5 [(w17.field) = { type: DATETIME }];
+  int64  last_step = 7;
+  int64  stepup_attempts = 8;
+  google.protobuf.Timestamp stepup_locked_until = 9 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp revoked_at = 10 [(w17.field) = { type: DATETIME, null: true }];
+  string ended_key = 11 [(w17.field) = { type: CHAR, max_len: 36, blank: true }];
+}
+
 message GetTotpSecretResp {
   option (w17.contrib.plugin_feature) = "two_factor";
-  UserTotpSecret secret = 1;
+  TotpSecretRow secret = 1;
   // The decrypted seed — top-level because an encrypted column decrypts only
   // into a single-segment target (`secret.seed` would carry ciphertext).
-  string seed = 2;
+  // NULL for an authenticator enrolled by rc.19 or earlier, which holds only
+  // the legacy secretbox `secret`: seedOf opens and moves that one, and
+  // refuses an enrolment holding neither — an absent seed is never verified
+  // against as an empty one.
+  string seed = 2 [(w17.field) = { null: true, blank: true, sensitive: true }];
 }
 
 message CountRecoveryCodesReq {
@@ -549,19 +1023,17 @@ message CountRecentMfaChallengesResp {
   int64 count = 1;
 }
 
-// --- devices feature: device lookup at sign-in + the mgmt list ---
-// GetDeviceByIdentifier resolves the (user, identifier) device the
-// sign-in handler upserts against; ListUserDevices backs the
-// ListDevices management RPC. Both gated `devices`.
+// --- device identity: the trust cutoff (base) + the mgmt list (devices) ---
+// The sign-in finds or creates its Device with AuthMutation.RegisterDevice
+// (one UPSERT); ListUserDevices backs the ListDevices management RPC.
 
-message GetDeviceByIdentifierReq {
-  option (w17.contrib.plugin_feature) = "devices";
-  string user_id    = 1;
-  string identifier = 2;
+// GetDeviceTrustRevokedAt reads User.device_trust_revoked_at: a device
+// trusted at or before it is no longer trusted.
+message GetDeviceTrustRevokedAtReq {
+  string user_id = 1;
 }
-message GetDeviceByIdentifierResp {
-  option (w17.contrib.plugin_feature) = "devices";
-  Device device = 1;
+message GetDeviceTrustRevokedAtResp {
+  google.protobuf.Timestamp device_trust_revoked_at = 1 [(w17.field) = { null: true }];
 }
 
 message ListUserDevicesReq {
@@ -571,43 +1043,6 @@ message ListUserDevicesReq {
 message ListUserDevicesResp {
   option (w17.contrib.plugin_feature) = "devices";
   repeated Device devices = 1;
-}
-
-// GetUserTenant resolves the authenticated principal's tenant —
-// the `tenant_id` data scope, sourced from auth (never client-
-// sent, per the data-scope rule). Behind `tenant_scope`: present
-// only when the activation enables the tenant feature; the
-// `User.tenant_id` column it reads is gated by the same tag, so
-// the query and its column appear / disappear together.
-message GetUserTenantReq {
-  option (w17.contrib.plugin_feature) = "tenant_scope";
-  string user_id = 1;
-}
-message GetUserTenantResp {
-  option (w17.contrib.plugin_feature) = "tenant_scope";
-  string tenant_id = 1;
-}
-
-// GetTenantBySlug / GetTenantByDomain resolve a Tenant id from the
-// request context at SignUp (slug from the URL `{tenant_slug}` path
-// param, domain from the forwarded Host header). The SignUp handler
-// stamps the result onto the new user's tenant_id. Both gated by
-// `tenant_scope` — they read the Tenant table the same feature adds.
-message GetTenantBySlugReq {
-  option (w17.contrib.plugin_feature) = "tenant_scope";
-  string slug = 1;
-}
-message GetTenantBySlugResp {
-  option (w17.contrib.plugin_feature) = "tenant_scope";
-  string tenant_id = 1;
-}
-message GetTenantByDomainReq {
-  option (w17.contrib.plugin_feature) = "tenant_scope";
-  string domain = 1;
-}
-message GetTenantByDomainResp {
-  option (w17.contrib.plugin_feature) = "tenant_scope";
-  string tenant_id = 1;
 }
 
 // ── org_membership query request/response messages ──────────
@@ -627,12 +1062,15 @@ message UserOrg {
   string name   = 3;
   string kind   = 4; // private | company
   string role   = 5; // a name from the org role catalogue
-  // owner — TRUE when this caller IS the organization's owner
-  // (Organization.owner_id). Distinct from `role`, which is a GRANT somebody
-  // was given and can be changed by an admin; ownership is a property of the
-  // organization. Without this the person who created an org is
-  // indistinguishable from anyone they promoted.
+  // owner — DEPRECATED, always false. Ownership is no longer an
+  // authorization fact (Organization.owner_id is dropped; see Organization in
+  // types/models.proto): whoever administers an organization holds a role in
+  // it. ListUserOrgs no longer projects it; the field stays, unset, so a
+  // client reading UserOrg (ListMyOrgs answers it) does not break.
   bool   owner  = 6;
+  // membership_kind — the kind of this membership (membership_kinds):
+  // `staff`, `client`, … One membership per organization, so one kind.
+  string membership_kind = 7 [(w17.contrib.plugin_feature_field) = "membership_kinds"];
 }
 
 message ListUserOrgsReq {
@@ -684,45 +1122,9 @@ message GetUserOrgPermissionsResp {
   repeated RoleGrant grants = 3;
 
 
-  // 1 = permission_ids, 2 = all_permissions (wildcard OR ownership).
+  // 1 = permission_ids, 2 = all_permissions (a wildcard role, which then
+  // also meant ownership).
   reserved 1, 2;
-}
-
-// GetUserOwnsOrg — is this user the organization's owner?
-//
-// Its OWN query rather than a field beside `grants`, for two reasons. The
-// shape: that message is now one row per role, and a scalar riding along a
-// fan-out is the ambiguity `w17.Paging` had to be carved out of. And the
-// meaning: ownership is not a role grant, so putting it in the message that
-// carries role grants would re-create the conflation this change exists to
-// undo.
-message GetUserOwnsOrgReq {
-  option (w17.contrib.plugin_feature) = "org_membership";
-  string user_id = 1 [(w17.field) = { type: UUID }];
-  string org_id  = 2 [(w17.field) = { type: UUID }];
-}
-message GetUserOwnsOrgResp {
-  option (w17.contrib.plugin_feature) = "org_membership";
-  // owner — Organization.owner_id is this user.
-  //
-  // Split out of `all_permissions`, which used to mean "a wildcard role OR
-  // ownership". Conflating them made ownership INERT: it arrived in the
-  // narrowing step, narrowing can only subtract, and an owner holding no
-  // role intersected "everything" with "nothing" and got nothing — owner_id
-  // set, auth_userrole empty ⇒ PermissionDenied — so owners needed seeded
-  // grants like anybody else.
-  //
-  // ⚠️ This is the ONE flag in the plugin that WIDENS rather than narrows,
-  // and the exception is deliberate, argued here rather than slipped in:
-  //
-  //   · ownership is not a permission anybody handed out — it is root
-  //     authority over the organization, read off the organization itself;
-  //   · it applies on the SESSION realm ONLY. An API token's ceiling stays
-  //     its holder's api-realm roles, so a stolen CI token is not an owner
-  //     login even when its owner owns the org;
-  //   · and the per-project CI lock runs ABOVE the ACL, so a locked project
-  //     still refuses a push from the owner.
-  bool owner = 1;
 }
 
 // The no-active-org half of the pair above. A separate query rather
@@ -738,8 +1140,6 @@ message GetUserRealmWidePermissionsReq {
 message GetUserRealmWidePermissionsResp {
   option (w17.contrib.plugin_feature) = "org_membership";
   // Realm-wide roles only — every org-scoped role is out of context here.
-  // No `owner` twin: ownership is per organization, and this is the answer
-  // for a request that named none.
   repeated RoleGrant grants = 3;
   reserved 1, 2;
 }
@@ -829,6 +1229,59 @@ message ListOrgMembershipsResp {
   w17.Paging paging = 2;
 }
 
+// GetOrganizationBySlugReq — an organization by its slug, with no caller
+// in it: the backoffice names the organization it invites into, and its
+// operator is a member of none (GetUserOrgBySlug answers only a member).
+message GetOrganizationBySlugReq {
+  option (w17.contrib.plugin_feature) = "backoffice_invites";
+  string slug = 1 [(w17.field) = { type: SLUG, max_len: 64 }];
+}
+
+// GetPendingOrgInviteReq / PendingOrgInviteRef — the organization and the
+// role of one pending invitation, by its id: what withdrawing it from the
+// backoffice locks and holds to the ceiling, for an id an operator picked
+// from the realm-wide list.
+message GetPendingOrgInviteReq {
+  option (w17.contrib.plugin_feature) = "backoffice_invites";
+  string id = 1 [(w17.field) = { type: UUID }];
+}
+message PendingOrgInviteRef {
+  option (w17.contrib.plugin_feature) = "backoffice_invites";
+  string id     = 1 [(w17.field) = { type: UUID }];
+  string org_id = 2 [(w17.field) = { type: UUID }];
+  string role   = 3;
+}
+
+// ListOrgInvitesAdminReq / OrgInviteAdminRow — every organization's pending
+// invitations, for the backoffice's OrgInvites page: the org's NAME beside
+// its id (ADMIN-FK, as OrgMembershipAdminRow does for memberships), the
+// address (empty for an open invitation, which names nobody), the role and
+// when it lapses. Never the token: the row keeps only its hash.
+message ListOrgInvitesAdminReq {
+  option (w17.contrib.plugin_feature) = "backoffice_invites";
+}
+message OrgInviteAdminRow {
+  option (w17.contrib.plugin_feature) = "backoffice_invites";
+  string id           = 1 [(w17.field) = { type: UUID }];
+  string email        = 2;
+  string organization = 3 [(w17.field) = { type: UUID }];
+  string org_name     = 4;
+  string role         = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+message GetOrgInviteAdminReq {
+  option (w17.contrib.plugin_feature) = "backoffice_invites";
+  string id = 1 [(w17.field) = { type: UUID }];
+}
+message ListOrgInvitesAdminResp {
+  option (w17.contrib.plugin_feature) = "backoffice_invites";
+  repeated OrgInviteAdminRow invites = 1;
+  // Cursor-paged (admin-only), as ListOrgMemberships: the page's list grows
+  // with every invitation the realm sends.
+  w17.Paging paging = 2;
+}
+
 message GetOrgMembershipReq {
   option (w17.contrib.plugin_feature) = "org_membership";
   string id = 1;
@@ -840,7 +1293,9 @@ message GetOrgMembershipReq {
 // these GLOBAL list + get back the admin Sessions page (review + revoke
 // tokens across every user). The projection NEVER includes the secret
 // `token` column — only the base-tier id / user_id / created_at /
-// expires_at. Gated user_admin (the same realm that manages accounts).
+// expires_at and the revocation (revoked_at / revoke_reason, and
+// revoked_by on the detail): a revoked token stays listed, shown as
+// revoked. Gated user_admin (the same realm that manages accounts).
 
 message ListUserTokensReq {
   option (w17.contrib.plugin_feature) = "user_admin";
@@ -877,6 +1332,23 @@ message UserTokenAdminRow {
   // of the sortable set (a keyset seek on a NULL key silently drops rows).
   // A read-projection row is not the model, so nothing else carries this.
   google.protobuf.Timestamp expires_at = 6 [(w17.field) = { type: DATETIME, null: true }];
+  // When it was revoked (NULL = live, so declared null for the same scan
+  // and sort reasons as expires_at) and why.
+  google.protobuf.Timestamp revoked_at = 7 [(w17.field) = { type: DATETIME, null: true }];
+  RevokeReason revoke_reason = 8;
+  // device — the Device row the token is bound to. NULL for a token bound to
+  // no device (minted before binding, an API or MCP token). The Sessions page
+  // does not link it to the Devices page: that page is the opt-in
+  // admin_devices feature, and a column ref cannot be gated.
+  string device = 9 [(w17.field) = { type: UUID, null: true }];
+  // The device's label (its user agent), blank when there is none — the
+  // Sessions column, so the cell reads as the browser rather than a UUID.
+  string device_label = 10;
+  // The device's key thumbprint (the id events and AuthResp call device_id);
+  // NULL for no device or a legacy (keyless) one.
+  string thumbprint = 11 [(w17.field) = { type: CHAR, max_len: 43, null: true }];
+  // A public-computer session (UserToken.public_computer).
+  bool public_computer = 12;
 }
 
 message ListUserTokensResp {
@@ -896,6 +1368,215 @@ message ListUserTokensResp {
 message GetUserTokenReq {
   option (w17.contrib.plugin_feature) = "user_admin";
   string id = 1;
+}
+
+// UserTokenAdminDetail — the Sessions detail projection: the token's safe
+// columns (NEVER the secret `token` or `token_hash`) joined to the Device it
+// is bound to and, for a CLI session, to the Device of the browser session
+// that approved it. Not a table. Every joined column is NULL / blank when
+// there is no such device. Gated user_admin.
+message UserTokenAdminDetail {
+  option (w17.contrib.plugin_feature) = "user_admin";
+  string id      = 1 [(w17.field) = { type: UUID }];
+  string user_id = 2 [(w17.field) = { type: UUID }];
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp expires_at = 4 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp revoked_at = 5 [(w17.field) = { type: DATETIME, null: true }];
+  string revoked_by = 6 [(w17.field) = { type: UUID, null: true }];
+  RevokeReason revoke_reason = 7;
+  bool public_computer = 8;
+  // The device the token is bound to: its row, label and key thumbprint.
+  string device_id         = 9  [(w17.field) = { type: UUID, null: true }];
+  string device_label      = 10;
+  string device_thumbprint = 11 [(w17.field) = { type: CHAR, max_len: 43, null: true }];
+  // A CLI session's approver: the Device of the browser session that
+  // approved the login (UserToken.approved_by_device_id), its label and
+  // thumbprint. NULL / blank on every other token.
+  string approved_by_device_id = 12 [(w17.field) = { type: UUID, null: true }];
+  string approver_label        = 13;
+  string approver_thumbprint   = 14 [(w17.field) = { type: CHAR, max_len: 43, null: true }];
+}
+
+// ── sign-in history reads ─────────────────────────────────────
+//
+// ListSignInEvents / GetSignInEvent back the admin Sign-ins page (user_admin,
+// the realm that manages accounts); ListUserSignInEvents backs the signed-in
+// person's own history (AuthService.ListMySignInEvents). Read-only: the
+// table is append-only (SignInEvent).
+
+message ListSignInEventsReq {
+  option (w17.contrib.plugin_feature) = "user_admin";
+}
+
+// SignInEventAdminRow — the Sign-ins list projection (ADMIN-FK), like
+// UserTokenAdminRow: not a table, a read-only DTO the ListSignInEvents DQL
+// joins User into.
+//   - account — who the attempt was about, as a person reads it: the
+//               account's current address, or the address typed when the
+//               attempt reached no account; the row's link to its detail.
+//   - user    — the raw user_id, linked to the Users page by the page's
+//               AdminColumnRef; NULL when the attempt reached no account
+//               (declared null so the row scans it).
+// The user agent and the Device row are on the detail.
+// Gated user_admin.
+message SignInEventAdminRow {
+  option (w17.contrib.plugin_feature) = "user_admin";
+  string id      = 1 [(w17.field) = { type: UUID }];
+  string account = 2;
+  string user    = 3 [(w17.field) = { type: UUID, null: true }];
+  SignInMethod  method  = 4;
+  SignInOutcome outcome = 5;
+  string ip      = 6;
+  google.protobuf.Timestamp created_at = 7;
+  // The proof's key thumbprint — the value events and AuthResp call
+  // device_id — so an operator can match a row to an event. NULL without a
+  // proof.
+  string thumbprint = 8 [(w17.field) = { type: CHAR, max_len: 43, null: true }];
+}
+
+message ListSignInEventsResp {
+  option (w17.contrib.plugin_feature) = "user_admin";
+  repeated SignInEventAdminRow events = 1;
+
+  // Cursor-paged (admin-only), like ListUserTokens: the history grows with
+  // every attempt, failures included, so an unpaged list would load it
+  // whole.
+  w17.Paging paging = 2;
+}
+
+message GetSignInEventReq {
+  option (w17.contrib.plugin_feature) = "user_admin";
+  string id = 1;
+}
+
+// ── user_admin: the Devices page ──────────────────────────────
+//
+// ListAllDevices / GetDevice back the admin Devices page: every Device row
+// of every account — revoked and legacy ones included, nothing in the table
+// is deleted — with the account's address and whether the device's trust
+// still stands. Gated user_admin.
+
+message ListAllDevicesReq {
+  option (w17.contrib.plugin_feature) = "user_admin";
+}
+
+// DeviceAdminRow — one device as the operator reads it (ADMIN-FK, like
+// UserTokenAdminRow; the list and the detail share it). Not a table.
+//   - owner      — the account's address (COALESCE: a device of a missing
+//                  account lists with a blank owner instead of failing the
+//                  page); the row's link to its detail.
+//   - user       — the raw user_id, linked to the Users page by the page's
+//                  AdminColumnRef.
+//   - thumbprint — the key thumbprint; NULL on a LEGACY row (recorded before
+//                  device binding, never usable).
+//   - created_at / last_seen_at — first and last seen.
+//   - trusted_at — when the device last passed the second factor (NULL:
+//                  never); trust_revoked_at — when the account's device trust
+//                  was last revoked as a whole (User.device_trust_revoked_at:
+//                  a password change, a disable, an erasure).
+//   - trusted    — whether the trust still stands: trusted_at set, later than
+//                  trust_revoked_at, and the device not revoked — the rule the
+//                  sign-in applies.
+//   - revoked_at — when the device was revoked for good (NULL: live).
+// Gated user_admin.
+message DeviceAdminRow {
+  option (w17.contrib.plugin_feature) = "user_admin";
+  string id         = 1 [(w17.field) = { type: UUID }];
+  string owner      = 2;
+  string user       = 3 [(w17.field) = { type: UUID }];
+  string label      = 4;
+  string thumbprint = 5 [(w17.field) = { type: CHAR, max_len: 43, null: true }];
+  string ip         = 6;
+  google.protobuf.Timestamp created_at   = 7;
+  google.protobuf.Timestamp last_seen_at = 8;
+  google.protobuf.Timestamp trusted_at       = 9  [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp trust_revoked_at = 10 [(w17.field) = { type: DATETIME, null: true }];
+  bool trusted = 11;
+  google.protobuf.Timestamp revoked_at = 12 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+message ListAllDevicesResp {
+  option (w17.contrib.plugin_feature) = "user_admin";
+  repeated DeviceAdminRow devices = 1;
+
+  // Cursor-paged (admin-only), like ListUserTokens: every key that ever
+  // passed a password is a row, and none is ever deleted.
+  w17.Paging paging = 2;
+}
+
+message GetDeviceReq {
+  option (w17.contrib.plugin_feature) = "user_admin";
+  string id = 1;
+}
+
+// GetSessionStepUpReq — the caller's own session (step_up_code).
+message GetSessionStepUpReq {
+  option (w17.contrib.plugin_feature) = "step_up_code";
+  string token_id = 1;
+  string user_id  = 2;
+}
+// GetSessionStepUpResp — the mailed step-up code's hash and when it was sent
+// (NULL: none is out).
+message GetSessionStepUpResp {
+  option (w17.contrib.plugin_feature) = "step_up_code";
+  string code_hash = 1 [(w17.field) = { type: CHAR, max_len: 255, null: true, sensitive: true }];
+  google.protobuf.Timestamp sent_at = 2 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+// GetSessionSteppedUpAtReq — the caller's own session (step_up): when it was
+// last stepped up, for an action of the plugin's own that asks for one
+// (CreateApiToken under api_token_step_up_seconds).
+message GetSessionSteppedUpAtReq {
+  option (w17.contrib.plugin_feature) = "step_up";
+  string token_id = 1;
+  string user_id  = 2;
+}
+message GetSessionSteppedUpAtResp {
+  option (w17.contrib.plugin_feature) = "step_up";
+  google.protobuf.Timestamp stepped_up_at = 1 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+message ListAuthenticatorsReq {
+  option (w17.contrib.plugin_feature) = "admin_mfa";
+}
+// AuthenticatorAdminRow — one authenticator enrolment as the operator reads
+// it (the list and the detail share it). Not a table.
+//   - owner        — the account's address; the row's link to its detail.
+//                    Plain columns only: the table carries the encrypted
+//                    seed, and a statement over it projects no computed
+//                    value (so no COALESCE, no recovery-code count).
+//   - user         — the raw user_id, linked to the Users page.
+//   - confirmed_at — when the person confirmed it (NULL: set up, never
+//                    confirmed, so it never guarded a sign-in).
+//   - revoked_at   — when it was disabled, replaced or reset (NULL: live).
+// Never the seed. Gated admin_mfa.
+message AuthenticatorAdminRow {
+  option (w17.contrib.plugin_feature) = "admin_mfa";
+  string id    = 1 [(w17.field) = { type: UUID }];
+  string owner = 2;
+  string user  = 3 [(w17.field) = { type: UUID }];
+  google.protobuf.Timestamp confirmed_at = 4 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp created_at   = 5;
+  google.protobuf.Timestamp revoked_at   = 6 [(w17.field) = { type: DATETIME, null: true }];
+}
+message ListAuthenticatorsResp {
+  option (w17.contrib.plugin_feature) = "admin_mfa";
+  repeated AuthenticatorAdminRow authenticators = 1;
+  // Cursor-paged (admin-only), like ListAllDevices: no enrolment is deleted.
+  w17.Paging paging = 2;
+}
+message GetAuthenticatorReq {
+  option (w17.contrib.plugin_feature) = "admin_mfa";
+  string id = 1;
+}
+
+message ListUserSignInEventsReq {
+  option (w17.contrib.plugin_feature) = "authenticate_turnkey";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListUserSignInEventsResp {
+  option (w17.contrib.plugin_feature) = "authenticate_turnkey";
+  repeated SignInEvent events = 1;
 }
 
 // AuthQuery — read-only DB lookups.
@@ -928,20 +1609,41 @@ message OrgMemberRow {
   string email   = 2;
   string role    = 3;
   google.protobuf.Timestamp joined_at = 4;
-  // owner — see UserOrg.owner. A member list that cannot show who owns the
-  // organization makes the owner look like any other admin.
-  bool   owner   = 5;
+  // The membership row's id (OrgMember.membership_id).
+  string membership_id = 6;
+
+  // 5 = owner, (Organization.owner_id = user_id): dropped with the column.
+  // OrgMember.owner, which this filled, stays — deprecated, always false.
+  reserved 5;
+  reserved "owner";
 }
 
 message ListOrgMembersByOrgReq {
   option (w17.contrib.plugin_feature) = "org_membership";
   string org_id = 1 [(w17.field) = { type: UUID }];
+  // after_email — the last address of the previous page; '' = the first page
+  // (every address sorts after the empty one).
+  // The keyset of the list's order (u.email, unique).
+  string after_email = 2 [(w17.field) = { type: CHAR, max_len: 320, blank: true }];
+  // limit — the rows read. The handler asks one more than the page it
+  // returns, to tell whether another page follows.
+  int32 limit = 3 [(w17.field) = { type: NUMBER, gte: 1, lte: 501 }];
 }
 message ListOrgMembersByOrgResp {
   option (w17.contrib.plugin_feature) = "org_membership";
   repeated OrgMemberRow members = 1;
 }
 
+message GetPendingOrgInviteForEmailReq {
+  option (w17.contrib.plugin_feature) = "invite_accept_from_list";
+  string invite_id = 1 [(w17.field) = { type: UUID }];
+  string email     = 2 [(w17.field) = { type: EMAIL, max_len: 320 }];
+}
+message GetPendingOrgInviteForEmailResp {
+  option (w17.contrib.plugin_feature) = "invite_accept_from_list";
+  string org_id     = 1;
+  string token_hash = 2;
+}
 message GetPendingOrgInviteByTokenReq {
   option (w17.contrib.plugin_feature) = "org_invite";
   string token_hash = 1 [(w17.field) = { type: CHAR, max_len: 128 }];
@@ -952,7 +1654,7 @@ message GetPendingOrgInviteByTokenResp {
   string role   = 2;
   // Empty = the invitation is OPEN — it names no address, and accepting it
   // therefore derives nothing about the one the registrant holds.
-  string email  = 3;
+  string email  = 3 [(w17.field) = { null: true }];
   // So a caller can look at what is pinned BEFORE spending the invitation. Opaque
   // here as everywhere — see OrgInvite.metadata.
   string metadata = 4;
@@ -982,10 +1684,566 @@ message PendingInviteRow {
   string org_name  = 4;
   string role      = 5;
   google.protobuf.Timestamp expires_at = 6;
+  // See OrgInvite.product_roles.
+  string product_roles = 7 [(w17.contrib.plugin_feature_field) = "product_roles"];
 }
 message ListPendingInvitesForEmailResp {
   option (w17.contrib.plugin_feature) = "org_invite";
   repeated PendingInviteRow invites = 1;
+}
+
+// ── oauth_server reads ─────────────────────────────────────────
+
+// The client columns every oauth_server read of a client projects.
+message OAuthClientRow {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string id = 1;
+  string client_id = 2;
+  OAuthClientKind kind = 3;
+  string client_name = 4;
+  string client_uri = 5;
+  string logo_uri = 6;
+  string redirect_uris = 7;
+  google.protobuf.Timestamp metadata_fetched_at = 8 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp disabled_at = 9 [(w17.field) = { type: DATETIME, null: true }];
+  string software_id = 10;
+}
+
+message GetOAuthClientByHashReq {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string client_id_hash = 1 [(w17.field) = { type: CHAR, max_len: 64 }];
+}
+message GetOAuthClientByHashResp {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  OAuthClientRow client = 1;
+}
+
+message GetOAuthClientByRowIDReq {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string id = 1 [(w17.field) = { type: UUID }];
+}
+message GetOAuthClientByRowIDResp {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  OAuthClientRow client = 1;
+}
+
+// GetPendingOAuthAuthorization — an authorization request the consent page
+// is deciding: live (not expired) and undecided only, with its client.
+message GetPendingOAuthAuthorizationReq {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string request_hash = 1 [(w17.field) = { type: CHAR, max_len: 64 }];
+}
+message GetPendingOAuthAuthorizationResp {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string id = 1;
+  OAuthGrantKind kind = 2;
+  string redirect_uri = 3;
+  string scope = 4;
+  string resource = 5;
+  google.protobuf.Timestamp expires_at = 6 [(w17.field) = { type: DATETIME }];
+  OAuthClientRow client = 7;
+}
+
+// GetOAuthCodeUse — an approved code by its hash, spent or not: a code
+// presented after it was redeemed ends the grant it bought (OAuth 2.1
+// §4.1.3).
+message GetOAuthCodeUseReq {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string code_hash = 1 [(w17.field) = { type: CHAR, max_len: 64 }];
+}
+message GetOAuthCodeUseResp {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string id = 1;
+  google.protobuf.Timestamp code_consumed_at = 2 [(w17.field) = { type: DATETIME, null: true }];
+  // The session the code minted (a session-kind code), empty otherwise.
+  string session_token_hash = 3 [(w17.field) = { type: CHAR, max_len: 64, null: true }];
+}
+
+// GetOAuthGrantByAuthorization — the grant an authorization's code bought.
+message GetOAuthGrantByAuthorizationReq {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string authorization_id = 1 [(w17.field) = { type: UUID }];
+}
+message GetOAuthGrantByAuthorizationResp {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string id = 1;
+}
+
+// GetOAuthApprovingSession — the session approving an authorization: its
+// expiry (a session grant mints no later) and its device (the approver).
+// Live sessions of the caller only.
+message GetOAuthApprovingSessionReq {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string token_id = 1 [(w17.field) = { type: UUID }];
+  string user_id = 2 [(w17.field) = { type: UUID }];
+}
+message GetOAuthApprovingSessionResp {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  // Echoed so "found, never expires" is told apart from "no row".
+  string token_id = 1;
+  google.protobuf.Timestamp expires_at = 2 [(w17.field) = { type: DATETIME, null: true }];
+  string device_id = 3 [(w17.field) = { type: UUID, null: true }];
+}
+
+// GetOAuthDeviceRevocation — whether the device that approved a grant was
+// revoked since: the approval ends with it.
+message GetOAuthDeviceRevocationReq {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string device_id = 1 [(w17.field) = { type: UUID }];
+}
+message GetOAuthDeviceRevocationResp {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string device_id = 1;
+  google.protobuf.Timestamp revoked_at = 2 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+// GetOAuthRefreshToken — a refresh token by its hash, in any state: a spent
+// one presented again is the reuse that ends its grant.
+message GetOAuthRefreshTokenReq {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string token_hash = 1 [(w17.field) = { type: CHAR, max_len: 64 }];
+}
+message GetOAuthRefreshTokenResp {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string id = 1;
+  string grant_id = 2;
+  google.protobuf.Timestamp expires_at = 3 [(w17.field) = { type: DATETIME }];
+  google.protobuf.Timestamp used_at = 4 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+// GetOAuthGrant — a grant with its client's state, for a refresh.
+message GetOAuthGrantReq {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string id = 1 [(w17.field) = { type: UUID }];
+}
+message GetOAuthGrantResp {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string id = 1;
+  string user_id = 2;
+  string org_id = 3 [(w17.field) = { type: UUID, null: true }];
+  string client_row_id = 4;
+  string client_id = 5;
+  string resource = 6;
+  string scope = 7;
+  string approved_by_device_id = 8 [(w17.field) = { type: UUID, null: true }];
+  google.protobuf.Timestamp expires_at = 9 [(w17.field) = { type: DATETIME }];
+  google.protobuf.Timestamp revoked_at = 10 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp client_disabled_at = 11 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+// GetOAuthGrantLastToken — the newest access token of a grant: one ended by
+// a revocation (logout everywhere, a password change, an operator, the
+// account disabled) ends the grant at its next refresh, so every path that
+// revokes a user's tokens reaches their connected apps too.
+message GetOAuthGrantLastTokenReq {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string grant_id = 1 [(w17.field) = { type: UUID }];
+}
+message GetOAuthGrantLastTokenResp {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string token_id = 1;
+  google.protobuf.Timestamp revoked_at = 2 [(w17.field) = { type: DATETIME, null: true }];
+}
+
+// GetOAuthAccessTokenGrant — the grant an access token belongs to, by the
+// token's hash (the revocation endpoint). Empty for any other token.
+message GetOAuthAccessTokenGrantReq {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string token_hash = 1 [(w17.field) = { type: CHAR, max_len: 64 }];
+}
+message GetOAuthAccessTokenGrantResp {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string grant_id = 1 [(w17.field) = { type: UUID, null: true }];
+}
+
+// ListUserOAuthGrants — a user's live connected apps.
+message ListUserOAuthGrantsReq {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+}
+message OAuthGrantRow {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  string id = 1;
+  string org_id = 2 [(w17.field) = { type: UUID, null: true }];
+  string resource = 3;
+  string scope = 4;
+  google.protobuf.Timestamp created_at = 5 [(w17.field) = { type: DATETIME }];
+  google.protobuf.Timestamp last_used_at = 6 [(w17.field) = { type: DATETIME, null: true }];
+  google.protobuf.Timestamp expires_at = 7 [(w17.field) = { type: DATETIME }];
+  string client_id = 8;
+  string client_name = 9;
+  string client_uri = 10;
+  string logo_uri = 11;
+}
+message ListUserOAuthGrantsResp {
+  option (w17.contrib.plugin_feature) = "oauth_server";
+  repeated OAuthGrantRow grants = 1;
+}
+
+// ── teams ──
+
+// TeamRow — one live team of an organization.
+message TeamRow {
+  option (w17.contrib.plugin_feature) = "teams";
+  string id          = 1;
+  string name        = 2;
+  string description = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+// ListOrgPackagesReq — the packages an organization has live (org_packages).
+message ListOrgPackagesReq {
+  option (w17.contrib.plugin_feature) = "org_packages";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListOrgPackagesResp {
+  option (w17.contrib.plugin_feature) = "org_packages";
+  repeated OrgPackageRow packages = 1;
+}
+message OrgPackageRow {
+  option (w17.contrib.plugin_feature) = "org_packages";
+  string package = 1;
+  google.protobuf.Timestamp enabled_at = 2;
+}
+
+message GetOrgOfHostReq {
+  option (w17.contrib.plugin_feature) = "org_hosts";
+  string host = 1 [(w17.field) = { type: CHAR, max_len: 253 }];
+}
+message OrgHostRow {
+  option (w17.contrib.plugin_feature) = "org_hosts";
+  string host    = 1;
+  string org_id  = 2;
+  string slug    = 3;
+  google.protobuf.Timestamp bound_at = 4;
+}
+message ListOrgHostRowsReq {
+  option (w17.contrib.plugin_feature) = "org_hosts";
+}
+message ListOrgHostRowsResp {
+  option (w17.contrib.plugin_feature) = "org_hosts";
+  repeated OrgHostRow hosts = 1;
+}
+
+message ListOrgEmailProofPolicyRowsReq {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListOrgEmailProofPolicyRowsResp {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  repeated OrgEmailProofPolicyRow policies = 1;
+}
+message OrgEmailProofPolicyRow {
+  option (w17.contrib.plugin_feature) = "org_email_proof_policy";
+  string floor = 1;
+  google.protobuf.Timestamp set_at = 2;
+}
+message ListOrgTwoFactorPolicyRowsReq {
+  option (w17.contrib.plugin_feature) = "org_two_factor_policy";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListOrgTwoFactorPolicyRowsResp {
+  option (w17.contrib.plugin_feature) = "org_two_factor_policy";
+  repeated OrgTwoFactorPolicyRow policies = 1;
+}
+message OrgTwoFactorPolicyRow {
+  option (w17.contrib.plugin_feature) = "org_two_factor_policy";
+  string kind   = 1;
+  string policy = 2;
+  google.protobuf.Timestamp set_at = 3;
+}
+
+message ListOrgSignUpPolicyRowsReq {
+  option (w17.contrib.plugin_feature) = "org_signup";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListOrgSignUpPolicyRowsResp {
+  option (w17.contrib.plugin_feature) = "org_signup";
+  repeated OrgSignUpPolicyRow policies = 1;
+}
+message OrgSignUpPolicyRow {
+  option (w17.contrib.plugin_feature) = "org_signup";
+  string kind = 1;
+  bool   open = 2;
+  string role = 3;
+  google.protobuf.Timestamp set_at = 4;
+  // See OrgSignUpPolicy.product_roles.
+  string product_roles = 5 [(w17.contrib.plugin_feature_field) = "product_roles"];
+  // See OrgSignUpPolicy.role_snapshot.
+  string role_snapshot = 6;
+}
+
+// The product roles users hold (product_roles) and an organization's plan
+// (product_plans).
+// ListProductRoleDefs — the identity's own roles live for an organization:
+// the backoffice's, and (org_id set) that organization's.
+message ListProductRoleDefsReq {
+  option (w17.contrib.plugin_feature) = "product_roles";
+  string org_id = 1 [(w17.field) = { type: UUID, null: true, blank: true }];
+}
+message ListProductRoleDefsResp {
+  option (w17.contrib.plugin_feature) = "product_roles";
+  repeated ProductRoleDefRow roles = 1;
+}
+message ProductRoleDefRow {
+  option (w17.contrib.plugin_feature) = "product_roles";
+  string id          = 1;
+  // org_id — '' for the backoffice's.
+  string org_id      = 2 [(w17.field) = { null: true }];
+  string key         = 3;
+  string name        = 4;
+  bool   org_scoped  = 5;
+  string permissions = 6;
+}
+
+// ListTokenProductRoles — the products' roles an API token may use
+// (TokenProductRole); none = the token names none.
+message ListTokenProductRolesReq {
+  option (w17.contrib.plugin_feature) = "product_roles";
+  string token_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListTokenProductRolesResp {
+  option (w17.contrib.plugin_feature) = "product_roles";
+  repeated TokenProductRoleRow roles = 1;
+}
+message TokenProductRoleRow {
+  option (w17.contrib.plugin_feature) = "product_roles";
+  string product  = 1;
+  string role_key = 2;
+}
+
+message ListProductRolesOfUserReq {
+  option (w17.contrib.plugin_feature) = "product_roles";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+  string product = 2 [(w17.field) = { type: CHAR, max_len: 64 }];
+}
+message ProductRoleGrantRowsResp {
+  option (w17.contrib.plugin_feature) = "product_roles";
+  repeated ProductRoleGrantRow grants = 1;
+}
+message ProductRoleGrantRow {
+  option (w17.contrib.plugin_feature) = "product_roles";
+  string id         = 1;
+  string user_id    = 2;
+  // org_id — '' for a realm-wide grant.
+  string org_id     = 3 [(w17.field) = { null: true }];
+  string product    = 4;
+  string role_key   = 5;
+  string granted_by = 6 [(w17.field) = { null: true }];
+  google.protobuf.Timestamp granted_at = 7;
+}
+message ListOrgProductRoleGrantRowsReq {
+  option (w17.contrib.plugin_feature) = "product_roles";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListUserProductRoleGrantRowsReq {
+  option (w17.contrib.plugin_feature) = "product_roles";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListRealmProductRoleGrantRowsReq {
+  option (w17.contrib.plugin_feature) = "product_roles";
+}
+// GetOrgProductAllowanceReq / OrgProductAllowanceRef — the organization of
+// one live plan line, by its id: what ending it from the backoffice locks,
+// for an id an operator picked from a list of lines.
+message GetOrgProductAllowanceReq {
+  option (w17.contrib.plugin_feature) = "product_plans";
+  string id = 1 [(w17.field) = { type: UUID }];
+}
+message OrgProductAllowanceRef {
+  option (w17.contrib.plugin_feature) = "product_plans";
+  string id     = 1 [(w17.field) = { type: UUID }];
+  string org_id = 2 [(w17.field) = { type: UUID }];
+}
+
+message ListOrgProductAllowanceRowsReq {
+  option (w17.contrib.plugin_feature) = "product_plans";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListOrgProductAllowanceRowsResp {
+  option (w17.contrib.plugin_feature) = "product_plans";
+  repeated OrgProductAllowanceRow lines = 1;
+}
+message OrgProductAllowanceRow {
+  option (w17.contrib.plugin_feature) = "product_plans";
+  string id       = 1;
+  string product  = 2;
+  string role_key = 3;
+  google.protobuf.Timestamp allowed_at = 4;
+}
+
+message ListProductPlanRowsReq {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+}
+message ListProductPlanRowsResp {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+  repeated ProductPlanRow plans = 1;
+}
+message ProductPlanRow {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+  string id   = 1;
+  string name = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+message ListProductPlanLineRowsReq {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+  string plan_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListProductPlanLineRowsResp {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+  repeated ProductPlanLineRow lines = 1;
+}
+message ProductPlanLineRow {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+  string id       = 1;
+  string product  = 2;
+  string role_key = 3;
+  google.protobuf.Timestamp added_at = 4;
+}
+message ListOrgProductPlanAssignmentRowsReq {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListOrgProductPlanAssignmentRowsResp {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+  repeated OrgProductPlanAssignmentRow assignments = 1;
+}
+message OrgProductPlanAssignmentRow {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+  string id      = 1;
+  string org_id  = 2;
+  string plan_id = 3;
+  google.protobuf.Timestamp assigned_at = 4;
+}
+message ListProductPlanAssignmentRowsReq {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+  string plan_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListProductPlanAssignmentRowsResp {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+  repeated OrgProductPlanAssignmentRow assignments = 1;
+}
+message ListOrgNamedPlanLineRowsReq {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListOrgNamedPlanLineRowsResp {
+  option (w17.contrib.plugin_feature) = "named_product_plans";
+  repeated ProductPlanLineRow lines = 1;
+}
+
+message ListTeamsByOrgReq {
+  option (w17.contrib.plugin_feature) = "teams";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListTeamsByOrgResp {
+  option (w17.contrib.plugin_feature) = "teams";
+  repeated TeamRow teams = 1;
+}
+
+// GetTeamReq — one live team, whichever organization it is in: the caller
+// compares org_id with the organization it acts in.
+message GetTeamReq {
+  option (w17.contrib.plugin_feature) = "teams";
+  string id = 1 [(w17.field) = { type: UUID }];
+}
+message GetTeamResp {
+  option (w17.contrib.plugin_feature) = "teams";
+  string id     = 1;
+  string org_id = 2;
+  string name   = 3;
+}
+
+// TeamMemberRow — one live member of one of an organization's teams.
+message TeamMemberRow {
+  option (w17.contrib.plugin_feature) = "teams";
+  string team_id = 1;
+  string user_id = 2;
+  string email   = 3;
+  google.protobuf.Timestamp added_at = 4;
+}
+message ListTeamMembersByOrgReq {
+  option (w17.contrib.plugin_feature) = "teams";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListTeamMembersByOrgResp {
+  option (w17.contrib.plugin_feature) = "teams";
+  repeated TeamMemberRow members = 1;
+}
+
+// TeamRoleRow — one live role of one of an organization's teams.
+message TeamRoleRow {
+  option (w17.contrib.plugin_feature) = "teams";
+  string team_id = 1;
+  string role_id = 2;
+}
+message ListTeamRolesByOrgReq {
+  option (w17.contrib.plugin_feature) = "teams";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListTeamRolesByOrgResp {
+  option (w17.contrib.plugin_feature) = "teams";
+  repeated TeamRoleRow roles = 1;
+}
+
+// ListTeamRoleIds — the live roles one team holds (of live roles).
+message ListTeamRoleIdsReq {
+  option (w17.contrib.plugin_feature) = "teams";
+  string team_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListTeamRoleIdsResp {
+  option (w17.contrib.plugin_feature) = "teams";
+  repeated string role_ids = 1;
+}
+
+// GetUserTeamRoleGrants — the roles a user holds through their teams IN ONE
+// ORGANIZATION, role-attributed like GetUserOrgPermissions. Authenticate adds
+// them for a session acting in that organization (handlers/teams.go).
+message GetUserTeamRoleGrantsReq {
+  option (w17.contrib.plugin_feature) = "teams";
+  string user_id = 1;
+  string org_id  = 2;
+}
+message GetUserTeamRoleGrantsResp {
+  option (w17.contrib.plugin_feature) = "teams";
+  repeated RoleGrant grants = 1;
+}
+
+// GetOrgMemberAccount — the account of a LIVE member of an organization, for
+// a team to take them in: NotFound for anyone else. The account's kind rides
+// along (service_account), because a machine account is not a team member.
+message GetOrgMemberAccountReq {
+  option (w17.contrib.plugin_feature) = "teams";
+  string user_id = 1 [(w17.field) = { type: UUID }];
+  string org_id  = 2 [(w17.field) = { type: UUID }];
+}
+message GetOrgMemberAccountResp {
+  option (w17.contrib.plugin_feature) = "teams";
+  User user = 1;
+}
+
+// ListOrgTeamSuperadmins — ListOrgSuperadmins' team half: one row per member
+// and team through which they hold a wildcard role in the organization, read
+// with GetUserTeamRoleGrants' liveness (the team membership, the team, its role
+// grant, the role, the organization membership it was made under) and an
+// account that is neither disabled nor erased.
+message ListOrgTeamSuperadminsReq {
+  option (w17.contrib.plugin_feature) = "teams";
+  string org_id = 1 [(w17.field) = { type: UUID }];
+}
+message ListOrgTeamSuperadminsResp {
+  option (w17.contrib.plugin_feature) = "teams";
+  repeated OrgSuperadminRow grants = 1;
+}
+
+// CountTeamRoleGrants — how many live teams hold a role: a role a team holds
+// is in use (DeleteOrgRole).
+message CountTeamRoleGrantsReq {
+  option (w17.contrib.plugin_feature) = "teams";
+  string role_id = 1 [(w17.field) = { type: UUID }];
+}
+message CountTeamRoleGrantsResp {
+  option (w17.contrib.plugin_feature) = "teams";
+  int64 count = 1;
 }
 
 service AuthQuery {
@@ -1012,13 +2270,23 @@ service AuthQuery {
           "       u.created_at AS user.created_at, "
           "       ?feature(service_account) u.kind AS user.kind, "
           "       ?feature(user_admin) u.disabled_at AS user.disabled_at, "
+          // erased_at (`user_admin`): the sign-in history writes an attempt
+          // at an erased account without the client's address and agent.
+          "       ?feature(user_admin) u.erased_at AS user.erased_at, "
           // email_verified_at (`email_verification`): read by the OAuth
           // local-account check, which refuses to link a provider identity to
           // an existing password account unless that address is verified.
           // Missing from the projection it inverted the gate — the field was
           // never valid, so EVERY local account was refused, and unlike the
           // invite gate this one is not behind an opt-in knob.
-          "       ?feature(email_verification) u.email_verified_at AS user.email_verified_at "
+          "       ?feature(email_verification) u.email_verified_at AS user.email_verified_at, "
+          "       ?feature(email_verification) u.email_proof AS user.email_proof, "
+          "       u.device_trust_revoked_at AS user.device_trust_revoked_at, "
+          "       ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent, "
+          "       ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at, "
+          "       ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs, "
+          "       u.sign_in_failures AS user.sign_in_failures, "
+          "       u.sign_in_window_at AS user.sign_in_window_at "
           "FROM @module.User u WHERE u.email = :email"
       }
     };
@@ -1034,8 +2302,18 @@ service AuthQuery {
           "       u.password_hash AS user.password_hash, "
           "       ?feature(service_account) u.kind AS user.kind, "
           "       u.created_at AS user.created_at, "
-          "       COALESCE(t.token_hash, '') AS stored_token_hash "
-          "FROM @module.User u JOIN @module.UserToken t ON t.user_id = u.id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW())"
+          "       COALESCE(t.token_hash, '') AS stored_token_hash, "
+          "       ?feature(email_verification) u.email_verified_at AS user.email_verified_at, "
+          "       ?feature(email_verification) u.email_proof AS user.email_proof, "
+          "       ?feature(user_admin) u.disabled_at AS user.disabled_at, "
+          "       u.device_trust_revoked_at AS user.device_trust_revoked_at, "
+          "       ?feature(user_admin) u.erased_at AS user.erased_at, "
+          "       ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent, "
+          "       ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at, "
+          "       ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs, "
+          "       u.sign_in_failures AS user.sign_in_failures, "
+          "       u.sign_in_window_at AS user.sign_in_window_at "
+          "FROM @module.User u JOIN @module.UserToken t ON t.user_id = u.id WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL"
       }
     };
   }
@@ -1060,44 +2338,40 @@ service AuthQuery {
           "SELECT ROWS_TO_ARRAY(rp.permission_id) AS permission_ids "
           "FROM @module.RolePermission rp "
           "JOIN @module.UserRole ur ON ur.role_id = rp.role_id "
-          "WHERE ur.user_id = :user_id"
+          "JOIN @module.Role r ON r.id = rp.role_id "
+          "WHERE ur.user_id = :user_id AND ur.revoked_at IS NULL AND rp.removed_at IS NULL AND r.deleted_at IS NULL"
       }
     };
     option (w17.contrib.plugin_feature_rpc) = "rbac";
   }
 
-  // GetUserByTokenWithPermissions — the canonical auth-backend
-  // lookup. ONE round-trip resolves the bearer token into the
-  // User row + the deduped permission IDs the user holds.
-  // Hand-written Authenticate composes:
-  //
-  //   resp, _ := authQuery.GetUserByTokenWithPermissions(...)
-  //   return &AuthResp{PermissionIds: resp.GetPermissionIds()}
-  //
-  // Notes on the DQL:
-  //   - LEFT JOIN through UserRole / RolePermission means a
-  //     user with no roles still yields one row (rather than
-  //     NotFound); the ROWS_TO_ARRAY then carries an empty
-  //     list. The token JOIN stays inner — no token, no row,
-  //     and the consumer's gateway middleware returns 401.
-  //   - GROUP BY pins the row to the User's primary identity
-  //     so the aggregate folds the join cross-product into one
-  //     row per user.
-  //   - ROWS_TO_ARRAY maps per-dialect to PG
-  //     `array_agg + FILTER + COALESCE`, MySQL `JSON_ARRAYAGG`,
-  //     SQLite `json_group_array` — always returns a list,
-  //     never NULL. The repeated-scalar scan path
-  //     decodes the column into `[]int32` regardless of which
-  //     wire shape the dialect chose.
-  //   - DISTINCT-equivalent dedup: the M2M topology guarantees
-  //     unique (user_id, permission_id) pairs via the composite-
-  //     unique indexes on UserRole + RolePermission, so the
-  //     aggregate doesn't observe duplicates even across
-  //     multiple roles overlapping on a permission.
-  //
-  // Permission table is gone (the activating domain's
-  // AclPermission proto enum IS the catalog). RolePermission.
-  // permission_id carries the int32 enum value directly.
+  // GetExpiredToken — see the request. Matches the same two keys as the live
+  // lookup (hash, or the legacy clear token) and only rows that have ENDED:
+  // expired (`expires_at <= NOW()` never matches a NULL, never-expiring row)
+  // or revoked — exactly the rows the live lookup's two predicates refuse.
+  // Read only — an ended row is never moved to the hash or otherwise touched.
+  rpc GetExpiredToken(GetExpiredTokenReq) returns (GetExpiredTokenResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT t.expires_at AS expires_at, "
+          "       COALESCE(d.thumbprint, '') AS device_thumbprint, "
+          "       t.revoked_at AS revoked_at, "
+          "       d.revoked_at AS device_revoked_at "
+          "FROM @module.UserToken t "
+          "LEFT JOIN @module.Device d ON d.id = t.device_id "
+          "WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at <= NOW() OR t.revoked_at IS NOT NULL)"
+      }
+    };
+  }
+
+  // GetUserByTokenWithPermissions — Authenticate's bearer lookup: the live
+  // token (by its hash, or the legacy plaintext column), its user, and the
+  // device it is bound to. Despite the name it returns no permissions: those
+  // are a second read, GetUserRoleGrants, which the resolver narrows (realm,
+  // organization, token subset). The token JOIN is inner — no live token, no
+  // row (NotFound), and the gateway answers 401.
   rpc GetUserByTokenWithPermissions(GetUserByTokenWithPermissionsReq) returns (GetUserByTokenWithPermissionsResp) {
     option (w17.db.method) = {
       ops: {
@@ -1108,12 +2382,25 @@ service AuthQuery {
           "       u.password_hash AS user.password_hash, "
           "       ?feature(service_account) u.kind AS user.kind, "
           "       ?feature(user_admin) u.disabled_at AS user.disabled_at, "
+          "       ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent, "
           "       u.created_at AS user.created_at, "
           "       t.id AS token_id, "
-          "       COALESCE(t.token_hash, '') AS stored_token_hash "
+          "       COALESCE(t.token_hash, '') AS stored_token_hash, "
+          "       COALESCE(d.thumbprint, '') AS device_thumbprint, "
+          "       d.revoked_at AS device_revoked_at, "
+          "       t.mcp_only AS mcp_only, "
+          "       ?feature(email_verification) u.email_verified_at AS user.email_verified_at, "
+          "       ?feature(email_verification) u.email_proof AS user.email_proof, "
+          "       u.device_trust_revoked_at AS user.device_trust_revoked_at, "
+          "       ?feature(user_admin) u.erased_at AS user.erased_at, "
+          "       ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at, "
+          "       ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs, "
+          "       u.sign_in_failures AS user.sign_in_failures, "
+          "       u.sign_in_window_at AS user.sign_in_window_at "
           "FROM @module.User u "
           "JOIN @module.UserToken t ON t.user_id = u.id "
-          "WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW())"
+          "LEFT JOIN @module.Device d ON d.id = t.device_id "
+          "WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL"
       }
     };
     option (w17.contrib.plugin_feature_rpc) = "rbac";
@@ -1134,8 +2421,8 @@ service AuthQuery {
           "       r.all_permissions AS all_permissions "
           "FROM @module.UserRole ur "
           "JOIN @module.Role r ON r.id = ur.role_id "
-          "LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id "
-          "WHERE ur.user_id = :user_id "
+          "LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL "
+          "WHERE ur.user_id = :user_id AND ur.revoked_at IS NULL AND r.deleted_at IS NULL "
           "GROUP BY r.id, r.all_permissions "
           "ORDER BY r.id ASC"
       }
@@ -1153,7 +2440,8 @@ service AuthQuery {
           "       ROWS_TO_ARRAY(rp.permission_id) AS permission_ids, "
           "       r.all_permissions AS all_permissions "
           "FROM @module.Role r "
-          "LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id "
+          "LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL "
+          "WHERE r.deleted_at IS NULL "
           "GROUP BY r.id, r.all_permissions "
           "ORDER BY r.id ASC"
       }
@@ -1185,7 +2473,16 @@ service AuthQuery {
         dql:
           "SELECT u.id AS id, u.email AS email, "
           "       ?feature(service_account) u.kind AS kind, "
-          "       u.disabled_at AS disabled_at, u.created_at AS created_at "
+          "       u.disabled_at AS disabled_at, u.erased_at AS erased_at, "
+          "       u.created_at AS created_at, "
+          "       ?feature(email_verification) u.email_verified_at AS email_verified_at, "
+          "       ?feature(email_verification) u.email_proof AS email_proof, "
+          "       u.device_trust_revoked_at AS device_trust_revoked_at, "
+          "       ?feature(marketing_consent) u.marketing_consent AS marketing_consent, "
+          "       ?feature(marketing_consent) u.marketing_consent_at AS marketing_consent_at, "
+          "       ?feature(bot_token_guard) u.allowed_cidrs AS allowed_cidrs, "
+          "       u.sign_in_failures AS sign_in_failures, "
+          "       u.sign_in_window_at AS sign_in_window_at "
           "FROM @module.User u ORDER BY u.created_at DESC, u.id DESC"
       }
     };
@@ -1212,10 +2509,19 @@ service AuthQuery {
           "SELECT u.id AS id, u.email AS email, "
           "       ?feature(service_account) u.kind AS kind, "
           "       ?feature(user_admin) u.disabled_at AS disabled_at, "
-          "       ?feature(tenant_scope) u.tenant_id AS tenant_id, "
-          "       u.created_at AS created_at "
+          "       u.created_at AS created_at, "
+          "       u.password_hash AS password_hash, "
+          "       ?feature(email_verification) u.email_verified_at AS email_verified_at, "
+          "       ?feature(email_verification) u.email_proof AS email_proof, "
+          "       u.device_trust_revoked_at AS device_trust_revoked_at, "
+          "       ?feature(user_admin) u.erased_at AS erased_at, "
+          "       ?feature(marketing_consent) u.marketing_consent AS marketing_consent, "
+          "       ?feature(marketing_consent) u.marketing_consent_at AS marketing_consent_at, "
+          "       ?feature(bot_token_guard) u.allowed_cidrs AS allowed_cidrs, "
+          "       u.sign_in_failures AS sign_in_failures, "
+          "       u.sign_in_window_at AS sign_in_window_at "
           "FROM @module.User u "
-          "JOIN @module.OrgMembership m ON m.user_id = u.id AND m.org_id = :org_id "
+          "JOIN @module.OrgMembership m ON m.user_id = u.id AND m.org_id = :org_id AND m.removed_at IS NULL "
           "ORDER BY u.created_at DESC, u.id DESC"
       }
     };
@@ -1242,7 +2548,16 @@ service AuthQuery {
         dql:
           "SELECT u.id AS id, u.email AS email, "
           "       u.kind AS kind, "
-          "       u.disabled_at AS disabled_at, u.created_at AS created_at "
+          "       u.disabled_at AS disabled_at, u.erased_at AS erased_at, "
+          "       u.created_at AS created_at, "
+          "       ?feature(email_verification) u.email_verified_at AS email_verified_at, "
+          "       ?feature(email_verification) u.email_proof AS email_proof, "
+          "       u.device_trust_revoked_at AS device_trust_revoked_at, "
+          "       ?feature(marketing_consent) u.marketing_consent AS marketing_consent, "
+          "       ?feature(marketing_consent) u.marketing_consent_at AS marketing_consent_at, "
+          "       ?feature(bot_token_guard) u.allowed_cidrs AS allowed_cidrs, "
+          "       u.sign_in_failures AS sign_in_failures, "
+          "       u.sign_in_window_at AS sign_in_window_at "
           "FROM @module.User u "
           "WHERE u.kind = 1 "
           "ORDER BY u.created_at DESC, u.id DESC"
@@ -1266,8 +2581,17 @@ service AuthQuery {
           "SELECT u.id AS id, u.email AS email, "
           "       u.kind AS kind, "
           "       u.disabled_at AS disabled_at, "
-          "       ?feature(tenant_scope) u.tenant_id AS tenant_id, "
-          "       u.created_at AS created_at "
+          "       u.created_at AS created_at, "
+          "       u.password_hash AS password_hash, "
+          "       ?feature(email_verification) u.email_verified_at AS email_verified_at, "
+          "       ?feature(email_verification) u.email_proof AS email_proof, "
+          "       u.device_trust_revoked_at AS device_trust_revoked_at, "
+          "       ?feature(user_admin) u.erased_at AS erased_at, "
+          "       ?feature(marketing_consent) u.marketing_consent AS marketing_consent, "
+          "       ?feature(marketing_consent) u.marketing_consent_at AS marketing_consent_at, "
+          "       ?feature(bot_token_guard) u.allowed_cidrs AS allowed_cidrs, "
+          "       u.sign_in_failures AS sign_in_failures, "
+          "       u.sign_in_window_at AS sign_in_window_at "
           "FROM @module.User u "
           "WHERE u.kind = 1 "
           "ORDER BY u.created_at DESC, u.id DESC"
@@ -1291,7 +2615,7 @@ service AuthQuery {
         dql:
           "SELECT u.id AS user_id "
           "FROM @module.User u "
-          "JOIN @module.OrgMembership m ON m.user_id = u.id AND m.org_id = :org_id "
+          "JOIN @module.OrgMembership m ON m.user_id = u.id AND m.org_id = :org_id AND m.removed_at IS NULL "
           "WHERE u.id = :user_id"
       }
     };
@@ -1312,7 +2636,7 @@ service AuthQuery {
         dql:
           "SELECT r.id AS id, r.name AS name, "
           "       r.description AS description "
-          "FROM @module.Role r WHERE r.token_type = 2 "
+          "FROM @module.Role r WHERE r.token_type = 2 AND r.deleted_at IS NULL "
           "ORDER BY r.name ASC, r.id ASC"
       }
     };
@@ -1322,7 +2646,7 @@ service AuthQuery {
   // GetUser — one user for the admin detail view. Returns the User
   // model DIRECTLY (readonly_fields resolve against its top-level
   // fields). NO password_hash in the projection. Gated user_admin.
-  rpc GetUser(GetUserReq) returns (User) {
+  rpc GetUser(GetUserReq) returns (UserAccount) {
     option (w17.db.method) = {
       ops: {
         name: "main"
@@ -1335,7 +2659,16 @@ service AuthQuery {
         dql:
           "SELECT u.id AS id, u.email AS email, "
           "       ?feature(service_account) u.kind AS kind, "
-          "       u.disabled_at AS disabled_at, u.created_at AS created_at "
+          "       u.disabled_at AS disabled_at, u.erased_at AS erased_at, "
+          "       u.created_at AS created_at, "
+          "       ?feature(email_verification) u.email_verified_at AS email_verified_at, "
+          "       ?feature(email_verification) u.email_proof AS email_proof, "
+          "       u.device_trust_revoked_at AS device_trust_revoked_at, "
+          "       ?feature(marketing_consent) u.marketing_consent AS marketing_consent, "
+          "       ?feature(marketing_consent) u.marketing_consent_at AS marketing_consent_at, "
+          "       ?feature(bot_token_guard) u.allowed_cidrs AS allowed_cidrs, "
+          "       u.sign_in_failures AS sign_in_failures, "
+          "       u.sign_in_window_at AS sign_in_window_at "
           "FROM @module.User u WHERE u.id = :user_id"
       }
     };
@@ -1349,7 +2682,7 @@ service AuthQuery {
     option (w17.db.method) = {
       ops: {
         name: "main"
-        dql: "SELECT ROWS_TO_ARRAY(r.id) AS role_ids FROM @module.Role r WHERE r.assign_first_user = TRUE"
+        dql: "SELECT ROWS_TO_ARRAY(r.id) AS role_ids FROM @module.Role r WHERE r.assign_first_user = TRUE AND r.deleted_at IS NULL"
       }
     };
     option (w17.contrib.plugin_feature_rpc) = "rbac";
@@ -1362,7 +2695,7 @@ service AuthQuery {
     option (w17.db.method) = {
       ops: {
         name: "main"
-        dql: "SELECT ROWS_TO_ARRAY(r.id) AS role_ids FROM @module.Role r WHERE r.assign_default = TRUE"
+        dql: "SELECT ROWS_TO_ARRAY(r.id) AS role_ids FROM @module.Role r WHERE r.assign_default = TRUE AND r.deleted_at IS NULL"
       }
     };
     option (w17.contrib.plugin_feature_rpc) = "rbac";
@@ -1388,74 +2721,22 @@ service AuthQuery {
   // not a convenience list — it is the only way the field leaves the
   // database.
   //
-  // ⚠️ The two GATED columns stay out, and this is a known limit rather
-  // than an oversight: `token_type` is gated on `api_token` and
-  // `org_scoped` on `org_membership`, so naming either here makes the
-  // typecheck fail for every project without that feature ("column
-  // r.org_scoped not found on Role" — measured, not predicted). Reading
-  // them needs feature-variant DQL, which this vocabulary does not have.
-  // The consequence worth knowing: a caller cannot tell an org-scoped
-  // role from a global one through the API, only through the seed.
-  // GetUserOwnsAnyOrg — does this principal own an organization at all.
+  // The GATED columns (`token_type` on `api_token`, `org_scoped` on
+  // `org_membership`, `org_id` on `org_roles`) are projected with
+  // `?feature(<name>)`, so a project without the feature compiles the query
+  // without the column and a project with it reads it: a caller tells an
+  // org-scoped role from a global one through either read.
   //
-  // The base principal query (GetUserByTokenWithPermissions) cannot ask this:
-  // it is BASE TIER, present in every activation, and `Organization` only
-  // exists when `org_membership` is on. Naming it there would fail the
-  // typecheck for every project without the feature — the same wall
-  // ListRoles hits with `org_scoped`.
-  //
-  // "ANY", deliberately, and it is not as wide as it reads. This answer only
-  // widens the BASE set; narrowGrantsToActiveOrg still runs after it and
-  // re-asks per organization, so owning one org buys nothing in another. What
-  // it fixes is the opposite order: ownership resolved only in the narrowing
-  // step could never widen anything, so an owner holding no role grant
-  // intersected "everything" with "nothing" and got nothing.
-  rpc GetUserOwnsAnyOrg(GetUserOwnsAnyOrgReq) returns (GetUserOwnsAnyOrgResp) {
-    option (w17.contrib.plugin_feature_rpc) = "org_membership";
-    option (w17.db.method) = {
-      ops: {
-        name: "main"
-        dql:
-          "SELECT EXISTS(SELECT 1 FROM @module.Organization o "
-          "              WHERE o.owner_id = :user_id) AS owns "
-          "FROM @module.User u WHERE u.id = :user_id"
-      }
-    };
-  }
-
-  // GetOwnedOrgBySlug — resolve a slug to an org the caller OWNS.
-  //
-  // The membership lookup's counterpart, and deliberately a second query
-  // rather than an OR bolted onto GetUserOrgBySlug: that one reads FROM
-  // OrgMembership and joins Organization, so admitting owners would mean
-  // inverting which table it starts from — the kind of edit that keeps the
-  // text almost identical while changing which rows can come back at all.
-  // Two flat single-table reads say what they mean, and the membership path
-  // (the common one) keeps the shape it has been tested in.
-  //
-  // Runs only when the membership lookup found nothing, so it costs the
-  // owner-without-membership case one query and everyone else nothing.
-  rpc GetOwnedOrgBySlug(GetOwnedOrgBySlugReq) returns (GetOwnedOrgBySlugResp) {
-    option (w17.contrib.plugin_feature_rpc) = "org_membership";
-    option (w17.db.method) = {
-      ops: {
-        name: "main"
-        dql:
-          "SELECT o.id AS org_id FROM @module.Organization o "
-          "WHERE o.slug = :slug AND o.owner_id = :user_id"
-      }
-    };
-  }
+  // `preset_key` is also an optional FILTER on ListRoles: a caller after one
+  // preset role names it instead of scanning the paged catalogue.
 
   // ListOrgScopedRoles — the role catalogue restricted to roles that mean
   // something INSIDE an organization.
   //
-  // Separate from ListRoles rather than a flag on it, and the comment above
-  // that RPC is the reason: `org_scoped` only exists as a column when the
-  // `org_membership` feature is on, so naming it in the shared query fails
-  // the typecheck for every project without that feature. This one is GATED
-  // on org_membership, so the column is guaranteed to be there — the same
-  // shape GetUserOrgPermissions already uses.
+  // Separate from ListRoles rather than a flag on it: `org_scoped` only
+  // exists as a column when the `org_membership` feature is on, and this
+  // read is GATED on org_membership, so it can FILTER on the column (not
+  // only project it) — the same shape GetUserOrgPermissions already uses.
   //
   // Exists so an invitation UI can offer choices instead of asking a person
   // to type a role name and find out afterwards whether it was one.
@@ -1465,10 +2746,156 @@ service AuthQuery {
       ops: {
         name: "main"
         dql:
-          "SELECT r.id AS id, r.name AS name, r.description AS description "
-          "FROM @module.Role r WHERE r.org_scoped = TRUE "
+          "SELECT r.id AS id, r.name AS name, r.description AS description, "
+          "       r.display_name AS display_name, "
+          "       ?feature(api_token) r.token_type AS token_type "
+          "FROM @module.Role r WHERE r.org_scoped = TRUE AND r.deleted_at IS NULL "
           "ORDER BY r.name ASC, r.id ASC"
       }
+    };
+  }
+
+  // ListOrgRoleRows — see its request message.
+  rpc ListOrgRoleRows(ListOrgRoleRowsReq) returns (ListOrgRoleRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_roles";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT r.id AS id, r.name AS name, r.description AS description, "
+          "       r.display_name AS display_name, "
+          "       (r.org_id IS NOT NULL) AS custom, "
+          "       r.all_permissions AS all_permissions, "
+          "       ?feature(api_token) r.token_type AS token_type "
+          "FROM @module.Role r "
+          "WHERE r.org_scoped = TRUE AND r.deleted_at IS NULL "
+          "  AND (r.org_id IS NULL OR r.org_id = :org_id) "
+          "ORDER BY r.name ASC, r.id ASC"
+      }
+    };
+  }
+
+  // CountRoleGrants — see its request message.
+  rpc CountRoleGrants(CountRoleGrantsReq) returns (CountRoleGrantsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_roles";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT COUNT(*) AS count FROM @module.UserRole ur "
+          "WHERE ur.role_id = :role_id AND ur.revoked_at IS NULL"
+      }
+    };
+  }
+
+  // GetOrgSuspension — the organization's suspended_at, read by Authenticate
+  // for the organization a request was resolved to (org_suspension.go). Live
+  // organizations only, as every organization reader: a deleted one is never
+  // selected, and its row answers NotFound.
+  rpc GetOrgSuspension(GetOrgSuspensionReq) returns (GetOrgSuspensionResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_suspension";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql: "SELECT o.id AS org_id, o.suspended_at AS suspended_at FROM @module.Organization o WHERE o.id = :org_id AND o.deleted_at IS NULL"
+      }
+    };
+  }
+
+  // LockOrganization — SELECT … FOR UPDATE on the organization's row, read
+  // inside the transaction of a change that can take a superadmin away; see
+  // the request.
+  rpc LockOrganization(LockOrganizationReq) returns (LockOrganizationResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_membership";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql: "SELECT o.id AS org_id FROM @module.Organization o WHERE o.id = :org_id AND o.deleted_at IS NULL"
+      }
+    };
+    option (w17.db.lock) = {
+      locks: [
+        { resource: "Organization", kind: SELECT_FOR_UPDATE }
+      ]
+    };
+  }
+
+  // ListOrgSuperadmins — see its request message. Only grants of a live
+  // membership count: a removed member's grants are revoked with it, but the
+  // join says so rather than relying on it. The account's disabled_at and
+  // erased_at exist only with user_admin, so they are PROJECTED behind a gate
+  // (a SELECT's WHERE conjunct cannot be gated: dropping one would return more
+  // rows) and orgSuperadmins drops a disabled or erased account's rows;
+  // without user_admin no account can be disabled or erased.
+  rpc ListOrgSuperadmins(ListOrgSuperadminsReq) returns (ListOrgSuperadminsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_membership";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          // A direct org grant comes through no team: team_id is '' by
+          // definition here (ListOrgTeamSuperadmins fills it for a team's), and
+          // the stamps are NULL where user_admin, which owns them, is off.
+          "SELECT ur.user_id AS user_id, r.id AS role_id, '' AS team_id, "
+          "       ?feature(user_admin) u.disabled_at AS disabled_at, "
+          "       ?unless(user_admin) NULL AS disabled_at, "
+          "       ?feature(user_admin) u.erased_at AS erased_at, "
+          "       ?unless(user_admin) NULL AS erased_at, "
+          "       ?feature(api_token) r.token_type AS token_type "
+          "FROM @module.UserRole ur "
+          "JOIN @module.Role r ON r.id = ur.role_id "
+          "JOIN @module.OrgMembership m ON m.user_id = ur.user_id AND m.org_id = ur.org_id AND m.removed_at IS NULL "
+          "JOIN @module.User u ON u.id = ur.user_id "
+          "WHERE ur.org_id = :org_id AND ur.revoked_at IS NULL "
+          "  AND r.all_permissions = TRUE AND r.deleted_at IS NULL "
+          "ORDER BY ur.user_id ASC, r.id ASC"
+      }
+    };
+  }
+
+  // ListRealmSuperadmins — see its request message.
+  rpc ListRealmSuperadmins(ListRealmSuperadminsReq) returns (ListRealmSuperadminsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "rbac";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT ur.user_id AS user_id, r.id AS role_id, "
+          // Without user_admin there are no disabled or erased accounts, and
+          // the columns do not exist: the statement says NULL (`?unless`)
+          // instead of leaving the fields unselected.
+          "       ?feature(user_admin) u.disabled_at AS disabled_at, "
+          "       ?unless(user_admin) NULL AS disabled_at, "
+          "       ?feature(user_admin) u.erased_at AS erased_at, "
+          "       ?unless(user_admin) NULL AS erased_at, "
+          "       ?feature(api_token) r.token_type AS token_type "
+          "FROM @module.User u "
+          "JOIN @module.UserRole ur ON ur.user_id = u.id "
+          "JOIN @module.Role r ON r.id = ur.role_id "
+          "WHERE ur.revoked_at IS NULL "
+          "  AND r.all_permissions = TRUE AND r.deleted_at IS NULL "
+          "ORDER BY ur.user_id ASC, r.id ASC"
+      }
+    };
+  }
+
+  // LockUsers — SELECT … FOR UPDATE on the named accounts' User rows, in id
+  // order. The last-admin rule locks the realm's administrators with it and
+  // then reads them again (a JOIN-shaped read cannot carry the lock itself),
+  // so two operators disabling each other at once take the same rows in the
+  // same order and the second one's read sees what the first one wrote.
+  rpc LockUsers(LockUsersReq) returns (LockUsersResp) {
+    option (w17.contrib.plugin_feature_rpc) = "user_admin";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql: "SELECT u.id AS user_id FROM @module.User u WHERE u.id IN (:ids) ORDER BY u.id ASC"
+      }
+    };
+    option (w17.db.lock) = {
+      locks: [
+        { resource: "User", kind: SELECT_FOR_UPDATE }
+      ]
     };
   }
 
@@ -1483,8 +2910,14 @@ service AuthQuery {
           "       r.assign_first_user AS assign_first_user, "
           "       r.assign_default AS assign_default, "
           "       r.preset_key AS preset_key, "
-          "       r.created_at AS created_at "
-          "FROM @module.Role r ORDER BY r.name ASC, r.id ASC"
+          "       r.created_at AS created_at, "
+          "       ?feature(api_token) r.token_type AS token_type, "
+          "       ?feature(org_membership) r.org_scoped AS org_scoped, "
+          "       r.deleted_at AS deleted_at, "
+          "       r.ended_key AS ended_key, "
+          "       ?feature(org_roles) r.org_id AS org_id "
+          "FROM @module.Role r WHERE r.deleted_at IS NULL AND ?r.preset_key = :preset_key "
+          "ORDER BY r.name ASC, r.id ASC"
       }
     };
     option (w17.contrib.plugin_feature_rpc) = "rbac";
@@ -1507,8 +2940,13 @@ service AuthQuery {
           "       r.assign_first_user AS assign_first_user, "
           "       r.assign_default AS assign_default, "
           "       r.preset_key AS preset_key, "
-          "       r.created_at AS created_at "
-          "FROM @module.Role r WHERE r.id = :id"
+          "       r.created_at AS created_at, "
+          "       ?feature(api_token) r.token_type AS token_type, "
+          "       ?feature(org_membership) r.org_scoped AS org_scoped, "
+          "       r.deleted_at AS deleted_at, "
+          "       r.ended_key AS ended_key, "
+          "       ?feature(org_roles) r.org_id AS org_id "
+          "FROM @module.Role r WHERE r.id = :id AND r.deleted_at IS NULL"
       }
     };
     option (w17.contrib.plugin_feature_rpc) = "rbac";
@@ -1528,9 +2966,63 @@ service AuthQuery {
           "       COALESCE(t.token_hash, '') AS stored_token_hash, "
           "       u.id AS user.id, "
           "       ?feature(service_account) u.kind AS user.kind, "
-          "       ?feature(user_admin) u.disabled_at AS user.disabled_at "
+          "       ?feature(user_admin) u.disabled_at AS user.disabled_at, "
+          "       ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent, "
+          "       ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs, "
+          "       t.last_used_at AS last_used_at, "
+          "       COALESCE(d.thumbprint, '') AS device_thumbprint, "
+          "       d.revoked_at AS device_revoked_at, "
+          // bearer / oauth_* are columns of their features. Without the feature
+          // the column does not exist and the value is known: no token is a
+          // bearer token, none carries an OAuth grant — so the statement says
+          // so (`?unless`) rather than leaving the field unselected. A generated
+          // query fills every field of its response.
+          "       ?feature(service_account) t.bearer AS bearer, "
+          "       ?unless(service_account) FALSE AS bearer, "
+          "       ?feature(oauth_server) COALESCE(t.resource, '') AS oauth_resource, "
+          "       ?unless(oauth_server) '' AS oauth_resource, "
+          "       ?feature(oauth_server) t.oauth_org_id AS oauth_org_id, "
+          "       ?unless(oauth_server) NULL AS oauth_org_id, "
+          "       ?feature(oauth_server) t.oauth_grant_id AS oauth_grant_id, "
+          "       ?unless(oauth_server) NULL AS oauth_grant_id, "
+          "       t.mcp_only AS mcp_only, "
+          "       u.email AS user.email, "
+          "       u.password_hash AS user.password_hash, "
+          "       u.created_at AS user.created_at, "
+          "       ?feature(email_verification) u.email_verified_at AS user.email_verified_at, "
+          "       ?feature(email_verification) u.email_proof AS user.email_proof, "
+          "       u.device_trust_revoked_at AS user.device_trust_revoked_at, "
+          "       ?feature(user_admin) u.erased_at AS user.erased_at, "
+          "       ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at, "
+          "       u.sign_in_failures AS user.sign_in_failures, "
+          "       u.sign_in_window_at AS user.sign_in_window_at "
           "FROM @module.UserToken t JOIN @module.User u ON u.id = t.user_id "
-          "WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW())"
+          "LEFT JOIN @module.Device d ON d.id = t.device_id "
+          "WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL"
+      }
+    };
+    option (w17.contrib.plugin_feature_rpc) = "api_token";
+  }
+
+  // GetExpiredTokenWithType — see the request. The realm-aware twin of
+  // GetExpiredToken: same keys, ended (expired or revoked) rows only, plus the kind so the
+  // refusal can say "sign in again" to a session and "create a new token" to
+  // an API token. Read only.
+  rpc GetExpiredTokenWithType(GetExpiredTokenWithTypeReq) returns (GetExpiredTokenWithTypeResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT t.expires_at AS expires_at, "
+          "       t.token_type AS token_type, "
+          "       COALESCE(d.thumbprint, '') AS device_thumbprint, "
+          "       t.revoked_at AS revoked_at, "
+          "       ?feature(service_account) t.bearer AS bearer, "
+          "       ?unless(service_account) FALSE AS bearer, "
+          "       d.revoked_at AS device_revoked_at "
+          "FROM @module.UserToken t "
+          "LEFT JOIN @module.Device d ON d.id = t.device_id "
+          "WHERE (t.token_hash = :token_hash OR t.token = :legacy_token) AND (t.expires_at <= NOW() OR t.revoked_at IS NOT NULL)"
       }
     };
     option (w17.contrib.plugin_feature_rpc) = "api_token";
@@ -1552,8 +3044,8 @@ service AuthQuery {
           "       r.all_permissions AS all_permissions "
           "FROM @module.UserRole ur "
           "JOIN @module.Role r ON r.id = ur.role_id "
-          "LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id "
-          "WHERE ur.user_id = :user_id AND r.token_type = :token_type "
+          "LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL "
+          "WHERE ur.user_id = :user_id AND r.token_type = :token_type AND ur.revoked_at IS NULL AND r.deleted_at IS NULL "
           "GROUP BY r.id, r.all_permissions "
           "ORDER BY r.id ASC"
       }
@@ -1578,7 +3070,9 @@ service AuthQuery {
 
   // ListApiTokensByUser — the caller's API tokens (management view, no
   // secret token string). Filtered to token_type = :token_type (handler
-  // stamps API). Newest first. Gated api_token.
+  // stamps API). Revoked tokens are listed, with revoked_at and
+  // revoke_reason, so the owner sees them revoked. Newest first. Gated
+  // api_token.
   rpc ListApiTokensByUser(ListApiTokensByUserReq) returns (ListApiTokensByUserResp) {
     option (w17.db.method) = {
       ops: {
@@ -1597,8 +3091,13 @@ service AuthQuery {
           "       t.name AS name, "
           "       t.last_used_at AS last_used_at, "
           "       t.expires_at AS expires_at, "
-          "       t.created_at AS created_at "
+          "       t.created_at AS created_at, "
+          "       t.revoked_at AS revoked_at, "
+          "       t.revoke_reason AS revoke_reason, "
+          "       d.thumbprint AS device_thumbprint, "
+          "       d.revoked_at AS device_revoked_at "
           "FROM @module.UserToken t "
+          "LEFT JOIN @module.Device d ON d.id = t.device_id "
           "WHERE t.user_id = :user_id AND t.token_type = :token_type "
           "ORDER BY t.created_at DESC"
       }
@@ -1606,45 +3105,99 @@ service AuthQuery {
     option (w17.contrib.plugin_feature_rpc) = "api_token";
   }
 
-  // GetUserTenant — resolves the principal's tenant_id (the
-  // tenant data scope) by user id. The gated tenant.go handler
-  // calls this from Authenticate's scope decorator to stamp
-  // scopes["tenant_id"]. Tagged `tenant_scope`: the User.tenant_id
-  // column it reads is gated by the same feature, so the query
-  // and its column appear / disappear together. tenant_id is
-  // NOT NULL on User, so a resolved principal always yields one.
-  rpc GetUserTenant(GetUserTenantReq) returns (GetUserTenantResp) {
+  // GetUserDeviceByThumbprint — the live (user, thumbprint) Device row; see
+  // the request. Gated api_token.
+  rpc GetUserDeviceByThumbprint(GetUserDeviceByThumbprintReq) returns (GetUserDeviceByThumbprintResp) {
     option (w17.db.method) = {
       ops: {
         name: "main"
-        dql: "SELECT u.tenant_id AS tenant_id FROM @module.User u WHERE u.id = :user_id"
+        dql:
+          "SELECT d.id AS device_id "
+          "FROM @module.Device d "
+          "WHERE d.user_id = :user_id AND d.thumbprint = :thumbprint AND d.revoked_at IS NULL"
       }
     };
-    option (w17.contrib.plugin_feature_rpc) = "tenant_scope";
+    option (w17.contrib.plugin_feature_rpc) = "api_token";
   }
 
-  // GetTenantBySlug — resolve a tenant id from its slug (Tenant.name).
-  // Used by SignUp for URL-based tenancy (`/t/{tenant_slug}/...`).
-  rpc GetTenantBySlug(GetTenantBySlugReq) returns (GetTenantBySlugResp) {
+  // GetSessionApprover — the caller's session's approver; see the request.
+  // Gated api_token.
+  rpc GetSessionApprover(GetSessionApproverReq) returns (GetSessionApproverResp) {
     option (w17.db.method) = {
       ops: {
         name: "main"
-        dql: "SELECT t.id AS tenant_id FROM @module.Tenant t WHERE t.name = :slug"
+        dql:
+          "SELECT t.approved_by_device_id AS approved_by_device_id "
+          "FROM @module.UserToken t "
+          "WHERE t.id = :token_id AND t.user_id = :user_id"
       }
     };
-    option (w17.contrib.plugin_feature_rpc) = "tenant_scope";
+    option (w17.contrib.plugin_feature_rpc) = "api_token";
   }
 
-  // GetTenantByDomain — resolve a tenant id from its host domain.
-  // Used by SignUp for host-based tenancy (the forwarded Host header).
-  rpc GetTenantByDomain(GetTenantByDomainReq) returns (GetTenantByDomainResp) {
+  // LockMachineAccount — SELECT … FOR UPDATE on the machine account's user
+  // row, read inside IssueBotToken's transaction; see the request. Gated
+  // service_account.
+  rpc LockMachineAccount(LockMachineAccountReq) returns (LockMachineAccountResp) {
     option (w17.db.method) = {
       ops: {
         name: "main"
-        dql: "SELECT t.id AS tenant_id FROM @module.Tenant t WHERE t.domain = :domain"
+        dql: "SELECT u.id AS user_id FROM @module.User u WHERE u.id = :user_id"
       }
     };
-    option (w17.contrib.plugin_feature_rpc) = "tenant_scope";
+    option (w17.db.lock) = {
+      locks: [
+        { resource: "User", kind: SELECT_FOR_UPDATE }
+      ]
+    };
+    option (w17.contrib.plugin_feature_rpc) = "service_account";
+  }
+
+  // ListMachineKeys — the machine account's live keyed devices; see the
+  // request. FLAT aliases (a list-shaped response). Gated service_account.
+  rpc ListMachineKeys(ListMachineKeysReq) returns (ListMachineKeysResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT d.id AS id, d.thumbprint AS thumbprint "
+          "FROM @module.Device d "
+          "WHERE d.user_id = :user_id AND d.revoked_at IS NULL AND d.thumbprint IS NOT NULL "
+          "ORDER BY d.created_at"
+      }
+    };
+    option (w17.contrib.plugin_feature_rpc) = "service_account";
+  }
+
+  // GetBotAllowedCidrs — see the request. Gated bot_token_guard.
+  rpc GetBotAllowedCidrs(GetBotAllowedCidrsReq) returns (GetBotAllowedCidrsResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT u.allowed_cidrs AS allowed_cidrs "
+          "FROM @module.User u "
+          "WHERE u.id = :user_id AND u.kind = 1"
+      }
+    };
+    option (w17.contrib.plugin_feature_rpc) = "bot_token_guard";
+  }
+
+  // ListBotTokenUses — see the request. Unpaged: the rows grow with new
+  // combinations only. Gated bot_token_guard.
+  rpc ListBotTokenUses(ListBotTokenUsesReq) returns (ListBotTokenUsesResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT b.token_id AS token_id, b.address AS address, b.surface AS surface, "
+          "       b.method AS method, b.first_used_at AS first_used_at, b.last_used_at AS last_used_at "
+          "FROM @module.BotTokenUse b "
+          "WHERE b.user_id = :user_id "
+          "ORDER BY b.last_used_at DESC, b.id DESC"
+      }
+    };
+    option (w17.contrib.plugin_feature_rpc) = "bot_token_guard";
   }
 
   // GetProviderByName — the OAuth provider keyed by URL slug. Returns all
@@ -1672,15 +3225,17 @@ service AuthQuery {
           "       c.name AS client.name, "
           "       c.redirect_uri AS client.redirect_uri, "
           "       c.enabled AS client.enabled, "
-          "       c.created_at AS client.created_at "
+          "       c.created_at AS client.created_at, "
+          "       c.revoked_at AS client.revoked_at "
           "FROM @module.AuthClient c "
-          "WHERE c.client_id = :client_id AND c.redirect_uri = :redirect_uri AND c.enabled = TRUE"
+          "WHERE c.client_id = :client_id AND c.redirect_uri = :redirect_uri AND c.enabled = TRUE AND c.revoked_at IS NULL"
       }
     };
     option (w17.contrib.plugin_feature_rpc) = "cli_login";
   }
 
-  // ListAuthClients — the operator's view of what is registered. Admin-only.
+  // ListAuthClients — the operator's view of what is registered, revoked
+  // registrations included (with revoked_at). Admin-only.
   rpc ListAuthClients(ListAuthClientsReq) returns (ListAuthClientsResp) {
     option (w17.db.method) = {
       ops: {
@@ -1691,8 +3246,24 @@ service AuthQuery {
           "       c.name AS name, "
           "       c.redirect_uri AS redirect_uri, "
           "       c.enabled AS enabled, "
-          "       c.created_at AS created_at "
+          "       c.created_at AS created_at, "
+          "       c.revoked_at AS revoked_at "
           "FROM @module.AuthClient c ORDER BY c.client_id, c.redirect_uri"
+      }
+    };
+    option (w17.contrib.plugin_feature_rpc) = "cli_login";
+  }
+
+  // GetAuthClientRevocation — see the request. Keyed on the unique pair, so
+  // it reads one row (there is at most one: the index is not partial).
+  rpc GetAuthClientRevocation(GetAuthClientRevocationReq) returns (GetAuthClientRevocationResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT c.id AS id, c.revoked_at AS revoked_at "
+          "FROM @module.AuthClient c "
+          "WHERE c.client_id = :client_id AND c.redirect_uri = :redirect_uri"
       }
     };
     option (w17.contrib.plugin_feature_rpc) = "cli_login";
@@ -1711,7 +3282,47 @@ service AuthQuery {
           "SELECT c.client_secret AS client_secret, "
           "       c.enabled AS enabled "
           "FROM @module.AuthClient c "
-          "WHERE c.client_id = :client_id AND c.redirect_uri = :redirect_uri"
+          // Live rows only: a revoked registration is refused like an unknown
+          // one.
+          "WHERE c.client_id = :client_id AND c.redirect_uri = :redirect_uri AND c.revoked_at IS NULL"
+      }
+    };
+    option (w17.contrib.plugin_feature_rpc) = "cli_login";
+  }
+
+  // GetLiveSessionExpiry — the approving session's expires_at, for CliAuthorize
+  // to bind into the code. Scoped by the token id AND the owner, so a caller
+  // can read only their own session, and live only. No row = refuse the
+  // approval.
+  //
+  // No token_type filter: a SELECT cannot gate a WHERE conjunct, and the
+  // column exists only under `api_token`. The session-only guarantee comes
+  // from the handler instead — requireSessionCaller runs first, and the
+  // envelope carries a session_token_id only for a session-realm token, so
+  // the id this query is asked about is always a session's.
+  // GetCliApproverRevocation — the approving device's revoked_at, read by
+  // CliToken for a code that names one. Gated cli_login.
+  rpc GetCliApproverRevocation(GetCliApproverRevocationReq) returns (GetCliApproverRevocationResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql: "SELECT d.id AS device_id, d.revoked_at AS revoked_at FROM @module.Device d WHERE d.id = :device_id"
+      }
+    };
+    option (w17.contrib.plugin_feature_rpc) = "cli_login";
+  }
+
+  rpc GetLiveSessionExpiry(GetLiveSessionExpiryReq) returns (GetLiveSessionExpiryResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT t.id AS token_id, "
+          "       t.expires_at AS expires_at, "
+          "       t.device_id AS device_id "
+          "FROM @module.UserToken t "
+          "WHERE t.id = :token_id AND t.user_id = :user_id "
+          "AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL"
       }
     };
     option (w17.contrib.plugin_feature_rpc) = "cli_login";
@@ -1735,7 +3346,10 @@ service AuthQuery {
           "       p.subject_path AS provider.subject_path, "
           "       p.email_path AS provider.email_path, "
           "       p.enabled AS provider.enabled, "
-          "       p.created_at AS provider.created_at "
+          "       p.created_at AS provider.created_at, "
+          "       p.response_mode AS provider.response_mode, "
+          "       p.team_id AS provider.team_id, "
+          "       p.key_id AS provider.key_id "
           "FROM @module.OAuthProvider p WHERE p.name = :name"
       }
     };
@@ -1762,9 +3376,9 @@ service AuthQuery {
     option (w17.contrib.plugin_feature_rpc) = "oauth";
   }
 
-  // GetUserById — resolve a user by id, password_hash included. Two
-  // callers today: the EnrollTotp otpauth label (which wants the email)
-  // and ChangePassword (which must verify the CURRENT password of the
+  // GetUserById — resolve a user by id, password_hash included. Callers
+  // include ResolveUser (the account a principal is answered for), the
+  // EnrollTotp otpauth label (which wants the email) and ChangePassword (which must verify the CURRENT password of the
   // authenticated principal, and must not look that principal up by an
   // address the request supplied). Ungated — see the messages above.
   rpc GetUserById(GetUserByIdReq) returns (GetUserByIdResp) {
@@ -1782,17 +3396,47 @@ service AuthQuery {
           // including verified accounts. Third instance of the
           // shape GetUserByEmail's comment already names.
           "       ?feature(email_verification) u.email_verified_at AS user.email_verified_at, "
+          // email_proof (`email_verification`): inviteVerifiedEmailGate's
+          // middle floor (`derived`) accepts an address an earlier BOUND
+          // invitation derived. Left out, it arrived as UNPROVEN — the enum's
+          // zero, a real value here — so that floor refused every account
+          // whose proof was derived and not self-confirmed.
+          "       ?feature(email_verification) u.email_proof AS user.email_proof, "
           // disabled_at (`user_admin`): every path that issues a session for
           // an EXISTING account re-checks it through this read
           // (refuseUnsignableAccount). Left out, the second sign-in step,
           // the OAuth callback and the CLI exchange issued sessions to an
           // account disabled after its password step.
           "       ?feature(user_admin) u.disabled_at AS user.disabled_at, "
-          // tenant_id (`tenant_scope`): IssueBotToken holds the target to the
-          // operator's tenant (service_account_tenant.go) through this read.
-          "       ?feature(tenant_scope) u.tenant_id AS user.tenant_id, "
-          "       u.created_at AS user.created_at "
+          // erased_at (`user_admin`): EraseUsers reads it to make a second
+          // erase a no-op.
+          "       ?feature(user_admin) u.erased_at AS user.erased_at, "
+          // marketing_consent (`marketing_consent`): ResolveUser answers it in
+          // AuthResp as Authenticate does from GetUserByTokenWithPermissions.
+          "       ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent, "
+          "       u.created_at AS user.created_at, "
+          "       u.device_trust_revoked_at AS user.device_trust_revoked_at, "
+          "       ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at, "
+          "       ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs, "
+          "       u.sign_in_failures AS user.sign_in_failures, "
+          "       u.sign_in_window_at AS user.sign_in_window_at "
           "FROM @module.User u WHERE u.id = :user_id"
+      }
+    };
+  }
+
+  // The user's marketing consent and when they decided it (NULL = never
+  // asked). Gated marketing_consent.
+  rpc GetUserMarketingConsent(GetUserMarketingConsentReq) returns (GetUserMarketingConsentResp) {
+    option (w17.contrib.plugin_feature_rpc) = "marketing_consent";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT u.marketing_consent AS consent, "
+          "       u.marketing_consent_at AS decided_at "
+          "FROM @module.User u "
+          "WHERE u.id = :user_id"
       }
     };
   }
@@ -1813,8 +3457,12 @@ service AuthQuery {
           "       s.seed AS seed, "
           "       s.last_step AS secret.last_step, "
           "       s.confirmed_at AS secret.confirmed_at, "
-          "       s.created_at AS secret.created_at "
-          "FROM @module.UserTotpSecret s WHERE s.user_id = :user_id"
+          "       s.created_at AS secret.created_at, "
+          "       s.stepup_attempts AS secret.stepup_attempts, "
+          "       s.stepup_locked_until AS secret.stepup_locked_until, "
+          "       s.revoked_at AS secret.revoked_at, "
+          "       s.ended_key AS secret.ended_key "
+          "FROM @module.UserTotpSecret s WHERE s.user_id = :user_id AND s.revoked_at IS NULL"
       }
     };
     option (w17.contrib.plugin_feature_rpc) = "two_factor";
@@ -1828,7 +3476,7 @@ service AuthQuery {
         name: "main"
         dql:
           "SELECT COUNT(*) AS count FROM @module.UserRecoveryCode r "
-          "WHERE r.user_id = :user_id AND r.used_at IS NULL"
+          "WHERE r.user_id = :user_id AND r.used_at IS NULL AND r.revoked_at IS NULL"
       }
     };
     option (w17.contrib.plugin_feature_rpc) = "two_factor";
@@ -1848,7 +3496,10 @@ service AuthQuery {
           "       c.code_hash AS challenge.code_hash, "
           "       c.consumed_at AS challenge.consumed_at, "
           "       c.created_at AS challenge.created_at, "
-          "       c.attempts AS challenge.attempts "
+          "       c.attempts AS challenge.attempts, "
+          "       COALESCE(c.thumbprint, '') AS challenge.thumbprint, "
+          "       c.public_computer AS challenge.public_computer, "
+          "       c.enrol AS challenge.enrol "
           "FROM @module.MfaChallenge c WHERE c.id = :challenge_id"
       }
     };
@@ -1890,34 +3541,29 @@ service AuthQuery {
     option (w17.contrib.plugin_feature_rpc) = "two_factor";
   }
 
-  // GetDeviceByIdentifier — resolve the (user, identifier) Device the
-  // sign-in handler upserts against. NotFound (zero rows) is the
-  // expected "first sight of this device" signal: the handler treats
-  // any error as absent and falls through to CreateDevice. Gated devices.
-  rpc GetDeviceByIdentifier(GetDeviceByIdentifierReq) returns (GetDeviceByIdentifierResp) {
+  // GetDeviceTrustRevokedAt — when the account's device trust was last
+  // revoked (a password change or a disable stamps it). The sign-in resolver
+  // and ListDevices count a device as trusted only when its trusted_at is
+  // later. Base tier, like the Device table.
+  rpc GetDeviceTrustRevokedAt(GetDeviceTrustRevokedAtReq) returns (GetDeviceTrustRevokedAtResp) {
     option (w17.db.method) = {
       ops: {
         name: "main"
-        dql:
-          "SELECT d.id AS device.id, "
-          "       d.user_id AS device.user_id, "
-          "       d.identifier AS device.identifier, "
-          "       d.label AS device.label, "
-          "       d.ip AS device.ip, "
-          "       d.trusted_at AS device.trusted_at, "
-          "       d.last_seen_at AS device.last_seen_at, "
-          "       d.created_at AS device.created_at, "
-          "       d.trust_token_hash AS device.trust_token_hash "
-          "FROM @module.Device d WHERE d.user_id = :user_id AND d.identifier = :identifier"
+        dql: "SELECT u.device_trust_revoked_at AS device_trust_revoked_at FROM @module.User u WHERE u.id = :user_id"
       }
     };
-    option (w17.contrib.plugin_feature_rpc) = "devices";
   }
 
-  // ListUserDevices — the caller's devices (management view), newest
-  // first. The handler maps each row to DeviceInfo, deriving `trusted`
-  // (trusted_at present) + `current` (identifier matches the calling
-  // request's resolved device). Gated devices.
+  // ListUserDevices — the caller's live devices (management view), newest
+  // first; a revoked device, and a legacy one recorded before device binding
+  // (no thumbprint), is history, not a device to manage — both stay in the
+  // table, queryable. A program's key (api_key: an API token's device) is not
+  // a device the owner signs in with: it is managed through its API token,
+  // so RevokeOtherDevices and RevokeAllDevices, which read this list, leave
+  // API tokens alone. The handler
+  // maps each row to DeviceInfo, deriving `trusted` (trusted_at later than
+  // the account's trust revocation) + `current` (thumbprint matches the
+  // device the caller's token is bound to). Gated devices.
   rpc ListUserDevices(ListUserDevicesReq) returns (ListUserDevicesResp) {
     option (w17.db.method) = {
       ops: {
@@ -1925,13 +3571,18 @@ service AuthQuery {
         dql:
           "SELECT d.id AS id, "
           "       d.user_id AS user_id, "
-          "       d.identifier AS identifier, "
+          "       d.thumbprint AS thumbprint, "
           "       d.label AS label, "
           "       d.ip AS ip, "
           "       d.trusted_at AS trusted_at, "
           "       d.last_seen_at AS last_seen_at, "
-          "       d.created_at AS created_at "
-          "FROM @module.Device d WHERE d.user_id = :user_id "
+          "       d.created_at AS created_at, "
+          "       d.revoked_at AS revoked_at, "
+          "       d.api_key AS api_key, "
+          "       d.sign_in_failures AS sign_in_failures, "
+          "       d.sign_in_window_at AS sign_in_window_at "
+          "FROM @module.Device d WHERE d.user_id = :user_id AND d.revoked_at IS NULL "
+          "AND d.thumbprint IS NOT NULL AND d.api_key = FALSE "
           "ORDER BY d.last_seen_at DESC"
       }
     };
@@ -1948,15 +3599,17 @@ service AuthQuery {
       ops: {
         name: "main"
         dql:
-          "SELECT (o.owner_id = m.user_id) AS owner, "
-          "       o.id AS org_id, "
+          "SELECT o.id AS org_id, "
           "       o.slug AS slug, "
           "       o.name AS name, "
           "       o.kind AS kind, "
-          "       m.role AS role "
+          "       m.role AS role, "
+          // owner is deprecated and always false (see UserOrg.owner).
+          "       FALSE AS owner, "
+          "       ?feature(membership_kinds) m.kind AS membership_kind "
           "FROM @module.OrgMembership m "
           "JOIN @module.Organization o ON o.id = m.org_id "
-          "WHERE m.user_id = :user_id "
+          "WHERE m.user_id = :user_id AND m.removed_at IS NULL AND o.deleted_at IS NULL "
           "ORDER BY o.name ASC"
       }
     };
@@ -1972,7 +3625,8 @@ service AuthQuery {
         dql:
           "SELECT ROWS_TO_ARRAY(ur.role_id) AS role_ids "
           "FROM @module.UserRole ur "
-          "WHERE ur.user_id = :user_id AND ur.org_id = :org_id"
+          "JOIN @module.Role r ON r.id = ur.role_id "
+          "WHERE ur.user_id = :user_id AND ur.org_id = :org_id AND ur.revoked_at IS NULL AND r.deleted_at IS NULL"
       }
     };
   }
@@ -1984,7 +3638,7 @@ service AuthQuery {
   // decorator has validated membership and resolved the active org, and
   // its answer REPLACES the unfiltered set — the unfiltered set is the
   // union across every org the user belongs to, which is precisely what
-  // must not leak between tenants.
+  // must not leak between organizations.
   //
   // This is the ONLY query that names `UserRole.org_id`, which is why it
   // is the only one that had to be gated: the column is dropped when
@@ -2024,28 +3678,13 @@ service AuthQuery {
           "       r.all_permissions AS all_permissions "
           "FROM @module.UserRole ur "
           "JOIN @module.Role r ON r.id = ur.role_id "
-          "LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id "
+          "LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL "
           "WHERE ur.user_id = :user_id "
           "  AND (ur.org_id = :org_id "
           "       OR (ur.org_id IS NULL AND r.org_scoped = FALSE)) "
+          "  AND ur.revoked_at IS NULL AND r.deleted_at IS NULL "
           "GROUP BY r.id, r.all_permissions "
           "ORDER BY r.id ASC"
-      }
-    };
-  }
-
-  // GetUserOwnsOrg — the ownership probe, kept apart from the grants above
-  // because ownership is not a grant. A correlated EXISTS; see
-  // GetUserOwnsOrgResp for why this one flag is allowed to widen.
-  rpc GetUserOwnsOrg(GetUserOwnsOrgReq) returns (GetUserOwnsOrgResp) {
-    option (w17.contrib.plugin_feature_rpc) = "org_membership";
-    option (w17.db.method) = {
-      ops: {
-        name: "main"
-        dql:
-          "SELECT EXISTS(SELECT 1 FROM @module.Organization o "
-          "              WHERE o.id = :org_id AND o.owner_id = u.id) AS owner "
-          "FROM @module.User u WHERE u.id = :user_id"
       }
     };
   }
@@ -2071,9 +3710,10 @@ service AuthQuery {
           "       r.all_permissions AS all_permissions "
           "FROM @module.UserRole ur "
           "JOIN @module.Role r ON r.id = ur.role_id "
-          "LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id "
+          "LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL "
           "WHERE ur.user_id = :user_id "
           "  AND ur.org_id IS NULL AND r.org_scoped = FALSE "
+          "  AND ur.revoked_at IS NULL AND r.deleted_at IS NULL "
           "GROUP BY r.id, r.all_permissions "
           "ORDER BY r.id ASC"
       }
@@ -2092,7 +3732,7 @@ service AuthQuery {
           "SELECT o.id AS org_id, m.role AS role "
           "FROM @module.OrgMembership m "
           "JOIN @module.Organization o ON o.id = m.org_id "
-          "WHERE m.user_id = :user_id AND o.slug = :slug"
+          "WHERE m.user_id = :user_id AND o.slug = :slug AND m.removed_at IS NULL AND o.deleted_at IS NULL"
       }
     };
   }
@@ -2111,8 +3751,11 @@ service AuthQuery {
         name: "main"
         dql:
           "SELECT o.id AS id, o.slug AS slug, o.name AS name, "
-          "       o.kind AS kind, o.created_at AS created_at "
-          "FROM @module.Organization o ORDER BY o.name ASC, o.id ASC"
+          "       o.kind AS kind, o.created_at AS created_at, "
+          "       o.deleted_at AS deleted_at, "
+          "       ?feature(org_suspension) o.suspended_at AS suspended_at, "
+          "       o.ended_key AS ended_key "
+          "FROM @module.Organization o WHERE o.deleted_at IS NULL ORDER BY o.name ASC, o.id ASC"
       }
     };
   }
@@ -2127,8 +3770,11 @@ service AuthQuery {
         name: "main"
         dql:
           "SELECT o.id AS id, o.slug AS slug, o.name AS name, "
-          "       o.kind AS kind, o.created_at AS created_at "
-          "FROM @module.Organization o WHERE o.id = :id"
+          "       o.kind AS kind, o.created_at AS created_at, "
+          "       o.deleted_at AS deleted_at, "
+          "       ?feature(org_suspension) o.suspended_at AS suspended_at, "
+          "       o.ended_key AS ended_key "
+          "FROM @module.Organization o WHERE o.id = :id AND o.deleted_at IS NULL"
       }
     };
   }
@@ -2139,9 +3785,10 @@ service AuthQuery {
   // User) + the org's NAME (LEFT JOIN Organization, linked to the
   // Organizations page by the page's AdminColumnRef) instead of the two
   // raw UUIDs the link table stores. LEFT JOINs + COALESCE so a membership
-  // whose user or org was hard-deleted (no DB-level FK) still lists with an
-  // empty handle instead of erroring the whole page (a NULL join scanned
-  // into a Go string is a scan error). Gated org_membership.
+  // whose user or org row is missing still lists with an empty handle
+  // instead of erroring the whole page (a NULL join scanned into a Go string
+  // is a scan error). The foreign keys make that impossible for new rows; the
+  // COALESCE stays as the page's own guarantee. Gated org_membership.
   rpc ListOrgMemberships(ListOrgMembershipsReq) returns (ListOrgMembershipsResp) {
     option (w17.contrib.plugin_feature_rpc) = "org_membership";
     option (w17.db.method) = {
@@ -2154,7 +3801,81 @@ service AuthQuery {
           "FROM @module.OrgMembership m "
           "LEFT JOIN @module.User u ON u.id = m.user_id "
           "LEFT JOIN @module.Organization o ON o.id = m.org_id "
+          "WHERE m.removed_at IS NULL "
           "ORDER BY m.created_at DESC, m.id DESC"
+      }
+    };
+  }
+
+  // GetOrganizationBySlug — one live organization by its slug, for the
+  // backoffice inviting into it. Gated org_invite.
+  rpc GetOrganizationBySlug(GetOrganizationBySlugReq) returns (Organization) {
+    option (w17.contrib.plugin_feature_rpc) = "backoffice_invites";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT o.id AS id, o.slug AS slug, o.name AS name, "
+          "       o.kind AS kind, o.created_at AS created_at, "
+          "       o.deleted_at AS deleted_at, "
+          "       ?feature(org_suspension) o.suspended_at AS suspended_at, "
+          "       o.ended_key AS ended_key "
+          "FROM @module.Organization o WHERE o.slug = :slug AND o.deleted_at IS NULL"
+      }
+    };
+  }
+
+  // GetPendingOrgInvite — the organization and role of one pending
+  // invitation, for withdrawing it from the backoffice. Gated org_invite.
+  rpc GetPendingOrgInvite(GetPendingOrgInviteReq) returns (PendingOrgInviteRef) {
+    option (w17.contrib.plugin_feature_rpc) = "backoffice_invites";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT i.id AS id, i.org_id AS org_id, i.role AS role "
+          "FROM @module.OrgInvite i "
+          "WHERE i.id = :id AND i.accepted_at IS NULL AND i.closed_at IS NULL"
+      }
+    };
+  }
+
+  // GetOrgInviteAdmin — one pending invitation for the OrgInvites page's
+  // detail, in the list's shape. Gated org_invite.
+  rpc GetOrgInviteAdmin(GetOrgInviteAdminReq) returns (OrgInviteAdminRow) {
+    option (w17.contrib.plugin_feature_rpc) = "backoffice_invites";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT i.id AS id, COALESCE(i.email, '') AS email, "
+          "       i.org_id AS organization, COALESCE(o.name, '') AS org_name, "
+          "       i.role AS role, i.expires_at AS expires_at, i.created_at AS created_at "
+          "FROM @module.OrgInvite i "
+          "JOIN @module.Organization o ON o.id = i.org_id "
+          "WHERE i.id = :id AND i.accepted_at IS NULL AND i.closed_at IS NULL AND o.deleted_at IS NULL"
+      }
+    };
+  }
+
+  // ListOrgInvitesAdmin — every live organization's pending invitations for
+  // the backoffice's OrgInvites page, newest first, with the org's name; the
+  // address empty for an open invitation. Pending = neither accepted nor
+  // closed, the same rows ListOrgInvitesByOrg lists per organization; a
+  // deleted organization's are not offered. Gated org_invite.
+  rpc ListOrgInvitesAdmin(ListOrgInvitesAdminReq) returns (ListOrgInvitesAdminResp) {
+    option (w17.contrib.plugin_feature_rpc) = "backoffice_invites";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT i.id AS id, COALESCE(i.email, '') AS email, "
+          "       i.org_id AS organization, COALESCE(o.name, '') AS org_name, "
+          "       i.role AS role, i.expires_at AS expires_at, i.created_at AS created_at "
+          "FROM @module.OrgInvite i "
+          "JOIN @module.Organization o ON o.id = i.org_id "
+          "WHERE i.accepted_at IS NULL AND i.closed_at IS NULL AND o.deleted_at IS NULL "
+          "ORDER BY i.created_at DESC, i.id DESC"
       }
     };
   }
@@ -2168,8 +3889,12 @@ service AuthQuery {
         name: "main"
         dql:
           "SELECT m.id AS id, m.user_id AS user_id, m.org_id AS org_id, "
-          "       m.role AS role, m.created_at AS created_at "
-          "FROM @module.OrgMembership m WHERE m.id = :id"
+          "       m.role AS role, m.created_at AS created_at, "
+          "       m.removed_at AS removed_at, "
+          "       m.removed_by AS removed_by, "
+          "       m.ended_key AS ended_key, "
+          "       ?feature(membership_kinds) m.kind AS kind "
+          "FROM @module.OrgMembership m WHERE m.id = :id AND m.removed_at IS NULL"
       }
     };
   }
@@ -2183,12 +3908,14 @@ service AuthQuery {
   // declares no title so the cell reads "User" with the id in its
   // tooltip), so the list shows a name + a labelled link instead of a
   // bare user UUID. The projection NEVER includes the secret `token`
-  // column — only base-tier id / user_id / created_at / expires_at (so
-  // it stays valid whether or not api_token / devices add their columns).
-  // LEFT JOIN + COALESCE so an orphan token (its user hard-deleted — there
-  // is no DB-level FK) still lists with an empty owner instead of erroring
-  // the whole page (converting a NULL join into a Go string is a scan
-  // error). Gated user_admin.
+  // column — only base-tier id / user_id / created_at / expires_at and the
+  // revocation (so it stays valid whether or not api_token / devices add
+  // their columns). Revoked tokens are listed, shown as revoked.
+  // LEFT JOIN + COALESCE so a token whose user row is missing still lists
+  // with an empty owner instead of erroring the whole page (converting a NULL
+  // join into a Go string is a scan error). The foreign key on user_id rules
+  // that out; the COALESCE stays as the page's own guarantee. Gated
+  // user_admin.
   rpc ListUserTokens(ListUserTokensReq) returns (ListUserTokensResp) {
     option (w17.contrib.plugin_feature_rpc) = "user_admin";
     option (w17.db.method) = {
@@ -2196,27 +3923,215 @@ service AuthQuery {
         name: "main"
         dql:
           "SELECT t.id AS id, COALESCE(u.email, '') AS owner, t.user_id AS user, "
-          "       t.created_at AS created_at, t.expires_at AS expires_at "
+          "       t.created_at AS created_at, t.expires_at AS expires_at, "
+          "       t.revoked_at AS revoked_at, t.revoke_reason AS revoke_reason, "
+          "       t.device_id AS device, COALESCE(d.label, '') AS device_label, "
+          "       d.thumbprint AS thumbprint, t.public_computer AS public_computer "
           "FROM @module.UserToken t "
           "LEFT JOIN @module.User u ON u.id = t.user_id "
+          "LEFT JOIN @module.Device d ON d.id = t.device_id "
           "ORDER BY t.created_at DESC, t.id DESC"
       }
     };
   }
 
-  // GetUserToken — one token for the admin Sessions detail view. Returns
-  // the UserToken model DIRECTLY but projects only the safe base columns
-  // (NO secret `token`, same discipline as GetUser omitting
-  // password_hash). Gated user_admin.
-  rpc GetUserToken(GetUserTokenReq) returns (UserToken) {
+  // GetUserToken — one token for the admin Sessions detail view, as
+  // UserTokenAdminDetail: only the safe columns (NO secret `token` or
+  // `token_hash`, same discipline as GetUser omitting password_hash), the
+  // device the token is bound to (LEFT JOIN Device d) and, for a CLI session,
+  // the device that approved it (LEFT JOIN Device a). Gated user_admin.
+  rpc GetUserToken(GetUserTokenReq) returns (UserTokenAdminDetail) {
     option (w17.contrib.plugin_feature_rpc) = "user_admin";
     option (w17.db.method) = {
       ops: {
         name: "main"
         dql:
           "SELECT t.id AS id, t.user_id AS user_id, "
-          "       t.created_at AS created_at, t.expires_at AS expires_at "
-          "FROM @module.UserToken t WHERE t.id = :id"
+          "       t.created_at AS created_at, t.expires_at AS expires_at, "
+          "       t.revoked_at AS revoked_at, t.revoked_by AS revoked_by, "
+          "       t.revoke_reason AS revoke_reason, t.public_computer AS public_computer, "
+          "       t.device_id AS device_id, COALESCE(d.label, '') AS device_label, "
+          "       d.thumbprint AS device_thumbprint, "
+          "       t.approved_by_device_id AS approved_by_device_id, "
+          "       COALESCE(a.label, '') AS approver_label, a.thumbprint AS approver_thumbprint "
+          "FROM @module.UserToken t "
+          "LEFT JOIN @module.Device d ON d.id = t.device_id "
+          "LEFT JOIN @module.Device a ON a.id = t.approved_by_device_id "
+          "WHERE t.id = :id"
+      }
+    };
+  }
+
+  // ListSignInEvents — the sign-in history for the admin Sign-ins page,
+  // newest first, cursor-paged on (created_at, id). LEFT JOIN User: an
+  // attempt that reached no account has no user, and shows the address it
+  // named instead. Every outcome is listed, failures included. Gated
+  // user_admin.
+  rpc ListSignInEvents(ListSignInEventsReq) returns (ListSignInEventsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "user_admin";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT e.id AS id, COALESCE(u.email, e.address) AS account, e.user_id AS user, "
+          "       e.method AS method, e.outcome AS outcome, e.ip AS ip, "
+          "       e.created_at AS created_at, e.thumbprint AS thumbprint "
+          "FROM @module.SignInEvent e "
+          "LEFT JOIN @module.User u ON u.id = e.user_id "
+          "ORDER BY e.created_at DESC, e.id DESC"
+      }
+    };
+  }
+
+  // GetSignInEvent — one attempt for the admin Sign-ins detail view, every
+  // column. Gated user_admin.
+  rpc GetSignInEvent(GetSignInEventReq) returns (SignInEvent) {
+    option (w17.contrib.plugin_feature_rpc) = "user_admin";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT e.id AS id, e.created_at AS created_at, e.user_id AS user_id, "
+          "       e.address AS address, e.device_id AS device_id, "
+          "       e.thumbprint AS thumbprint, e.ip AS ip, e.user_agent AS user_agent, "
+          "       e.method AS method, e.outcome AS outcome, "
+          "       e.public_computer AS public_computer "
+          "FROM @module.SignInEvent e WHERE e.id = :id"
+      }
+    };
+  }
+
+  // ListAllDevices — every device for the admin Devices page, the newest
+  // first, cursor-paged on (created_at, id): an immutable key, because every
+  // sign-in rewrites last_seen_at and a keyset over it would skip or repeat
+  // rows while an operator pages (last seen is shown as a column). LEFT JOIN User
+  // for the owner's address and the account's trust revocation; `trusted` is
+  // the sign-in's rule (trusted_at later than the account's revocation, the
+  // device not revoked). Revoked and legacy (keyless) devices are listed.
+  // Gated user_admin.
+  rpc ListAllDevices(ListAllDevicesReq) returns (ListAllDevicesResp) {
+    option (w17.contrib.plugin_feature_rpc) = "user_admin";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT d.id AS id, COALESCE(u.email, '') AS owner, d.user_id AS user, "
+          "       d.label AS label, d.thumbprint AS thumbprint, d.ip AS ip, "
+          "       d.created_at AS created_at, d.last_seen_at AS last_seen_at, "
+          "       d.trusted_at AS trusted_at, u.device_trust_revoked_at AS trust_revoked_at, "
+          "       CASE WHEN d.trusted_at IS NOT NULL AND d.revoked_at IS NULL "
+          "            AND (u.device_trust_revoked_at IS NULL OR d.trusted_at > u.device_trust_revoked_at) "
+          "            THEN TRUE ELSE FALSE END AS trusted, "
+          "       d.revoked_at AS revoked_at "
+          "FROM @module.Device d "
+          "LEFT JOIN @module.User u ON u.id = d.user_id "
+          "ORDER BY d.created_at DESC, d.id DESC"
+      }
+    };
+  }
+
+  // GetSessionStepUp — the mailed step-up code out for the caller's session
+  // (ConfirmStepUp reads it). Gated step_up_code.
+  rpc GetSessionStepUp(GetSessionStepUpReq) returns (GetSessionStepUpResp) {
+    option (w17.contrib.plugin_feature_rpc) = "step_up_code";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT t.step_up_code_hash AS code_hash, t.step_up_code_sent_at AS sent_at "
+          "FROM @module.UserToken t WHERE t.id = :token_id AND t.user_id = :user_id AND t.revoked_at IS NULL"
+      }
+    };
+  }
+
+  // GetSessionSteppedUpAt — when the caller's session was last stepped up.
+  // Gated step_up.
+  rpc GetSessionSteppedUpAt(GetSessionSteppedUpAtReq) returns (GetSessionSteppedUpAtResp) {
+    option (w17.contrib.plugin_feature_rpc) = "step_up";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT t.stepped_up_at AS stepped_up_at FROM @module.UserToken t "
+          "WHERE t.id = :token_id AND t.user_id = :user_id AND t.revoked_at IS NULL"
+      }
+    };
+  }
+
+  // ListAuthenticators / GetAuthenticator — the admin Authenticators page
+  // (admin_mfa): every enrolment, ended ones included, never the seed.
+  rpc ListAuthenticators(ListAuthenticatorsReq) returns (ListAuthenticatorsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "admin_mfa";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT s.id AS id, u.email AS owner, s.user_id AS user, "
+          "       s.confirmed_at AS confirmed_at, s.created_at AS created_at, s.revoked_at AS revoked_at "
+          "FROM @module.UserTotpSecret s "
+          "JOIN @module.User u ON u.id = s.user_id "
+          "ORDER BY s.created_at DESC, s.id DESC"
+      }
+    };
+  }
+  rpc GetAuthenticator(GetAuthenticatorReq) returns (AuthenticatorAdminRow) {
+    option (w17.contrib.plugin_feature_rpc) = "admin_mfa";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT s.id AS id, u.email AS owner, s.user_id AS user, "
+          "       s.confirmed_at AS confirmed_at, s.created_at AS created_at, s.revoked_at AS revoked_at "
+          "FROM @module.UserTotpSecret s "
+          "JOIN @module.User u ON u.id = s.user_id "
+          "WHERE s.id = :id"
+      }
+    };
+  }
+
+  // GetDevice — one device for the admin Devices detail view (and the
+  // Revoke action, which reads the device's account and state with it), the
+  // list's projection. Gated user_admin.
+  rpc GetDevice(GetDeviceReq) returns (DeviceAdminRow) {
+    option (w17.contrib.plugin_feature_rpc) = "user_admin";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT d.id AS id, COALESCE(u.email, '') AS owner, d.user_id AS user, "
+          "       d.label AS label, d.thumbprint AS thumbprint, d.ip AS ip, "
+          "       d.created_at AS created_at, d.last_seen_at AS last_seen_at, "
+          "       d.trusted_at AS trusted_at, u.device_trust_revoked_at AS trust_revoked_at, "
+          "       CASE WHEN d.trusted_at IS NOT NULL AND d.revoked_at IS NULL "
+          "            AND (u.device_trust_revoked_at IS NULL OR d.trusted_at > u.device_trust_revoked_at) "
+          "            THEN TRUE ELSE FALSE END AS trusted, "
+          "       d.revoked_at AS revoked_at "
+          "FROM @module.Device d "
+          "LEFT JOIN @module.User u ON u.id = d.user_id "
+          "WHERE d.id = :id"
+      }
+    };
+  }
+
+  // ListUserSignInEvents — one account's own sign-in history, newest first,
+  // the latest 100 (AuthService.ListMySignInEvents, which passes the
+  // caller's id). Served by the (user_id, created_at) index. Gated
+  // authenticate_turnkey, the feature that knows the caller.
+  rpc ListUserSignInEvents(ListUserSignInEventsReq) returns (ListUserSignInEventsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "authenticate_turnkey";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT e.id AS id, e.created_at AS created_at, "
+          "       e.user_id AS user_id, e.address AS address, "
+          "       e.device_id AS device_id, e.thumbprint AS thumbprint, "
+          "       e.ip AS ip, e.user_agent AS user_agent, "
+          "       e.method AS method, e.outcome AS outcome, "
+          "       e.public_computer AS public_computer "
+          "FROM @module.SignInEvent e WHERE e.user_id = :user_id "
+          "ORDER BY e.created_at DESC, e.id DESC "
+          "LIMIT 100"
       }
     };
   }
@@ -2225,7 +4140,8 @@ service AuthQuery {
   // org member + invite reads
   // ────────────────────────────────────────────────────────────
 
-  // ListOrgMembersByOrg — everyone in ONE organization. The ByOrg
+  // ListOrgMembersByOrg — ONE organization's members, a page at a time
+  // (keyset on the address, which is unique). The ByOrg
   // suffix is not decoration: every proto in this plugin generates into
   // ONE Go package, so a query message may not share a name with the
   // business message that wraps it — and the business RPC is the one
@@ -2244,13 +4160,15 @@ service AuthQuery {
           "SELECT m.user_id AS user_id, "
           "       u.email AS email, "
           "       m.role AS role, "
-          "       (o.owner_id = m.user_id) AS owner, "
-          "       m.created_at AS joined_at "
+          "       m.created_at AS joined_at, "
+          "       m.id AS membership_id "
           "FROM @module.OrgMembership m "
           "JOIN @module.User u ON u.id = m.user_id "
           "JOIN @module.Organization o ON o.id = m.org_id "
-          "WHERE m.org_id = :org_id "
-          "ORDER BY u.email ASC"
+          "WHERE m.org_id = :org_id AND m.removed_at IS NULL AND o.deleted_at IS NULL "
+          "AND u.email > :after_email "
+          "ORDER BY u.email ASC "
+          "LIMIT :limit"
       }
     };
   }
@@ -2282,7 +4200,28 @@ service AuthQuery {
           "       i.email AS email, "
           "       i.metadata AS metadata "
           "FROM @module.OrgInvite i "
-          "WHERE i.token_hash = :token_hash AND i.accepted_at IS NULL AND i.expires_at > NOW() "
+          "JOIN @module.Organization o ON o.id = i.org_id "
+          "WHERE i.token_hash = :token_hash AND i.accepted_at IS NULL AND i.closed_at IS NULL AND i.expires_at > NOW() AND o.deleted_at IS NULL "
+          "LIMIT 1"
+      }
+    };
+  }
+
+  // GetPendingOrgInviteForEmail — a pending invitation by its id, only if it
+  // is bound to this address (invite_accept_from_list). Answers the hash the
+  // acceptance then spends it by, through the one claim (and the one
+  // OrgInviteAccepted) accepting through the link uses.
+  rpc GetPendingOrgInviteForEmail(GetPendingOrgInviteForEmailReq) returns (GetPendingOrgInviteForEmailResp) {
+    option (w17.contrib.plugin_feature_rpc) = "invite_accept_from_list";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT i.org_id AS org_id, "
+          "       i.token_hash AS token_hash "
+          "FROM @module.OrgInvite i "
+          "JOIN @module.Organization o ON o.id = i.org_id "
+          "WHERE i.id = :invite_id AND i.email = :email AND i.accepted_at IS NULL AND i.closed_at IS NULL AND i.expires_at > NOW() AND o.deleted_at IS NULL "
           "LIMIT 1"
       }
     };
@@ -2302,9 +4241,15 @@ service AuthQuery {
           "       i.expires_at AS expires_at, "
           "       i.accepted_at AS accepted_at, "
           "       i.created_at AS created_at, "
-          "       i.metadata AS metadata "
+          "       i.metadata AS metadata, "
+          "       ?feature(product_roles) i.product_roles AS product_roles, "
+          "       i.token_hash AS token_hash, "
+          "       i.role_snapshot AS role_snapshot, "
+          "       i.closed_at AS closed_at, "
+          "       i.closed_by AS closed_by, "
+          "       ?feature(membership_kinds) i.kind AS kind "
           "FROM @module.OrgInvite i "
-          "WHERE i.org_id = :org_id AND i.accepted_at IS NULL "
+          "WHERE i.org_id = :org_id AND i.accepted_at IS NULL AND i.closed_at IS NULL "
           "ORDER BY i.created_at DESC"
       }
     };
@@ -2331,12 +4276,641 @@ service AuthQuery {
           "       o.slug AS org_slug, "
           "       o.name AS org_name, "
           "       i.role AS role, "
-          "       i.expires_at AS expires_at "
+          "       i.expires_at AS expires_at, "
+          "       ?feature(product_roles) i.product_roles AS product_roles "
           "FROM @module.OrgInvite i "
           "JOIN @module.Organization o ON o.id = i.org_id "
-          "WHERE i.email = :email AND i.accepted_at IS NULL AND i.expires_at > NOW() "
+          "WHERE i.email = :email AND i.accepted_at IS NULL AND i.closed_at IS NULL AND i.expires_at > NOW() AND o.deleted_at IS NULL "
           "ORDER BY i.created_at DESC"
       }
     };
   }
+
+  // ── oauth_server reads ──
+
+  rpc GetOAuthClientByHash(GetOAuthClientByHashReq) returns (GetOAuthClientByHashResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth_server";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT c.id AS client.id, c.client_id AS client.client_id, c.kind AS client.kind, "
+          "       c.client_name AS client.client_name, c.client_uri AS client.client_uri, "
+          "       c.logo_uri AS client.logo_uri, c.redirect_uris AS client.redirect_uris, "
+          "       c.metadata_fetched_at AS client.metadata_fetched_at, c.disabled_at AS client.disabled_at, "
+          "       c.software_id AS client.software_id "
+          "FROM @module.OAuthClient c WHERE c.client_id_hash = :client_id_hash"
+      }
+    };
+  }
+
+  rpc GetOAuthClientByRowID(GetOAuthClientByRowIDReq) returns (GetOAuthClientByRowIDResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth_server";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT c.id AS client.id, c.client_id AS client.client_id, c.kind AS client.kind, "
+          "       c.client_name AS client.client_name, c.client_uri AS client.client_uri, "
+          "       c.logo_uri AS client.logo_uri, c.redirect_uris AS client.redirect_uris, "
+          "       c.metadata_fetched_at AS client.metadata_fetched_at, c.disabled_at AS client.disabled_at, "
+          "       c.software_id AS client.software_id "
+          "FROM @module.OAuthClient c WHERE c.id = :id"
+      }
+    };
+  }
+
+  rpc GetPendingOAuthAuthorization(GetPendingOAuthAuthorizationReq) returns (GetPendingOAuthAuthorizationResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth_server";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT a.id AS id, a.kind AS kind, a.redirect_uri AS redirect_uri, a.scope AS scope, "
+          "       a.resource AS resource, a.expires_at AS expires_at, "
+          "       c.id AS client.id, c.client_id AS client.client_id, c.kind AS client.kind, "
+          "       c.client_name AS client.client_name, c.client_uri AS client.client_uri, "
+          "       c.logo_uri AS client.logo_uri, c.redirect_uris AS client.redirect_uris, "
+          "       c.metadata_fetched_at AS client.metadata_fetched_at, c.disabled_at AS client.disabled_at, "
+          "       c.software_id AS client.software_id "
+          "FROM @module.OAuthAuthorization a JOIN @module.OAuthClient c ON c.id = a.client_row_id "
+          "WHERE a.request_hash = :request_hash AND a.decided_at IS NULL AND a.expires_at > NOW() AND c.disabled_at IS NULL"
+      }
+    };
+  }
+
+  rpc GetOAuthApprovingSession(GetOAuthApprovingSessionReq) returns (GetOAuthApprovingSessionResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth_server";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT t.id AS token_id, t.expires_at AS expires_at, t.device_id AS device_id "
+          "FROM @module.UserToken t "
+          "WHERE t.id = :token_id AND t.user_id = :user_id "
+          "AND (t.expires_at IS NULL OR t.expires_at > NOW()) AND t.revoked_at IS NULL"
+      }
+    };
+  }
+
+  rpc GetOAuthDeviceRevocation(GetOAuthDeviceRevocationReq) returns (GetOAuthDeviceRevocationResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth_server";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql: "SELECT d.id AS device_id, d.revoked_at AS revoked_at FROM @module.Device d WHERE d.id = :device_id"
+      }
+    };
+  }
+
+  rpc GetOAuthRefreshToken(GetOAuthRefreshTokenReq) returns (GetOAuthRefreshTokenResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth_server";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT r.id AS id, r.grant_id AS grant_id, r.expires_at AS expires_at, r.used_at AS used_at "
+          "FROM @module.OAuthRefreshToken r WHERE r.token_hash = :token_hash"
+      }
+    };
+  }
+
+  rpc GetOAuthGrant(GetOAuthGrantReq) returns (GetOAuthGrantResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth_server";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT g.id AS id, g.user_id AS user_id, g.org_id AS org_id, g.client_row_id AS client_row_id, "
+          "       c.client_id AS client_id, g.resource AS resource, g.scope AS scope, "
+          "       g.approved_by_device_id AS approved_by_device_id, g.expires_at AS expires_at, "
+          "       g.revoked_at AS revoked_at, c.disabled_at AS client_disabled_at "
+          "FROM @module.OAuthGrant g JOIN @module.OAuthClient c ON c.id = g.client_row_id "
+          "WHERE g.id = :id"
+      }
+    };
+  }
+
+  rpc GetOAuthGrantLastToken(GetOAuthGrantLastTokenReq) returns (GetOAuthGrantLastTokenResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth_server";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT t.id AS token_id, t.revoked_at AS revoked_at FROM @module.UserToken t "
+          "WHERE t.oauth_grant_id = :grant_id ORDER BY t.created_at DESC, t.id DESC LIMIT 1"
+      }
+    };
+  }
+
+  rpc GetOAuthAccessTokenGrant(GetOAuthAccessTokenGrantReq) returns (GetOAuthAccessTokenGrantResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth_server";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql: "SELECT t.oauth_grant_id AS grant_id FROM @module.UserToken t WHERE t.token_hash = :token_hash"
+      }
+    };
+  }
+
+  rpc ListUserOAuthGrants(ListUserOAuthGrantsReq) returns (ListUserOAuthGrantsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth_server";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT g.id AS id, g.org_id AS org_id, g.resource AS resource, "
+          "       g.scope AS scope, g.created_at AS created_at, "
+          "       g.last_used_at AS last_used_at, g.expires_at AS expires_at, "
+          "       c.client_id AS client_id, c.client_name AS client_name, "
+          "       c.client_uri AS client_uri, c.logo_uri AS logo_uri "
+          "FROM @module.OAuthGrant g JOIN @module.OAuthClient c ON c.id = g.client_row_id "
+          "WHERE g.user_id = :user_id AND g.revoked_at IS NULL AND g.expires_at > NOW() "
+          "ORDER BY g.created_at DESC "
+          "LIMIT 200"
+      }
+    };
+  }
+
+  rpc GetOAuthCodeUse(GetOAuthCodeUseReq) returns (GetOAuthCodeUseResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth_server";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql: "SELECT a.id AS id, a.code_consumed_at AS code_consumed_at, a.session_token_hash AS session_token_hash FROM @module.OAuthAuthorization a WHERE a.code_hash = :code_hash"
+      }
+    };
+  }
+
+  rpc GetOAuthGrantByAuthorization(GetOAuthGrantByAuthorizationReq) returns (GetOAuthGrantByAuthorizationResp) {
+    option (w17.contrib.plugin_feature_rpc) = "oauth_server";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql: "SELECT g.id AS id FROM @module.OAuthGrant g WHERE g.authorization_id = :authorization_id"
+      }
+    };
+  }
+
+  // ── teams (handlers/teams.go) ──
+
+  // ListOrgPackages — read on every Authenticate in an organization: the
+  // packages bound what its members hold.
+  rpc ListOrgPackages(ListOrgPackagesReq) returns (ListOrgPackagesResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_packages";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT p.package AS package, p.enabled_at AS enabled_at "
+          "FROM @module.OrgPackage p "
+          "WHERE p.org_id = :org_id AND p.ended_at IS NULL "
+          "ORDER BY p.package ASC"
+      }
+    };
+  }
+
+  // GetOrgOfHost — the live organization a host is bound to (org_hosts);
+  // NotFound when the host is unbound or its organization deleted. Read on
+  // every Authenticate through an audience that takes the organization from the
+  // host.
+  rpc GetOrgOfHost(GetOrgOfHostReq) returns (OrgHostRow) {
+    option (w17.contrib.plugin_feature_rpc) = "org_hosts";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT h.host AS host, h.org_id AS org_id, o.slug AS slug, h.bound_at AS bound_at "
+          "FROM @module.OrgHost h "
+          "JOIN @module.Organization o ON o.id = h.org_id "
+          "WHERE h.host = :host AND h.ended_at IS NULL AND o.deleted_at IS NULL"
+      }
+    };
+  }
+
+  // ListOrgHostRows — every live binding, by host.
+  rpc ListOrgHostRows(ListOrgHostRowsReq) returns (ListOrgHostRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_hosts";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT h.host AS host, h.org_id AS org_id, o.slug AS slug, h.bound_at AS bound_at "
+          "FROM @module.OrgHost h "
+          "JOIN @module.Organization o ON o.id = h.org_id "
+          "WHERE h.ended_at IS NULL AND o.deleted_at IS NULL "
+          "ORDER BY h.host ASC"
+      }
+    };
+  }
+
+  // ListOrgTwoFactorPolicyRows — an organization's live second-factor
+  // policies, by kind. Read on every password sign-in into the organization
+  // and on enrolling an authenticator there.
+  rpc ListOrgTwoFactorPolicyRows(ListOrgTwoFactorPolicyRowsReq) returns (ListOrgTwoFactorPolicyRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_two_factor_policy";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT p.kind AS kind, p.policy AS policy, p.set_at AS set_at "
+          "FROM @module.OrgTwoFactorPolicy p "
+          "WHERE p.org_id = :org_id AND p.ended_at IS NULL "
+          "ORDER BY p.kind ASC"
+      }
+    };
+  }
+
+  // ListOrgEmailProofPolicyRows — an organization's live address-proof floor
+  // (one row at most). Read on every acceptance of an invitation into the
+  // organization and on every registration its host takes.
+  rpc ListOrgEmailProofPolicyRows(ListOrgEmailProofPolicyRowsReq) returns (ListOrgEmailProofPolicyRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_email_proof_policy";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT p.floor AS floor, p.set_at AS set_at "
+          "FROM @module.OrgEmailProofPolicy p "
+          "WHERE p.org_id = :org_id AND p.ended_at IS NULL"
+      }
+    };
+  }
+
+  // ListOrgSignUpPolicyRows — an organization's live registration
+  // policies, by kind. Read on a registration without an invitation that
+  // arrives on the organization's host.
+  rpc ListOrgSignUpPolicyRows(ListOrgSignUpPolicyRowsReq) returns (ListOrgSignUpPolicyRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "org_signup";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT p.kind AS kind, p.open AS open, p.role AS role, p.set_at AS set_at, "
+          "p.role_snapshot AS role_snapshot, "
+          "?feature(product_roles) p.product_roles AS product_roles "
+          "FROM @module.OrgSignUpPolicy p "
+          "WHERE p.org_id = :org_id AND p.ended_at IS NULL "
+          "ORDER BY p.kind ASC"
+      }
+    };
+  }
+
+  // ListProductRolesOfUser — read on every Authenticate a product's gateway
+  // asks: the user's live grants in the product, in every organization and
+  // realm-wide; the handler keeps the active organization's and the realm's.
+  rpc ListProductRoleDefs(ListProductRoleDefsReq) returns (ListProductRoleDefsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "product_roles";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT r.id AS id, r.org_id AS org_id, r.key AS key, r.name AS name, r.org_scoped AS org_scoped, r.permissions AS permissions "
+          "FROM @module.ProductRoleDef r "
+          "WHERE r.ended_at IS NULL AND (r.org_id IS NULL OR r.org_id = :org_id) "
+          "ORDER BY r.key ASC"
+      }
+    };
+  }
+  rpc ListTokenProductRoles(ListTokenProductRolesReq) returns (ListTokenProductRolesResp) {
+    option (w17.contrib.plugin_feature_rpc) = "product_roles";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT t.product AS product, t.role_key AS role_key "
+          "FROM @module.TokenProductRole t "
+          "WHERE t.token_id = :token_id "
+          "ORDER BY t.product ASC, t.role_key ASC"
+      }
+    };
+  }
+  rpc ListProductRolesOfUser(ListProductRolesOfUserReq) returns (ProductRoleGrantRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "product_roles";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT g.id AS id, g.user_id AS user_id, g.org_id AS org_id, g.product AS product, g.role_key AS role_key, g.granted_by AS granted_by, g.granted_at AS granted_at "
+          "FROM @module.ProductRoleGrant g "
+          "WHERE g.user_id = :user_id AND g.product = :product AND g.ended_at IS NULL "
+          "ORDER BY g.role_key ASC"
+      }
+    };
+  }
+  rpc ListOrgProductRoleGrantRows(ListOrgProductRoleGrantRowsReq) returns (ProductRoleGrantRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "product_roles";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT g.id AS id, g.user_id AS user_id, g.org_id AS org_id, g.product AS product, g.role_key AS role_key, g.granted_by AS granted_by, g.granted_at AS granted_at "
+          "FROM @module.ProductRoleGrant g "
+          "WHERE g.org_id = :org_id AND g.ended_at IS NULL "
+          "ORDER BY g.user_id ASC, g.product ASC, g.role_key ASC"
+      }
+    };
+  }
+  rpc ListUserProductRoleGrantRows(ListUserProductRoleGrantRowsReq) returns (ProductRoleGrantRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "product_roles";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT g.id AS id, g.user_id AS user_id, g.org_id AS org_id, g.product AS product, g.role_key AS role_key, g.granted_by AS granted_by, g.granted_at AS granted_at "
+          "FROM @module.ProductRoleGrant g "
+          "WHERE g.user_id = :user_id AND g.ended_at IS NULL "
+          "ORDER BY g.product ASC, g.role_key ASC"
+      }
+    };
+  }
+  rpc ListRealmProductRoleGrantRows(ListRealmProductRoleGrantRowsReq) returns (ProductRoleGrantRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "product_roles";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT g.id AS id, g.user_id AS user_id, g.org_id AS org_id, g.product AS product, g.role_key AS role_key, g.granted_by AS granted_by, g.granted_at AS granted_at "
+          "FROM @module.ProductRoleGrant g "
+          "WHERE g.org_id IS NULL AND g.ended_at IS NULL "
+          "ORDER BY g.user_id ASC, g.product ASC, g.role_key ASC"
+      }
+    };
+  }
+  // ListOrgProductAllowanceRows — an organization's plan: read on every
+  // Authenticate a product's gateway asks in the organization.
+  // GetOrgProductAllowance — the organization of one live plan line.
+  rpc GetOrgProductAllowance(GetOrgProductAllowanceReq) returns (OrgProductAllowanceRef) {
+    option (w17.contrib.plugin_feature_rpc) = "product_plans";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT a.id AS id, a.org_id AS org_id "
+          "FROM @module.OrgProductAllowance a "
+          "WHERE a.id = :id AND a.ended_at IS NULL"
+      }
+    };
+  }
+
+  rpc ListOrgProductAllowanceRows(ListOrgProductAllowanceRowsReq) returns (ListOrgProductAllowanceRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "product_plans";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT a.id AS id, a.product AS product, a.role_key AS role_key, a.allowed_at AS allowed_at "
+          "FROM @module.OrgProductAllowance a "
+          "WHERE a.org_id = :org_id AND a.ended_at IS NULL "
+          "ORDER BY a.product ASC, a.role_key ASC"
+      }
+    };
+  }
+
+  // ListProductPlanRows — the live named plans.
+  rpc ListProductPlanRows(ListProductPlanRowsReq) returns (ListProductPlanRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "named_product_plans";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT p.id AS id, p.name AS name, p.created_at AS created_at "
+          "FROM @module.ProductPlan p "
+          "WHERE p.ended_at IS NULL "
+          "ORDER BY p.name ASC"
+      }
+    };
+  }
+  // ListProductPlanLineRows — a plan's live lines.
+  rpc ListProductPlanLineRows(ListProductPlanLineRowsReq) returns (ListProductPlanLineRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "named_product_plans";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT l.id AS id, l.product AS product, l.role_key AS role_key, l.added_at AS added_at "
+          "FROM @module.ProductPlanLine l "
+          "WHERE l.plan_id = :plan_id AND l.ended_at IS NULL "
+          "ORDER BY l.product ASC, l.role_key ASC"
+      }
+    };
+  }
+  // ListOrgProductPlanAssignmentRows — the plan an organization is on (none or one).
+  rpc ListOrgProductPlanAssignmentRows(ListOrgProductPlanAssignmentRowsReq) returns (ListOrgProductPlanAssignmentRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "named_product_plans";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT a.id AS id, a.org_id AS org_id, a.plan_id AS plan_id, a.assigned_at AS assigned_at "
+          "FROM @module.OrgProductPlanAssignment a "
+          "WHERE a.org_id = :org_id AND a.ended_at IS NULL"
+      }
+    };
+  }
+  // ListProductPlanAssignmentRows — the organizations on a plan.
+  rpc ListProductPlanAssignmentRows(ListProductPlanAssignmentRowsReq) returns (ListProductPlanAssignmentRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "named_product_plans";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT a.id AS id, a.org_id AS org_id, a.plan_id AS plan_id, a.assigned_at AS assigned_at "
+          "FROM @module.OrgProductPlanAssignment a "
+          "WHERE a.plan_id = :plan_id AND a.ended_at IS NULL "
+          "ORDER BY a.assigned_at ASC"
+      }
+    };
+  }
+  // ListOrgNamedPlanLineRows — the lines of the plan an organization is on: read with its own lines on every Authenticate a product's gateway asks in it.
+  rpc ListOrgNamedPlanLineRows(ListOrgNamedPlanLineRowsReq) returns (ListOrgNamedPlanLineRowsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "named_product_plans";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT l.id AS id, l.product AS product, l.role_key AS role_key, l.added_at AS added_at "
+          "FROM @module.ProductPlanLine l "
+          "JOIN @module.OrgProductPlanAssignment a ON a.plan_id = l.plan_id "
+          "WHERE a.org_id = :org_id AND a.ended_at IS NULL AND l.ended_at IS NULL "
+          "ORDER BY l.product ASC, l.role_key ASC"
+      }
+    };
+  }
+
+  rpc ListTeamsByOrg(ListTeamsByOrgReq) returns (ListTeamsByOrgResp) {
+    option (w17.contrib.plugin_feature_rpc) = "teams";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT t.id AS id, t.name AS name, t.description AS description, t.created_at AS created_at "
+          "FROM @module.Team t "
+          "WHERE t.org_id = :org_id AND t.deleted_at IS NULL "
+          "ORDER BY t.name ASC, t.id ASC"
+      }
+    };
+  }
+
+  rpc GetTeam(GetTeamReq) returns (GetTeamResp) {
+    option (w17.contrib.plugin_feature_rpc) = "teams";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT t.id AS id, t.org_id AS org_id, t.name AS name "
+          "FROM @module.Team t "
+          "WHERE t.id = :id AND t.deleted_at IS NULL"
+      }
+    };
+  }
+
+  // ListTeamMembersByOrg — every live member of every live team of one
+  // organization. A member whose organization membership ended (or began
+  // again after they were added) is not one: the same join the grants read.
+  rpc ListTeamMembersByOrg(ListTeamMembersByOrgReq) returns (ListTeamMembersByOrgResp) {
+    option (w17.contrib.plugin_feature_rpc) = "teams";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT tm.team_id AS team_id, tm.user_id AS user_id, u.email AS email, tm.created_at AS added_at "
+          "FROM @module.TeamMember tm "
+          "JOIN @module.Team t ON t.id = tm.team_id AND t.deleted_at IS NULL "
+          "JOIN @module.OrgMembership m ON m.user_id = tm.user_id AND m.org_id = t.org_id "
+          "  AND m.removed_at IS NULL AND m.created_at <= tm.created_at "
+          "JOIN @module.User u ON u.id = tm.user_id "
+          "WHERE t.org_id = :org_id AND tm.removed_at IS NULL "
+          "ORDER BY u.email ASC"
+      }
+    };
+  }
+
+  rpc ListTeamRolesByOrg(ListTeamRolesByOrgReq) returns (ListTeamRolesByOrgResp) {
+    option (w17.contrib.plugin_feature_rpc) = "teams";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT tr.team_id AS team_id, tr.role_id AS role_id "
+          "FROM @module.TeamRole tr "
+          "JOIN @module.Team t ON t.id = tr.team_id AND t.deleted_at IS NULL "
+          "JOIN @module.Role r ON r.id = tr.role_id AND r.deleted_at IS NULL "
+          "WHERE t.org_id = :org_id AND tr.revoked_at IS NULL "
+          "ORDER BY tr.team_id ASC, tr.role_id ASC"
+      }
+    };
+  }
+
+  rpc ListTeamRoleIds(ListTeamRoleIdsReq) returns (ListTeamRoleIdsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "teams";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT ROWS_TO_ARRAY(tr.role_id) AS role_ids "
+          "FROM @module.TeamRole tr "
+          "JOIN @module.Role r ON r.id = tr.role_id "
+          "WHERE tr.team_id = :team_id AND tr.revoked_at IS NULL AND r.deleted_at IS NULL"
+      }
+    };
+  }
+
+  // GetUserTeamRoleGrants — see its request message. Every link is read live:
+  // the team, the membership in it, the organization membership it was made
+  // under (created no later than the team membership, so a person removed and
+  // invited back holds nothing from before), the team's role and the role
+  // itself; only an org-scoped role counts.
+  rpc GetUserTeamRoleGrants(GetUserTeamRoleGrantsReq) returns (GetUserTeamRoleGrantsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "teams";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT r.id AS role_id, "
+          "       ROWS_TO_ARRAY(rp.permission_id) AS permission_ids, "
+          "       r.all_permissions AS all_permissions "
+          "FROM @module.TeamMember tm "
+          "JOIN @module.Team t ON t.id = tm.team_id AND t.deleted_at IS NULL "
+          "JOIN @module.OrgMembership m ON m.user_id = tm.user_id AND m.org_id = t.org_id "
+          "  AND m.removed_at IS NULL AND m.created_at <= tm.created_at "
+          "JOIN @module.TeamRole tr ON tr.team_id = t.id AND tr.revoked_at IS NULL "
+          "JOIN @module.Role r ON r.id = tr.role_id AND r.deleted_at IS NULL AND r.org_scoped = TRUE "
+          "LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL "
+          "WHERE tm.user_id = :user_id AND t.org_id = :org_id AND tm.removed_at IS NULL "
+          "GROUP BY r.id, r.all_permissions "
+          "ORDER BY r.id ASC"
+      }
+    };
+  }
+
+  rpc GetOrgMemberAccount(GetOrgMemberAccountReq) returns (GetOrgMemberAccountResp) {
+    option (w17.contrib.plugin_feature_rpc) = "teams";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT u.id AS user.id, "
+          "       u.email AS user.email, "
+          "       ?feature(service_account) u.kind AS user.kind, "
+          "       u.created_at AS user.created_at, "
+          "       u.password_hash AS user.password_hash, "
+          "       ?feature(email_verification) u.email_verified_at AS user.email_verified_at, "
+          "       ?feature(email_verification) u.email_proof AS user.email_proof, "
+          "       ?feature(user_admin) u.disabled_at AS user.disabled_at, "
+          "       u.device_trust_revoked_at AS user.device_trust_revoked_at, "
+          "       ?feature(user_admin) u.erased_at AS user.erased_at, "
+          "       ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent, "
+          "       ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at, "
+          "       ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs, "
+          "       u.sign_in_failures AS user.sign_in_failures, "
+          "       u.sign_in_window_at AS user.sign_in_window_at "
+          "FROM @module.OrgMembership m "
+          "JOIN @module.User u ON u.id = m.user_id "
+          "WHERE m.user_id = :user_id AND m.org_id = :org_id AND m.removed_at IS NULL"
+      }
+    };
+  }
+
+  // ListOrgTeamSuperadmins — see its request message. The joins are
+  // GetUserTeamRoleGrants', narrowed to wildcard roles.
+  rpc ListOrgTeamSuperadmins(ListOrgTeamSuperadminsReq) returns (ListOrgTeamSuperadminsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "teams";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT tm.user_id AS user_id, r.id AS role_id, t.id AS team_id, "
+          "       ?feature(user_admin) u.disabled_at AS disabled_at, "
+          "       ?unless(user_admin) NULL AS disabled_at, "
+          "       ?feature(user_admin) u.erased_at AS erased_at, "
+          "       ?unless(user_admin) NULL AS erased_at, "
+          "       ?feature(api_token) r.token_type AS token_type "
+          "FROM @module.TeamMember tm "
+          "JOIN @module.Team t ON t.id = tm.team_id AND t.deleted_at IS NULL "
+          "JOIN @module.OrgMembership m ON m.user_id = tm.user_id AND m.org_id = t.org_id "
+          "  AND m.removed_at IS NULL AND m.created_at <= tm.created_at "
+          "JOIN @module.TeamRole tr ON tr.team_id = t.id AND tr.revoked_at IS NULL "
+          "JOIN @module.Role r ON r.id = tr.role_id AND r.deleted_at IS NULL AND r.org_scoped = TRUE "
+          "  AND r.all_permissions = TRUE "
+          "JOIN @module.User u ON u.id = tm.user_id "
+          "WHERE t.org_id = :org_id AND tm.removed_at IS NULL "
+          "ORDER BY tm.user_id ASC, t.id ASC, r.id ASC"
+      }
+    };
+  }
+
+  rpc CountTeamRoleGrants(CountTeamRoleGrantsReq) returns (CountTeamRoleGrantsResp) {
+    option (w17.contrib.plugin_feature_rpc) = "teams";
+    option (w17.db.method) = {
+      ops: {
+        name: "main"
+        dql:
+          "SELECT COUNT(*) AS count FROM @module.TeamRole tr "
+          "JOIN @module.Team t ON t.id = tr.team_id AND t.deleted_at IS NULL "
+          "WHERE tr.role_id = :role_id AND tr.revoked_at IS NULL"
+      }
+    };
+  }
+
 }

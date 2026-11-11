@@ -17,8 +17,7 @@
 // The plugin author's contract:
 //   - AuthReq mirrors the gateway's required shape:
 //     `map<string, string> headers = 1` (validated by the
-//     gateway parser; see srcgo/domains/gateway/parser/parser.go
-//     §validateAuthRequestShape).
+//     gateway parser when it reads the auth method).
 //   - AuthResp carries the two fields the gateway router
 //     consumes: `repeated int32 permission_ids` (the deduped
 //     numeric IDs of granted permissions from the activating
@@ -128,6 +127,62 @@ func (x *AuthReq) GetHeaders() map[string]string {
 	return nil
 }
 
+// ResolveUserReq names the person whose principal ResolveUser answers, and
+// the request they act in: `headers` are read exactly as Authenticate reads an
+// AuthReq's — `w17-org` selects the organization (by slug), an audience's
+// membership kinds, a product — less the credential, which there is none of.
+type ResolveUserReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Headers       map[string]string      `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveUserReq) Reset() {
+	*x = ResolveUserReq{}
+	mi := &file_business_auth_service_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveUserReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveUserReq) ProtoMessage() {}
+
+func (x *ResolveUserReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveUserReq.ProtoReflect.Descriptor instead.
+func (*ResolveUserReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ResolveUserReq) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ResolveUserReq) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
 // AuthResp matches the gateway's auth contract. The router
 // reads `permission_ids` to seed the per-request ACL check
 // (validateAuthResponseShape rejects an AuthResp missing this
@@ -145,7 +200,7 @@ func (x *AuthReq) GetHeaders() map[string]string {
 // `(w17.field).type = UUID` annotation drives validation on
 // the wire shape end-to-end.
 //
-// `scopes` carries REV-147 data-scope values the gateway threads
+// `scopes` carries data-scope values the gateway threads
 // into outgoing gRPC metadata as `x-w17-scope-<name>`, for the
 // storage codegen's per-model `(w17.db.scope)` auto-stamp (INSERT)
 // + auto-WHERE (SELECT). The plugin publishes the canonical
@@ -164,7 +219,7 @@ type AuthResp struct {
 	// exactly the current session — without the raw bearer ever reaching a
 	// backend handler. Empty when the auth backend can't resolve an id.
 	SessionTokenId string `protobuf:"bytes,4,opt,name=session_token_id,json=sessionTokenId,proto3" json:"session_token_id,omitempty"`
-	// `labels` is the BROADCAST tenancy key, and it is deliberately NOT
+	// `labels` is the BROADCAST organization isolation key, and it is deliberately NOT
 	// `scopes` under another name.
 	//
 	// A scope filters ROWS. A label decides who an EVENT reaches: the
@@ -182,15 +237,29 @@ type AuthResp struct {
 	//
 	// Empty (the default, and every project that publishes no label) means
 	// events go out unlabelled and every authenticated client receives them
-	// — the single-tenant posture, unchanged.
-	Labels        map[string]string `protobuf:"bytes,5,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// — the single-organization posture, unchanged.
+	Labels map[string]string `protobuf:"bytes,5,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// device_id — the RFC 7638 key thumbprint the resolved token is BOUND to,
+	// which Authenticate checked against the request's proof of possession
+	// (the gateway's `x-w17-dpop-jkt`) before answering. The gateway stamps it
+	// into the envelope it forwards (`x-w17-device`), so every service the
+	// call reaches knows the verified device beside the user. Never empty on
+	// a successful answer: an unbound token is refused.
+	DeviceId string `protobuf:"bytes,6,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	// acted_for marks a person this domain's own code acts for: an envelope
+	// AuthService.ResolveUser answered, without a credential. It is held as the
+	// person's session (session_token_id is how a check tells a session from a
+	// token, and there is no session to name), so a re-read of their grants —
+	// the role ceiling under an organization's lock — counts the session's
+	// roles. Only ResolveUser sets it; Authenticate never does.
+	ActedFor      bool `protobuf:"varint,10,opt,name=acted_for,json=actedFor,proto3" json:"acted_for,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AuthResp) Reset() {
 	*x = AuthResp{}
-	mi := &file_business_auth_service_proto_msgTypes[1]
+	mi := &file_business_auth_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -202,7 +271,7 @@ func (x *AuthResp) String() string {
 func (*AuthResp) ProtoMessage() {}
 
 func (x *AuthResp) ProtoReflect() protoreflect.Message {
-	mi := &file_business_auth_service_proto_msgTypes[1]
+	mi := &file_business_auth_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -215,7 +284,7 @@ func (x *AuthResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthResp.ProtoReflect.Descriptor instead.
 func (*AuthResp) Descriptor() ([]byte, []int) {
-	return file_business_auth_service_proto_rawDescGZIP(), []int{1}
+	return file_business_auth_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *AuthResp) GetPermissionIds() []int32 {
@@ -253,6 +322,20 @@ func (x *AuthResp) GetLabels() map[string]string {
 	return nil
 }
 
+func (x *AuthResp) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *AuthResp) GetActedFor() bool {
+	if x != nil {
+		return x.ActedFor
+	}
+	return false
+}
+
 // SignInReq / SignInResp — canonical email+password sign-in
 // turnkey. The plugin's hand-written SignIn handler resolves the
 // user via AuthQuery.GetUserByEmail, runs the plugin-owned
@@ -262,16 +345,23 @@ func (x *AuthResp) GetLabels() map[string]string {
 // error) maps to a single opaque Unauthenticated status —
 // anti-enumeration.
 type SignInReq struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
-	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Email    string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
+	Password string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	// public_computer — "this is a public computer" (an internet café, a
+	// shared PC). The session gets the public lifetime
+	// (public_session_ttl_seconds, shorter than the normal one) and the device
+	// is never made trusted, so two_factor_scope=new_devices asks the second
+	// factor at every sign-in from it. The client keeps the token in session
+	// storage only. Echoed on the response. With two_factor the challenge carries it to VerifyMfa.
+	PublicComputer bool `protobuf:"varint,3,opt,name=public_computer,json=publicComputer,proto3" json:"public_computer,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SignInReq) Reset() {
 	*x = SignInReq{}
-	mi := &file_business_auth_service_proto_msgTypes[2]
+	mi := &file_business_auth_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -283,7 +373,7 @@ func (x *SignInReq) String() string {
 func (*SignInReq) ProtoMessage() {}
 
 func (x *SignInReq) ProtoReflect() protoreflect.Message {
-	mi := &file_business_auth_service_proto_msgTypes[2]
+	mi := &file_business_auth_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -296,7 +386,7 @@ func (x *SignInReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignInReq.ProtoReflect.Descriptor instead.
 func (*SignInReq) Descriptor() ([]byte, []int) {
-	return file_business_auth_service_proto_rawDescGZIP(), []int{2}
+	return file_business_auth_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SignInReq) GetEmail() string {
@@ -313,17 +403,27 @@ func (x *SignInReq) GetPassword() string {
 	return ""
 }
 
+func (x *SignInReq) GetPublicComputer() bool {
+	if x != nil {
+		return x.PublicComputer
+	}
+	return false
+}
+
 type SignInResp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Token  string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	// public_computer — echoes the request's choice on a response that carries
+	// a token: the client keeps a public-computer token in session storage only.
+	PublicComputer bool `protobuf:"varint,6,opt,name=public_computer,json=publicComputer,proto3" json:"public_computer,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SignInResp) Reset() {
 	*x = SignInResp{}
-	mi := &file_business_auth_service_proto_msgTypes[3]
+	mi := &file_business_auth_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -335,7 +435,7 @@ func (x *SignInResp) String() string {
 func (*SignInResp) ProtoMessage() {}
 
 func (x *SignInResp) ProtoReflect() protoreflect.Message {
-	mi := &file_business_auth_service_proto_msgTypes[3]
+	mi := &file_business_auth_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -348,7 +448,7 @@ func (x *SignInResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignInResp.ProtoReflect.Descriptor instead.
 func (*SignInResp) Descriptor() ([]byte, []int) {
-	return file_business_auth_service_proto_rawDescGZIP(), []int{3}
+	return file_business_auth_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SignInResp) GetUserId() string {
@@ -363,6 +463,13 @@ func (x *SignInResp) GetToken() string {
 		return x.Token
 	}
 	return ""
+}
+
+func (x *SignInResp) GetPublicComputer() bool {
+	if x != nil {
+		return x.PublicComputer
+	}
+	return false
 }
 
 // SignUpReq / SignUpResp — canonical register-and-issue-token
@@ -388,14 +495,22 @@ type SignUpReq struct {
 	// is what spends it, so a signup that fails afterwards must not have burnt the
 	// link. Empty is normal — a bound invitation still matches by address, and a
 	// deployment with `invite_only` off asks nothing at all.
-	InviteToken   string `protobuf:"bytes,4,opt,name=invite_token,json=inviteToken,proto3" json:"invite_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	InviteToken string `protobuf:"bytes,4,opt,name=invite_token,json=inviteToken,proto3" json:"invite_token,omitempty"`
+	// public_computer — "this is a public computer" (an internet café, a
+	// shared PC). The session gets the public lifetime
+	// (public_session_ttl_seconds, shorter than the normal one) and the device
+	// is never made trusted, so two_factor_scope=new_devices asks the second
+	// factor at every sign-in from it. The client keeps the token in session
+	// storage only. Echoed on the response. Ignored under sign_up_confirmation, where SignUp issues no
+	// session: ConfirmSignUp takes its own.
+	PublicComputer bool `protobuf:"varint,5,opt,name=public_computer,json=publicComputer,proto3" json:"public_computer,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SignUpReq) Reset() {
 	*x = SignUpReq{}
-	mi := &file_business_auth_service_proto_msgTypes[4]
+	mi := &file_business_auth_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -407,7 +522,7 @@ func (x *SignUpReq) String() string {
 func (*SignUpReq) ProtoMessage() {}
 
 func (x *SignUpReq) ProtoReflect() protoreflect.Message {
-	mi := &file_business_auth_service_proto_msgTypes[4]
+	mi := &file_business_auth_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -420,7 +535,7 @@ func (x *SignUpReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignUpReq.ProtoReflect.Descriptor instead.
 func (*SignUpReq) Descriptor() ([]byte, []int) {
-	return file_business_auth_service_proto_rawDescGZIP(), []int{4}
+	return file_business_auth_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SignUpReq) GetEmail() string {
@@ -444,17 +559,26 @@ func (x *SignUpReq) GetInviteToken() string {
 	return ""
 }
 
+func (x *SignUpReq) GetPublicComputer() bool {
+	if x != nil {
+		return x.PublicComputer
+	}
+	return false
+}
+
 type SignUpResp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Token  string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	// Echoes the request's public_computer when a session was issued.
+	PublicComputer bool `protobuf:"varint,5,opt,name=public_computer,json=publicComputer,proto3" json:"public_computer,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SignUpResp) Reset() {
 	*x = SignUpResp{}
-	mi := &file_business_auth_service_proto_msgTypes[5]
+	mi := &file_business_auth_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -466,7 +590,7 @@ func (x *SignUpResp) String() string {
 func (*SignUpResp) ProtoMessage() {}
 
 func (x *SignUpResp) ProtoReflect() protoreflect.Message {
-	mi := &file_business_auth_service_proto_msgTypes[5]
+	mi := &file_business_auth_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -479,7 +603,7 @@ func (x *SignUpResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignUpResp.ProtoReflect.Descriptor instead.
 func (*SignUpResp) Descriptor() ([]byte, []int) {
-	return file_business_auth_service_proto_rawDescGZIP(), []int{5}
+	return file_business_auth_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SignUpResp) GetUserId() string {
@@ -494,6 +618,13 @@ func (x *SignUpResp) GetToken() string {
 		return x.Token
 	}
 	return ""
+}
+
+func (x *SignUpResp) GetPublicComputer() bool {
+	if x != nil {
+		return x.PublicComputer
+	}
+	return false
 }
 
 // WhoAmIReq / WhoAmIResp — current-principal probe. The FE calls
@@ -512,7 +643,7 @@ type WhoAmIReq struct {
 
 func (x *WhoAmIReq) Reset() {
 	*x = WhoAmIReq{}
-	mi := &file_business_auth_service_proto_msgTypes[6]
+	mi := &file_business_auth_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -524,7 +655,7 @@ func (x *WhoAmIReq) String() string {
 func (*WhoAmIReq) ProtoMessage() {}
 
 func (x *WhoAmIReq) ProtoReflect() protoreflect.Message {
-	mi := &file_business_auth_service_proto_msgTypes[6]
+	mi := &file_business_auth_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -537,7 +668,7 @@ func (x *WhoAmIReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WhoAmIReq.ProtoReflect.Descriptor instead.
 func (*WhoAmIReq) Descriptor() ([]byte, []int) {
-	return file_business_auth_service_proto_rawDescGZIP(), []int{6}
+	return file_business_auth_service_proto_rawDescGZIP(), []int{7}
 }
 
 type WhoAmIResp struct {
@@ -549,7 +680,7 @@ type WhoAmIResp struct {
 
 func (x *WhoAmIResp) Reset() {
 	*x = WhoAmIResp{}
-	mi := &file_business_auth_service_proto_msgTypes[7]
+	mi := &file_business_auth_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -561,7 +692,7 @@ func (x *WhoAmIResp) String() string {
 func (*WhoAmIResp) ProtoMessage() {}
 
 func (x *WhoAmIResp) ProtoReflect() protoreflect.Message {
-	mi := &file_business_auth_service_proto_msgTypes[7]
+	mi := &file_business_auth_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -574,7 +705,7 @@ func (x *WhoAmIResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WhoAmIResp.ProtoReflect.Descriptor instead.
 func (*WhoAmIResp) Descriptor() ([]byte, []int) {
-	return file_business_auth_service_proto_rawDescGZIP(), []int{7}
+	return file_business_auth_service_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *WhoAmIResp) GetUserId() string {
@@ -587,7 +718,8 @@ func (x *WhoAmIResp) GetUserId() string {
 // LogoutReq / LogoutResp — revoke the CURRENT session (base-tier, no
 // `devices` feature). No body: the handler reads the authenticated
 // principal (user_id) + the resolved session_token_id from the gateway's
-// auth envelope and deletes exactly that one SESSION token. Idempotent —
+// auth envelope and revokes exactly that one SESSION token (the row
+// stays, with revoked_at). Idempotent —
 // a logout against an already-revoked / expired session still succeeds.
 // "Log out everywhere / other devices" is the `devices` feature's job
 // (RevokeAllDevices); this revokes only the bearer that made the call.
@@ -599,7 +731,7 @@ type LogoutReq struct {
 
 func (x *LogoutReq) Reset() {
 	*x = LogoutReq{}
-	mi := &file_business_auth_service_proto_msgTypes[8]
+	mi := &file_business_auth_service_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -611,7 +743,7 @@ func (x *LogoutReq) String() string {
 func (*LogoutReq) ProtoMessage() {}
 
 func (x *LogoutReq) ProtoReflect() protoreflect.Message {
-	mi := &file_business_auth_service_proto_msgTypes[8]
+	mi := &file_business_auth_service_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -624,7 +756,7 @@ func (x *LogoutReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutReq.ProtoReflect.Descriptor instead.
 func (*LogoutReq) Descriptor() ([]byte, []int) {
-	return file_business_auth_service_proto_rawDescGZIP(), []int{8}
+	return file_business_auth_service_proto_rawDescGZIP(), []int{9}
 }
 
 type LogoutResp struct {
@@ -635,7 +767,7 @@ type LogoutResp struct {
 
 func (x *LogoutResp) Reset() {
 	*x = LogoutResp{}
-	mi := &file_business_auth_service_proto_msgTypes[9]
+	mi := &file_business_auth_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -647,7 +779,7 @@ func (x *LogoutResp) String() string {
 func (*LogoutResp) ProtoMessage() {}
 
 func (x *LogoutResp) ProtoReflect() protoreflect.Message {
-	mi := &file_business_auth_service_proto_msgTypes[9]
+	mi := &file_business_auth_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -660,59 +792,165 @@ func (x *LogoutResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutResp.ProtoReflect.Descriptor instead.
 func (*LogoutResp) Descriptor() ([]byte, []int) {
-	return file_business_auth_service_proto_rawDescGZIP(), []int{9}
+	return file_business_auth_service_proto_rawDescGZIP(), []int{10}
+}
+
+// ListMySignInEvents — the caller's own sign-in history: every attempt that
+// reached their account, newest first, the latest 100, failures included
+// (a wrong password, a refused device). Attempts that named their address
+// while it had no account are not theirs to read and are not listed.
+// Authenticated; the account is the caller's (the gateway envelope), never a
+// request field.
+type ListMySignInEventsReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMySignInEventsReq) Reset() {
+	*x = ListMySignInEventsReq{}
+	mi := &file_business_auth_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMySignInEventsReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMySignInEventsReq) ProtoMessage() {}
+
+func (x *ListMySignInEventsReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMySignInEventsReq.ProtoReflect.Descriptor instead.
+func (*ListMySignInEventsReq) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{11}
+}
+
+type ListMySignInEventsResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Events        []*SignInEvent         `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMySignInEventsResp) Reset() {
+	*x = ListMySignInEventsResp{}
+	mi := &file_business_auth_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMySignInEventsResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMySignInEventsResp) ProtoMessage() {}
+
+func (x *ListMySignInEventsResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_auth_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMySignInEventsResp.ProtoReflect.Descriptor instead.
+func (*ListMySignInEventsResp) Descriptor() ([]byte, []int) {
+	return file_business_auth_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ListMySignInEventsResp) GetEvents() []*SignInEvent {
+	if x != nil {
+		return x.Events
+	}
+	return nil
 }
 
 var File_business_auth_service_proto protoreflect.FileDescriptor
 
 const file_business_auth_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1bbusiness/auth_service.proto\x12\x10w17.contrib.auth\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x18queries/auth_query.proto\x1a\x12types/models.proto\x1a\x11w17/contrib.proto\x1a\x0fw17/field.proto\"\xa1\x01\n" +
-	"\aAuthReq\x12@\n" +
-	"\aheaders\x18\x01 \x03(\v2&.w17.contrib.auth.AuthReq.HeadersEntryR\aheaders\x1a:\n" +
+	"\x1bbusiness/auth_service.proto\x12\x10w17.contrib.auth\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x18queries/auth_query.proto\x1a\x12types/models.proto\x1a\x11w17/contrib.proto\x1a\x0fw17/field.proto\"\xaa\x01\n" +
+	"\aAuthReq\x12I\n" +
+	"\aheaders\x18\x01 \x03(\v2&.w17.contrib.auth.AuthReq.HeadersEntryB\a\xca\xf3\x18\x03\xa0\x02\x01R\aheaders\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:\x18\xfa\xf4\x18\x14authenticate_turnkey\"\x94\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:\x18\xfa\xf4\x18\x14authenticate_turnkey\"\xd0\x01\n" +
+	"\x0eResolveUserReq\x12\x1f\n" +
+	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12G\n" +
+	"\aheaders\x18\x02 \x03(\v2-.w17.contrib.auth.ResolveUserReq.HeadersEntryR\aheaders\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:\x18\xfa\xf4\x18\x14authenticate_turnkey\"\xce\x03\n" +
 	"\bAuthResp\x12%\n" +
 	"\x0epermission_ids\x18\x01 \x03(\x05R\rpermissionIds\x12\x1f\n" +
 	"\auser_id\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12>\n" +
 	"\x06scopes\x18\x03 \x03(\v2&.w17.contrib.auth.AuthResp.ScopesEntryR\x06scopes\x120\n" +
 	"\x10session_token_id\x18\x04 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x0esessionTokenId\x12>\n" +
-	"\x06labels\x18\x05 \x03(\v2&.w17.contrib.auth.AuthResp.LabelsEntryR\x06labels\x1a9\n" +
+	"\x06labels\x18\x05 \x03(\v2&.w17.contrib.auth.AuthResp.LabelsEntryR\x06labels\x12\x1b\n" +
+	"\tdevice_id\x18\x06 \x01(\tR\bdeviceId\x12\x1b\n" +
+	"\tacted_for\x18\n" +
+	" \x01(\bR\bactedFor\x1a9\n" +
 	"\vScopesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:\x18\xfa\xf4\x18\x14authenticate_turnkey\"e\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:\x18\xfa\xf4\x18\x14authenticate_turnkey\"\x8e\x01\n" +
 	"\tSignInReq\x12\x1f\n" +
 	"\x05email\x18\x01 \x01(\tB\t\xca\xf3\x18\x05\b\x04@\xc0\x02R\x05email\x12\"\n" +
-	"\bpassword\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\bBR\bpassword:\x13\xfa\xf4\x18\x0fsign_in_turnkey\"X\n" +
+	"\bpassword\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\bBR\bpassword\x12'\n" +
+	"\x0fpublic_computer\x18\x03 \x01(\bR\x0epublicComputer:\x13\xfa\xf4\x18\x0fsign_in_turnkey\"\xa6\x01\n" +
 	"\n" +
 	"SignInResp\x12\x1f\n" +
-	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token:\x13\xfa\xf4\x18\x0fsign_in_turnkey\"\x95\x01\n" +
+	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12\x1f\n" +
+	"\x05token\x18\x02 \x01(\tB\t\xca\xf3\x18\x050\x01\xa0\x02\x01R\x05token\x12'\n" +
+	"\x0fpublic_computer\x18\x06 \x01(\bR\x0epublicComputer:\x13\xfa\xf4\x18\x0fsign_in_turnkeyJ\x04\b\x05\x10\x06R\x12device_trust_token\"\xc7\x01\n" +
 	"\tSignUpReq\x12\x1f\n" +
 	"\x05email\x18\x01 \x01(\tB\t\xca\xf3\x18\x05\b\x04@\xc0\x02R\x05email\x12\"\n" +
-	"\bpassword\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\bBR\bpassword\x12.\n" +
-	"\finvite_token\x18\x04 \x01(\tB\v\xca\xf3\x18\a\b\x01(\x01@\x80\x01R\vinviteToken:\x13\xfa\xf4\x18\x0fsign_up_turnkey\"X\n" +
+	"\bpassword\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\bBR\bpassword\x121\n" +
+	"\finvite_token\x18\x04 \x01(\tB\x0e\xca\xf3\x18\n" +
+	"\b\x01(\x01@\x80\x01\xa0\x02\x01R\vinviteToken\x12'\n" +
+	"\x0fpublic_computer\x18\x05 \x01(\bR\x0epublicComputer:\x13\xfa\xf4\x18\x0fsign_up_turnkeyJ\x04\b\x03\x10\x04\"\x8c\x01\n" +
 	"\n" +
 	"SignUpResp\x12\x1f\n" +
-	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token:\x13\xfa\xf4\x18\x0fsign_up_turnkey\"%\n" +
+	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId\x12\x1f\n" +
+	"\x05token\x18\x02 \x01(\tB\t\xca\xf3\x18\x050\x01\xa0\x02\x01R\x05token\x12'\n" +
+	"\x0fpublic_computer\x18\x05 \x01(\bR\x0epublicComputer:\x13\xfa\xf4\x18\x0fsign_up_turnkey\"%\n" +
 	"\tWhoAmIReq:\x18\xfa\xf4\x18\x14authenticate_turnkey\"G\n" +
 	"\n" +
 	"WhoAmIResp\x12\x1f\n" +
 	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId:\x18\xfa\xf4\x18\x14authenticate_turnkey\"%\n" +
 	"\tLogoutReq:\x18\xfa\xf4\x18\x14authenticate_turnkey\"&\n" +
 	"\n" +
-	"LogoutResp:\x18\xfa\xf4\x18\x14authenticate_turnkey2\xe0\x03\n" +
+	"LogoutResp:\x18\xfa\xf4\x18\x14authenticate_turnkey\"1\n" +
+	"\x15ListMySignInEventsReq:\x18\xfa\xf4\x18\x14authenticate_turnkey\"i\n" +
+	"\x16ListMySignInEventsResp\x125\n" +
+	"\x06events\x18\x01 \x03(\v2\x1d.w17.contrib.auth.SignInEventR\x06events:\x18\xfa\xf4\x18\x14authenticate_turnkey2\xb5\x06\n" +
 	"\vAuthService\x12_\n" +
-	"\fAuthenticate\x12\x19.w17.contrib.auth.AuthReq\x1a\x1a.w17.contrib.auth.AuthResp\"\x18\x8a\xf5\x18\x14authenticate_turnkey\x12X\n" +
+	"\fAuthenticate\x12\x19.w17.contrib.auth.AuthReq\x1a\x1a.w17.contrib.auth.AuthResp\"\x18\x8a\xf5\x18\x14authenticate_turnkey\x12d\n" +
+	"\x11AuthenticateAdmin\x12\x19.w17.contrib.auth.AuthReq\x1a\x1a.w17.contrib.auth.AuthResp\"\x18\x8a\xf5\x18\x14authenticate_turnkey\x12i\n" +
+	"\vResolveUser\x12 .w17.contrib.auth.ResolveUserReq\x1a\x1a.w17.contrib.auth.AuthResp\"\x1c\x8a\xf5\x18\x14authenticate_turnkey\xa0\xf5\x18\x01\x12X\n" +
 	"\x06SignIn\x12\x1b.w17.contrib.auth.SignInReq\x1a\x1c.w17.contrib.auth.SignInResp\"\x13\x8a\xf5\x18\x0fsign_in_turnkey\x12X\n" +
 	"\x06SignUp\x12\x1b.w17.contrib.auth.SignUpReq\x1a\x1c.w17.contrib.auth.SignUpResp\"\x13\x8a\xf5\x18\x0fsign_up_turnkey\x12]\n" +
 	"\x06WhoAmI\x12\x1b.w17.contrib.auth.WhoAmIReq\x1a\x1c.w17.contrib.auth.WhoAmIResp\"\x18\x8a\xf5\x18\x14authenticate_turnkey\x12]\n" +
-	"\x06Logout\x12\x1b.w17.contrib.auth.LogoutReq\x1a\x1c.w17.contrib.auth.LogoutResp\"\x18\x8a\xf5\x18\x14authenticate_turnkeyB\xbd\x01\n" +
+	"\x06Logout\x12\x1b.w17.contrib.auth.LogoutReq\x1a\x1c.w17.contrib.auth.LogoutResp\"\x18\x8a\xf5\x18\x14authenticate_turnkey\x12\x81\x01\n" +
+	"\x12ListMySignInEvents\x12'.w17.contrib.auth.ListMySignInEventsReq\x1a(.w17.contrib.auth.ListMySignInEventsResp\"\x18\x8a\xf5\x18\x14authenticate_turnkeyB\xbd\x01\n" +
 	"\x14com.w17.contrib.authB\x10AuthServiceProtoP\x01Z1github.com/wandering-compiler/plugins/auth/gen/pb\xa2\x02\x03WCA\xaa\x02\x10W17.Contrib.Auth\xca\x02\x10W17\\Contrib\\Auth\xe2\x02\x1cW17\\Contrib\\Auth\\GPBMetadata\xea\x02\x12W17::Contrib::Authb\x06proto3"
 
 var (
@@ -727,41 +965,54 @@ func file_business_auth_service_proto_rawDescGZIP() []byte {
 	return file_business_auth_service_proto_rawDescData
 }
 
-var file_business_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_business_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_business_auth_service_proto_goTypes = []any{
-	(*AuthReq)(nil),    // 0: w17.contrib.auth.AuthReq
-	(*AuthResp)(nil),   // 1: w17.contrib.auth.AuthResp
-	(*SignInReq)(nil),  // 2: w17.contrib.auth.SignInReq
-	(*SignInResp)(nil), // 3: w17.contrib.auth.SignInResp
-	(*SignUpReq)(nil),  // 4: w17.contrib.auth.SignUpReq
-	(*SignUpResp)(nil), // 5: w17.contrib.auth.SignUpResp
-	(*WhoAmIReq)(nil),  // 6: w17.contrib.auth.WhoAmIReq
-	(*WhoAmIResp)(nil), // 7: w17.contrib.auth.WhoAmIResp
-	(*LogoutReq)(nil),  // 8: w17.contrib.auth.LogoutReq
-	(*LogoutResp)(nil), // 9: w17.contrib.auth.LogoutResp
-	nil,                // 10: w17.contrib.auth.AuthReq.HeadersEntry
-	nil,                // 11: w17.contrib.auth.AuthResp.ScopesEntry
-	nil,                // 12: w17.contrib.auth.AuthResp.LabelsEntry
+	(*AuthReq)(nil),                // 0: w17.contrib.auth.AuthReq
+	(*ResolveUserReq)(nil),         // 1: w17.contrib.auth.ResolveUserReq
+	(*AuthResp)(nil),               // 2: w17.contrib.auth.AuthResp
+	(*SignInReq)(nil),              // 3: w17.contrib.auth.SignInReq
+	(*SignInResp)(nil),             // 4: w17.contrib.auth.SignInResp
+	(*SignUpReq)(nil),              // 5: w17.contrib.auth.SignUpReq
+	(*SignUpResp)(nil),             // 6: w17.contrib.auth.SignUpResp
+	(*WhoAmIReq)(nil),              // 7: w17.contrib.auth.WhoAmIReq
+	(*WhoAmIResp)(nil),             // 8: w17.contrib.auth.WhoAmIResp
+	(*LogoutReq)(nil),              // 9: w17.contrib.auth.LogoutReq
+	(*LogoutResp)(nil),             // 10: w17.contrib.auth.LogoutResp
+	(*ListMySignInEventsReq)(nil),  // 11: w17.contrib.auth.ListMySignInEventsReq
+	(*ListMySignInEventsResp)(nil), // 12: w17.contrib.auth.ListMySignInEventsResp
+	nil,                            // 13: w17.contrib.auth.AuthReq.HeadersEntry
+	nil,                            // 14: w17.contrib.auth.ResolveUserReq.HeadersEntry
+	nil,                            // 15: w17.contrib.auth.AuthResp.ScopesEntry
+	nil,                            // 16: w17.contrib.auth.AuthResp.LabelsEntry
+	(*SignInEvent)(nil),            // 17: w17.contrib.auth.SignInEvent
 }
 var file_business_auth_service_proto_depIdxs = []int32{
-	10, // 0: w17.contrib.auth.AuthReq.headers:type_name -> w17.contrib.auth.AuthReq.HeadersEntry
-	11, // 1: w17.contrib.auth.AuthResp.scopes:type_name -> w17.contrib.auth.AuthResp.ScopesEntry
-	12, // 2: w17.contrib.auth.AuthResp.labels:type_name -> w17.contrib.auth.AuthResp.LabelsEntry
-	0,  // 3: w17.contrib.auth.AuthService.Authenticate:input_type -> w17.contrib.auth.AuthReq
-	2,  // 4: w17.contrib.auth.AuthService.SignIn:input_type -> w17.contrib.auth.SignInReq
-	4,  // 5: w17.contrib.auth.AuthService.SignUp:input_type -> w17.contrib.auth.SignUpReq
-	6,  // 6: w17.contrib.auth.AuthService.WhoAmI:input_type -> w17.contrib.auth.WhoAmIReq
-	8,  // 7: w17.contrib.auth.AuthService.Logout:input_type -> w17.contrib.auth.LogoutReq
-	1,  // 8: w17.contrib.auth.AuthService.Authenticate:output_type -> w17.contrib.auth.AuthResp
-	3,  // 9: w17.contrib.auth.AuthService.SignIn:output_type -> w17.contrib.auth.SignInResp
-	5,  // 10: w17.contrib.auth.AuthService.SignUp:output_type -> w17.contrib.auth.SignUpResp
-	7,  // 11: w17.contrib.auth.AuthService.WhoAmI:output_type -> w17.contrib.auth.WhoAmIResp
-	9,  // 12: w17.contrib.auth.AuthService.Logout:output_type -> w17.contrib.auth.LogoutResp
-	8,  // [8:13] is the sub-list for method output_type
-	3,  // [3:8] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	13, // 0: w17.contrib.auth.AuthReq.headers:type_name -> w17.contrib.auth.AuthReq.HeadersEntry
+	14, // 1: w17.contrib.auth.ResolveUserReq.headers:type_name -> w17.contrib.auth.ResolveUserReq.HeadersEntry
+	15, // 2: w17.contrib.auth.AuthResp.scopes:type_name -> w17.contrib.auth.AuthResp.ScopesEntry
+	16, // 3: w17.contrib.auth.AuthResp.labels:type_name -> w17.contrib.auth.AuthResp.LabelsEntry
+	17, // 4: w17.contrib.auth.ListMySignInEventsResp.events:type_name -> w17.contrib.auth.SignInEvent
+	0,  // 5: w17.contrib.auth.AuthService.Authenticate:input_type -> w17.contrib.auth.AuthReq
+	0,  // 6: w17.contrib.auth.AuthService.AuthenticateAdmin:input_type -> w17.contrib.auth.AuthReq
+	1,  // 7: w17.contrib.auth.AuthService.ResolveUser:input_type -> w17.contrib.auth.ResolveUserReq
+	3,  // 8: w17.contrib.auth.AuthService.SignIn:input_type -> w17.contrib.auth.SignInReq
+	5,  // 9: w17.contrib.auth.AuthService.SignUp:input_type -> w17.contrib.auth.SignUpReq
+	7,  // 10: w17.contrib.auth.AuthService.WhoAmI:input_type -> w17.contrib.auth.WhoAmIReq
+	9,  // 11: w17.contrib.auth.AuthService.Logout:input_type -> w17.contrib.auth.LogoutReq
+	11, // 12: w17.contrib.auth.AuthService.ListMySignInEvents:input_type -> w17.contrib.auth.ListMySignInEventsReq
+	2,  // 13: w17.contrib.auth.AuthService.Authenticate:output_type -> w17.contrib.auth.AuthResp
+	2,  // 14: w17.contrib.auth.AuthService.AuthenticateAdmin:output_type -> w17.contrib.auth.AuthResp
+	2,  // 15: w17.contrib.auth.AuthService.ResolveUser:output_type -> w17.contrib.auth.AuthResp
+	4,  // 16: w17.contrib.auth.AuthService.SignIn:output_type -> w17.contrib.auth.SignInResp
+	6,  // 17: w17.contrib.auth.AuthService.SignUp:output_type -> w17.contrib.auth.SignUpResp
+	8,  // 18: w17.contrib.auth.AuthService.WhoAmI:output_type -> w17.contrib.auth.WhoAmIResp
+	10, // 19: w17.contrib.auth.AuthService.Logout:output_type -> w17.contrib.auth.LogoutResp
+	12, // 20: w17.contrib.auth.AuthService.ListMySignInEvents:output_type -> w17.contrib.auth.ListMySignInEventsResp
+	13, // [13:21] is the sub-list for method output_type
+	5,  // [5:13] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_business_auth_service_proto_init() }
@@ -777,7 +1028,7 @@ func file_business_auth_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_business_auth_service_proto_rawDesc), len(file_business_auth_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
@@ -790,4 +1041,4 @@ func file_business_auth_service_proto_init() {
 	file_business_auth_service_proto_depIdxs = nil
 }
 
-// emit-sha256: c9f187d8f3ce5a855cbad786b05558afaf7334084f7f59cb94990428e2d76f06
+// emit-sha256: a493276d1f86fbde2a1aaea7ddbd606531d5614143a16cc0fc38cbdf068202e3

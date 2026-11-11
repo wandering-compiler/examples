@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-11-03 14:19+0000\n"
+"POT-Creation-Date: 2026-11-11 22:50+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -27,6 +27,9 @@ msgstr "Clear"
 
 msgid "Close"
 msgstr "Close"
+
+msgid "Code"
+msgstr "Code"
 
 msgid "Continue"
 msgstr "Continue"
@@ -66,6 +69,9 @@ msgstr "Edit"
 
 msgid "Edit {name}"
 msgstr "Edit {name}"
+
+msgid "Enter the code from your authenticator app, or the one we sent to your e-mail."
+msgstr "Enter the code from your authenticator app, or the one we sent to your e-mail."
 
 msgid "Enter your credentials to continue."
 msgstr "Enter your credentials to continue."
@@ -157,8 +163,17 @@ msgstr "Sign-in failed"
 msgid "Something went wrong"
 msgstr "Something went wrong"
 
+msgid "Start over"
+msgstr "Start over"
+
 msgid "System theme"
 msgstr "System theme"
+
+msgid "This account has to set up an authenticator before it signs in, which this admin cannot do."
+msgstr "This account has to set up an authenticator before it signs in, which this admin cannot do."
+
+msgid "This account signs in with a second factor, which this admin cannot ask for."
+msgstr "This account signs in with a second factor, which this admin cannot ask for."
 
 msgid "This browser cannot start a secure sign-in here — it needs HTTPS"
 msgstr "This browser cannot start a secure sign-in here — it needs HTTPS"
@@ -183,6 +198,9 @@ msgstr "Unavailable"
 
 msgid "Username"
 msgstr "Username"
+
+msgid "Verify"
+msgstr "Verify"
 
 msgid "Will apply to {target}."
 msgstr "Will apply to {target}."

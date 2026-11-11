@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-11-09 23:43+0000\n"
+"POT-Creation-Date: 2026-11-11 22:45+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -229,11 +229,14 @@ msgstr "Cache · User Session Query · Get User Session"
 msgid "Choose at least one permission for the role."
 msgstr "Choose at least one permission for the role."
 
+msgid "Choose none, derived or full."
+msgstr "Choose none, derived or full."
+
 msgid "Choose one of your organizations for this application."
 msgstr "Choose one of your organizations for this application."
 
-msgid "Choose required, optional or disabled."
-msgstr "Choose required, optional or disabled."
+msgid "Choose required, enrol, optional or disabled."
+msgstr "Choose required, enrol, optional or disabled."
 
 msgid "Choose the organization to act in: name it in the W17-Org header (the organization's slug) and try again."
 msgstr "Choose the organization to act in: name it in the W17-Org header (the organization's slug) and try again."
@@ -255,6 +258,9 @@ msgstr "Confirm your email address before accepting this invitation."
 
 msgid "Every organization has this package; it is not given or taken."
 msgstr "Every organization has this package; it is not given or taken."
+
+msgid "From inside an organization, change its email verification in the organization's own settings."
+msgstr "From inside an organization, change its email verification in the organization's own settings."
 
 msgid "From inside an organization, change its two-step sign-in in the organization's own settings."
 msgstr "From inside an organization, change its two-step sign-in in the organization's own settings."
@@ -295,6 +301,9 @@ msgstr "Permission {permission} is not part of this deployment."
 msgid "Registration here is not set up correctly. Contact the organization."
 msgstr "Registration here is not set up correctly. Contact the organization."
 
+msgid "Registration here is paused until the organization confirms its settings again. Contact the organization."
+msgstr "Registration here is paused until the organization confirms its settings again. Contact the organization."
+
 msgid "Registration is by invitation only. Ask the organization you are joining to invite you."
 msgstr "Registration is by invitation only. Ask the organization you are joining to invite you."
 
@@ -307,11 +316,17 @@ msgstr "Role {role} is not one this organization's teams can hold."
 msgid "Set up an authenticator app first. Recovery codes belong to it."
 msgstr "Set up an authenticator app first. Recovery codes belong to it."
 
+msgid "Setting up an authenticator at sign-in is not available here."
+msgstr "Setting up an authenticator at sign-in is not available here."
+
 msgid "Sign in to do this. An API token cannot create credentials."
 msgstr "Sign in to do this. An API token cannot create credentials."
 
 msgid "Signing in with the provider did not complete. Please start again."
 msgstr "Signing in with the provider did not complete. Please start again."
+
+msgid "Someone holds no other administrator role than this one. Give them another administrator role before retiring it."
+msgstr "Someone holds no other administrator role than this one. Give them another administrator role before retiring it."
 
 msgid "Someone still holds this role, directly or through a team. Give them another role first."
 msgstr "Someone still holds this role, directly or through a team. Give them another role first."
@@ -628,6 +643,12 @@ msgstr "That role does not exist, or it was deleted."
 msgid "That role is not one of this organization's own roles, so it cannot be changed here."
 msgstr "That role is not one of this organization's own roles, so it cannot be changed here."
 
+msgid "The captcha could not be checked. Try again later."
+msgstr "The captcha could not be checked. Try again later."
+
+msgid "The captcha was not accepted. Solve it again."
+msgstr "The captcha was not accepted. Solve it again."
+
 msgid "The file is too large."
 msgstr "The file is too large."
 
@@ -681,9 +702,6 @@ msgstr "This account has been disabled."
 
 msgid "This address belongs to another organization than the one you chose."
 msgstr "This address belongs to another organization than the one you chose."
-
-msgid "This address does not belong to any organization here. Check the address you registered on."
-msgstr "This address does not belong to any organization here. Check the address you registered on."
 
 msgid "This app did not prove which device it runs on. Reload or update it, then sign in again."
 msgstr "This app did not prove which device it runs on. Reload or update it, then sign in again."
@@ -742,8 +760,14 @@ msgstr "This member holds a role with permissions you do not have, so you cannot
 msgid "This membership belongs to another organization."
 msgstr "This membership belongs to another organization."
 
+msgid "This organization admits only a confirmed email address, and this registration cannot confirm one."
+msgstr "This organization admits only a confirmed email address, and this registration cannot confirm one."
+
 msgid "This organization already has a team named {name}."
 msgstr "This organization already has a team named {name}."
+
+msgid "This organization is suspended by the operators of the service. Contact them to have it restored."
+msgstr "This organization is suspended by the operators of the service. Contact them to have it restored."
 
 msgid "This part of the service is not open to you: none of your memberships is of a kind it admits."
 msgstr "This part of the service is not open to you: none of your memberships is of a kind it admits."
@@ -765,6 +789,9 @@ msgstr "This registration names another address than the one it arrived on."
 
 msgid "This request names two different organizations. Name one."
 msgstr "This request names two different organizations. Name one."
+
+msgid "This request needs a solved captcha."
+msgstr "This request needs a solved captcha."
 
 msgid "This role is held across the whole platform, not in one organization."
 msgstr "This role is held across the whole platform, not in one organization."

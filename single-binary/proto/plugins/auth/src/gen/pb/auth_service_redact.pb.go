@@ -12,15 +12,18 @@ import (
 // may write: the fields left out of a record (sensitive by label or type).
 func init() {
 	redact.Register(map[string]redact.Plan{
-		"w17.contrib.auth.AuthReq":    {},
-		"w17.contrib.auth.AuthResp":   {},
-		"w17.contrib.auth.SignInReq":  {Skip: []protowire.Number{2 /* password */}},
-		"w17.contrib.auth.SignInResp": {},
-		"w17.contrib.auth.WhoAmIReq":  {},
-		"w17.contrib.auth.WhoAmIResp": {},
-		"w17.contrib.auth.LogoutReq":  {},
-		"w17.contrib.auth.LogoutResp": {},
+		"w17.contrib.auth.AuthReq":                {Skip: []protowire.Number{1 /* headers */}},
+		"w17.contrib.auth.ResolveUserReq":         {},
+		"w17.contrib.auth.AuthResp":               {},
+		"w17.contrib.auth.SignInReq":              {Skip: []protowire.Number{2 /* password */}},
+		"w17.contrib.auth.SignInResp":             {Skip: []protowire.Number{2 /* token */}},
+		"w17.contrib.auth.WhoAmIReq":              {},
+		"w17.contrib.auth.WhoAmIResp":             {},
+		"w17.contrib.auth.LogoutReq":              {},
+		"w17.contrib.auth.LogoutResp":             {},
+		"w17.contrib.auth.ListMySignInEventsReq":  {},
+		"w17.contrib.auth.ListMySignInEventsResp": {},
 	})
 }
 
-// emit-sha256: 404136944f750ff9202401a3152f043e38b44faeb5b4901f0cf251fe719b643a
+// emit-sha256: 4380db5e86b89010781021ba3d8f54e175c1be9fcc21e8f65d0c3d4e089d51bc

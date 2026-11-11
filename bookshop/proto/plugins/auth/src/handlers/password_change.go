@@ -8,6 +8,7 @@ import (
 	"github.com/wandering-compiler/sdk/go/service/tx/distx"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	pb "github.com/wandering-compiler/plugins/auth/gen/pb"
@@ -31,24 +32,39 @@ import (
 // that the caller has not proven they may know.
 var errCurrentPasswordWrong = errors.New("current password does not match")
 
-// nilUUID names no token: DeleteOtherSessionTokens keeps none when the caller
-// holds no session (an API-token bearer). The column is a uuid, so an empty
-// string would not compare — it would fail to bind.
-const nilUUID = "00000000-0000-0000-0000-000000000000"
+// currentPasswordWrong is the refusal of a wrong current password: on the
+// field, as ConfirmPassword's. Not Unauthenticated — the caller's session is
+// fine, and a client answers Unauthenticated by signing the person out.
+func currentPasswordWrong(ctx context.Context) error {
+	return refusal(ctx, codes.PermissionDenied, errCurrentPasswordWrong.Error(),
+		CodePasswordNotConfirmed, "current_password", MsgPasswordNotConfirmed, nil)
+}
 
 // ChangePassword verifies the caller's current password and replaces it,
 // and ends every OTHER session of the account in the same unit of work.
 //
 // Bearer tokens do not derive from the password, so without the sweep they
 // kept working: changing a password after a session leaked did not evict
-// whoever held it. The sweep is DeleteOtherSessionTokens, a primitive this
-// feature owns — not DeleteUserSessionsForReset (`password_reset`) or
-// DeleteAllUserTokens (`devices`), which would make this feature depend on
-// one of them. API tokens are kept; see below.
+// whoever held it. The sweep is RevokeOtherSessionTokens, a primitive this
+// feature owns — not RevokeTokensForReset (`password_reset`) or
+// RevokeAllUserTokens (`devices`), which would make this feature depend on
+// one of them. The sessions are revoked (reason PASSWORD_CHANGED, the caller
+// as revoked_by), not deleted. API tokens are kept; see below.
+//
+// Only a person's session may change the password, as only a session may
+// step up (ConfirmPassword) or mint a token: an API token is a credential a
+// program holds, narrowed to what it was minted for, and replacing the
+// password — and with it signing the person out of every session — is a
+// decision about the person's standing, not one of the token's permissions.
+// The refusal comes before anything is read, counted or written
+// (password_change/session-only).
 func (h *AuthServiceHandler) ChangePassword(ctx context.Context, req *pb.ChangePasswordReq) (*pb.ChangePasswordResp, error) {
 	userID, err := callerUserID(ctx)
 	if err != nil {
 		return nil, Unauthenticated(err)
+	}
+	if err := requireSessionCaller(ctx); err != nil {
+		return nil, err
 	}
 
 	// Read the stored hash for the AUTHENTICATED principal, never for an
@@ -62,17 +78,30 @@ func (h *AuthServiceHandler) ChangePassword(ctx context.Context, req *pb.ChangeP
 	if err != nil {
 		return nil, err
 	}
+	// The current password is a guess like a sign-in's, so it spends the same
+	// per-account budget, counted before it is checked: a stolen session is
+	// no unlimited oracle for the password (password_change/guess-budget).
+	md, _ := metadata.FromIncomingContext(ctx)
+	thumbprint := firstMeta(md, dpopJKTKey)
+	if err := spendSignInBudget(ctx, h, userID, thumbprint); err != nil {
+		if errors.Is(err, errSignInThrottled) {
+			return nil, refusal(ctx, codes.ResourceExhausted, "password_change: the account's password guess budget is spent",
+				CodePasswordAttemptsSpent, "current_password", MsgPasswordAttemptsSpent, nil)
+		}
+		return nil, err
+	}
 	currentHash := got.GetUser().GetPasswordHash()
 	ok, _, _ := h.PasswordHash.VerifyAndRotate(currentHash, req.GetCurrentPassword(), nil)
 	if !ok {
-		return nil, Unauthenticated(errCurrentPasswordWrong)
+		return nil, currentPasswordWrong(ctx)
 	}
+	resetSignInBudget(ctx, h, userID, thumbprint)
 
 	// Hashing is CPU-bound and deliberately outside any transaction, the
 	// same shape SignUp uses.
 	hashed, err := h.PasswordHash.Hash(req.GetNewPassword())
 	if err != nil {
-		return nil, err
+		return nil, hashPasswordErr(ctx, err, "new_password")
 	}
 	// COMPARE-AND-SWAP on the hash that was just verified, not a bare write
 	// keyed on the user id.
@@ -98,10 +127,10 @@ func (h *AuthServiceHandler) ChangePassword(ctx context.Context, req *pb.ChangeP
 	// Together they commit or neither does — a failed sign-out keeps the old
 	// password, and the person is told the change failed.
 	//
-	// The caller's own session is kept (they are in the middle of using it);
-	// a caller on an API token has none, and keeps no session. API tokens
-	// stay: they are credentials minted on purpose, for CI, and a password
-	// change is not a decision about them — revoke one with RevokeApiToken.
+	// The caller's own session is kept (they are in the middle of using it;
+	// requireSessionCaller above made sure there is one). API tokens stay:
+	// they are credentials minted on purpose, for CI, and a password change
+	// is not a decision about them — revoke one with RevokeApiToken.
 	var tx *distx.TxHandle
 	txCtx := ctx
 	if h.DistTx != nil {
@@ -121,19 +150,18 @@ func (h *AuthServiceHandler) ChangePassword(ctx context.Context, req *pb.ChangeP
 		CurrentHash:  currentHash,
 	}); err != nil {
 		if status.Code(err) == codes.NotFound {
-			return fail(Unauthenticated(errCurrentPasswordWrong))
+			return fail(currentPasswordWrong(ctx))
 		}
 		return fail(err)
 	}
-	keep := callerSessionTokenID(ctx)
-	if keep == "" {
-		keep = nilUUID
-	}
-	if _, err := h.Mutation.DeleteOtherSessionTokens(txCtx, &pb.DeleteOtherSessionTokensReq{
+	if _, err := h.Mutation.RevokeOtherSessionTokens(txCtx, &pb.RevokeOtherSessionTokensReq{
 		UserId:      userID,
-		KeepTokenId: keep,
-		TokenType:   pb.TokenType_TOKEN_TYPE_SESSION,
+		KeepTokenId: callerSessionTokenID(ctx),
 	}); err != nil {
+		return fail(err)
+	}
+	// A reset link asked for before the change would undo it.
+	if err := spendResetLinks(txCtx, h, userID); err != nil {
 		return fail(err)
 	}
 	if tx != nil {
