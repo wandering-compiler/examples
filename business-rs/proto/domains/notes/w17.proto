@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+// Domain-level cascade for the notes domain: one Postgres connection and
+// one event channel on NATS.
+//
+// The storage tier is generated (Go). The business tier is written in
+// Rust: `business_bundles[].language: rust` in w17/lock.yaml, so codegen
+// writes no code for it, only the manifest and the descriptor set the
+// Rust business SDK builds the tier from.
+//
+// File is a SENTINEL — options only, no messages.
+
+package business_rs.notes;
+
+import "w17/module.proto";
+
+option (w17.module) = {
+  connection: {
+    name: "notes-postgres",
+    dialect: POSTGRES,
+    version: "18"
+  },
+
+  channels: [
+    {
+      name: "notes"
+      transport: TRANSPORT_NATS
+      retry: {
+        max_deliver: 5
+        ack_wait_seconds: 30
+        backoff: BACKOFF_EXPONENTIAL
+      }
+      drain_timeout_seconds: 30
+    }
+  ]
+};

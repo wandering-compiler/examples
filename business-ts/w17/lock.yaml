@@ -1,0 +1,44 @@
+admin_languages: []
+admin_wire: CLIENT_WIRE_UNSPECIFIED
+codegen_version: ""
+connections:
+    - default: true
+      name: notes-postgres
+      target_content_sha256: ""
+      target_migration_id: ""
+formats: {}
+generated_code:
+    binaries: []
+    business_bundles:
+        - domain: notes
+          env: []
+          language: typescript
+          register: business/notes
+    ci_configs: []
+    clients: []
+    deploy_targets: []
+    e2e: true
+    grpc_clients: []
+    pb_stubs:
+        - language: go
+          output_root: ""
+          package: ""
+    proto_dir: proto
+    replicas: []
+    stubs: srcgo/gen
+infra: null
+languages:
+    - en
+languages_dir: w17/languages
+org_id: 0ad10000-0000-7000-8000-0000000000b1
+org_slug: test
+plugins: []
+project: examples-business-ts
+project_id: 3bfa54ca-2292-4e77-9aec-3af50e681a81
+sdk_version: v0.1.0-rc.77
+secrets: null
+signature:
+    alg: ed25519/v1
+    body: 67d22526fa42e97309e49955a8d10e5eb174bfb9cd7130e4521b2e4aef944b4cd7f6ba06addd638586f69d6a81fba84e7a91573e4b4964121deafa922f17d70a
+    key_id: ed25519:d1f1f31adf965af1
+w17_url: localhost:13444

@@ -1,0 +1,8 @@
+# The file 0070's ExportNote put, fetched through the gateway's download
+# route: the gateway reads the same notes-exports root the companion wrote,
+# and the bytes are the ones the Rust tier rendered from 0010's note.
+download:
+    url: ${export.file}
+expect:
+    w17_wire.body: "written by the rust tier\n\nb\n"
+    w17_wire.content_disposition: {matcher: regex, pattern: "^attachment"}

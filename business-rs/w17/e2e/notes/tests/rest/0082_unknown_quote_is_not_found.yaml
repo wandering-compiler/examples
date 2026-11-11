@@ -1,0 +1,8 @@
+# The API's 404 is mapped by the companion onto the caller's situation —
+# NOT_FOUND — and the Rust handler passes the error on as it is, so the
+# REST caller gets a 404.
+method: board.NotesService.Quote
+input:
+    id: nope
+expect_error:
+    code: NOT_FOUND

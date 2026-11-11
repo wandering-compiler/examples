@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package business_python.notes.board;
+
+import "w17/event.proto";
+
+// NoteCreated — emitted by the PYTHON business tier: NotesService.CreateNote
+// carries the `(w17.event_emit)`, and the Python business SDK publishes the
+// event once the method returns (after the commit, inside a transaction).
+//
+// Public, so it reaches the gateway's `/w17-events` stream and the e2e suite
+// can await it. The subscriber (subscribers.proto) records a `delivered`
+// mark for every delivery.
+message NoteCreated {
+  option (w17.event) = {
+    channel: "notes"
+    topic:   "note.created"
+    public:  true
+  };
+
+  int64  note_id = 1;
+  string batch   = 2;
+  string title   = 3;
+}
+
+// NoteDelivered — emitted by the subscriber's handler
+// (NotesEvents.OnNoteCreated) once it recorded the `delivered` mark. The
+// e2e suite awaits it beside NoteCreated, which proves the bus delivered the
+// Python tier's event to the Python tier's subscriber, and makes the mark a
+// fact by the time the next step reads it.
+message NoteDelivered {
+  option (w17.event) = {
+    channel: "notes"
+    topic:   "note.delivered"
+    public:  true
+  };
+
+  int64 note_id = 1;
+}

@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+// Module-level cascade for the notes domain's `exports` module: the
+// file-storage connection behind NoteExport.file.
+//
+// The Python business tier is its only writer: NotesService.ExportNote
+// renders a note and puts the file here (the field declares `upload.writer:
+// BUSINESS`), through the business companion, which serves the store over
+// gRPC with the same Go code a Go tier runs in-process. The gateway only
+// reads it, for the download route.
+//
+// File is a SENTINEL — options only, no messages.
+
+package business_python.notes.exports;
+
+import "w17/module.proto";
+
+option (w17.module) = {
+  connection: { name: "notes-exports", dialect: LOCAL_FS, version: "1", used_capability: KV }
+};

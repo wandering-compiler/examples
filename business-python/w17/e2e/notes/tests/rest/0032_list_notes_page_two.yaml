@@ -1,0 +1,14 @@
+# Page 2 through the Python business method, resumed from 0030's cursor.
+# The business tier knows nothing of the sort: the next cursor of 0030 was
+# built by the gateway from the position the storage query reported on its
+# response headers, which paging.forward relayed back through the Python
+# tier; the cursor's keyset reaches storage again only through the forward.
+method: board.NotesService.ListNotes
+input:
+    batch: paged
+    limit: 2
+    cursor: ${notes_page.next_cursor}
+expect:
+    items: {matcher: count, op: '==', value: 1}
+    items.0.title: {matcher: eq, value: page note 3}
+    paging.previous_cursor: {capture: notes_page.previous_cursor, match: {matcher: not_empty}}

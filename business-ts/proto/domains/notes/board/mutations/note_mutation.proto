@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package business_ts.notes.board;
+
+import "w17/db.proto";
+import "w17/field.proto";
+import "domains/notes/board/types/models.proto";
+
+message CreateNoteReq {
+  string batch = 1 [(w17.field) = { type: CHAR, min_len: 1, max_len: 64 }];
+  string title = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 200 }];
+  string body  = 3 [(w17.field) = { type: TEXT }];
+}
+
+message RecordMarkReq {
+  int64  note_id = 1;
+  string mark    = 2 [(w17.field) = { type: CHAR, min_len: 1, max_len: 40 }];
+}
+
+// RecordNoteExportReq — the handle the business tier's put returned.
+message RecordNoteExportReq {
+  int64  note_id = 1;
+  string file    = 2 [(w17.field) = {
+    type: UPLOADED_FILE,
+    upload: {
+      connection:       "notes-exports",
+      bucket_path:      "/note-exports",
+      expected_objects: 10000,
+      max_per_bucket:   100,
+      max_size_bytes:   65536,
+      writer:           BUSINESS
+    }
+  }];
+}
+
+// NoteMutation — write side. Generated storage-tier SQL handlers, called by
+// the TypeScript business tier only.
+service NoteMutation {
+  rpc CreateNote(CreateNoteReq) returns (Note) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO board.Note SET batch = :batch, title = :title, body = :body RETURNING id, batch, title, body, created_at"
+      }
+    };
+  }
+
+  rpc RecordMark(RecordMarkReq) returns (NoteMark) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO board.NoteMark SET note_id = :note_id, mark = :mark RETURNING id, note_id, mark, created_at"
+      }
+    };
+  }
+
+  // RecordNoteExport — stores the handle of a file the business tier put.
+  rpc RecordNoteExport(RecordNoteExportReq) returns (NoteExport) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql:  "INSERT INTO board.NoteExport SET note_id = :note_id, file = :file RETURNING id, note_id, file, created_at"
+      }
+    };
+  }
+}

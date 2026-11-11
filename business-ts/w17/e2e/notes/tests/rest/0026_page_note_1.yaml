@@ -1,0 +1,10 @@
+# Note 1 of the three ListNotes pages through (0030, 0032): batch "paged",
+# page size 2, so page 1 holds notes 1 and 2 and page 2 holds note 3.
+method: board.NotesService.CreateNote
+input:
+    batch: paged
+    title: page note 1
+    body: b
+expect:
+    id: {matcher: not_empty}
+    title: {matcher: eq, value: page note 1}

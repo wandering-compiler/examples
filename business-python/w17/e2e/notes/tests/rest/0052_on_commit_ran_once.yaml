@@ -1,0 +1,8 @@
+# on_commit: CreateNoteInTx's hook ran once, after the commit and before the
+# method answered, so 0020's note has exactly one `committed` mark.
+method: board.NoteQuery.CountMarks
+input:
+    note_id: ${tx_note.id}
+    mark: committed
+expect:
+    marks: {matcher: eq, value: "1"}

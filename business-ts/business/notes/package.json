@@ -1,0 +1,6 @@
+{
+  "name": "business-ts-notes",
+  "private": true,
+  "description": "The notes domain's business tier, on the TypeScript business SDK (@w17/business, provided by the image).",
+  "type": "module"
+}

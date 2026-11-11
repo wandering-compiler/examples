@@ -1,0 +1,7 @@
+# The NoteCreated held until 0020's commit was published and delivered.
+method: board.NoteQuery.CountMarks
+input:
+    note_id: ${tx_note.id}
+    mark: delivered
+expect:
+    marks: {matcher: eq, value: "1"}

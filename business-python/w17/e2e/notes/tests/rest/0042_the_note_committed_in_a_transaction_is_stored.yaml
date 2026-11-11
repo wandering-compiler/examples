@@ -1,0 +1,7 @@
+# The committed write of 0020 exists.
+method: board.NoteQuery.GetNote
+input:
+    note_id: ${tx_note.id}
+expect:
+    id: {matcher: eq, value: "${tx_note.id}"}
+    title: {matcher: eq, value: committed in a transaction}

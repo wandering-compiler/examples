@@ -1,0 +1,17 @@
+{
+  "//": "For the editor and `tsc --noEmit` only: Node runs w17.ts as it is (type stripping), so the settings hold the code to erasable syntax. @w17/business is the image's and is not installed here; point `paths` at a checkout of the SDK (sdk/ts/business/src/index.ts) to typecheck against it.",
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "types": ["node"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true
+  },
+  "include": ["**/*.ts"]
+}

@@ -1,0 +1,19 @@
+# The rollback path of CreateNoteInTx: the title asks for it, so the
+# method fails AFTER the write and distx.run rolls the transaction back. The
+# refusal is the handler's own (forUser, FAILED_PRECONDITION), and the
+# NoteCreated the composed CreateNote parked is dropped: no event arrives in
+# the whole window. 0024 reads the batch back empty.
+method: board.NotesService.CreateNoteInTx
+input:
+    batch: rolled-back
+    title: "rollback: this note must not stay"
+    body: b
+expect_error:
+    code: FAILED_PRECONDITION
+    message: {matcher: regex, pattern: "rolled back"}
+await_events:
+    - topic: note.created
+      absent: true
+      timeout_ms: 5000
+      match:
+        batch: {matcher: eq, value: rolled-back}

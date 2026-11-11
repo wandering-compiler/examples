@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package business_ts.notes;
+
+import "w17/rest.proto";
+
+// REST surface of the notes domain. The writes and the paged list go
+// through the TypeScript business tier (NotesService); the reads the suite
+// checks them with go straight to the generated storage tier.
+//
+// No auth plugin: the example is about the business tier's language, so
+// every endpoint is public (`unauthenticated: true`).
+option (w17.rest_api) = {
+  name:            "public",
+  version:         "v1",
+  prefix:          "/api/v1",
+  description:     "REST surface of the business-ts example.",
+  unauthenticated: true,
+
+  groups: [
+    {
+      prefix:      "/notes",
+      description: "Notes, written and paged by the TypeScript business tier.",
+      endpoints: [
+        // The TypeScript business tier.
+        { ref: "board.NotesService.CreateNote",     method: POST, path: "" },
+        { ref: "board.NotesService.CreateNoteInTx", method: POST, path: "/in-tx" },
+        // Paged through the TypeScript tier: the handler forwards the page to the
+        // storage query with paging.forward(ctx), and the next / previous
+        // position storage reports comes back through it to the gateway.
+        { ref: "board.NotesService.ListNotes",      method: GET,  path: "/batches/{batch}",
+          paged: { enabled: true, default_limit: 2, max_limit: 10 } },
+
+        // The generated storage tier, read directly.
+        { ref: "board.NoteQuery.GetNote",    method: GET, path: "/{note_id}" },
+        { ref: "board.NoteQuery.CountMarks", method: GET, path: "/{note_id}/marks/{mark}" },
+        // The storage query the business ListNotes forwards its page to. It
+        // is published paged as well: the storage handler applies a page
+        // only for a method some surface pages.
+        { ref: "board.NoteQuery.ListBatch",  method: GET, path: "/storage/batches/{batch}",
+          paged: { enabled: true, default_limit: 2, max_limit: 10 } },
+
+        // The business companion, through the business tier. ExportNote puts
+        // a file on notes-exports and answers the row: its `file` is the
+        // download URL the gateway rewrote the handle into, served by the
+        // download route below.
+        { ref: "board.NotesService.ExportNote", method: POST, path: "/{note_id}/export" },
+        // A third-party API behind the business tier: the handler calls the
+        // egress client proto/clients/quotes, which calls the Quotes API.
+        { ref: "board.NotesService.Quote",      method: GET,  path: "/quotes/{id}" }
+      ],
+      // The files the business tier puts (NoteExport.file), read back by
+      // the gateway from the same notes-exports root the companion writes.
+      downloads: [
+        {
+          path:                "/files"
+          include:             ["board.*"]
+          url_form:            URL_FORM_RELATIVE
+          content_disposition: CONTENT_DISPOSITION_ATTACHMENT
+        }
+      ]
+    }
+  ]
+};

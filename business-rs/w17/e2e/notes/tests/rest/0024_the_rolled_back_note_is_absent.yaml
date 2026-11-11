@@ -1,0 +1,7 @@
+# The rolled-back write is not in the database: the batch 0022 wrote into
+# is empty, read through the generated storage query.
+method: board.NoteQuery.ListBatch
+input:
+    batch: rolled-back
+expect:
+    items: {matcher: count, op: '==', value: 0}

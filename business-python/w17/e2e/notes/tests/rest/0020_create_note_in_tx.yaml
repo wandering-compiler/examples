@@ -1,0 +1,30 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+#
+# The commit path of CreateNoteInTx: distx.run around CreateNote composed
+# through the served service, so the note is written inside the transaction
+# and NoteCreated waits for the commit. The on_commit hook records a
+# `committed` mark (read back by 0052). Both events are matched on the id of
+# the note this step committed.
+method: board.NotesService.CreateNoteInTx
+input:
+    batch: in-tx
+    title: committed in a transaction
+    body: b
+expect:
+    id: {capture: tx_note.id, match: {matcher: not_empty}}
+    batch: {matcher: eq, value: in-tx}
+    title: {matcher: eq, value: committed in a transaction}
+    body: {matcher: eq, value: b}
+    created_at: {matcher: not_empty}
+await_events:
+    - topic: note.created
+      timeout_ms: 15000
+      match:
+        note_id: {matcher: eq, value: "${tx_note.id}"}
+        batch: {matcher: eq, value: in-tx}
+        title: {matcher: eq, value: committed in a transaction}
+    - topic: note.delivered
+      timeout_ms: 30000
+      match:
+        note_id: {matcher: eq, value: "${tx_note.id}"}
