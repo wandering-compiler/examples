@@ -32,9 +32,15 @@ type stubEvent struct {
 
 // contactUntil polls the stub for the contact keyed by user until done says
 // it holds what the test waits for.
+//
+// The wait is long because of the queue, not the plugin: every test before
+// these signs users up, and the plugin takes auth's UserCreated events one at
+// a time, a few a second. On 12 November ~190 were still queued when the
+// marketing tests started and the queue took ~95 s to empty, so a test's own
+// sign-up reached Brevo well after 30 s.
 func contactUntil(t *testing.T, user string, done func(stubContact) bool) stubContact {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(3 * time.Minute)
 	var last stubContact
 	var lastRaw string
 	for {
