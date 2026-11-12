@@ -50,13 +50,13 @@ plugins:
     - git: null
       name: auth
       source: local
-      version: 0.1.0-rc.60
+      version: 0.1.0-rc.61
 project: examples-single-binary
 project_id: d1ef82a1-ffe4-4220-af2e-2bdeb3c99889
 sdk_version: v0.1.0-rc.77
 secrets: null
 signature:
     alg: ed25519/v1
-    body: c924a1a37f1604160333e8d9113f578d9fb27c4163a5f3516fcb2db7341f0ea10f2fdb4e8522f6c0f3e199a2b4d4e868133e671270b85c236235fae982a8f205
+    body: cd9d864103a973f105e5565040ea7289ad336890ac0ef14c2da29ffc48be6a0a01f0632cda7a3d1a01973c7e3fbed0addb8590a7e250e8a42ea9163ad6d36807
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

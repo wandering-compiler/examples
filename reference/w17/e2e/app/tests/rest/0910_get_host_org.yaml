@@ -1,0 +1,9 @@
+# The organization a host serves, asked before anyone signs in (a white-label
+# sign-in page). The fixtures bind org-alpha.reference.test to the alpha
+# organization; an unbound host answers found = false, never an error.
+method: auth.AuthService.GetHostOrg
+input:
+    host: org-alpha.reference.test
+expect:
+    found: {matcher: eq, value: true}
+    slug: {matcher: not_empty}
