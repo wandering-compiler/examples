@@ -13,7 +13,7 @@ description = "The notes domain's business tier, on the Rust business SDK (w17-b
 [dependencies]
 # Both SDK crates at the tag of the project's sdk_version (w17/lock.yaml). The
 # image checks that Cargo.lock takes them from this tag.
-w17-business = { git = "https://github.com/wandering-compiler/sdk", tag = "rs/v0.1.0-rc.77" }
+w17-business = { git = "https://github.com/wandering-compiler/sdk", tag = "rs/v0.1.0-rc.78" }
 # The code w17-business-build generates names tonic and prost by path: the
 # majors the SDK is built on.
 tonic = "0.14"
@@ -21,4 +21,4 @@ prost = "0.14"
 tokio = { version = "1", features = ["macros"] }
 
 [build-dependencies]
-w17-business-build = { git = "https://github.com/wandering-compiler/sdk", tag = "rs/v0.1.0-rc.77" }
+w17-business-build = { git = "https://github.com/wandering-compiler/sdk", tag = "rs/v0.1.0-rc.78" }
