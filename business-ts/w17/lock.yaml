@@ -35,10 +35,10 @@ org_slug: test
 plugins: []
 project: examples-business-ts
 project_id: 3bfa54ca-2292-4e77-9aec-3af50e681a81
-sdk_version: v0.1.0-rc.78
+sdk_version: v0.1.0-rc.79
 secrets: null
 signature:
     alg: ed25519/v1
-    body: e34dc41323d81681aa62cfa7f5c5a77c966d510ee68413a5f7cc2ed4f9e4899d885ddc8c4c598cf1d9291d88107f8141c447945277a46dd338afb4b9767fa105
+    body: 31b65e3fa2e41fb01862051db8a8c40709511216058be543ba264bd271fbc2cbad9eccceab75a5c2fcb25a9cdc28c3b37c23b0c6983cc1bdd4c86e34b444dc09
     key_id: ed25519:d1f1f31adf965af1
 w17_url: localhost:13444
