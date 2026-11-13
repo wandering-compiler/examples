@@ -51,10 +51,10 @@ plugins:
       version: 0.1.0-rc.13
 project: examples-jobs
 project_id: 0e9d85e2-b985-4fea-9297-e721e9d2e520
-sdk_version: v0.1.0-rc.79
+sdk_version: v0.1.0-rc.80
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 7ec7b41699053d081357ca9bcd9405f4ebfb14f9e3d5a05614f52a74de57674ebb55df7667a873393897b1873055ad7ee9e465e9c4e8f26d208c8cf9d48e590a
+    body: 638c10751b8523b49ded1272392b4c513472849a867b8bea1752a26ad4360cb26c703c5f7443ac703506bf19e5afefb2e7161e981cd7dc31418adc310c41f701
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
