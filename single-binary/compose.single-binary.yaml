@@ -29,6 +29,9 @@ services:
       # base URL and the credential, one secret (a real deployment resolves
       # it through the secret chain, never from a compose file).
       W17_CLIENT_QUOTES_DSN: http://quotestub:8080?auth=bearer&token=test-token
+      # The SOAP client proto/clients/payers: the register's endpoint, which
+      # the same stand-in serves (quotestub/registry.wsdl).
+      W17_CLIENT_PAYERS_DSN: http://quotestub:8080/registry
     depends_on:
       app-seed: { condition: service_completed_successfully }
       quotestub: { condition: service_started }

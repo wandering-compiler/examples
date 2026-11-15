@@ -49,6 +49,19 @@ message QuoteResp {
   string author = 3;
 }
 
+message PayerStatusReq { string dic = 1; }
+
+// PayerStatusResp — a VAT payer as the third-party SOAP register answered,
+// through the egress client proto/clients/payers.
+message PayerStatusResp {
+  string dic        = 1;
+  bool   reliable   = 2;
+  // The published account: "<number>/<bank>" or an IBAN.
+  string account    = 3;
+  string deposit    = 4;
+  string checked_at = 5;
+}
+
 // NotesFacade — hand-written BUSINESS tier. CreateNoteChecked applies a
 // trivial business rule (tags the title) then delegates to the storage
 // NoteMutation. In the single binary the facade reaches storage by
@@ -116,4 +129,10 @@ service NotesFacade {
   // with the credential from W17_CLIENT_QUOTES_DSN, retried when the API is
   // briefly unavailable, its errors coded for this caller.
   rpc Quote(QuoteReq) returns (QuoteResp);
+
+  // PayerStatus — the same through a SOAP service: `egress.Payers()` was
+  // generated from the register's WSDL (proto/clients/payers), and each call
+  // is a SOAP envelope POSTed to W17_CLIENT_PAYERS_DSN, retried because the
+  // operation was generated idempotent, a SOAP fault coded for this caller.
+  rpc PayerStatus(PayerStatusReq) returns (PayerStatusResp);
 }

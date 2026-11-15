@@ -1,0 +1,7 @@
+# A SOAP Client fault blames the request: INVALID_ARGUMENT, never retried —
+# and the facade passes the error on as it is, so the REST caller gets a 400.
+method: example.NotesFacade.PayerStatus
+input:
+    dic: bad
+expect_error:
+    code: INVALID_ARGUMENT

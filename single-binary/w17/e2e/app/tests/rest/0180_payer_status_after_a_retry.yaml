@@ -1,0 +1,9 @@
+# `flaky` answers a Server fault with 503 to the first request and the payer
+# to the next. A SOAP call is a POST: it is retried only because the client
+# was generated with `--idempotent getStatus` — the answer proves the retry.
+method: example.NotesFacade.PayerStatus
+input:
+    dic: flaky
+expect:
+    dic: flaky
+    reliable: true
