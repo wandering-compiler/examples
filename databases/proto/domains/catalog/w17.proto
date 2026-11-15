@@ -59,6 +59,10 @@ option (w17.pg.module) = {
       name:                "nlevel"
       description:         "ltree depth — number of labels in the path."
       required_extensions: [ "ltree" ]
+      // A path's label count is never NULL for a path that is not: the
+      // promise lets `nlevel(d.path)` over a NOT NULL path fill a
+      // non-nullable field (the compiler cannot see into the function).
+      non_null:            true
     },
     {
       name:                "akeys"
