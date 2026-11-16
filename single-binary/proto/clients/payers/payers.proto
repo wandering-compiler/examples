@@ -11,8 +11,8 @@ import "w17/egress.proto";
 import "w17/lock.proto";
 import "google/protobuf/timestamp.proto";
 
-option (w17.lock_checksum) = "sha256:448025f1c83a3b549026521683354b2d7b561d7fe45b66671da32a0204d30015";
-option (w17.lock_signature) = "ed25519/v1:2103ea437b40b99337984a0792e0bafe3101bb7d8ceb45121fd23cbf8201d09b943d7b442f61aeaf3f9392d5230899b70954d6b2bf35a70aefa62b2f0d25c90a";
+option (w17.lock_checksum) = "sha256:69d3fa4fcc5677a3d85877409604ccabece88e102bd1d5f82e42061e478570ef";
+option (w17.lock_signature) = "ed25519/v1:e26bee82e61bbe8afc75ebc62898997d7532c9a38a7be6647691a5f39380fc4e9e5f198b34961ae43cb67415b05ac4cd91e136f28069713d4c809e0ef2a14b09";
 option (w17.egress_client) = {
   name: "payers"
   title: "PayerRegistry"
