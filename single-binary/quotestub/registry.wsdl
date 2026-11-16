@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The stand-in for a third-party SOAP register of VAT payers (main.go
+     serves it at POST /registry): the example's egress client `payers` is
+     generated from this WSDL and the schema it imports. -->
+<wsdl:definitions name="PayerRegistry" targetNamespace="urn:example:registry"
+    xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:example:registry">
+  <wsdl:documentation>Whether a VAT payer is reliable, and the accounts it published.</wsdl:documentation>
+  <wsdl:types>
+    <xsd:schema>
+      <xsd:import namespace="urn:example:registry" schemaLocation="registry.xsd"/>
+    </xsd:schema>
+  </wsdl:types>
+  <wsdl:message name="getStatusIn"><wsdl:part name="parameters" element="tns:StatusRequest"/></wsdl:message>
+  <wsdl:message name="getStatusOut"><wsdl:part name="parameters" element="tns:StatusResponse"/></wsdl:message>
+  <wsdl:portType name="Registry">
+    <wsdl:operation name="getStatus">
+      <wsdl:documentation>The status of each payer asked for.</wsdl:documentation>
+      <wsdl:input message="tns:getStatusIn"/>
+      <wsdl:output message="tns:getStatusOut"/>
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="RegistrySoap" type="tns:Registry">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="getStatus">
+      <soap:operation soapAction="urn:example:registry/getStatus"/>
+      <wsdl:input><soap:body use="literal"/></wsdl:input>
+      <wsdl:output><soap:body use="literal"/></wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="PayerRegistry">
+    <wsdl:port name="RegistrySoap" binding="tns:RegistrySoap">
+      <soap:address location="http://quotestub:8080/registry"/>
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>

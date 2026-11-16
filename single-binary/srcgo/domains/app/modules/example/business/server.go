@@ -11,6 +11,7 @@ import (
 
 	appbiz "github.com/wandering-compiler/examples/single-binary/w17/stubs/business/app"
 	"github.com/wandering-compiler/examples/single-binary/w17/stubs/egress"
+	payerspb "github.com/wandering-compiler/examples/single-binary/w17/stubs/pb/clients/payers"
 	quotespb "github.com/wandering-compiler/examples/single-binary/w17/stubs/pb/clients/quotes"
 	examplepb "github.com/wandering-compiler/examples/single-binary/w17/stubs/pb/domains/app/example"
 	"github.com/wandering-compiler/sdk/go/lib/kvfs"
@@ -87,6 +88,37 @@ func (s *NotesFacadeServer) Quote(ctx context.Context, req *examplepb.QuoteReq) 
 		return nil, err
 	}
 	return &examplepb.QuoteResp{Id: q.GetId(), Text: q.GetText(), Author: q.GetAuthor()}, nil
+}
+
+// PayerStatus asks a third-party SOAP register whether a VAT payer is
+// reliable, through the egress client generated from its WSDL
+// (proto/clients/payers). The envelope, the SOAPAction, the retry and the
+// fault mapping are the client's: a Client fault comes back
+// INVALID_ARGUMENT and passes through as it is.
+func (s *NotesFacadeServer) PayerStatus(ctx context.Context, req *examplepb.PayerStatusReq) (*examplepb.PayerStatusResp, error) {
+	res, err := egress.Payers().GetStatus(ctx, &payerspb.StatusRequest{Dic: []string{req.GetDic()}})
+	if err != nil {
+		return nil, err
+	}
+	if len(res.GetPayer()) == 0 {
+		return nil, status.Errorf(codes.NotFound, "no payer %s", req.GetDic())
+	}
+	p := res.GetPayer()[0]
+	out := &examplepb.PayerStatusResp{
+		Dic:       p.GetDic(),
+		Reliable:  p.GetUnreliable() == payerspb.Reliability_RELIABILITY_NE,
+		Deposit:   p.GetDeposit().GetValue() + " " + p.GetDeposit().GetCurrency(),
+		CheckedAt: p.GetCheckedAt().AsTime().Format("2006-01-02T15:04:05Z07:00"),
+	}
+	if accts := p.GetAccount(); len(accts) > 0 {
+		switch a := accts[0].GetChoice().(type) {
+		case *payerspb.Account_Domestic:
+			out.Account = a.Domestic.GetNumber() + "/" + a.Domestic.GetBank()
+		case *payerspb.Account_Iban:
+			out.Account = a.Iban
+		}
+	}
+	return out, nil
 }
 
 // NoteText answers the same rendering per request, as the HTTP body

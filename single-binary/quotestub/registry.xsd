@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema targetNamespace="urn:example:registry" elementFormDefault="qualified"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:example:registry">
+  <xsd:element name="StatusRequest">
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element name="dic" type="xsd:string" maxOccurs="unbounded"/>
+      </xsd:sequence>
+    </xsd:complexType>
+  </xsd:element>
+  <xsd:element name="StatusResponse">
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element name="payer" type="tns:Payer" minOccurs="0" maxOccurs="unbounded"/>
+      </xsd:sequence>
+      <xsd:attribute name="generated" type="xsd:date" use="required"/>
+    </xsd:complexType>
+  </xsd:element>
+  <xsd:complexType name="Payer">
+    <xsd:sequence>
+      <xsd:element name="checkedAt" type="xsd:dateTime"/>
+      <xsd:element name="account" type="tns:Account" minOccurs="0" maxOccurs="unbounded"/>
+      <xsd:element name="deposit" type="tns:Amount" minOccurs="0"/>
+    </xsd:sequence>
+    <xsd:attribute name="dic" type="xsd:string" use="required"/>
+    <!-- ANO = the payer IS unreliable, as the real register says it. -->
+    <xsd:attribute name="unreliable" type="tns:Reliability" use="required"/>
+  </xsd:complexType>
+  <xsd:complexType name="Account">
+    <xsd:choice>
+      <xsd:element name="domestic" type="tns:DomesticAccount"/>
+      <xsd:element name="iban" type="xsd:string"/>
+    </xsd:choice>
+  </xsd:complexType>
+  <xsd:complexType name="DomesticAccount">
+    <xsd:attribute name="number" type="xsd:string" use="required"/>
+    <xsd:attribute name="bank" type="xsd:string" use="required"/>
+  </xsd:complexType>
+  <xsd:complexType name="Amount">
+    <xsd:simpleContent>
+      <xsd:extension base="xsd:decimal">
+        <xsd:attribute name="currency" type="xsd:string" use="required"/>
+      </xsd:extension>
+    </xsd:simpleContent>
+  </xsd:complexType>
+  <xsd:simpleType name="Reliability">
+    <xsd:restriction base="xsd:string">
+      <xsd:enumeration value="ANO"/>
+      <xsd:enumeration value="NE"/>
+      <xsd:enumeration value="NENALEZEN"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+</xsd:schema>

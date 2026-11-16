@@ -1,0 +1,15 @@
+# The business tier calling a third-party SOAP service through an egress
+# client generated from its WSDL (proto/clients/payers): the call reaches the
+# register stand-in (quotestub/, POST /registry) as a SOAP 1.1 envelope with
+# the operation's SOAPAction — the stand-in faults without it — and the
+# answer's attributes, choice (a domestic account), simpleContent (the
+# deposit with its currency) and dateTime come back decoded.
+method: example.NotesFacade.PayerStatus
+input:
+    dic: CZ12345678
+expect:
+    dic: CZ12345678
+    reliable: true
+    account: 19-2000145399/0800
+    deposit: 1250.50 CZK
+    checked_at: "2026-11-15T10:00:00Z"
