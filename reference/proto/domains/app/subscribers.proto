@@ -41,47 +41,52 @@ option (w17.event_subscribers) = {
       event:   "TaskCompleted"
       channel: "tasks"
 
-      // `topic_filter` — the glob the runtime matches an emitted
-      // event's topic against, pushed down to the transport where the
-      // transport supports it.
+      // `topic_filter` — the glob the generated dispatcher matches an
+      // emitted event's topic against at delivery time.
       //
-      // The default is `**`, every topic on the channel, and that stopped
-      // being a harmless default the moment the `users` module started
-      // shipping `directory.plan.*` on this same channel: an unfiltered
-      // consumer asks NATS for every message the domain produces and
-      // then discards the ones whose envelope tag it does not handle.
-      // The filter keeps the wire traffic proportional to what this
-      // surface reacts to.
+      // It is NOT pushed down to the transport: the subscriber's
+      // transport subscription is the whole channel (`**`), so every
+      // message on `tasks` is read either way, `directory.plan.*`
+      // included. What the filter narrows is which handler RUNS for a
+      // delivery, not what is read off the wire. The default is `**`,
+      // every topic on the channel; since the `users` module started
+      // shipping `directory.plan.*` on this same channel, an explicit
+      // filter is what keeps this arm to the task events it handles.
       //
       // `task.*` and not the exact topic on purpose — the next task
-      // event should reach the same consumer without re-provisioning
-      // it, and a one-topic filter has to be edited every time the
-      // module grows.
+      // event of this module matches without editing the filter, where
+      // a one-topic filter has to be changed every time the module
+      // grows.
       topic_filter: "task.*"
 
       // `retry` — the SUBSCRIBER-side override, applied on top of the
-      // channel + per-event cascade.
+      // channel + per-event cascade. It does NOT give this subscription
+      // a retry of its own.
       //
-      // It goes on THIS subscription and not on the two cache-
-      // invalidation ones because the counter is the handler whose
-      // failure is permanent: a dropped increment is a number that
-      // stays wrong forever, while an invalidation that never ran is
-      // undone by the next write or by the entry expiring. The event's
-      // own retry (10 deliveries / 60s) is already the aggressive end
-      // of what the channel carries; this asks for more still, because
-      // the consumer's need outlives the event's.
+      // Retries are the CHANNEL's: the broker consumer is provisioned
+      // once per channel, and the generated `ChannelRetries()` rolls
+      // every channel, event and subscription figure on it up through
+      // max(MaxDeliver, AckWait). So the 20 deliveries / 120s below
+      // become the redelivery budget of EVERY subscription on `tasks`,
+      // the two cache invalidations included. A figure BELOW the
+      // rolled-up one is accepted and changes nothing (codegen names it
+      // in a NOTE at the top of the generated channels.go): this field
+      // can only ever ASK FOR MORE, and a subscriber that must give up
+      // earlier than its peers needs a channel of its own.
       //
-      // ⚠️ THE ROLLUP IS max(), NOT per-subscriber. Today's broker
-      // consumer model is per-CHANNEL, so the generated
-      // `ChannelRetries()` aggregates every event and subscription on
-      // a channel through max(MaxDeliver, AckWait) — per-subscriber
-      // strictness is parked (see the generated channels.go). The
-      // practical consequence is one-directional and worth writing
-      // down: a subscription can only ever ASK FOR MORE. A value below
-      // the channel's rolled-up figure is accepted, changes nothing,
-      // and says so nowhere — so an author reaching for this field to
-      // make one consumer give up EARLIER is writing a comment, not a
-      // config.
+      // It is written on THIS subscription because the counter is the
+      // handler whose failure is permanent: a dropped increment is a
+      // number that stays wrong forever, while an invalidation that
+      // never ran is undone by the next write or by the entry expiring.
+      // The event's own retry (10 deliveries / 60s) is already the
+      // aggressive end of what the channel carries; this asks for more.
+      //
+      // Sibling subscriptions of one event share a delivery:
+      // TaskCompleted reaches this counter and the cache invalidation
+      // below as ONE message. When one of them fails, the message is
+      // redelivered under the shared budget, and the dispatcher re-runs
+      // only the arms that have not succeeded — an arm that already
+      // succeeded is recorded as settled and is not run again.
       retry: {
         max_deliver:      20
         ack_wait_seconds: 120
@@ -127,9 +132,9 @@ option (w17.event_subscribers) = {
       channel: "tasks"
 
       // Its own topic prefix, and the reason the `task.*` filters above
-      // exist: both modules ship on the `tasks` channel, so an
-      // unfiltered consumer would receive the other module's traffic
-      // and discard it by envelope tag.
+      // exist: both modules ship on the `tasks` channel, and the
+      // subscriber reads all of it; the filters decide which handler
+      // runs for each delivery.
       topic_filter: "directory.plan.*"
 
       handler: "users.UsersService.OnDirectoryPlanRetired"

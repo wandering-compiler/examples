@@ -1,0 +1,8 @@
+# After a delete the task is not found: the read-back that makes the
+# delete's empty `expect: {}` prove something.
+method: tasks.TasksService.GetTask
+pre: [auth/auth.yaml]
+input:
+    task_id: ${task.id}
+expect_error:
+    code: NOT_FOUND
