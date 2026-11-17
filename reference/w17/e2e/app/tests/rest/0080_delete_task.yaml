@@ -4,3 +4,4 @@ pre:
 input:
     id: ${task.id}
 expect: {}
+post: [checks/task_is_gone.yaml]

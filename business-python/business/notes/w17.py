@@ -72,12 +72,15 @@ class NotesService:
             # transaction the event waits for the commit.
             note = await self.registry.self(NOTES).CreateNote(tx_ctx, req)
 
+            # Runs after the root transaction committed, never after a
+            # rollback. The write it makes is not part of the transaction
+            # (it has landed), so it goes out on the caller's context,
+            # detached from its cancellation: work after a commit runs to
+            # its end even when the caller hangs up.
+            detached = ctx.without_cancel()
+
             async def committed():
-                # Runs after the root transaction committed, never after a
-                # rollback. The write it makes is not part of the
-                # transaction (it has landed), so it goes out on the
-                # caller's context.
-                await self.mutation.RecordMark(ctx, self.RecordMarkReq(note_id=note.id, mark="committed"))
+                await self.mutation.RecordMark(detached, self.RecordMarkReq(note_id=note.id, mark="committed"))
 
             await on_commit(tx_ctx, committed)
             if req.title.startswith(ROLLBACK_PREFIX):

@@ -33,10 +33,10 @@ option (w17.event_subscribers) = {
 
       // The domain ships one topic today, so the filter narrows
       // nothing yet — it is written as a PREFIX so the next billing
-      // event reaches this consumer without re-provisioning it, and so
-      // the day a second surface subscribes to the same channel the
-      // scoping already exists rather than having to be retrofitted
-      // onto a live consumer.
+      // event matches without editing it, and so the day another
+      // topic ships on the same channel the scoping already exists.
+      // The generated dispatcher applies it at delivery time; the
+      // transport subscription is the whole channel either way.
       topic_filter: "billing.invoice.*"
 
       handler: "core.InvoiceNoticeMutation.OnInvoiceIssued"
