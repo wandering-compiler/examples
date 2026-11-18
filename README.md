@@ -23,14 +23,25 @@ tests.
 
 ## Running an example
 
-You need Docker and [`w17ctl`](https://github.com/wandering-compiler/w17ctl#install).
+You need Docker, [`w17ctl`](https://github.com/wandering-compiler/w17ctl#install)
+and an account on the w17 console (it is invitation-only: the invitation gives
+you an organization of your own).
+
+Each example's lock (`w17/lock.yaml`) names the project and the organization it
+is registered in — w17's own. To run one, register a copy of it in YOUR
+organization first:
 
 ```sh
-cd bookshop
-w17ctl login            # once
-w17ctl codegen          # generate the services from the protos
-w17ctl test             # bring the stack up, run the e2e suite, tear it down
+cp -r bookshop ~/bookshop && cd ~/bookshop
+w17ctl login                                 # once
+w17ctl project register --org <your-org>     # repoints the copy's lock at a new project of yours
+w17ctl codegen                               # generate the services from the protos
+w17ctl test                                  # bring the stack up, run the e2e suite, tear it down
 ```
+
+`project register` rewrites only the copy's lock; the protos, the hand-written
+code and the e2e cases stay as they are. To start a project of your own instead,
+run `w17ctl init` in an empty directory and take what you need from here.
 
 Generated code (`w17/services`, `w17/stubs`, `w17/specs`, …) is not committed —
 `w17ctl codegen` writes it. What is committed is what you would write yourself:
