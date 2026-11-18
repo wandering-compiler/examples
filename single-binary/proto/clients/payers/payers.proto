@@ -11,8 +11,8 @@ import "w17/egress.proto";
 import "w17/lock.proto";
 import "google/protobuf/timestamp.proto";
 
-option (w17.lock_checksum) = "sha256:69d3fa4fcc5677a3d85877409604ccabece88e102bd1d5f82e42061e478570ef";
-option (w17.lock_signature) = "ed25519/v1:e26bee82e61bbe8afc75ebc62898997d7532c9a38a7be6647691a5f39380fc4e9e5f198b34961ae43cb67415b05ac4cd91e136f28069713d4c809e0ef2a14b09";
+option (w17.lock_checksum) = "sha256:039d231f83c5e823164414f2d16fa8f212484048465e17ca254848e3c3087e8c";
+option (w17.lock_signature) = "ed25519/v1:c09fa683242c41d98a1763e883a9f9dc5a858c6b72ca181bac9d4d8a873558f41f248983cc71708a3bc1237b451410c8edb80550fd557589319ff79971344b03";
 option (w17.egress_client) = {
   name: "payers"
   title: "PayerRegistry"
@@ -49,7 +49,7 @@ message Account {
 }
 
 message Amount {
-  string value = 1 [(w17.egress_field) = { xml_text: true }];
+  string value = 1 [(w17.egress_field) = { xml_text: true xml_whitespace: EGRESS_XML_WHITESPACE_COLLAPSE }];
   string currency = 2 [(w17.egress_field) = { name: "currency" required: true xml_attribute: true }];
 }
 
@@ -79,5 +79,5 @@ message StatusRequest {
 
 message StatusResponse {
   repeated Payer payer = 1 [(w17.egress_field) = { name: "payer" xml_namespace: "urn:example:registry" }];
-  string generated = 2 [(w17.egress_field) = { name: "generated" required: true xml_attribute: true }];
+  string generated = 2 [(w17.egress_field) = { name: "generated" required: true xml_attribute: true xml_whitespace: EGRESS_XML_WHITESPACE_COLLAPSE }];
 }
