@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/lib/pq v1.12.3
 	github.com/wandering-compiler/examples/billing/w17/stubs v0.0.0
-	github.com/wandering-compiler/sdk/go v0.1.0-rc.88
+	github.com/wandering-compiler/sdk/go v0.1.0-rc.89
 	google.golang.org/grpc v1.83.2
 )
 
