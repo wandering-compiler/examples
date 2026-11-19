@@ -1,6 +1,6 @@
 # The stand-in for the third-party Quotes API (openapi.yaml), for the test
 # stack only: the app's egress client calls it as it would the real one.
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY . .
 RUN CGO_ENABLED=0 go build -o /quotestub .

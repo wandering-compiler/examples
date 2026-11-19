@@ -1,6 +1,6 @@
 module github.com/wandering-compiler/examples/reference
 
-go 1.26.1
+go 1.27.0
 
 require (
 	github.com/redis/go-redis/v9 v9.21.0

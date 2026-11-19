@@ -103,7 +103,7 @@ grep -q "$seed_name" <<<"$got" || fail "GetJob did not return the seeded row: $g
 echo "==> building ops-gateway-cli and ops-gateway-ctl"
 mkdir -p "$bin"
 docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOFLAGS=-buildvcs=false -e CGO_ENABLED=0 -e GOPROXY -e GODEBUG \
-  -v "$top:/w" -w "/w/$rel" golang:1.26 sh -c '
+  -v "$top:/w" -w "/w/$rel" golang:1.27 sh -c '
     set -e
     (cd w17/services/ops-gateway && go build -o /w/'"$rel"'/bin/livetest/ops-gateway-cli ./cmd/ops-gateway-cli)
     (cd w17/services/ops-ctl && go build -o /w/'"$rel"'/bin/livetest/ops-gateway-ctl ./cmd/ops-gateway-ctl)

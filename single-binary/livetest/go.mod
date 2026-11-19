@@ -1,3 +1,3 @@
 module github.com/wandering-compiler/examples/single-binary/livetest
 
-go 1.26
+go 1.27.0

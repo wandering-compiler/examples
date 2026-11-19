@@ -1,5 +1,5 @@
 # The example's stand-in for the Stripe API; see main.go.
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 # The module proxy the CI job serves, when there is one (compose passes it
 # through build.args); unset, go uses its default.
 ARG GOPROXY

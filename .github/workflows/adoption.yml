@@ -104,7 +104,7 @@ jobs:
         if: inputs.sdk_ref != ''
         run: |
           # The version Go resolves the ref to (a tag, or a pseudo-version).
-          v="$(docker run --rm -e GOFLAGS=-mod=mod -e GODEBUG=http2client=0 golang:1.26 go list -m -f '{{.Version}}' "github.com/wandering-compiler/sdk/go@${{ inputs.sdk_ref }}")"
+          v="$(docker run --rm -e GOFLAGS=-mod=mod -e GODEBUG=http2client=0 golang:1.27 go list -m -f '{{.Version}}' "github.com/wandering-compiler/sdk/go@${{ inputs.sdk_ref }}")"
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "SDK at $v"
 
@@ -140,7 +140,7 @@ jobs:
           gorun() {
             docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOMODCACHE=/gomod \
               -e GODEBUG=http2client=0 -e GOFLAGS=-mod=mod -e GOWORK=off \
-              -v "$HOME/gomod:/gomod" -v "$PWD:/w" -w "/w/$1" golang:1.26 sh -c "$2"
+              -v "$HOME/gomod:/gomod" -v "$PWD:/w" -w "/w/$1" golang:1.27 sh -c "$2"
           }
           retry() { for i in 1 2 3; do "$@" && return 0; echo "::warning::attempt $i failed: $*"; sleep 10; done; return 1; }
           # The SDK's whole module graph, through a scratch module.
@@ -309,7 +309,7 @@ jobs:
           if [ -n "${{ needs.modules.outputs.sdk_version }}" ] && [ -f srcgo/go.mod ] \
             && grep -q 'wandering-compiler/sdk/go ' srcgo/go.mod; then
             docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off -e GOFLAGS=-mod=mod \
-              -v "$PWD:/w" -w /w/srcgo golang:1.26 \
+              -v "$PWD:/w" -w /w/srcgo golang:1.27 \
               go mod edit -require="github.com/wandering-compiler/sdk/go@${{ needs.modules.outputs.sdk_version }}"
           fi
           # A project with no hand-written module requiring sdk/go (billing,
@@ -366,7 +366,7 @@ jobs:
               | xargs -0 grep -l 'wandering-compiler/sdk/go ' \
               | while IFS= read -r mod; do
                   retry docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off -e GOPROXY -e GODEBUG \
-                    -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.26 \
+                    -v "$PWD:/w" -w "/w/$(dirname "$mod")" golang:1.27 \
                     go get "github.com/wandering-compiler/sdk/go@${{ needs.modules.outputs.sdk_version }}"
                 done
           fi
@@ -396,7 +396,7 @@ jobs:
                   cp "$dir/go.mod" "$dir/go.mod.pinned"
                   [ -f "$dir/go.sum" ] && cp "$dir/go.sum" "$dir/go.sum.pinned"
                   if retry docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOWORK=off -e GOPROXY -e GODEBUG \
-                    -v "$PWD:/w" -w "/w/$dir" golang:1.26 \
+                    -v "$PWD:/w" -w "/w/$dir" golang:1.27 \
                     go mod tidy; then
                     rm -f "$dir/go.mod.pinned" "$dir/go.sum.pinned"
                   else

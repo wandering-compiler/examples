@@ -17,6 +17,15 @@ permissions:
   contents: read
 
 jobs:
+  # Every Go image, go.mod / go.work line and setup-go version names
+  # go.version's line; scripts/go-bump.sh <line> moves them all.
+  go-version:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/check-go-version.sh
+
   released:
     if: github.event_name != 'schedule'
     uses: ./.github/workflows/adoption.yml
