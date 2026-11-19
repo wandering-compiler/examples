@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/nats-io/nats.go v1.52.0
 	github.com/redis/go-redis/v9 v9.21.0
-	github.com/wandering-compiler/sdk/go v0.1.0-rc.88
+	github.com/wandering-compiler/sdk/go v0.1.0-rc.89
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
 )
