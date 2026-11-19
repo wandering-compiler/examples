@@ -3,4 +3,4 @@
 // it.
 module github.com/wandering-compiler/examples/single-binary/quotestub
 
-go 1.26
+go 1.27.0

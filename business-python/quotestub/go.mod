@@ -3,4 +3,4 @@
 // it.
 module github.com/wandering-compiler/examples/business-python/quotestub
 
-go 1.26
+go 1.27.0

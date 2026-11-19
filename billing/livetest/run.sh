@@ -41,5 +41,5 @@ fi
 docker run --rm --network "${project}_default" "${goproxy[@]}" \
   -e GATEWAY_DPOP_ORIGIN="$dpop_origin" \
   -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOFLAGS=-buildvcs=false -e GOWORK=off \
-  -v "$PWD:/w" -w /w/livetest golang:1.26 \
+  -v "$PWD:/w" -w /w/livetest golang:1.27 \
   go test -count=1 -race ./...

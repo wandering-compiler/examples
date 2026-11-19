@@ -2,7 +2,7 @@
 # own Go module (the srcgo directory) and the clients codegen writes next to
 # it. It hosts the facade services and reaches the generated storage
 # tier over gRPC.
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 # The module proxy the CI job serves, when there is one (compose passes it
 # through build.args); unset, go uses its default.
 ARG GOPROXY

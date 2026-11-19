@@ -54,7 +54,7 @@ logs() {
 docker run --rm --network "${project}_default" --network-alias livetest-sentry "${goproxy[@]}" \
   -e GATEWAY_DPOP_ORIGIN="$dpop_origin" \
   -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOFLAGS=-buildvcs=false -e GOWORK=off \
-  -v "$PWD:/w" -w /w/livetest golang:1.26 \
+  -v "$PWD:/w" -w /w/livetest golang:1.27 \
   go test -count=1 -race ./... || { logs; exit 1; }
 
 # Second phase: the gateway's per-address limit on, as a deployment runs it.
@@ -89,5 +89,5 @@ docker run -d --name "$limited" --network "${project}_default" --network-alias a
 docker run --rm --network "${project}_default" --network-alias livetest-sentry "${goproxy[@]}" \
   -e GATEWAY_URL=http://app-gateway-limits:8080 -e GATEWAY_DPOP_ORIGIN="$dpop_origin" -e PUBLIC_LIMITS_ON=1 \
   -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOFLAGS=-buildvcs=false -e GOWORK=off \
-  -v "$PWD:/w" -w /w/livetest golang:1.26 \
+  -v "$PWD:/w" -w /w/livetest golang:1.27 \
   go test -count=1 -race -run '^TestPublicLimits_' ./... || { docker logs --tail 100 "$limited" >&2; logs; exit 1; }

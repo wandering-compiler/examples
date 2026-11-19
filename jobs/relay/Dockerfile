@@ -3,7 +3,7 @@
 # production. The image also carries the setup the example needs before
 # anything starts (see compose.jobs.yaml): the identities are made with
 # `relay mint` and `relay issue-worker`.
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 # The module proxy the CI job serves, when there is one (compose passes it
 # through build.args); unset, go uses its default.
 ARG GOPROXY

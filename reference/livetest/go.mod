@@ -1,6 +1,6 @@
 module github.com/wandering-compiler/examples/reference/livetest
 
-go 1.26.1
+go 1.27.0
 
 require (
 	github.com/nats-io/nats.go v1.52.0
