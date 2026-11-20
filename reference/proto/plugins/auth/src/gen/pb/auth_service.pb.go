@@ -1571,7 +1571,7 @@ type ListOrgMembersReq struct {
 	// page_size — members per page: 100 when unset, at most 500 (a larger
 	// value is cut to 500).
 	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	// page_token — the previous page's next_page_token; ” = the first page.
+	// page_token — the previous page's next_page_token; '' = the first page.
 	// Opaque to the caller.
 	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3658,7 +3658,7 @@ func (x *HostOrgResp) GetOpenKinds() []string {
 type SetOrgSignUpPolicyReq struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	// kind — ” without membership_kinds; required with it.
+	// kind — '' without membership_kinds; required with it.
 	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	Open bool   `protobuf:"varint,3,opt,name=open,proto3" json:"open,omitempty"`
 	// role — the org-scoped role an open registration gets; required when open.
@@ -4648,4 +4648,4 @@ func file_business_auth_service_proto_init() {
 	file_business_auth_service_proto_depIdxs = nil
 }
 
-// emit-sha256: f20299dce9e5149f2f6f0ed9152d1de1a8e1cbbdca56c2e260ad4c86140948d3
+// emit-sha256: a720c5553db37c567171221c4d213f54f65874434f41e3ea9d9aadecbcfd85c4

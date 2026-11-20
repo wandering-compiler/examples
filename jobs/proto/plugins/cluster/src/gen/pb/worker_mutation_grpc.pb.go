@@ -30,6 +30,14 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WorkerMutationClient interface {
+	// Two ops. The first locks the LIVE relay row for the rest of the
+	// transaction — a no-op write rather than a read, so a DeleteRelay of the
+	// same relay (which writes that row) runs either wholly before it, and this
+	// finds no live relay and refuses, or wholly after it, and ends a relay
+	// whose worker was recorded while it was live. A read would let the end
+	// land between the check and the upsert and file a worker under an ended
+	// relay. The foreign key on Worker.relay_id cannot say this: the ended
+	// row still exists.
 	RecordWorker(ctx context.Context, in *RecordWorkerReq, opts ...grpc.CallOption) (*RecordWorkerResp, error)
 	// Ban and Unban are separate methods rather than one taking a target state.
 	// They are opposite decisions, they will diverge (a ban will want a reason),
@@ -85,6 +93,14 @@ func (c *workerMutationClient) UnbanWorkers(ctx context.Context, in *DecideWorke
 // All implementations should embed UnimplementedWorkerMutationServer
 // for forward compatibility.
 type WorkerMutationServer interface {
+	// Two ops. The first locks the LIVE relay row for the rest of the
+	// transaction — a no-op write rather than a read, so a DeleteRelay of the
+	// same relay (which writes that row) runs either wholly before it, and this
+	// finds no live relay and refuses, or wholly after it, and ends a relay
+	// whose worker was recorded while it was live. A read would let the end
+	// land between the check and the upsert and file a worker under an ended
+	// relay. The foreign key on Worker.relay_id cannot say this: the ended
+	// row still exists.
 	RecordWorker(context.Context, *RecordWorkerReq) (*RecordWorkerResp, error)
 	// Ban and Unban are separate methods rather than one taking a target state.
 	// They are opposite decisions, they will diverge (a ban will want a reason),
@@ -212,4 +228,4 @@ var WorkerMutation_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "mutations/worker_mutation.proto",
 }
 
-// emit-sha256: 63e83d68c717c43227b895bc882284b65aab83a46c3f32a97473385b6321bd02
+// emit-sha256: 3b3f1a258339a8432c341f44e79b0f38de21f4d03d6701922b840e794c5aba47

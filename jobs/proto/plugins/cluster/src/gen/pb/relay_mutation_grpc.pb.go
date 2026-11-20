@@ -40,12 +40,34 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type RelayMutationClient interface {
+	// A plain INSERT whose `name` must be free among LIVE relays (the unique
+	// index over name and ended_key): registering a relay that was ended is a
+	// new row with a new id, and the ended row stays as it was (see Relay).
 	CreateRelay(ctx context.Context, in *CreateRelayReq, opts ...grpc.CallOption) (*CreateRelayResp, error)
+	// Edits a LIVE relay only. An ended relay is history and is not rewritten:
+	// the write matches no row, as it matched none for a deleted one before.
 	UpdateRelay(ctx context.Context, in *UpdateRelayReq, opts ...grpc.CallOption) (*UpdateRelayResp, error)
-	// Deletes rather than soft-deletes. `enabled = false` is how a relay is
-	// taken out of service and kept; delete means the operator is done with it,
-	// and a registry that accumulates tombstones stops being readable.
+	// ENDS the relay; it deletes nothing. Rows are never deleted from this
+	// plugin's tables: an ended relay stays as the record of what was
+	// registered, and the Worker rows that name it keep resolving (their
+	// relay_id is a foreign key). It stamps removed_at and moves ended_key to
+	// the row's own id, which frees the name for a new registration (see Relay).
+	//
+	// From then on the relay is gone for every reader — ListRelays, GetRelay,
+	// and through them placement, reservations (a handle naming it polls as
+	// expired), registration codes, drain, the ban delivery and the worker
+	// sweep — and RecordWorker refuses to file a worker under it. `enabled =
+	// false` is still how a relay is taken out of service and KEPT; ending it
+	// means the operator is done with it.
+	//
+	// Idempotent: ending an ended (or unknown) relay changes nothing and is not
+	// an error, as deleting a missing row was not. The name is DeleteRelay, not
+	// EndRelay, so every caller and the admin page's delete keep working.
 	DeleteRelay(ctx context.Context, in *DeleteRelayReq, opts ...grpc.CallOption) (*DeleteRelayResp, error)
+	// Both observations below write a LIVE relay only: an ended relay keeps the
+	// observed state it ended with, and a write queued before the end lands on
+	// nothing.
+	//
 	// Success also CLEARS last_error: a relay that answers is not still failing,
 	// and a stale error beside a fresh last_seen_at sends an operator hunting a
 	// problem that fixed itself.
@@ -115,12 +137,34 @@ func (c *relayMutationClient) RecordRelayFailed(ctx context.Context, in *RecordR
 // All implementations should embed UnimplementedRelayMutationServer
 // for forward compatibility.
 type RelayMutationServer interface {
+	// A plain INSERT whose `name` must be free among LIVE relays (the unique
+	// index over name and ended_key): registering a relay that was ended is a
+	// new row with a new id, and the ended row stays as it was (see Relay).
 	CreateRelay(context.Context, *CreateRelayReq) (*CreateRelayResp, error)
+	// Edits a LIVE relay only. An ended relay is history and is not rewritten:
+	// the write matches no row, as it matched none for a deleted one before.
 	UpdateRelay(context.Context, *UpdateRelayReq) (*UpdateRelayResp, error)
-	// Deletes rather than soft-deletes. `enabled = false` is how a relay is
-	// taken out of service and kept; delete means the operator is done with it,
-	// and a registry that accumulates tombstones stops being readable.
+	// ENDS the relay; it deletes nothing. Rows are never deleted from this
+	// plugin's tables: an ended relay stays as the record of what was
+	// registered, and the Worker rows that name it keep resolving (their
+	// relay_id is a foreign key). It stamps removed_at and moves ended_key to
+	// the row's own id, which frees the name for a new registration (see Relay).
+	//
+	// From then on the relay is gone for every reader — ListRelays, GetRelay,
+	// and through them placement, reservations (a handle naming it polls as
+	// expired), registration codes, drain, the ban delivery and the worker
+	// sweep — and RecordWorker refuses to file a worker under it. `enabled =
+	// false` is still how a relay is taken out of service and KEPT; ending it
+	// means the operator is done with it.
+	//
+	// Idempotent: ending an ended (or unknown) relay changes nothing and is not
+	// an error, as deleting a missing row was not. The name is DeleteRelay, not
+	// EndRelay, so every caller and the admin page's delete keep working.
 	DeleteRelay(context.Context, *DeleteRelayReq) (*DeleteRelayResp, error)
+	// Both observations below write a LIVE relay only: an ended relay keeps the
+	// observed state it ended with, and a write queued before the end lands on
+	// nothing.
+	//
 	// Success also CLEARS last_error: a relay that answers is not still failing,
 	// and a stale error beside a fresh last_seen_at sends an operator hunting a
 	// problem that fixed itself.
@@ -292,4 +336,4 @@ var RelayMutation_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "mutations/relay_mutation.proto",
 }
 
-// emit-sha256: 536daa86475e5eb79e759a4afa0f3e5173cc8f53be976663ed920fbe7278b732
+// emit-sha256: 6f5c30357df12b4feeba1ef45842755613f541d86790a022cdf7ed8f95381047

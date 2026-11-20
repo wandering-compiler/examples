@@ -14,6 +14,7 @@ import (
 
 	pb "github.com/wandering-compiler/plugins/cluster/gen/pb"
 	"github.com/wandering-compiler/plugins/cluster/lib/workeradmit"
+	"github.com/wandering-compiler/sdk/go/core/grpcerr"
 	w17pb "github.com/wandering-compiler/sdk/go/pb/w17"
 )
 
@@ -37,6 +38,10 @@ type WorkerStore interface {
 	// Decide bans (ban) or unbans the workers with these registry ids,
 	// recording who decided and when.
 	Decide(ctx context.Context, ids []string, ban bool, by string) error
+	// Exists reports whether the registry holds a worker with this id.
+	// Worker rows are never deleted, so an id found here is still there when
+	// the decision is written.
+	Exists(ctx context.Context, id string) (bool, error)
 }
 
 // withBans puts the ban set on ctx, for every relay call made under it: the
@@ -75,7 +80,7 @@ func (h *ClusterServiceHandler) withBansFrom(
 	}
 	bans, version, err := read(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.Unavailable, "cluster: cannot read the ban set: %v", err)
+		return nil, grpcerr.ReplaySafe(status.Errorf(codes.Unavailable, "cluster: cannot read the ban set: %v", err))
 	}
 	return withBanSet(ctx, bans, version, full), nil
 }
@@ -97,7 +102,7 @@ func (h *ClusterServiceHandler) CheckWorkers(
 	}
 	relays, err := h.Relays.ListEnabled(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.Unavailable, "cluster: cannot read the relay registry: %v", err)
+		return nil, grpcerr.ReplaySafe(status.Errorf(codes.Unavailable, "cluster: cannot read the relay registry: %v", err))
 	}
 
 	// Counted before and after rather than reported per row, because the
@@ -107,7 +112,7 @@ func (h *ClusterServiceHandler) CheckWorkers(
 	// simply discovers nothing.
 	before, err := h.Workers.EnrolledCount(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.Unavailable, "cluster: cannot count workers: %v", err)
+		return nil, grpcerr.ReplaySafe(status.Errorf(codes.Unavailable, "cluster: cannot count workers: %v", err))
 	}
 
 	var unreachable []string
@@ -229,8 +234,8 @@ func (h *ClusterServiceHandler) exchangeOne(ctx context.Context, r Relay) ([]rej
 			rejected = append(rejected, rejectedWorker{worker: w, err: err})
 		case refusedRelay:
 			// The registry refused the RELAY this worker would be filed
-			// under — its row is gone (deleted since the relay list was
-			// read), its id is not one the registry takes, or the fingerprint
+			// under — it has ended (DeleteRelay since the relay list was
+			// read, RELAY_ENDED), its id is not one the registry takes, or the fingerprint
 			// it computed is not in a shape the registry takes. Every other
 			// worker of this relay would be refused the same way, so it is
 			// this relay that failed, not each of its workers; skipping them
@@ -321,11 +326,11 @@ var relayLevelFields = []string{"relay_id", "cert_fingerprint"}
 // Only InvalidArgument and OutOfRange are about the request — a failed field
 // validation, a mapped constraint, a value the column cannot hold. Of those,
 // one whose detail names a field the RELAY supplies (relayLevelFields) is
-// about the relay, not the worker's claims: a relay_id foreign key or a
-// malformed id (today's schema has no foreign key on Worker.relay_id, so that
-// is defensive, but an operator would otherwise read every worker of a
-// vanished relay as individually refused), or a fingerprint the relay
-// computed in a shape the registry does not take — every worker of that relay
+// about the relay, not the worker's claims: RecordWorker's own refusal of a
+// relay that has ended since the relay list was read (RELAY_ENDED, on
+// relay_id), the relay_id foreign key, or a malformed id — an operator would
+// otherwise read every worker of an ended relay as individually refused — or
+// a fingerprint the relay computed in a shape the registry does not take — every worker of that relay
 // would be refused the same way. Everything else aborts.
 func classifyRecordError(err error) recordOutcome {
 	if err == nil {
@@ -409,7 +414,7 @@ func (h *ClusterServiceHandler) IssueRegistrationCode(
 		return nil, status.Errorf(codes.NotFound, "cluster: no relay %q is registered", req.GetIds()[0])
 	}
 	if err != nil {
-		return nil, status.Errorf(codes.Unavailable, "cluster: cannot read the relay registry: %v", err)
+		return nil, grpcerr.ReplaySafe(status.Errorf(codes.Unavailable, "cluster: cannot read the relay registry: %v", err))
 	}
 	conn, err := h.acquire(ctx, r)
 	if err != nil {

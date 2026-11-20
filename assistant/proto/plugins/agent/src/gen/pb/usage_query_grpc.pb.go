@@ -74,6 +74,14 @@ type UsageQueryClient interface {
 	// the report — and a run recorded as one row per turn, many of them small,
 	// could price at zero.
 	//
+	// A kind is priced only when the row USED it:
+	// `CASE WHEN <tokens> = 0 THEN 0 ELSE <tokens> * <rate> END`. A NULL rate
+	// means "this kind is not priced for this model" (a model with no cache, say),
+	// and `0 * NULL` is NULL in SQL — priced unconditionally, every row of such a
+	// model was unpriced although it spent nothing unpriced, and the limiter
+	// refused every call of a capped scope. A row is unpriced only when a kind it
+	// used has no rate (or no price applies at all).
+	//
 	// ⚠️ What was tried first and REVERTED: putting currency in the GROUP BY. An
 	// unpriced call has a NULL currency, so grouping on it splits every rollup that
 	// mixes priced and unpriced calls — the ordinary case, the one `priced_calls`
@@ -82,7 +90,7 @@ type UsageQueryClient interface {
 	GetScopeSpend(ctx context.Context, in *GetScopeSpendReq, opts ...grpc.CallOption) (*GetScopeSpendResp, error)
 	// Spend for one scope over a period, per LABEL VALUE of one key.
 	//
-	// The question GetScopeSpend cannot answer. "What did this tenant spend,
+	// The question GetScopeSpend cannot answer. "What did this organization spend,
 	// per model" is a bill; "what did THIS RUN cost, and who is it charged to"
 	// is attribution, and a consumer who cannot ask it keeps a second set of
 	// books beside this one. Two sets of books drift, and nobody notices for
@@ -211,6 +219,14 @@ type UsageQueryServer interface {
 	// the report — and a run recorded as one row per turn, many of them small,
 	// could price at zero.
 	//
+	// A kind is priced only when the row USED it:
+	// `CASE WHEN <tokens> = 0 THEN 0 ELSE <tokens> * <rate> END`. A NULL rate
+	// means "this kind is not priced for this model" (a model with no cache, say),
+	// and `0 * NULL` is NULL in SQL — priced unconditionally, every row of such a
+	// model was unpriced although it spent nothing unpriced, and the limiter
+	// refused every call of a capped scope. A row is unpriced only when a kind it
+	// used has no rate (or no price applies at all).
+	//
 	// ⚠️ What was tried first and REVERTED: putting currency in the GROUP BY. An
 	// unpriced call has a NULL currency, so grouping on it splits every rollup that
 	// mixes priced and unpriced calls — the ordinary case, the one `priced_calls`
@@ -219,7 +235,7 @@ type UsageQueryServer interface {
 	GetScopeSpend(context.Context, *GetScopeSpendReq) (*GetScopeSpendResp, error)
 	// Spend for one scope over a period, per LABEL VALUE of one key.
 	//
-	// The question GetScopeSpend cannot answer. "What did this tenant spend,
+	// The question GetScopeSpend cannot answer. "What did this organization spend,
 	// per model" is a bill; "what did THIS RUN cost, and who is it charged to"
 	// is attribution, and a consumer who cannot ask it keeps a second set of
 	// books beside this one. Two sets of books drift, and nobody notices for
@@ -398,4 +414,4 @@ var UsageQuery_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "queries/usage_query.proto",
 }
 
-// emit-sha256: c7ce1fb6fca2a6c669b4cf6706cbe8ece722a918ab3df871294e772af300b7d5
+// emit-sha256: 19a2b7424171270596807eaf8e7f91d6c309d9d37c0d8e7ed8febbf59a66f70e

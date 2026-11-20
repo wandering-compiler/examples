@@ -1,5 +1,5 @@
 name: auth
-version: 0.1.0-rc.61
+version: 0.1.0
 requires_w17: ">=1.18"
 
 # v3 — explicit Go module anchor. Staging text-rewrites every
@@ -8,7 +8,7 @@ requires_w17: ">=1.18"
 go_module: github.com/wandering-compiler/plugins/auth
 
 description: "Email + password authentication primitives + bearer tokens + RBAC. v3 plugin — proto + DQL primitives + authored Go business handlers (Authenticate, SignIn)."
-license: "Apache-2.0"
+license: "MIT"
 
 channels:
   - events

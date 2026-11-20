@@ -26,7 +26,15 @@ const (
 type ReserveTaskReq struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// As ScheduleTaskReq.label: words for an operator, never parsed.
-	Label         string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	Label string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	// engine is an opaque name of what the work needs the worker to run — for
+	// a codegen pool, the codegen engine's version. The pool never interprets
+	// it: it compares strings. A relay places the reservation only while an
+	// attached worker carries the engine (or carries no list at all, which an
+	// older worker sends), and the proxy refuses a call whose
+	// `w17-cluster-engine` header names another engine than this. Empty binds
+	// nothing, as before the field existed.
+	Engine        string `protobuf:"bytes,2,opt,name=engine,proto3" json:"engine,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -64,6 +72,13 @@ func (*ReserveTaskReq) Descriptor() ([]byte, []int) {
 func (x *ReserveTaskReq) GetLabel() string {
 	if x != nil {
 		return x.Label
+	}
+	return ""
+}
+
+func (x *ReserveTaskReq) GetEngine() string {
+	if x != nil {
+		return x.Engine
 	}
 	return ""
 }
@@ -1123,10 +1138,10 @@ func (x *IssueRegistrationCodeResp) GetRelayFingerprint() string {
 
 type ScheduleTaskReq struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Opaque caller-supplied label, shown to operators and recorded by the
-	// ledger when that feature is on. Never parsed — it exists so that a queue
-	// an operator is staring at during an incident has words in it instead of
-	// uuids.
+	// Opaque caller-supplied label. It is passed to the relay with the request
+	// and nothing reads or records it yet; never parsed. Kept so that a queue an
+	// operator inspects can carry words instead of uuids once something shows
+	// it.
 	Label string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
 	// Give up after this long without a slot. Zero means "wait as long as my own
 	// context allows", which is the common case: the caller already has a
@@ -1443,9 +1458,10 @@ var File_business_cluster_service_proto protoreflect.FileDescriptor
 
 const file_business_cluster_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1ebusiness/cluster_service.proto\x12\x13w17.contrib.cluster\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11w17/contrib.proto\x1a\x0fw17/field.proto\"3\n" +
+	"\x1ebusiness/cluster_service.proto\x12\x13w17.contrib.cluster\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11w17/contrib.proto\x1a\x0fw17/field.proto\"X\n" +
 	"\x0eReserveTaskReq\x12!\n" +
-	"\x05label\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x01R\x05label\"@\n" +
+	"\x05label\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x01R\x05label\x12#\n" +
+	"\x06engine\x18\x02 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x01R\x06engine\"@\n" +
 	"\x11GetReservationReq\x12+\n" +
 	"\vreservation\x18\x01 \x01(\tB\t\xca\xf3\x18\x05\bC@\xa0\x01R\vreservation\"C\n" +
 	"\x14CancelReservationReq\x12+\n" +
@@ -1648,4 +1664,4 @@ func file_business_cluster_service_proto_init() {
 	file_business_cluster_service_proto_depIdxs = nil
 }
 
-// emit-sha256: 54fc4436f50353ff9884dbdad54fe4d49c40fe47b065649c9c16840df0f4ba6e
+// emit-sha256: 03fdfc7e450bc875a89aed3d709799ebb3f9718758cf3f137faab286dba7fa12

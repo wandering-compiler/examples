@@ -244,6 +244,13 @@ type listening struct {
 //
 // A start that FAILS part-way stops whatever it had already started before
 // returning, so nothing keeps serving behind an error.
+// baseServerOptions are what the management and worker-attach servers start
+// from: the panic net, outermost, then the cluster keepalive. (The proxy gets
+// both through tunnel.ProxyServerOptions.)
+func baseServerOptions() []grpc.ServerOption {
+	return append(tunnel.RecoverServerOptions(), tunnel.ServerKeepalive()...)
+}
+
 func serve(cfg config, stop <-chan os.Signal, started func(listening)) (err error) {
 	var undo []func()
 	defer func() {
@@ -265,6 +272,14 @@ func serve(cfg config, stop <-chan os.Signal, started func(listening)) (err erro
 		if strings.TrimSpace(req.val) == "" {
 			return fmt.Errorf("%s is required", req.flag)
 		}
+	}
+	// A pin of the wrong shape can match no certificate: the relay used to
+	// start and refuse every control plane, which showed only as refused
+	// handshakes in the log. Upper case and surrounding space are normalised
+	// below; colons (openssl's -fingerprint form) and any other length are not.
+	if pin := strings.ToLower(strings.TrimSpace(cfg.controlPin)); !isSHA256Hex(pin) {
+		return fmt.Errorf("--control-plane-fingerprint %q is not a SHA-256 fingerprint: it must be 64 hex characters "+
+			"with no separators, as the control plane prints it", cfg.controlPin)
 	}
 
 	crt, err := relayIdentity(cfg)
@@ -353,11 +368,14 @@ func serve(cfg config, stop <-chan os.Signal, started func(listening)) (err erro
 		}
 		return nil
 	}
-	// Every server here takes tunnel.ServerKeepalive: it pings its peers on
-	// the cluster schedule and accepts their pings (lib/tunnel/keepalive.go).
-	// The management server also applies the ban set every control-plane call
-	// carries, before the call runs (relayserver.BanInterceptors).
-	mgmtOpts := append(tunnel.ServerKeepalive(), relayserver.BanServerOptions(workers)...)
+	// Every server here takes the panic net first (tunnel.RecoverServerOptions:
+	// one bad request must not end the process, and with it every queue,
+	// ticket and attached worker) and tunnel.ServerKeepalive: it pings its
+	// peers on the cluster schedule and accepts their pings
+	// (lib/tunnel/keepalive.go). The management server also applies the ban
+	// set every control-plane call carries, before the call runs
+	// (relayserver.BanInterceptors).
+	mgmtOpts := append(baseServerOptions(), relayserver.BanServerOptions(workers)...)
 	srv := grpc.NewServer(append(mgmtOpts, grpc.Creds(credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{crt},
 		MinVersion:   tls.VersionTLS13,
@@ -381,6 +399,11 @@ func serve(cfg config, stop <-chan os.Signal, started func(listening)) (err erro
 	// out its full complement of tickets and every caller found out at the
 	// proxy.
 	backends.OnCapacityChange(pool.SetCapacity)
+	// And per engine: a worker's slots count for the engines it announced
+	// (AttachReq.engines), so a reservation for one engine waits for a worker
+	// that runs it while reservations for others go ahead — one queue per
+	// engine on the one pool.
+	backends.OnEngineCapacityChange(pool.SetEngineCapacity)
 	// A tunnel whose certificate expired takes no new work; what is running
 	// on it gets as long as a drain would before the tunnel is closed.
 	backends.SetExpiryGrace(cfg.drainTimeout)
@@ -433,13 +456,12 @@ func serve(cfg config, stop <-chan os.Signal, started func(listening)) (err erro
 			// into an outage for every accepted one.
 			log.Printf("tunnel refused: %v", e)
 		})
-		if err != nil {
-			log.Printf("tunnel listener stopped: %v", err)
-		}
+		// ServeTunnels returns only when the listener fails, always with why.
+		log.Printf("tunnel listener stopped: %v", err)
 	}()
 
 	// The WORKER-ATTACH server: gRPC, worker TLS, its own port.
-	attachSrv := grpc.NewServer(append(tunnel.ServerKeepalive(), grpc.Creds(credentials.NewTLS(attachTLS)))...)
+	attachSrv := grpc.NewServer(append(baseServerOptions(), grpc.Creds(credentials.NewTLS(attachTLS)))...)
 	// Backends is handed over so a worker's declared slots and its readiness
 	// land where scheduling can see them. The attach stream and the tunnel are
 	// separate connections; this is where the two halves meet.
@@ -688,4 +710,18 @@ func logControlPlaneRefused(leaf []byte, want string) error {
 	err := controlPlaneRefused(leaf, want)
 	log.Print(err)
 	return err
+}
+
+// isSHA256Hex reports whether s is 64 lowercase hex characters, the form
+// relaydial.Fingerprint prints and a pin is compared in.
+func isSHA256Hex(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }

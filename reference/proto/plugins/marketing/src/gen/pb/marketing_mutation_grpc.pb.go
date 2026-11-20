@@ -51,10 +51,17 @@ type MarketingMutationClient interface {
 	// Gated brevo.
 	ForgetSentEventsBefore(ctx context.Context, in *ForgetSentEventsBeforeReq, opts ...grpc.CallOption) (*ForgetSentEventsBeforeResp, error)
 	// SetContactEmail — the user's last address, lower-cased by the caller.
-	// Gated brevo.
+	// A new row starts sent_blacklisted (see EnsureContact). Gated brevo.
 	SetContactEmail(ctx context.Context, in *SetContactEmailReq, opts ...grpc.CallOption) (*ContactWriteResp, error)
 	// EnsureContact — the user's row, created empty when there is none, so
 	// the conditional writes below have a row to hold back. Gated brevo.
+	//
+	// A new row starts sent_blacklisted: a contact the plugin has not
+	// subscribed is blacklisted as far as it knows — by its own writes, or by
+	// Brevo, which creates the contact of an event blacklisted. sent_blacklisted
+	// false then means only that the plugin subscribed the contact, so a
+	// blacklist Brevo answers over it is the person's unsubscribe, and one over
+	// a contact the plugin never subscribed is not.
 	EnsureContact(ctx context.Context, in *EnsureContactReq, opts ...grpc.CallOption) (*ContactWriteResp, error)
 	// SetContactConsent — the last consent auth announced and when it was
 	// decided, only when it is newer than the one kept: two deliveries at once
@@ -269,10 +276,17 @@ type MarketingMutationServer interface {
 	// Gated brevo.
 	ForgetSentEventsBefore(context.Context, *ForgetSentEventsBeforeReq) (*ForgetSentEventsBeforeResp, error)
 	// SetContactEmail — the user's last address, lower-cased by the caller.
-	// Gated brevo.
+	// A new row starts sent_blacklisted (see EnsureContact). Gated brevo.
 	SetContactEmail(context.Context, *SetContactEmailReq) (*ContactWriteResp, error)
 	// EnsureContact — the user's row, created empty when there is none, so
 	// the conditional writes below have a row to hold back. Gated brevo.
+	//
+	// A new row starts sent_blacklisted: a contact the plugin has not
+	// subscribed is blacklisted as far as it knows — by its own writes, or by
+	// Brevo, which creates the contact of an event blacklisted. sent_blacklisted
+	// false then means only that the plugin subscribed the contact, so a
+	// blacklist Brevo answers over it is the person's unsubscribe, and one over
+	// a contact the plugin never subscribed is not.
 	EnsureContact(context.Context, *EnsureContactReq) (*ContactWriteResp, error)
 	// SetContactConsent — the last consent auth announced and when it was
 	// decided, only when it is newer than the one kept: two deliveries at once
@@ -730,4 +744,4 @@ var MarketingMutation_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "mutations/marketing_mutation.proto",
 }
 
-// emit-sha256: 719afd80ff5c5d2a4e52e9a2c9fe8bd589dba727396e2b0e82a5b5ca489fc0fa
+// emit-sha256: c22772adf079f2e772fecf3756683ef777ee20b63214739f2b531530d7f625bf

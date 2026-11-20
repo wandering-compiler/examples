@@ -116,7 +116,8 @@ func (s *WorkerServer) Attach(
 	// the worker retries at its usual pace instead of backing off as banned.
 	if !s.Workers.HoldsBanSet() {
 		return refusal.New(codes.Unavailable, refusal.BanSetUnknown,
-			"relay: not admitting workers yet — this relay has not received the ban set since it started; retry shortly")
+			"relay: not admitting workers yet — this relay has not received the ban set since it started; "+
+				BanSetSource+"; retry shortly")
 	}
 	if !s.Workers.Admitted(id) {
 		// The message names the identity on purpose: a banned machine's
@@ -138,6 +139,11 @@ func (s *WorkerServer) Attach(
 	}
 	att := s.newAttachment(id, slots)
 	defer att.close()
+	// What the machine runs, as announced — before readiness, so it is never
+	// credited ready for work it would be picked for without its engines.
+	if att.b != nil {
+		att.b.SetEngines(att.fp, att.gen, req.GetEngines())
+	}
 	// The worker's OWN answer, as of the announcement. Taken from the
 	// announcement rather than waiting for a first status, so a machine that
 	// came up already draining is never briefly counted as ready.

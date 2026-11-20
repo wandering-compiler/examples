@@ -1692,10 +1692,10 @@ type Role struct {
 	OrgScoped bool `protobuf:"varint,11,opt,name=org_scoped,json=orgScoped,proto3" json:"org_scoped,omitempty"`
 	// deleted_at — when DeleteRole retired the role. NULL = live.
 	DeletedAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
-	// ended_key — ” while the row is live, the row's own id once it has ended
+	// ended_key — '' while the row is live, the row's own id once it has ended
 	// (here: deleted). It is part of the unique index over the row's natural
 	// key, so the ended row keeps every column and still frees that key for a
-	// new live row: every live row shares the one value ”, so two live rows
+	// new live row: every live row shares the one value '', so two live rows
 	// still collide, and every ended row carries a value of its own.
 	//
 	// The mechanism every auth table whose key must be reusable after a removal
@@ -2083,13 +2083,13 @@ type UserRole struct {
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// org_id — WHICH organization this grant applies in.
 	//
-	//	NULL — realm-wide. The role counts in every org context (staff /
-	//	       admin roles, and every role in a project that predates
-	//	       `org_membership`). This is what an unset column means, so
-	//	       existing rows keep behaving exactly as they do today.
-	//	set  — the grant exists only while that org is the request's
-	//	       ACTIVE org (Authenticate resolves it from the validated
-	//	       membership, never from client input).
+	//   NULL — realm-wide. The role counts in every org context (staff /
+	//          admin roles, and every role in a project that predates
+	//          `org_membership`). This is what an unset column means, so
+	//          existing rows keep behaving exactly as they do today.
+	//   set  — the grant exists only while that org is the request's
+	//          ACTIVE org (Authenticate resolves it from the validated
+	//          membership, never from client input).
 	//
 	// Two rows differing only in `role_id` for the same (user, org) is
 	// the ROLE-COMPOSITION shape — "accountant + worker" for someone who
@@ -2113,7 +2113,7 @@ type UserRole struct {
 	// the caller named nobody: an admin binding, a cascade, project code).
 	RevokedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
 	RevokedBy string                 `protobuf:"bytes,7,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
-	// ended_key — ” while live, the row's own id once revoked (Role.ended_key).
+	// ended_key — '' while live, the row's own id once revoked (Role.ended_key).
 	EndedKey      string `protobuf:"bytes,8,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3011,7 +3011,7 @@ type Organization struct {
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// deleted_at — when DeleteOrganization retired it. NULL = live.
 	DeletedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
-	// ended_key — ” while live, the row's own id once deleted (Role.ended_key).
+	// ended_key — '' while live, the row's own id once deleted (Role.ended_key).
 	EndedKey      string `protobuf:"bytes,8,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3123,7 +3123,7 @@ type OrgMembership struct {
 	// when nobody is known: an admin binding, an organization's deletion).
 	RemovedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
 	RemovedBy string                 `protobuf:"bytes,7,opt,name=removed_by,json=removedBy,proto3" json:"removed_by,omitempty"`
-	// ended_key — ” while live, the row's own id once removed (Role.ended_key).
+	// ended_key — '' while live, the row's own id once removed (Role.ended_key).
 	EndedKey      string `protobuf:"bytes,8,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3230,7 +3230,7 @@ type OrgHost struct {
 	BoundAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=bound_at,json=boundAt,proto3" json:"bound_at,omitempty"`
 	EndedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
 	EndedBy string                 `protobuf:"bytes,7,opt,name=ended_by,json=endedBy,proto3" json:"ended_by,omitempty"`
-	// ended_key — ” while live, the row's own id once unbound (Role.ended_key).
+	// ended_key — '' while live, the row's own id once unbound (Role.ended_key).
 	EndedKey      string `protobuf:"bytes,8,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3333,7 +3333,7 @@ type OrgSignUpPolicy struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	OrgId string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	// kind — the membership kind it is for (” without membership_kinds).
+	// kind — the membership kind it is for ('' without membership_kinds).
 	Kind string `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
 	// open — a registration of this kind joins without an invitation.
 	Open bool `protobuf:"varint,4,opt,name=open,proto3" json:"open,omitempty"`
@@ -3343,7 +3343,7 @@ type OrgSignUpPolicy struct {
 	SetAt   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=set_at,json=setAt,proto3" json:"set_at,omitempty"`
 	EndedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
 	EndedBy string                 `protobuf:"bytes,9,opt,name=ended_by,json=endedBy,proto3" json:"ended_by,omitempty"`
-	// ended_key — ” while live, the row's own id once replaced or cleared.
+	// ended_key — '' while live, the row's own id once replaced or cleared.
 	EndedKey string `protobuf:"bytes,10,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
 	// role_snapshot — the role as the operator setting an open policy was
 	// allowed to hand it out, in OrgInvite.role_snapshot's form
@@ -4046,4 +4046,4 @@ func file_types_models_proto_init() {
 	file_types_models_proto_depIdxs = nil
 }
 
-// emit-sha256: 965b42b7d3d2cabee846a3bd47178c8f7ce49bc19bda768944e2d3861b987286
+// emit-sha256: bc7060f6489708f386f1a8b17dad209e2bc8562634ecc184c29d9180fb77f886

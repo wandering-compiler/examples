@@ -1591,10 +1591,10 @@ type Role struct {
 	DisplayName string `protobuf:"bytes,10,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	// deleted_at — when DeleteRole retired the role. NULL = live.
 	DeletedAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
-	// ended_key — ” while the row is live, the row's own id once it has ended
+	// ended_key — '' while the row is live, the row's own id once it has ended
 	// (here: deleted). It is part of the unique index over the row's natural
 	// key, so the ended row keeps every column and still frees that key for a
-	// new live row: every live row shares the one value ”, so two live rows
+	// new live row: every live row shares the one value '', so two live rows
 	// still collide, and every ended row carries a value of its own.
 	//
 	// The mechanism every auth table whose key must be reusable after a removal
@@ -1970,7 +1970,7 @@ type UserRole struct {
 	// the caller named nobody: an admin binding, a cascade, project code).
 	RevokedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
 	RevokedBy string                 `protobuf:"bytes,7,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
-	// ended_key — ” while live, the row's own id once revoked (Role.ended_key).
+	// ended_key — '' while live, the row's own id once revoked (Role.ended_key).
 	EndedKey      string `protobuf:"bytes,8,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2464,4 +2464,4 @@ func file_types_models_proto_init() {
 	file_types_models_proto_depIdxs = nil
 }
 
-// emit-sha256: b887776e8b0fa88069a21336ed956ebd2ee021fe53ba992e73748b2f2aa4b79b
+// emit-sha256: dce62ff6602dba89f3bce7350f5320d49f753f90b624095afedb63663f26e478

@@ -89,6 +89,11 @@ type Config struct {
 	// load.
 	Slots uint32
 
+	// Engines names what this machine runs (AttachReq.engines) — for a codegen
+	// worker, its engine versions. A reservation naming an engine is sent only
+	// to a worker that lists it. Empty takes any work, as before engines.
+	Engines []string
+
 	// Readiness, if set, is consulted whenever the worker is asked whether it
 	// still wants work, and its answer is sent to the relay when it changes.
 	//
@@ -204,8 +209,7 @@ func Run(ctx context.Context, cfg Config, onState func(State)) error {
 		if err == nil {
 			break
 		}
-		if errors.Is(err, ErrNeedsRegistration) || errors.Is(err, ErrInvalidClaim) ||
-			refusal.ReasonOf(err) != "" || ctx.Err() != nil {
+		if enrolmentFinal(err) || ctx.Err() != nil {
 			return err
 		}
 		onState(Disconnected)
@@ -248,6 +252,17 @@ func Run(ctx context.Context, cfg Config, onState func(State)) error {
 	}
 }
 
+// enrolmentFinal reports whether an enrolment error is one no retry can fix:
+// no code, a claim the relay would refuse, or a reasoned refusal — except one
+// answered Unavailable (the relay holds no ban set yet), which the same code
+// gets past once a control plane has reached the relay.
+func enrolmentFinal(err error) bool {
+	if errors.Is(err, ErrNeedsRegistration) || errors.Is(err, ErrInvalidClaim) {
+		return true
+	}
+	return refusal.ReasonOf(err) != "" && status.Code(err) != codes.Unavailable
+}
+
 func attachOnce(ctx context.Context, cfg Config, onState func(State)) error {
 	conn, err := dialAttach(cfg, true)
 	if err != nil {
@@ -275,6 +290,7 @@ func attachOnce(ctx context.Context, cfg Config, onState func(State)) error {
 			DeviceId:  cfg.DeviceID,
 			Slots:     cfg.Slots,
 			Readiness: initial.proto(),
+			Engines:   cfg.Engines,
 		}},
 	}); err != nil {
 		return err

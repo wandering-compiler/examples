@@ -1,6 +1,6 @@
 name: cluster
-version: 0.1.0-rc.13
-requires_w17: ">=1.8"
+version: 0.1.0
+requires_w17: ">=1.17"
 
 # v3 — explicit Go module anchor. Staging text-rewrites every
 # occurrence of this prefix in handlers/ + lib/ source to the
@@ -8,7 +8,7 @@ requires_w17: ">=1.8"
 go_module: github.com/wandering-compiler/plugins/cluster
 
 description: "Control plane for a pool of relays that place work on workers the control plane never talks to. Registers relays, picks one, and hands the caller an address and a single-use ticket. Deliberately knows NOTHING about what the workers do — activate it as `codegen` for compile workers, as `browser` for headless-browser workers, and the same plugin serves both."
-license: "Apache-2.0"
+license: "MIT"
 
 # The plugin is activated ONCE PER POOL, under the name of that pool:
 #
@@ -20,6 +20,13 @@ license: "Apache-2.0"
 # anywhere in this plugin: the pool IS the activation. A type enum would have
 # had to enumerate every consumer's workload in the plugin's own proto, which
 # no consumer could extend without forking it.
+#
+# WHERE IT RUNS: the plugin is staged into the domain's STORAGE bundle
+# (`<domain>-storage`). ClusterService — IssueRegistrationCode, CheckWorkers,
+# BanWorkers, … — is served there, and the env below is read there: set
+# client_cert_path / client_key_path on the storage service. The business
+# bundle does not serve it; a call there answers `Unimplemented: unknown
+# service …ClusterService`.
 
 env:
   - name: client_cert_path
@@ -45,13 +52,24 @@ env:
 # Dev-only sandbox: a relay next to the generated stack, so the pool can be
 # tried by hand without standing one up somewhere. Wired into the project's
 # tool-owned `compose.w17.yaml` and NOWHERE else — w17 never ships a sandbox to
-# production, which is right here: in production a relay lives OUTSIDE the
-# project's network, because it is what the workers reach.
+# production. Production runs the same relay binary from the `deploy:` block
+# below: a w17 deploy target builds cmd/relay into its own image and mints
+# every identity at deploy time; a hand-written stack builds this sandbox's
+# Dockerfile (same binary) and does the ceremony itself — see SPEC.md,
+# "Running the relay in production".
 #
-# Build the image from the plugin directory (it shares the plugin's Go module,
-# so the relay and the handlers carry one copy of the contract):
+# The image is built from the plugin directory (it shares the plugin's Go
+# module, so the relay and the handlers carry one copy of the contract), and
+# no registry publishes it. In a project, `build:` below makes compose.w17.yaml
+# build it from the vendored plugin — `w17ctl stack build`, `stack up --build`,
+# or the first `stack up` that finds no image. The build needs the plugin's
+# generated pb (src/gen/pb), which `w17ctl codegen` writes into the vendored
+# plugin, so codegen comes first, as it does for everything the stack runs.
+# From a clone of github.com/wandering-compiler/plugins, where src/gen is never
+# committed, generate it first:
+#   w17ctl plugin gen-pb cluster
 #   docker build -f cluster/sandboxes/relay/Dockerfile \
-#     -t ${W17_WORKSPACE:-w17}-w17-cluster-relay:dev cluster   (from a clone of github.com/wandering-compiler/plugins)
+#     -t ${W17_WORKSPACE:-w17}-w17-cluster-relay:dev cluster
 #
 # ⚠️ IT MINTS ITS OWN IDENTITY AND PRINTS THE FINGERPRINT AT STARTUP. Read it
 # out of the container log and paste it into the relay's row — the same
@@ -74,6 +92,11 @@ sandboxes:
   - name: clusterrelay
     description: "Dev-only relay for the cluster pool — mints its own identity and prints the fingerprint to paste into its registry row."
     image: ${W17_WORKSPACE:-w17}-w17-cluster-relay:dev
+    # Plugin-relative: the context is the plugin root (the relay builds from
+    # src/), the Dockerfile sits beside the sandbox's other files.
+    build:
+      context: .
+      dockerfile: sandboxes/relay/Dockerfile
     # FOUR listeners, and the split is not arbitrary — each has a different
     # audience and therefore a different rule about who may complete a
     # handshake:
@@ -102,7 +125,7 @@ sandboxes:
         description: "OPTIONAL ceiling on tasks running here at once; 0 (the default) means the relay carries whatever its attached workers add up to. A worker reports its own slot count when it attaches, because how many sessions a machine holds is a property of the machine. Set this only to cap a relay BELOW its fleet — a shared box, or a bandwidth limit. It used to be the capacity itself, which meant a relay with no workers cheerfully granted two tickets and both callers failed at the proxy."
       - name: RELAY_CONTROL_PLANE_FINGERPRINT
         value: ""
-        description: "REQUIRED, and deliberately empty: the relay refuses to start without it. Set it to the fingerprint of the client certificate this project's control plane presents (OPS_CLUSTER_CLIENT_CERT_PATH). Nothing else may manage this relay."
+        description: "REQUIRED, and deliberately empty: the relay refuses to start without it. Set it to the fingerprint of the client certificate this project's control plane presents (client_cert_path on the storage service: <DOMAIN>_<ACTIVATION>_CLIENT_CERT_PATH, e.g. APP_CODEGEN_CLIENT_CERT_PATH). Nothing else may manage this relay."
 
 # Production: what this plugin runs beside a project, and the ceremony a deploy
 # performs for it. The building blocks only — the PROJECT decides whether an
@@ -141,6 +164,9 @@ deploy:
       description: "One worker of the pool, enrolled with this relay at deploy time. Its image is the project's: whatever the pool runs."
       adopter: true
       state: /var/lib/worker
+      # The worker reads these with workerconn.ConfigFromEnv(activation) — the
+      # library and this block name the same variables, and a test holds them
+      # together. A worker that reads names of its own does not start here.
       env:
         - { name: "W17_{ACTIVATION}_RELAY_ATTACH", value: "{address:relay.attach}" }
         - { name: "W17_{ACTIVATION}_RELAY_TUNNEL", value: "{address:relay.tunnels}" }
@@ -170,18 +196,22 @@ deploy:
       image_of: relay
       reads: [relay]
       args: [issue-worker, --ca-cert, "{dir:relay}/ca.crt", --ca-key, "{dir:relay}/ca.key", --out, "{dir}", --name, "{env}-worker-1"]
-  # The relay of this machine is the row `local`, addressed by its internal
-  # name and pinned to the certificate minted above; a re-mint follows it.
+  # The relay of this machine is the LIVE row `local`, addressed by its
+  # internal name and pinned to the certificate minted above; a re-mint
+  # follows it. The conflict target is the unique index over (name,
+  # ended_key): ended_key is '' on every live row, so the upsert finds the live
+  # `local` and never an ended one.
   register:
     sql: >-
-      INSERT INTO {activation}_relay (name, url, cert_fingerprint, enabled)
-      VALUES ('local', '{address:relay.management}', '{fingerprint:relay}', true)
-      ON CONFLICT (name) DO UPDATE SET url = EXCLUDED.url, cert_fingerprint = EXCLUDED.cert_fingerprint
-    # When an environment stops deploying the relay, its row goes too: left
-    # behind, enabled, every placement would pay a dial timeout on it first.
-    # Nothing references a relay by key (a worker's relay_id is a location it
-    # refreshes), and deploying it again inserts the row anew.
-    unregister_sql: "DELETE FROM {activation}_relay WHERE name = 'local'"
+      INSERT INTO {activation}_relay (name, url, cert_fingerprint, enabled, ended_key)
+      VALUES ('local', '{address:relay.management}', '{fingerprint:relay}', true, '')
+      ON CONFLICT (name, ended_key) DO UPDATE SET url = EXCLUDED.url, cert_fingerprint = EXCLUDED.cert_fingerprint
+    # When an environment stops deploying the relay, its row is ENDED, as
+    # DeleteRelay ends one: left live and enabled, every placement would pay a
+    # dial timeout on it first. Never deleted — the plugin deletes no row, and
+    # the workers recorded under it reference it (Worker.relay_id, ON DELETE
+    # RESTRICT). Deploying it again inserts a new live `local`.
+    unregister_sql: "UPDATE {activation}_relay SET removed_at = CURRENT_TIMESTAMP, ended_key = CAST(id AS TEXT) WHERE name = 'local' AND removed_at IS NULL"
 
 presets:
   admin:

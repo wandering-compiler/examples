@@ -108,7 +108,9 @@ type ClusterServiceClient interface {
 	// Answered by the PROJECT. The new set is delivered to every registered
 	// relay at once, and again every few minutes to any it missed; a relay
 	// applying a ban closes the banned workers' tunnels, ending their running
-	// work (WORKER_LOST), and refuses their attach, tunnel and renewal.
+	// work (WORKER_LOST), and refuses their attach, tunnel and renewal. Every
+	// id is resolved first: one the registry does not hold refuses the whole
+	// selection (NOT_FOUND, naming it) and nothing is decided.
 	BanWorkers(ctx context.Context, in *DecideWorkersActionReq, opts ...grpc.CallOption) (*DecideWorkersActionResp, error)
 	UnbanWorkers(ctx context.Context, in *DecideWorkersActionReq, opts ...grpc.CallOption) (*DecideWorkersActionResp, error)
 	// RelayStats is answered by a RELAY: what it is carrying right now. The
@@ -344,7 +346,9 @@ type ClusterServiceServer interface {
 	// Answered by the PROJECT. The new set is delivered to every registered
 	// relay at once, and again every few minutes to any it missed; a relay
 	// applying a ban closes the banned workers' tunnels, ending their running
-	// work (WORKER_LOST), and refuses their attach, tunnel and renewal.
+	// work (WORKER_LOST), and refuses their attach, tunnel and renewal. Every
+	// id is resolved first: one the registry does not hold refuses the whole
+	// selection (NOT_FOUND, naming it) and nothing is decided.
 	BanWorkers(context.Context, *DecideWorkersActionReq) (*DecideWorkersActionResp, error)
 	UnbanWorkers(context.Context, *DecideWorkersActionReq) (*DecideWorkersActionResp, error)
 	// RelayStats is answered by a RELAY: what it is carrying right now. The
@@ -686,4 +690,4 @@ var ClusterService_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "business/cluster_service.proto",
 }
 
-// emit-sha256: 43fed35a196f88c982c28e11ffc3f268a4498cd6962fdbd5781b8da48b062456
+// emit-sha256: 68e5124ffd6dfa196b4f498290a45df217967dad66bfab06938a298d55cd7382
