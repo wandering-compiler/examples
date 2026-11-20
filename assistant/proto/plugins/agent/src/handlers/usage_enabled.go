@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 
-	gen "github.com/wandering-compiler/plugins/agent/gen"
 	pb "github.com/wandering-compiler/plugins/agent/gen/pb"
 	"github.com/wandering-compiler/plugins/agent/lib/usage"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -20,12 +19,11 @@ import (
 // handlers/usage.go refuses to boot when the activation says the feature is
 // on and the sink is still the no-op.
 func init() {
-	newUsageSink = func(clients gen.ClientSet) UsageSink {
-		// The bundle's ClientSet gains UsageMutation() only when this feature
-		// is active, so the author-side ClientSet interface cannot require it
-		// — a plugin compiled with the feature off would stop satisfying its
-		// own contract. Asserting here is safe precisely because this file is
-		// staged only in the activation that has the method.
+	newUsageSink = func(clients any) UsageSink {
+		// The generated ClientSet has UsageMutation() only when this feature
+		// is active — the usage tables exist only then — so the signature
+		// cannot require it. Asserting here is safe precisely because this
+		// file is staged only in the activation that has the method.
 		uc, ok := clients.(interface {
 			UsageMutation() pb.UsageMutationClient
 		})
@@ -79,7 +77,7 @@ type dbFlusher struct {
 	mut pb.UsageMutationClient
 
 	// Ids are stable for the life of a row, so a resolved one is cached. The
-	// cache is what keeps a steady stream of calls from the same tenant on the
+	// cache is what keeps a steady stream of calls from the same organization on the
 	// same model down to ONE insert per call rather than three.
 	//
 	// Bounded (idCache): every key here is the caller's, and a label carrying
@@ -93,7 +91,7 @@ type dbFlusher struct {
 // Flush records every event it CAN, and reports the ones it could not.
 //
 // It used to return at the first failure, which dropped the rest of the batch
-// unwritten — and a batch is up to 64 calls from every tenant the process
+// unwritten — and a batch is up to 64 calls from every organization the process
 // served. One caller's scope longer than the column allows, one model id the
 // table refuses, sank the spend of everybody queued behind it, and the writer
 // then counted the whole batch as lost, including the rows that HAD landed.

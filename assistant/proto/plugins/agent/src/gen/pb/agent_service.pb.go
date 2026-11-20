@@ -95,7 +95,7 @@ type CompleteReq struct {
 	// the QUESTION — the same model answers prose one minute and a record the
 	// next.
 	ResponseFormat ResponseFormat `protobuf:"varint,4,opt,name=response_format,json=responseFormat,proto3,enum=w17.contrib.agent.ResponseFormat" json:"response_format,omitempty"`
-	// Who the spend is charged to, in the CALLER's own vocabulary — a tenant
+	// Who the spend is charged to, in the CALLER's own vocabulary — an organization
 	// id, in every case we know of. The plugin never parses it. At most 128
 	// characters and no NUL; a longer scope, or one with a NUL, is refused with
 	// InvalidArgument before the model is called, in every activation.
@@ -111,7 +111,10 @@ type CompleteReq struct {
 	//
 	// Keys are at most 64 characters and values at most 256, neither with a
 	// NUL; any other is refused with InvalidArgument before the model is called.
-	UsageLabels   map[string]string `protobuf:"bytes,6,rep,name=usage_labels,json=usageLabels,proto3" json:"usage_labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	UsageLabels map[string]string `protobuf:"bytes,6,rep,name=usage_labels,json=usageLabels,proto3" json:"usage_labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// How the answer's final text is cleaned (FinalText); unset keeps the
+	// activation's filters.
+	FinalText     *FinalText `protobuf:"bytes,7,opt,name=final_text,json=finalText,proto3" json:"final_text,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -188,11 +191,19 @@ func (x *CompleteReq) GetUsageLabels() map[string]string {
 	return nil
 }
 
+func (x *CompleteReq) GetFinalText() *FinalText {
+	if x != nil {
+		return x.FinalText
+	}
+	return nil
+}
+
 type CompleteResp struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// What the model said. May be non-empty even when the response is
 	// INCOMPLETE — a truncated answer is still an answer, and the caller decides
-	// whether to keep it. Read `status` before showing it.
+	// whether to keep it. Read `status` before showing it. Cleaned by the
+	// activation's final-text filters (FinalText), when it has any.
 	Text string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
 	// How it ended, and the detail beneath that. Checking these is not optional:
 	// a caller that ignores them cannot tell a finished answer from one the
@@ -397,11 +408,217 @@ func (x *TextDelta) GetText() string {
 	return ""
 }
 
+// FinalText is a call's say over the filters that clean the final text — the
+// one a caller keeps (CompleteResp.text, Finished.text); the deltas are never
+// filtered, so a stream stays as fast as the model. The filters themselves are
+// the activation's: `final_text_scripts` drops the letters of every Unicode
+// script the activation does not allow (`<DOMAIN>_AGENT_ALLOWED_SCRIPTS`,
+// default Latin) — a token in Thai a model leaked into a Czech answer —
+// and `final_text_invisible` drops control and invisible characters
+// (zero-width spaces, bidi overrides, U+FFFD). A filter only removes; it never
+// writes text of its own.
+// TextFilterReq is what the plugin sends a project's own final-text filter —
+// a method the activation binds to the `text_filter` hook (plugin.yaml
+// hooks; PluginActivation.hooks): a business method of the domain taking
+// this message and returning TextFilterResp. The filters bound run in order,
+// after the built-in ones, each on the previous one's text.
+type TextFilterReq struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The final text as the filters before this one left it.
+	Text string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	// The plugin method that produced it: Complete, CompleteStream or RunAgent.
+	Method string `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
+	// The model that wrote it (ModelSpec.id, or the activation's default).
+	Model string `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
+	// The call's usage scope and labels, as the caller sent them.
+	UsageScope    string            `protobuf:"bytes,4,opt,name=usage_scope,json=usageScope,proto3" json:"usage_scope,omitempty"`
+	UsageLabels   map[string]string `protobuf:"bytes,5,rep,name=usage_labels,json=usageLabels,proto3" json:"usage_labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TextFilterReq) Reset() {
+	*x = TextFilterReq{}
+	mi := &file_business_agent_service_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TextFilterReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TextFilterReq) ProtoMessage() {}
+
+func (x *TextFilterReq) ProtoReflect() protoreflect.Message {
+	mi := &file_business_agent_service_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TextFilterReq.ProtoReflect.Descriptor instead.
+func (*TextFilterReq) Descriptor() ([]byte, []int) {
+	return file_business_agent_service_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *TextFilterReq) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *TextFilterReq) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *TextFilterReq) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *TextFilterReq) GetUsageScope() string {
+	if x != nil {
+		return x.UsageScope
+	}
+	return ""
+}
+
+func (x *TextFilterReq) GetUsageLabels() map[string]string {
+	if x != nil {
+		return x.UsageLabels
+	}
+	return nil
+}
+
+// TextFilterResp is a project filter's answer: the text that replaces the
+// final text (return the request's text to leave it as it was). A filter
+// that fails or does not answer within the activation's
+// `text_filter_timeout_seconds` is skipped, and logged: the answer the
+// model wrote, and was paid for, still reaches the caller.
+type TextFilterResp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TextFilterResp) Reset() {
+	*x = TextFilterResp{}
+	mi := &file_business_agent_service_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TextFilterResp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TextFilterResp) ProtoMessage() {}
+
+func (x *TextFilterResp) ProtoReflect() protoreflect.Message {
+	mi := &file_business_agent_service_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TextFilterResp.ProtoReflect.Descriptor instead.
+func (*TextFilterResp) Descriptor() ([]byte, []int) {
+	return file_business_agent_service_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *TextFilterResp) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+type FinalText struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The scripts this call allows instead of the activation's (Go's Unicode
+	// script names: Latin, Cyrillic, Greek, Han, Thai, …; case-insensitive) —
+	// an answer that has to be in another language. Common (digits,
+	// punctuation, emoji) and Inherited (combining marks) are always allowed.
+	// Refused (InvalidArgument) when a name is unknown, and (FailedPrecondition)
+	// when the activation does not filter scripts.
+	AllowedScripts []string `protobuf:"bytes,1,rep,name=allowed_scripts,json=allowedScripts,proto3" json:"allowed_scripts,omitempty"`
+	// No filter for this call — built-in or the project's own (the
+	// `text_filter` hook): the final text is the deltas, as without filters.
+	Raw           bool `protobuf:"varint,2,opt,name=raw,proto3" json:"raw,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FinalText) Reset() {
+	*x = FinalText{}
+	mi := &file_business_agent_service_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FinalText) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FinalText) ProtoMessage() {}
+
+func (x *FinalText) ProtoReflect() protoreflect.Message {
+	mi := &file_business_agent_service_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FinalText.ProtoReflect.Descriptor instead.
+func (*FinalText) Descriptor() ([]byte, []int) {
+	return file_business_agent_service_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *FinalText) GetAllowedScripts() []string {
+	if x != nil {
+		return x.AllowedScripts
+	}
+	return nil
+}
+
+func (x *FinalText) GetRaw() bool {
+	if x != nil {
+		return x.Raw
+	}
+	return false
+}
+
 type Finished struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The whole answer: every delta concatenated, and what the reader was
-	// actually shown. Present so a consumer who only persists the final text does
-	// not have to accumulate the deltas themselves.
+	// actually shown — then cleaned by the activation's final-text filters
+	// (FinalText), when it has any. A consumer that shows the deltas as they
+	// come replaces them with this text at the end; one that only persists the
+	// final text does not have to accumulate the deltas itself. Without
+	// filters it is exactly the deltas.
 	Text             string           `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
 	Status           Status           `protobuf:"varint,2,opt,name=status,proto3,enum=w17.contrib.agent.Status" json:"status,omitempty"`
 	IncompleteReason IncompleteReason `protobuf:"varint,3,opt,name=incomplete_reason,json=incompleteReason,proto3,enum=w17.contrib.agent.IncompleteReason" json:"incomplete_reason,omitempty"`
@@ -420,7 +637,7 @@ type Finished struct {
 
 func (x *Finished) Reset() {
 	*x = Finished{}
-	mi := &file_business_agent_service_proto_msgTypes[4]
+	mi := &file_business_agent_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -432,7 +649,7 @@ func (x *Finished) String() string {
 func (*Finished) ProtoMessage() {}
 
 func (x *Finished) ProtoReflect() protoreflect.Message {
-	mi := &file_business_agent_service_proto_msgTypes[4]
+	mi := &file_business_agent_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -445,7 +662,7 @@ func (x *Finished) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Finished.ProtoReflect.Descriptor instead.
 func (*Finished) Descriptor() ([]byte, []int) {
-	return file_business_agent_service_proto_rawDescGZIP(), []int{4}
+	return file_business_agent_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Finished) GetText() string {
@@ -515,7 +732,7 @@ type ToolSpec struct {
 
 func (x *ToolSpec) Reset() {
 	*x = ToolSpec{}
-	mi := &file_business_agent_service_proto_msgTypes[5]
+	mi := &file_business_agent_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -527,7 +744,7 @@ func (x *ToolSpec) String() string {
 func (*ToolSpec) ProtoMessage() {}
 
 func (x *ToolSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_business_agent_service_proto_msgTypes[5]
+	mi := &file_business_agent_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -540,7 +757,7 @@ func (x *ToolSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolSpec.ProtoReflect.Descriptor instead.
 func (*ToolSpec) Descriptor() ([]byte, []int) {
-	return file_business_agent_service_proto_rawDescGZIP(), []int{5}
+	return file_business_agent_service_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ToolSpec) GetName() string {
@@ -589,6 +806,8 @@ type Limits struct {
 	// work against YOUR database: untrusted text reaches the model, and a model
 	// told to "look up three hundred places" emits three hundred calls in one
 	// round. max_parallel bounds how many run at once — not how many run.
+	// Only calls to a declared tool count: one to a name the model invented is
+	// answered "no such tool" without running, and spends nothing.
 	MaxToolCalls int32 `protobuf:"varint,2,opt,name=max_tool_calls,json=maxToolCalls,proto3" json:"max_tool_calls,omitempty"`
 	// How many read-only calls run at once.
 	MaxParallel int32 `protobuf:"varint,3,opt,name=max_parallel,json=maxParallel,proto3" json:"max_parallel,omitempty"`
@@ -604,7 +823,7 @@ type Limits struct {
 
 func (x *Limits) Reset() {
 	*x = Limits{}
-	mi := &file_business_agent_service_proto_msgTypes[6]
+	mi := &file_business_agent_service_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -616,7 +835,7 @@ func (x *Limits) String() string {
 func (*Limits) ProtoMessage() {}
 
 func (x *Limits) ProtoReflect() protoreflect.Message {
-	mi := &file_business_agent_service_proto_msgTypes[6]
+	mi := &file_business_agent_service_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -629,7 +848,7 @@ func (x *Limits) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Limits.ProtoReflect.Descriptor instead.
 func (*Limits) Descriptor() ([]byte, []int) {
-	return file_business_agent_service_proto_rawDescGZIP(), []int{6}
+	return file_business_agent_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Limits) GetMaxTurns() int32 {
@@ -673,7 +892,7 @@ type RunAgentReq struct {
 
 func (x *RunAgentReq) Reset() {
 	*x = RunAgentReq{}
-	mi := &file_business_agent_service_proto_msgTypes[7]
+	mi := &file_business_agent_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -685,7 +904,7 @@ func (x *RunAgentReq) String() string {
 func (*RunAgentReq) ProtoMessage() {}
 
 func (x *RunAgentReq) ProtoReflect() protoreflect.Message {
-	mi := &file_business_agent_service_proto_msgTypes[7]
+	mi := &file_business_agent_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -698,7 +917,7 @@ func (x *RunAgentReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunAgentReq.ProtoReflect.Descriptor instead.
 func (*RunAgentReq) Descriptor() ([]byte, []int) {
-	return file_business_agent_service_proto_rawDescGZIP(), []int{7}
+	return file_business_agent_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RunAgentReq) GetMsg() isRunAgentReq_Msg {
@@ -763,7 +982,7 @@ type ToolCall struct {
 
 func (x *ToolCall) Reset() {
 	*x = ToolCall{}
-	mi := &file_business_agent_service_proto_msgTypes[8]
+	mi := &file_business_agent_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -775,7 +994,7 @@ func (x *ToolCall) String() string {
 func (*ToolCall) ProtoMessage() {}
 
 func (x *ToolCall) ProtoReflect() protoreflect.Message {
-	mi := &file_business_agent_service_proto_msgTypes[8]
+	mi := &file_business_agent_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -788,7 +1007,7 @@ func (x *ToolCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolCall.ProtoReflect.Descriptor instead.
 func (*ToolCall) Descriptor() ([]byte, []int) {
-	return file_business_agent_service_proto_rawDescGZIP(), []int{8}
+	return file_business_agent_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ToolCall) GetCallId() string {
@@ -834,7 +1053,7 @@ type Activity struct {
 
 func (x *Activity) Reset() {
 	*x = Activity{}
-	mi := &file_business_agent_service_proto_msgTypes[9]
+	mi := &file_business_agent_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -846,7 +1065,7 @@ func (x *Activity) String() string {
 func (*Activity) ProtoMessage() {}
 
 func (x *Activity) ProtoReflect() protoreflect.Message {
-	mi := &file_business_agent_service_proto_msgTypes[9]
+	mi := &file_business_agent_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -859,7 +1078,7 @@ func (x *Activity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Activity.ProtoReflect.Descriptor instead.
 func (*Activity) Descriptor() ([]byte, []int) {
-	return file_business_agent_service_proto_rawDescGZIP(), []int{9}
+	return file_business_agent_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Activity) GetActivityId() string {
@@ -912,7 +1131,7 @@ type RunAgentEvent struct {
 
 func (x *RunAgentEvent) Reset() {
 	*x = RunAgentEvent{}
-	mi := &file_business_agent_service_proto_msgTypes[10]
+	mi := &file_business_agent_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -924,7 +1143,7 @@ func (x *RunAgentEvent) String() string {
 func (*RunAgentEvent) ProtoMessage() {}
 
 func (x *RunAgentEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_business_agent_service_proto_msgTypes[10]
+	mi := &file_business_agent_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -937,7 +1156,7 @@ func (x *RunAgentEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunAgentEvent.ProtoReflect.Descriptor instead.
 func (*RunAgentEvent) Descriptor() ([]byte, []int) {
-	return file_business_agent_service_proto_rawDescGZIP(), []int{10}
+	return file_business_agent_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RunAgentEvent) GetEvent() isRunAgentEvent_Event {
@@ -1028,15 +1247,18 @@ type RunAgentReq_Start struct {
 	// that can be summed by label into "what did this run cost" without ever
 	// having to be split back apart. Each row is priced at the time its own
 	// turn ran; a turn that never reached the provider writes none.
-	UsageScope    string            `protobuf:"bytes,6,opt,name=usage_scope,json=usageScope,proto3" json:"usage_scope,omitempty"`
-	UsageLabels   map[string]string `protobuf:"bytes,7,rep,name=usage_labels,json=usageLabels,proto3" json:"usage_labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	UsageScope  string            `protobuf:"bytes,6,opt,name=usage_scope,json=usageScope,proto3" json:"usage_scope,omitempty"`
+	UsageLabels map[string]string `protobuf:"bytes,7,rep,name=usage_labels,json=usageLabels,proto3" json:"usage_labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// How Finished.text is cleaned (FinalText); unset keeps the
+	// activation's filters.
+	FinalText     *FinalText `protobuf:"bytes,8,opt,name=final_text,json=finalText,proto3" json:"final_text,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RunAgentReq_Start) Reset() {
 	*x = RunAgentReq_Start{}
-	mi := &file_business_agent_service_proto_msgTypes[12]
+	mi := &file_business_agent_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1048,7 +1270,7 @@ func (x *RunAgentReq_Start) String() string {
 func (*RunAgentReq_Start) ProtoMessage() {}
 
 func (x *RunAgentReq_Start) ProtoReflect() protoreflect.Message {
-	mi := &file_business_agent_service_proto_msgTypes[12]
+	mi := &file_business_agent_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1061,7 +1283,7 @@ func (x *RunAgentReq_Start) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunAgentReq_Start.ProtoReflect.Descriptor instead.
 func (*RunAgentReq_Start) Descriptor() ([]byte, []int) {
-	return file_business_agent_service_proto_rawDescGZIP(), []int{7, 0}
+	return file_business_agent_service_proto_rawDescGZIP(), []int{10, 0}
 }
 
 func (x *RunAgentReq_Start) GetModel() *ModelSpec {
@@ -1113,6 +1335,13 @@ func (x *RunAgentReq_Start) GetUsageLabels() map[string]string {
 	return nil
 }
 
+func (x *RunAgentReq_Start) GetFinalText() *FinalText {
+	if x != nil {
+		return x.FinalText
+	}
+	return nil
+}
+
 // ToolResult answers exactly one ToolCall, by its id.
 type RunAgentReq_ToolResult struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
@@ -1131,7 +1360,7 @@ type RunAgentReq_ToolResult struct {
 
 func (x *RunAgentReq_ToolResult) Reset() {
 	*x = RunAgentReq_ToolResult{}
-	mi := &file_business_agent_service_proto_msgTypes[13]
+	mi := &file_business_agent_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1143,7 +1372,7 @@ func (x *RunAgentReq_ToolResult) String() string {
 func (*RunAgentReq_ToolResult) ProtoMessage() {}
 
 func (x *RunAgentReq_ToolResult) ProtoReflect() protoreflect.Message {
-	mi := &file_business_agent_service_proto_msgTypes[13]
+	mi := &file_business_agent_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1156,7 +1385,7 @@ func (x *RunAgentReq_ToolResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunAgentReq_ToolResult.ProtoReflect.Descriptor instead.
 func (*RunAgentReq_ToolResult) Descriptor() ([]byte, []int) {
-	return file_business_agent_service_proto_rawDescGZIP(), []int{7, 1}
+	return file_business_agent_service_proto_rawDescGZIP(), []int{10, 1}
 }
 
 func (x *RunAgentReq_ToolResult) GetCallId() string {
@@ -1184,7 +1413,7 @@ var File_business_agent_service_proto protoreflect.FileDescriptor
 
 const file_business_agent_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1cbusiness/agent_service.proto\x12\x11w17.contrib.agent\x1a\x12types/models.proto\x1a\x11w17/contrib.proto\"\x9e\x03\n" +
+	"\x1cbusiness/agent_service.proto\x12\x11w17.contrib.agent\x1a\x12types/models.proto\x1a\x11w17/contrib.proto\"\xdb\x03\n" +
 	"\vCompleteReq\x122\n" +
 	"\x05model\x18\x01 \x01(\v2\x1c.w17.contrib.agent.ModelSpecR\x05model\x12\"\n" +
 	"\finstructions\x18\x02 \x01(\tR\finstructions\x126\n" +
@@ -1192,7 +1421,9 @@ const file_business_agent_service_proto_rawDesc = "" +
 	"\x0fresponse_format\x18\x04 \x01(\x0e2!.w17.contrib.agent.ResponseFormatR\x0eresponseFormat\x12\x1f\n" +
 	"\vusage_scope\x18\x05 \x01(\tR\n" +
 	"usageScope\x12R\n" +
-	"\fusage_labels\x18\x06 \x03(\v2/.w17.contrib.agent.CompleteReq.UsageLabelsEntryR\vusageLabels\x1a>\n" +
+	"\fusage_labels\x18\x06 \x03(\v2/.w17.contrib.agent.CompleteReq.UsageLabelsEntryR\vusageLabels\x12;\n" +
+	"\n" +
+	"final_text\x18\a \x01(\v2\x1c.w17.contrib.agent.FinalTextR\tfinalText\x1a>\n" +
 	"\x10UsageLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xdc\x01\n" +
@@ -1206,7 +1437,22 @@ const file_business_agent_service_proto_rawDesc = "" +
 	"\bfinished\x18\x02 \x01(\v2\x1b.w17.contrib.agent.FinishedH\x00R\bfinishedB\a\n" +
 	"\x05event\"\x1f\n" +
 	"\tTextDelta\x12\x12\n" +
-	"\x04text\x18\x01 \x01(\tR\x04text\"\x85\x02\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\"\x88\x02\n" +
+	"\rTextFilterReq\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\x12\x16\n" +
+	"\x06method\x18\x02 \x01(\tR\x06method\x12\x14\n" +
+	"\x05model\x18\x03 \x01(\tR\x05model\x12\x1f\n" +
+	"\vusage_scope\x18\x04 \x01(\tR\n" +
+	"usageScope\x12T\n" +
+	"\fusage_labels\x18\x05 \x03(\v21.w17.contrib.agent.TextFilterReq.UsageLabelsEntryR\vusageLabels\x1a>\n" +
+	"\x10UsageLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"$\n" +
+	"\x0eTextFilterResp\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\"F\n" +
+	"\tFinalText\x12'\n" +
+	"\x0fallowed_scripts\x18\x01 \x03(\tR\x0eallowedScripts\x12\x10\n" +
+	"\x03raw\x18\x02 \x01(\bR\x03raw\"\x85\x02\n" +
 	"\bFinished\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x121\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x19.w17.contrib.agent.StatusR\x06status\x12P\n" +
@@ -1223,11 +1469,11 @@ const file_business_agent_service_proto_rawDesc = "" +
 	"\tmax_turns\x18\x01 \x01(\x05R\bmaxTurns\x12$\n" +
 	"\x0emax_tool_calls\x18\x02 \x01(\x05R\fmaxToolCalls\x12!\n" +
 	"\fmax_parallel\x18\x03 \x01(\x05R\vmaxParallel\x120\n" +
-	"\x14tool_timeout_seconds\x18\x04 \x01(\x05R\x12toolTimeoutSeconds\"\xb2\x05\n" +
+	"\x14tool_timeout_seconds\x18\x04 \x01(\x05R\x12toolTimeoutSeconds\"\xef\x05\n" +
 	"\vRunAgentReq\x12<\n" +
 	"\x05start\x18\x01 \x01(\v2$.w17.contrib.agent.RunAgentReq.StartH\x00R\x05start\x12L\n" +
 	"\vtool_result\x18\x02 \x01(\v2).w17.contrib.agent.RunAgentReq.ToolResultH\x00R\n" +
-	"toolResult\x1a\xb8\x03\n" +
+	"toolResult\x1a\xf5\x03\n" +
 	"\x05Start\x122\n" +
 	"\x05model\x18\x01 \x01(\v2\x1c.w17.contrib.agent.ModelSpecR\x05model\x12\"\n" +
 	"\finstructions\x18\x02 \x01(\tR\finstructions\x126\n" +
@@ -1236,7 +1482,9 @@ const file_business_agent_service_proto_rawDesc = "" +
 	"\x06limits\x18\x05 \x01(\v2\x19.w17.contrib.agent.LimitsR\x06limits\x12\x1f\n" +
 	"\vusage_scope\x18\x06 \x01(\tR\n" +
 	"usageScope\x12X\n" +
-	"\fusage_labels\x18\a \x03(\v25.w17.contrib.agent.RunAgentReq.Start.UsageLabelsEntryR\vusageLabels\x1a>\n" +
+	"\fusage_labels\x18\a \x03(\v25.w17.contrib.agent.RunAgentReq.Start.UsageLabelsEntryR\vusageLabels\x12;\n" +
+	"\n" +
+	"final_text\x18\b \x01(\v2\x1c.w17.contrib.agent.FinalTextR\tfinalText\x1a>\n" +
 	"\x10UsageLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aU\n" +
@@ -1285,65 +1533,72 @@ func file_business_agent_service_proto_rawDescGZIP() []byte {
 }
 
 var file_business_agent_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_business_agent_service_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_business_agent_service_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_business_agent_service_proto_goTypes = []any{
 	(ResponseFormat)(0),            // 0: w17.contrib.agent.ResponseFormat
 	(*CompleteReq)(nil),            // 1: w17.contrib.agent.CompleteReq
 	(*CompleteResp)(nil),           // 2: w17.contrib.agent.CompleteResp
 	(*CompleteEvent)(nil),          // 3: w17.contrib.agent.CompleteEvent
 	(*TextDelta)(nil),              // 4: w17.contrib.agent.TextDelta
-	(*Finished)(nil),               // 5: w17.contrib.agent.Finished
-	(*ToolSpec)(nil),               // 6: w17.contrib.agent.ToolSpec
-	(*Limits)(nil),                 // 7: w17.contrib.agent.Limits
-	(*RunAgentReq)(nil),            // 8: w17.contrib.agent.RunAgentReq
-	(*ToolCall)(nil),               // 9: w17.contrib.agent.ToolCall
-	(*Activity)(nil),               // 10: w17.contrib.agent.Activity
-	(*RunAgentEvent)(nil),          // 11: w17.contrib.agent.RunAgentEvent
-	nil,                            // 12: w17.contrib.agent.CompleteReq.UsageLabelsEntry
-	(*RunAgentReq_Start)(nil),      // 13: w17.contrib.agent.RunAgentReq.Start
-	(*RunAgentReq_ToolResult)(nil), // 14: w17.contrib.agent.RunAgentReq.ToolResult
-	nil,                            // 15: w17.contrib.agent.RunAgentReq.Start.UsageLabelsEntry
-	(*ModelSpec)(nil),              // 16: w17.contrib.agent.ModelSpec
-	(*Message)(nil),                // 17: w17.contrib.agent.Message
-	(Status)(0),                    // 18: w17.contrib.agent.Status
-	(IncompleteReason)(0),          // 19: w17.contrib.agent.IncompleteReason
-	(*ModelUsage)(nil),             // 20: w17.contrib.agent.ModelUsage
+	(*TextFilterReq)(nil),          // 5: w17.contrib.agent.TextFilterReq
+	(*TextFilterResp)(nil),         // 6: w17.contrib.agent.TextFilterResp
+	(*FinalText)(nil),              // 7: w17.contrib.agent.FinalText
+	(*Finished)(nil),               // 8: w17.contrib.agent.Finished
+	(*ToolSpec)(nil),               // 9: w17.contrib.agent.ToolSpec
+	(*Limits)(nil),                 // 10: w17.contrib.agent.Limits
+	(*RunAgentReq)(nil),            // 11: w17.contrib.agent.RunAgentReq
+	(*ToolCall)(nil),               // 12: w17.contrib.agent.ToolCall
+	(*Activity)(nil),               // 13: w17.contrib.agent.Activity
+	(*RunAgentEvent)(nil),          // 14: w17.contrib.agent.RunAgentEvent
+	nil,                            // 15: w17.contrib.agent.CompleteReq.UsageLabelsEntry
+	nil,                            // 16: w17.contrib.agent.TextFilterReq.UsageLabelsEntry
+	(*RunAgentReq_Start)(nil),      // 17: w17.contrib.agent.RunAgentReq.Start
+	(*RunAgentReq_ToolResult)(nil), // 18: w17.contrib.agent.RunAgentReq.ToolResult
+	nil,                            // 19: w17.contrib.agent.RunAgentReq.Start.UsageLabelsEntry
+	(*ModelSpec)(nil),              // 20: w17.contrib.agent.ModelSpec
+	(*Message)(nil),                // 21: w17.contrib.agent.Message
+	(Status)(0),                    // 22: w17.contrib.agent.Status
+	(IncompleteReason)(0),          // 23: w17.contrib.agent.IncompleteReason
+	(*ModelUsage)(nil),             // 24: w17.contrib.agent.ModelUsage
 }
 var file_business_agent_service_proto_depIdxs = []int32{
-	16, // 0: w17.contrib.agent.CompleteReq.model:type_name -> w17.contrib.agent.ModelSpec
-	17, // 1: w17.contrib.agent.CompleteReq.messages:type_name -> w17.contrib.agent.Message
+	20, // 0: w17.contrib.agent.CompleteReq.model:type_name -> w17.contrib.agent.ModelSpec
+	21, // 1: w17.contrib.agent.CompleteReq.messages:type_name -> w17.contrib.agent.Message
 	0,  // 2: w17.contrib.agent.CompleteReq.response_format:type_name -> w17.contrib.agent.ResponseFormat
-	12, // 3: w17.contrib.agent.CompleteReq.usage_labels:type_name -> w17.contrib.agent.CompleteReq.UsageLabelsEntry
-	18, // 4: w17.contrib.agent.CompleteResp.status:type_name -> w17.contrib.agent.Status
-	19, // 5: w17.contrib.agent.CompleteResp.incomplete_reason:type_name -> w17.contrib.agent.IncompleteReason
-	20, // 6: w17.contrib.agent.CompleteResp.usage:type_name -> w17.contrib.agent.ModelUsage
-	4,  // 7: w17.contrib.agent.CompleteEvent.delta:type_name -> w17.contrib.agent.TextDelta
-	5,  // 8: w17.contrib.agent.CompleteEvent.finished:type_name -> w17.contrib.agent.Finished
-	18, // 9: w17.contrib.agent.Finished.status:type_name -> w17.contrib.agent.Status
-	19, // 10: w17.contrib.agent.Finished.incomplete_reason:type_name -> w17.contrib.agent.IncompleteReason
-	20, // 11: w17.contrib.agent.Finished.usage:type_name -> w17.contrib.agent.ModelUsage
-	13, // 12: w17.contrib.agent.RunAgentReq.start:type_name -> w17.contrib.agent.RunAgentReq.Start
-	14, // 13: w17.contrib.agent.RunAgentReq.tool_result:type_name -> w17.contrib.agent.RunAgentReq.ToolResult
-	4,  // 14: w17.contrib.agent.RunAgentEvent.delta:type_name -> w17.contrib.agent.TextDelta
-	9,  // 15: w17.contrib.agent.RunAgentEvent.tool_call:type_name -> w17.contrib.agent.ToolCall
-	10, // 16: w17.contrib.agent.RunAgentEvent.activity:type_name -> w17.contrib.agent.Activity
-	5,  // 17: w17.contrib.agent.RunAgentEvent.finished:type_name -> w17.contrib.agent.Finished
-	16, // 18: w17.contrib.agent.RunAgentReq.Start.model:type_name -> w17.contrib.agent.ModelSpec
-	17, // 19: w17.contrib.agent.RunAgentReq.Start.messages:type_name -> w17.contrib.agent.Message
-	6,  // 20: w17.contrib.agent.RunAgentReq.Start.tools:type_name -> w17.contrib.agent.ToolSpec
-	7,  // 21: w17.contrib.agent.RunAgentReq.Start.limits:type_name -> w17.contrib.agent.Limits
-	15, // 22: w17.contrib.agent.RunAgentReq.Start.usage_labels:type_name -> w17.contrib.agent.RunAgentReq.Start.UsageLabelsEntry
-	1,  // 23: w17.contrib.agent.AgentService.Complete:input_type -> w17.contrib.agent.CompleteReq
-	1,  // 24: w17.contrib.agent.AgentService.CompleteStream:input_type -> w17.contrib.agent.CompleteReq
-	8,  // 25: w17.contrib.agent.AgentService.RunAgent:input_type -> w17.contrib.agent.RunAgentReq
-	2,  // 26: w17.contrib.agent.AgentService.Complete:output_type -> w17.contrib.agent.CompleteResp
-	3,  // 27: w17.contrib.agent.AgentService.CompleteStream:output_type -> w17.contrib.agent.CompleteEvent
-	11, // 28: w17.contrib.agent.AgentService.RunAgent:output_type -> w17.contrib.agent.RunAgentEvent
-	26, // [26:29] is the sub-list for method output_type
-	23, // [23:26] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	15, // 3: w17.contrib.agent.CompleteReq.usage_labels:type_name -> w17.contrib.agent.CompleteReq.UsageLabelsEntry
+	7,  // 4: w17.contrib.agent.CompleteReq.final_text:type_name -> w17.contrib.agent.FinalText
+	22, // 5: w17.contrib.agent.CompleteResp.status:type_name -> w17.contrib.agent.Status
+	23, // 6: w17.contrib.agent.CompleteResp.incomplete_reason:type_name -> w17.contrib.agent.IncompleteReason
+	24, // 7: w17.contrib.agent.CompleteResp.usage:type_name -> w17.contrib.agent.ModelUsage
+	4,  // 8: w17.contrib.agent.CompleteEvent.delta:type_name -> w17.contrib.agent.TextDelta
+	8,  // 9: w17.contrib.agent.CompleteEvent.finished:type_name -> w17.contrib.agent.Finished
+	16, // 10: w17.contrib.agent.TextFilterReq.usage_labels:type_name -> w17.contrib.agent.TextFilterReq.UsageLabelsEntry
+	22, // 11: w17.contrib.agent.Finished.status:type_name -> w17.contrib.agent.Status
+	23, // 12: w17.contrib.agent.Finished.incomplete_reason:type_name -> w17.contrib.agent.IncompleteReason
+	24, // 13: w17.contrib.agent.Finished.usage:type_name -> w17.contrib.agent.ModelUsage
+	17, // 14: w17.contrib.agent.RunAgentReq.start:type_name -> w17.contrib.agent.RunAgentReq.Start
+	18, // 15: w17.contrib.agent.RunAgentReq.tool_result:type_name -> w17.contrib.agent.RunAgentReq.ToolResult
+	4,  // 16: w17.contrib.agent.RunAgentEvent.delta:type_name -> w17.contrib.agent.TextDelta
+	12, // 17: w17.contrib.agent.RunAgentEvent.tool_call:type_name -> w17.contrib.agent.ToolCall
+	13, // 18: w17.contrib.agent.RunAgentEvent.activity:type_name -> w17.contrib.agent.Activity
+	8,  // 19: w17.contrib.agent.RunAgentEvent.finished:type_name -> w17.contrib.agent.Finished
+	20, // 20: w17.contrib.agent.RunAgentReq.Start.model:type_name -> w17.contrib.agent.ModelSpec
+	21, // 21: w17.contrib.agent.RunAgentReq.Start.messages:type_name -> w17.contrib.agent.Message
+	9,  // 22: w17.contrib.agent.RunAgentReq.Start.tools:type_name -> w17.contrib.agent.ToolSpec
+	10, // 23: w17.contrib.agent.RunAgentReq.Start.limits:type_name -> w17.contrib.agent.Limits
+	19, // 24: w17.contrib.agent.RunAgentReq.Start.usage_labels:type_name -> w17.contrib.agent.RunAgentReq.Start.UsageLabelsEntry
+	7,  // 25: w17.contrib.agent.RunAgentReq.Start.final_text:type_name -> w17.contrib.agent.FinalText
+	1,  // 26: w17.contrib.agent.AgentService.Complete:input_type -> w17.contrib.agent.CompleteReq
+	1,  // 27: w17.contrib.agent.AgentService.CompleteStream:input_type -> w17.contrib.agent.CompleteReq
+	11, // 28: w17.contrib.agent.AgentService.RunAgent:input_type -> w17.contrib.agent.RunAgentReq
+	2,  // 29: w17.contrib.agent.AgentService.Complete:output_type -> w17.contrib.agent.CompleteResp
+	3,  // 30: w17.contrib.agent.AgentService.CompleteStream:output_type -> w17.contrib.agent.CompleteEvent
+	14, // 31: w17.contrib.agent.AgentService.RunAgent:output_type -> w17.contrib.agent.RunAgentEvent
+	29, // [29:32] is the sub-list for method output_type
+	26, // [26:29] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_business_agent_service_proto_init() }
@@ -1356,11 +1611,11 @@ func file_business_agent_service_proto_init() {
 		(*CompleteEvent_Delta)(nil),
 		(*CompleteEvent_Finished)(nil),
 	}
-	file_business_agent_service_proto_msgTypes[7].OneofWrappers = []any{
+	file_business_agent_service_proto_msgTypes[10].OneofWrappers = []any{
 		(*RunAgentReq_Start_)(nil),
 		(*RunAgentReq_ToolResult_)(nil),
 	}
-	file_business_agent_service_proto_msgTypes[10].OneofWrappers = []any{
+	file_business_agent_service_proto_msgTypes[13].OneofWrappers = []any{
 		(*RunAgentEvent_Delta)(nil),
 		(*RunAgentEvent_ToolCall)(nil),
 		(*RunAgentEvent_Activity)(nil),
@@ -1372,7 +1627,7 @@ func file_business_agent_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_business_agent_service_proto_rawDesc), len(file_business_agent_service_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   15,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
@@ -1386,4 +1641,4 @@ func file_business_agent_service_proto_init() {
 	file_business_agent_service_proto_depIdxs = nil
 }
 
-// emit-sha256: 933b9ca50b08d4af5a5804b88765745ecf80dd046a086b854aad4d2dd662273e
+// emit-sha256: a85870b999f70095604af1967ce93f95fa5d99c37f42a357b2aa33cc365f77de

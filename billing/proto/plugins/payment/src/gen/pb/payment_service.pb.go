@@ -292,8 +292,8 @@ func (x *ChargeResp) GetClientSecret() string {
 }
 
 // RefundPaymentReq reverses a Payment. amount is MONEY at scale 4; 0
-// = full refund (the payment's amount). currency defaults to the
-// payment's currency.
+// = what remains of the payment (all of it, or the rest after partial
+// refunds). currency defaults to the payment's currency.
 type RefundPaymentReq struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	PaymentId string                 `protobuf:"bytes,1,opt,name=payment_id,json=paymentId,proto3" json:"payment_id,omitempty"`
@@ -1376,4 +1376,4 @@ func file_business_payment_service_proto_init() {
 	file_business_payment_service_proto_depIdxs = nil
 }
 
-// emit-sha256: 3e7a9453a633228e3c5afea75edf5232af4c954c41d2c270543e973fcb337657
+// emit-sha256: 70de77b509abb250a9af228b6bad514b61f219a911c1e9dbdc388319bd7ef5e0

@@ -295,7 +295,7 @@ type GetExpiredTokenResp struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// NULL for a never-expiring token that was revoked.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	// The key the expired token is bound to (” for none): SESSION_EXPIRED is
+	// The key the expired token is bound to ('' for none): SESSION_EXPIRED is
 	// said only to a request whose proof is by that key.
 	DeviceThumbprint string `protobuf:"bytes,2,opt,name=device_thumbprint,json=deviceThumbprint,proto3" json:"device_thumbprint,omitempty"`
 	// When the token was revoked; NULL = not revoked (it expired).
@@ -1958,4 +1958,4 @@ func file_queries_auth_query_proto_init() {
 	file_queries_auth_query_proto_depIdxs = nil
 }
 
-// emit-sha256: d4a5b3f0a46c87d78702b7fba374da68e7955073c76973db4b100aecc360e624
+// emit-sha256: 1f9aa505c7b8e834fced0bbd34c3bd02e670e9355ab77689f76cd02aa5c63566

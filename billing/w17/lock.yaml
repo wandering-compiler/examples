@@ -30,27 +30,27 @@ org_id: 01a08faa-bba7-7f3c-bc4b-962c69e23b74
 org_slug: wandering-compiler
 plugins:
     - git:
-        commit: 190e9e7a4fb73623d9e050294fe3f90d96569a26
-        digest: f00a0d13f0333643a7a995263483f212fe48ac5b19cf324f6b99aac212d798bb
-        ref: auth/v0.1.0-rc.60
+        commit: 47321d160d821741fde09a7cd2aba6b78f51c072
+        digest: 60aa1afa521d844b649b27a50af50d74203e39b31ac3aacad77ac3729df7cea7
+        ref: auth/v0.1.0
         repo: https://github.com/wandering-compiler/plugins
       name: auth
       source: git
-      version: 0.1.0-rc.60
+      version: 0.1.0
     - git:
-        commit: 09809ac3d531e0660d0905a80737292d99494b4f
-        digest: e25b9ac8d677b30eea2ada552d856e2ecf4f2990283c3ad56a07e472529de5c7
-        ref: payment/v0.1.0-rc.9
+        commit: 219f649229c278665cbb9d9169b964d6284d27fc
+        digest: 31783b0d36d339bb75969e87da954e64d5108950492ff9d608efca5eb24c377b
+        ref: payment/v0.1.0
         repo: https://github.com/wandering-compiler/plugins
       name: payment
       source: git
-      version: 0.1.0-rc.9
+      version: 0.1.0
 project: examples-billing
 project_id: 514a5b95-afaf-4e9a-8730-5e172520c3a2
-sdk_version: v0.1.0-rc.89
+sdk_version: v0.1.0
 secrets: null
 signature:
     alg: ed25519/v1
-    body: ff831ab66e277357448390053bfc4796c231e4c37d03249d608dc6f9fd423452094cf4c247e54d8ae6ceef6282faafe7482b4e9c4e1ab99137dbee59bdbe7600
+    body: 114f9b101ddc485cb109eafb809fec622afa13f9a83beb825c5dfee971ec82c458ae43180a02cce7c3c17dbca5acf0d370e3153eb91c8c11205fab628f910d01
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

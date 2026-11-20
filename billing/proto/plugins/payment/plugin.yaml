@@ -1,5 +1,5 @@
 name: payment
-version: 0.1.0-rc.9
+version: 0.1.0
 requires_w17: ">=1.11"
 
 # Explicit Go module anchor — staging text-rewrites this prefix in
@@ -8,7 +8,7 @@ requires_w17: ">=1.11"
 go_module: github.com/wandering-compiler/plugins/payment
 
 description: "Provider-agnostic billing — customers, payments, refunds + webhook ingestion. Stripe driver."
-license: "Apache-2.0"
+license: "MIT"
 
 channels:
   - events

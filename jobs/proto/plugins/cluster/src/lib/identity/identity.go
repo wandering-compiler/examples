@@ -39,9 +39,10 @@ type Identity struct {
 
 // certLifetime is long because this certificate is PINNED, not validated:
 // the control plane holds its exact fingerprint on the relay's row, and a
-// caller receives it with every grant. Replacing it is an edit to that row —
-// the audit trail — and an expiry would only force that edit on a calendar
-// instead of when the key is actually in doubt.
+// caller receives it with every grant. Replacing it takes an operator's edit to
+// that row (the plugin keeps no history of the edit; SPEC cluster/no-events),
+// and an expiry would only force that edit on a calendar instead of when the
+// key is actually in doubt.
 //
 // Workers are the opposite case and get the opposite answer: their
 // certificates are issued by the relay's CA and short-lived (ca.go), because
@@ -104,11 +105,16 @@ func LoadOrCreateIdentity(dir, name string) (Identity, error) {
 	// The key is written 0600 and the directory 0700. Nothing here protects
 	// against a reader who is already root; it protects against the ordinary
 	// case of another account on a shared box.
-	if err := os.WriteFile(keyPath, id.KeyPEM, 0o600); err != nil {
-		return Identity{}, fmt.Errorf("identity: writing %s: %w", keyPath, err)
+	//
+	// Each file is written whole or not at all (temp file, sync, rename), key
+	// first: a crash leaves nothing, a whole key alone (refused above as
+	// half-written, and never pinned, since its fingerprint was never
+	// printed), or the pair — never a truncated key beside a certificate.
+	if err := writeAtomic(keyPath, id.KeyPEM, 0o600); err != nil {
+		return Identity{}, err
 	}
-	if err := os.WriteFile(certPath, id.CertPEM, 0o644); err != nil {
-		return Identity{}, fmt.Errorf("identity: writing %s: %w", certPath, err)
+	if err := writeAtomic(certPath, id.CertPEM, 0o644); err != nil {
+		return Identity{}, err
 	}
 	return id, nil
 }

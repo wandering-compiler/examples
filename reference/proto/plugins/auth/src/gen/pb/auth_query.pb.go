@@ -295,7 +295,7 @@ type GetExpiredTokenResp struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// NULL for a never-expiring token that was revoked.
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	// The key the expired token is bound to (” for none): SESSION_EXPIRED is
+	// The key the expired token is bound to ('' for none): SESSION_EXPIRED is
 	// said only to a request whose proof is by that key.
 	DeviceThumbprint string `protobuf:"bytes,2,opt,name=device_thumbprint,json=deviceThumbprint,proto3" json:"device_thumbprint,omitempty"`
 	// When the token was revoked; NULL = not revoked (it expired).
@@ -4341,7 +4341,7 @@ func (x *OrgMemberRow) GetMembershipId() string {
 type ListOrgMembersByOrgReq struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	// after_email — the last address of the previous page; ” = the first page
+	// after_email — the last address of the previous page; '' = the first page
 	// (every address sorts after the empty one).
 	// The keyset of the list's order (u.email, unique).
 	AfterEmail string `protobuf:"bytes,2,opt,name=after_email,json=afterEmail,proto3" json:"after_email,omitempty"`
@@ -7225,4 +7225,4 @@ func file_queries_auth_query_proto_init() {
 	file_queries_auth_query_proto_depIdxs = nil
 }
 
-// emit-sha256: 0d761cfbdefd4596bbfdfb07ef4a151d7c09cedde323668edd84103d188a762f
+// emit-sha256: fbf8281f53d9de5ac9873a31f82d256dfe58541bc0ce7482c0b2dce83eed38ad

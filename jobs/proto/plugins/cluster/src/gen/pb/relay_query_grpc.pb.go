@@ -28,6 +28,11 @@ const (
 // RelayQueryClient is the client API for RelayQuery service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Both reads return LIVE relays only (removed_at IS NULL). Every path that
+// resolves a relay goes through one of them — placement, reservations,
+// registration codes, drain, the ban delivery, the worker sweep, the admin
+// pages — so an ended relay is invisible to all of them by construction.
 type RelayQueryClient interface {
 	// Ordered by name rather than by creation, because the operator reading this
 	// list knows the relays by name and is looking one up, not browsing history.
@@ -66,6 +71,11 @@ func (c *relayQueryClient) GetRelay(ctx context.Context, in *GetRelayReq, opts .
 // RelayQueryServer is the server API for RelayQuery service.
 // All implementations should embed UnimplementedRelayQueryServer
 // for forward compatibility.
+//
+// Both reads return LIVE relays only (removed_at IS NULL). Every path that
+// resolves a relay goes through one of them — placement, reservations,
+// registration codes, drain, the ban delivery, the worker sweep, the admin
+// pages — so an ended relay is invisible to all of them by construction.
 type RelayQueryServer interface {
 	// Ordered by name rather than by creation, because the operator reading this
 	// list knows the relays by name and is looking one up, not browsing history.
@@ -162,4 +172,4 @@ var RelayQuery_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "queries/relay_query.proto",
 }
 
-// emit-sha256: 3ae07f90f376acd70bf7114d673513da63a9f4eb04b214e4e39111ec4055f4de
+// emit-sha256: 6f46958d9fbbe1b90346395fcd64d8a989c3c92ee396432566f68fd0debb7e24

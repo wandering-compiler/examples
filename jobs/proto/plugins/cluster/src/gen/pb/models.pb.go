@@ -91,14 +91,34 @@ func (WorkerState) EnumDescriptor() ([]byte, []int) {
 // This row is the WHITELIST. The control plane dials out, and it dials only to
 // a url that appears here with `enabled` set; a relay that is not in this table
 // cannot be reached by accident, and one that is disabled stops receiving work
-// without being deleted (so its history, if the ledger is on, survives).
+// without being ended (its row, pin and observed state stay for when it is
+// enabled again).
+//
+// A relay is never deleted. DeleteRelay ENDS it: it stamps removed_at and
+// moves ended_key from ” to the row's own id, and every reader — the lists,
+// GetRelay, placement, reservations, the ban delivery, the worker sweep, the
+// admin pages — reads live relays only, so an ended relay is never dialled
+// again. The row keeps its name, url, pin and observed state as the record of
+// what was registered, and every Worker row that named it keeps naming it
+// (Worker.relay_id is a foreign key, ON DELETE RESTRICT).
+//
+// Registering the same relay again — the same name, url and pin — is a NEW
+// row, by the same plain INSERT, never a revival of the ended one: `name` is
+// unique together with ended_key, so the ended row frees its name and two live
+// relays still cannot share one. The mechanism the auth plugin's re-addable
+// tables use (see its Role.ended_key). Not a revival because the ended row is
+// history — reviving it would rewrite the end out of it — and because the id
+// is the relay's identity for everything that names it: a reservation handle
+// or a worker row naming the ended relay keeps resolving to the ended one, and
+// the next sweep files the relay's workers under the new id.
 type Relay struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Operator-facing label. This is what the backoffice list shows and what an
 	// incident refers to, so it is a name and not a hostname: "eu-west-1",
-	// "spare-box". Unique, because two relays called the same thing make every
-	// later conversation about them ambiguous.
+	// "spare-box". Unique among LIVE relays (the index over name and
+	// ended_key, above), because two relays called the same thing make every
+	// later conversation about them ambiguous; an ended relay frees its name.
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// `host:port` of the relay's MANAGEMENT endpoint — the half this control
 	// plane calls. Not the proxy endpoint the caller is handed; that one the
@@ -120,9 +140,10 @@ type Relay struct {
 	// The relay's identity is PINNED to this fingerprint rather than validated
 	// against a CA, which means a relay may hold a self-signed certificate and
 	// needs no enrolment ceremony — the operator pastes a fingerprint and that is
-	// the whole trust decision. Rotating a relay's certificate is an edit here,
-	// and an edit is exactly the audit trail that a silent CA-issued swap would
-	// not leave.
+	// the whole trust decision. Rotating a relay's certificate takes an
+	// operator's edit here, where a CA-issued swap would need nobody. The edit
+	// overwrites the previous value and records neither who nor when (SPEC
+	// cluster/no-events).
 	//
 	// Deliberately NOT a shared secret. A bearer secret would have to be stored
 	// in a form this control plane can read back in order to present it, which
@@ -148,7 +169,17 @@ type Relay struct {
 	LastSeenAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_seen_at,json=lastSeenAt,proto3,oneof" json:"last_seen_at,omitempty"`
 	// What went wrong on the last failed attempt, for the operator who is trying
 	// to work out why a relay is not taking work. Cleared on success.
-	LastError     string `protobuf:"bytes,8,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	LastError string `protobuf:"bytes,8,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	// removed_at — when DeleteRelay ended the relay. NULL = live. Every reader
+	// skips a row that has it; nothing writes it back to NULL.
+	RemovedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	// ended_key — '' while the relay is live, the row's own id once it has
+	// ended. Part of the unique index over `name`: every live row shares '', so
+	// two live relays still collide on a name, and every ended row carries a
+	// value of its own, so it frees the name for a new registration. A full
+	// index rather than a partial `WHERE removed_at IS NULL` one, which not
+	// every dialect builds.
+	EndedKey      string `protobuf:"bytes,10,opt,name=ended_key,json=endedKey,proto3" json:"ended_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -239,6 +270,20 @@ func (x *Relay) GetLastError() string {
 	return ""
 }
 
+func (x *Relay) GetRemovedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RemovedAt
+	}
+	return nil
+}
+
+func (x *Relay) GetEndedKey() string {
+	if x != nil {
+		return x.EndedKey
+	}
+	return ""
+}
+
 // Worker — one machine that enrolled with a relay, and whether it is banned.
 //
 // # Why this table exists at all
@@ -290,6 +335,13 @@ type Worker struct {
 	// Which relay reported it. A worker's certificate is valid at exactly one
 	// relay (that relay's CA issued it), and an operator chasing "why is this
 	// machine idle" needs to know which.
+	//
+	// A foreign key to Relay (`fk: "@module.Relay"`, which staging expands to
+	// the activation's own table), ON DELETE RESTRICT (`deletion_rule: BLOCK`):
+	// a relay is ended, never deleted (see Relay), so the reference always
+	// resolves — to the ended row when the relay has ended — and a delete that
+	// would strand it is refused. RecordWorker files a worker only under a LIVE
+	// relay (see WorkerMutation.RecordWorker).
 	RelayId     string                 `protobuf:"bytes,6,opt,name=relay_id,json=relayId,proto3" json:"relay_id,omitempty"`
 	FirstSeenAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=first_seen_at,json=firstSeenAt,proto3" json:"first_seen_at,omitempty"`
 	// When the last ban or unban was decided, and by whom. Absent until one is.
@@ -403,11 +455,10 @@ var File_types_models_proto protoreflect.FileDescriptor
 
 const file_types_models_proto_rawDesc = "" +
 	"\n" +
-	"\x12types/models.proto\x12\x13w17.contrib.cluster\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11w17/contrib.proto\x1a\fw17/db.proto\x1a\x0fw17/field.proto\"\xfc\x05\n" +
+	"\x12types/models.proto\x12\x13w17.contrib.cluster\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11w17/contrib.proto\x1a\fw17/db.proto\x1a\x0fw17/field.proto\"\x84\a\n" +
 	"\x05Relay\x12\x1b\n" +
-	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\x1e\n" +
-	"\x04name\x18\x02 \x01(\tB\n" +
-	"\xca\xf3\x18\x06\b\x068\x01@@R\x04name\x12\xa1\x02\n" +
+	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x12\x1c\n" +
+	"\x04name\x18\x02 \x01(\tB\b\xca\xf3\x18\x04\b\x06@@R\x04name\x12\xa1\x02\n" +
 	"\x03url\x18\x03 \x01(\tB\x8e\x02\xca\xf3\x18\x89\x02\b\x01@\xff\x01r\x9b\x01^([A-Za-z0-9_]([A-Za-z0-9_.-]*[A-Za-z0-9_])?\\.?|\\[[0-9A-Fa-f:.]+\\]):([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$\xea\x01c\b5\x12_a relay address is host:port with no scheme, e.g. relay.example.com:13444 or clusterrelay:13444R\x03url\x12\x9b\x01\n" +
 	"\x10cert_fingerprint\x18\x04 \x01(\tBp\xca\xf3\x18l\b\x01@@r\x0e^[0-9a-f]{64}$\xea\x01U\b5\x12Qa certificate fingerprint is 64 lowercase hex characters, as relay mint prints itR\x0fcertFingerprint\x12!\n" +
 	"\aenabled\x18\x05 \x01(\bB\a\xca\xf3\x18\x03\xb8\x01\x1eR\aenabled\x12F\n" +
@@ -416,16 +467,24 @@ const file_types_models_proto_rawDesc = "" +
 	"\flast_seen_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x06\xca\xf3\x18\x02\b\x16H\x00R\n" +
 	"lastSeenAt\x88\x01\x01\x12'\n" +
 	"\n" +
-	"last_error\x18\b \x01(\tB\b\xca\xf3\x18\x04\b\x020\x01R\tlastError:\x04\xc2\xf3\x18\x00B\x0f\n" +
-	"\r_last_seen_at\"\xec\x03\n" +
+	"last_error\x18\b \x01(\tB\b\xca\xf3\x18\x04\b\x020\x01R\tlastError\x12C\n" +
+	"\n" +
+	"removed_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampB\b\xca\xf3\x18\x04\b\x16(\x01R\tremovedAt\x12*\n" +
+	"\tended_key\x18\n" +
+	" \x01(\tB\r\xca\xf3\x18\t\b\x010\x01@$\xa2\x01\x00R\bendedKey:\x1d\xc2\xf3\x18\x19\x12\x17\n" +
+	"\x06\n" +
+	"\x04name\n" +
+	"\v\n" +
+	"\tended_key\x10\x01B\x0f\n" +
+	"\r_last_seen_at\"\xfd\x03\n" +
 	"\x06Worker\x12\x1b\n" +
 	"\x02id\x18\x01 \x01(\tB\v\xca\xf3\x18\a\b\x03\x10\x01\xb8\x01\vR\x02id\x125\n" +
 	"\x10cert_fingerprint\x18\x02 \x01(\tB\n" +
 	"\xca\xf3\x18\x06\b\x018\x01@@R\x0fcertFingerprint\x12\x1f\n" +
 	"\x04name\x18\x03 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x01R\x04name\x12(\n" +
 	"\tdevice_id\x18\x04 \x01(\tB\v\xca\xf3\x18\a\b\x010\x01@\x80\x01R\bdeviceId\x12>\n" +
-	"\x05state\x18\x05 \x01(\x0e2 .w17.contrib.cluster.WorkerStateB\x06\xd2\xf3\x18\x02\b\x01R\x05state\x12'\n" +
-	"\brelay_id\x18\x06 \x01(\tB\f\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x02\b\x01R\arelayId\x12K\n" +
+	"\x05state\x18\x05 \x01(\x0e2 .w17.contrib.cluster.WorkerStateB\x06\xd2\xf3\x18\x02\b\x01R\x05state\x128\n" +
+	"\brelay_id\x18\x06 \x01(\tB\x1d\xca\xf3\x18\x02\b\x03\xd2\xf3\x18\x13\b\x01\x1a\r@module.Relay \x03R\arelayId\x12K\n" +
 	"\rfirst_seen_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\v\xca\xf3\x18\a\b\x16 \x01\xb8\x01\x01R\vfirstSeenAt\x12L\n" +
 	"\n" +
 	"decided_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\f\xca\xf3\x18\x02\b\x16\xd2\xf3\x18\x02\b\x01H\x00R\tdecidedAt\x88\x01\x01\x12*\n" +
@@ -461,14 +520,15 @@ var file_types_models_proto_goTypes = []any{
 var file_types_models_proto_depIdxs = []int32{
 	3, // 0: w17.contrib.cluster.Relay.created_at:type_name -> google.protobuf.Timestamp
 	3, // 1: w17.contrib.cluster.Relay.last_seen_at:type_name -> google.protobuf.Timestamp
-	0, // 2: w17.contrib.cluster.Worker.state:type_name -> w17.contrib.cluster.WorkerState
-	3, // 3: w17.contrib.cluster.Worker.first_seen_at:type_name -> google.protobuf.Timestamp
-	3, // 4: w17.contrib.cluster.Worker.decided_at:type_name -> google.protobuf.Timestamp
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	3, // 2: w17.contrib.cluster.Relay.removed_at:type_name -> google.protobuf.Timestamp
+	0, // 3: w17.contrib.cluster.Worker.state:type_name -> w17.contrib.cluster.WorkerState
+	3, // 4: w17.contrib.cluster.Worker.first_seen_at:type_name -> google.protobuf.Timestamp
+	3, // 5: w17.contrib.cluster.Worker.decided_at:type_name -> google.protobuf.Timestamp
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_types_models_proto_init() }
@@ -498,4 +558,4 @@ func file_types_models_proto_init() {
 	file_types_models_proto_depIdxs = nil
 }
 
-// emit-sha256: 9f0286292148eeffcaf95b92289ab6c60f466b01696fcd57acd482f10be59d50
+// emit-sha256: 22daf9705d06eb7e002043a9502d882a1d40093ae99b6895dc79019334995be1

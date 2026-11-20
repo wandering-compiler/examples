@@ -33,11 +33,19 @@ func init() {
 // text (ISO 8601): a Brevo date attribute holds the day only.
 const lastActivityAttr = "W17_LAST_ACTIVITY_AT"
 
+// maxAttributeName is the longest attribute name the plugin asks Brevo for.
+const maxAttributeName = 255
+
 // activityAttr is the contact attribute a method's records move:
 // W17_<SERVICE>_<METHOD> (`/e2e.app.tasks.TasksBusiness/CreateTask` →
-// `W17_TASKSBUSINESS_CREATETASK`), upper-cased as Brevo keeps attributes.
+// `W17_TASKSBUSINESS_CREATETASK`), upper-cased as Brevo keeps attributes, and
+// at most 255 characters, prefix included (eventName alone is cut at 255).
 func activityAttr(method string) string {
-	return "W17_" + strings.ToUpper(strings.ReplaceAll(eventName(method), "-", "_"))
+	a := "W17_" + strings.ToUpper(strings.ReplaceAll(eventName(method), "-", "_"))
+	if len(a) > maxAttributeName {
+		a = a[:maxAttributeName] // ASCII: eventName keeps [A-Za-z0-9_-]
+	}
+	return a
 }
 
 // activityAttributes are the attributes the records may move: one per method
@@ -93,15 +101,11 @@ func (t *brevoTool) writeActivity(ctx context.Context, records []*w17pb.RequestE
 		users = append(users, u)
 	}
 	sort.Strings(users)
-	erased, err := t.erasedOf(ctx, users)
-	if err != nil {
-		return err
-	}
+	// The records of erased users were dropped by ConsumeMarketing, which
+	// also undoes what an erasure landing during this write would lose.
 	keys := make([]key, 0, len(latest))
 	for k := range latest {
-		if !erased[k.user] {
-			keys = append(keys, k)
-		}
+		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].user != keys[j].user {
@@ -119,30 +123,11 @@ func (t *brevoTool) writeActivity(ctx context.Context, records []*w17pb.RequestE
 		}
 	}
 	for _, u := range users {
-		if erased[u] {
-			continue
-		}
 		if err := t.writeUserActivity(ctx, u, touched[u]); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// erasedOf reports which of users were erased: a late record of theirs writes
-// nothing.
-func (t *brevoTool) erasedOf(ctx context.Context, users []string) (map[string]bool, error) {
-	resp, err := t.query.ListContacts(ctx, &pb.ListContactsReq{UserIds: users})
-	if err != nil {
-		return nil, fmt.Errorf("marketing plugin: reading the contacts of %d users: %w", len(users), err)
-	}
-	out := map[string]bool{}
-	for _, c := range resp.GetContacts() {
-		if c.GetErasedAt() != nil {
-			out[c.GetUserId()] = true
-		}
-	}
-	return out, nil
 }
 
 // writeUserActivity writes the user's moved attributes, and the time of their
@@ -162,7 +147,7 @@ func (t *brevoTool) writeUserActivity(ctx context.Context, user string, attrs ma
 		}
 		// A contact Brevo lacks is created blacklisted, as every contact the
 		// plugin did not subscribe on a consent.
-		if err := t.contactCall("write the activity of", user, t.writeLeavingBlacklisted(ctx, user, "", now)); err != nil {
+		if err := t.contactCall(ctx, "write the activity of", user, t.writeLeavingBlacklisted(ctx, user, "", now)); err != nil {
 			return err
 		}
 		written = now

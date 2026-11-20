@@ -17,12 +17,14 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/wandering-compiler/plugins/agent/gen"
 	"github.com/wandering-compiler/plugins/agent/handlers"
 	"github.com/wandering-compiler/plugins/agent/lib/llm"
+	"github.com/wandering-compiler/plugins/agent/lib/textfilter"
 )
 
 // defaultMaxOutputTokens mirrors plugin.yaml's default so a bundle whose env
@@ -31,9 +33,10 @@ const defaultMaxOutputTokens = 4096
 
 // RegisterPlugin wires the AgentService handler.
 //
-// `clients` is unused: this plugin owns no tables and calls nothing in the
-// consuming project. It is in the signature because the v4 contract puts it
-// there for every plugin — see gen.ClientSet.
+// `clients` is the generated gen.ClientSet. Only the usage_persistence feature
+// uses it (the usage sink and the limiter); they assert the usage clients
+// rather than require them, because an activation with the feature off has no
+// usage tables and so no usage clients.
 //
 // Every configuration error is returned HERE rather than tolerated, so a
 // misconfigured bundle fails at boot instead of on the first user's request.
@@ -72,6 +75,16 @@ func RegisterPlugin(cfg *gen.EnvConfig, registry gen.HandlerRegistry, clients ge
 	if err := handlers.VerifyLimiterWiring(limiter); err != nil {
 		return err
 	}
+	finalText, err := finalTextFilters(gen.FeatureFinalTextScripts, gen.FeatureFinalTextInvisible, cfg.AllowedScripts)
+	if err != nil {
+		return err
+	}
+	// The project's own filters, bound to the text_filter hook: none unless
+	// the activation binds some.
+	if clients != nil {
+		finalText.Hooks = clients.TextFilterHooks()
+	}
+	finalText.HookTimeout = time.Duration(cfg.TextFilterTimeoutSeconds) * time.Second
 
 	// Drain the usage queue at teardown.
 	//
@@ -98,6 +111,23 @@ func RegisterPlugin(cfg *gen.EnvConfig, registry gen.HandlerRegistry, clients ge
 		StreamClient:     client,
 		DefaultModel:     strings.TrimSpace(cfg.DefaultModel),
 		DefaultMaxTokens: maxTokens,
+		FinalText:        finalText,
 	})
 	return nil
+}
+
+// finalTextFilters are the activation's final-text filters: the features it
+// switched on, the scripts from <DOMAIN>_AGENT_ALLOWED_SCRIPTS. A script
+// list the filter cannot use refuses the boot rather than the first answer —
+// an unknown name, or none with the filter on.
+func finalTextFilters(scripts, invisible bool, allowed string) (handlers.FinalTextFilters, error) {
+	f := handlers.FinalTextFilters{Invisible: invisible}
+	if scripts {
+		s, err := textfilter.NewScripts(strings.Split(allowed, ","))
+		if err != nil {
+			return f, fmt.Errorf("agent: allowed_scripts: %w", err)
+		}
+		f.Scripts = s
+	}
+	return f, nil
 }

@@ -43,6 +43,11 @@ const (
 // Nothing else is refreshed: `state`, `decided_at` and `decided_by` are the
 // decision, and `name` / `device_id` are claims a banned machine must not be
 // able to keep re-labelling.
+//
+// Filed only under a LIVE relay. A relay ended (DeleteRelay) between the
+// sweep's relay list and this write is refused — InvalidArgument,
+// RELAY_ENDED, on `relay_id` — so the sweep counts it as that relay failing,
+// not as each of its workers being bad (see WorkerMutation.RecordWorker).
 type RecordWorkerReq struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	CertFingerprint string                 `protobuf:"bytes,1,opt,name=cert_fingerprint,json=certFingerprint,proto3" json:"cert_fingerprint,omitempty"`
@@ -265,10 +270,11 @@ const file_mutations_worker_mutation_proto_rawDesc = "" +
 	"\n" +
 	"decided_by\x18\x02 \x01(\tB\t\xca\xf3\x18\x05\b\x01@\x80\x01R\tdecidedBy\x12*\n" +
 	"\x02at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\"\x13\n" +
-	"\x11DecideWorkersResp2\xf4\x05\n" +
-	"\x0eWorkerMutation\x12\xbf\x02\n" +
-	"\fRecordWorker\x12$.w17.contrib.cluster.RecordWorkerReq\x1a%.w17.contrib.cluster.RecordWorkerResp\"\xe1\x01\xf2\xf3\x18\xdc\x01B\xd9\x01\n" +
-	"\x04main\x12\xd0\x01UPSERT INTO @module.Worker SET cert_fingerprint = :cert_fingerprint, name = :name,     device_id = :device_id, relay_id = :relay_id, state = 1 ON CONFLICT (cert_fingerprint) DO UPDATE SET relay_id = :relay_id\x12\xcd\x01\n" +
+	"\x11DecideWorkersResp2\xee\a\n" +
+	"\x0eWorkerMutation\x12\xb9\x04\n" +
+	"\fRecordWorker\x12$.w17.contrib.cluster.RecordWorkerReq\x1a%.w17.contrib.cluster.RecordWorkerResp\"\xdb\x03\xf2\xf3\x18\xd6\x03B\xf7\x01\n" +
+	"\x05relay\x12_UPDATE @module.Relay SET id = id WHERE id = :relay_id AND removed_at IS NULL RETURNING id AS id\x1a\x8c\x01\b\x02\x12\vRELAY_ENDED\x1aqNo live relay {relay_id} is registered: it was never registered, or it was deleted. Its workers are not recorded.\"\brelay_idB\xd9\x01\n" +
+	"\x04main\x12\xd0\x01UPSERT INTO @module.Worker SET cert_fingerprint = :cert_fingerprint, name = :name,     device_id = :device_id, relay_id = :relay.id, state = 1 ON CONFLICT (cert_fingerprint) DO UPDATE SET relay_id = :relay.id\x12\xcd\x01\n" +
 	"\n" +
 	"BanWorkers\x12%.w17.contrib.cluster.DecideWorkersReq\x1a&.w17.contrib.cluster.DecideWorkersResp\"p\xf2\xf3\x18lBj\n" +
 	"\x04main\x12bUPDATE @module.Worker SET state = 2, decided_at = :at, decided_by = :decided_by WHERE id IN (:ids)\x12\xcf\x01\n" +
@@ -335,4 +341,4 @@ func file_mutations_worker_mutation_proto_init() {
 	file_mutations_worker_mutation_proto_depIdxs = nil
 }
 
-// emit-sha256: 4aa2f28de23d465a5c67228a3374e45bfc89afb7c984305341dd28b6a3d70bba
+// emit-sha256: 4f701508f88586d7ed9894e95d5716a48c538f83632bd85207bd308690402158

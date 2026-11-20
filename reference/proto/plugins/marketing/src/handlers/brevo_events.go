@@ -5,9 +5,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/wandering-compiler/sdk/go/lib/eventlog"
 	w17pb "github.com/wandering-compiler/sdk/go/pb/w17"
@@ -26,10 +29,36 @@ import (
 // and the stream redelivers the batch; what was sent before it is skipped
 // then. An event Brevo refuses for its content is logged and not retried:
 // sending it again would be refused again.
+//
+// A record of a user the plugin holds erased writes nothing (brevo/erasure):
+// an event alone would create the contact again, keyed by the user's id. The
+// records arrive late (a backlog, a redelivery, a dead-letter replay) while
+// UserDeleted is handled at once, so the rows are read once per batch, and
+// again after the batch is written, for an erasure that landed meanwhile.
 func (t *brevoTool) ConsumeMarketing(ctx context.Context, batch *eventlog.ConsumedBatch) error {
-	var selected []*w17pb.RequestEventMeta
+	var candidates []*w17pb.RequestEventMeta
+	seen := map[string]bool{}
+	var users []string
 	for _, rec := range batch.Records {
 		if meta := rec.Meta; meta != nil && meta.GetUserId() != "" && t.sel.sends(meta.GetMethod()) {
+			candidates = append(candidates, meta)
+			if u := meta.GetUserId(); !seen[u] {
+				seen[u] = true
+				users = append(users, u)
+			}
+		}
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	sort.Strings(users)
+	erased, err := t.erasedOf(ctx, users)
+	if err != nil {
+		return err
+	}
+	var selected []*w17pb.RequestEventMeta
+	for _, meta := range candidates {
+		if !erased[meta.GetUserId()] {
 			selected = append(selected, meta)
 		}
 	}
@@ -44,10 +73,18 @@ func (t *brevoTool) ConsumeMarketing(ctx context.Context, batch *eventlog.Consum
 			return err
 		}
 	}
-	if !t.events {
-		return nil
+	if t.events {
+		if err := t.sendEvents(ctx, selected); err != nil {
+			return err
+		}
 	}
-	return t.sendEvents(ctx, selected)
+	var written []string
+	for _, u := range users {
+		if !erased[u] {
+			written = append(written, u)
+		}
+	}
+	return t.undoForErased(ctx, written...)
 }
 
 // sendEvents sends the selected records as Brevo events (brevo_events).
@@ -59,7 +96,7 @@ func (t *brevoTool) sendEvents(ctx context.Context, selected []*w17pb.RequestEve
 	var todo []pending
 	var ids []string
 	for _, meta := range selected {
-		ev, ok := eventFor(meta, t.consentAttr)
+		ev, ok := eventFor(meta)
 		if !ok {
 			continue
 		}
@@ -91,17 +128,28 @@ func (t *brevoTool) sendEvents(ctx context.Context, selected []*w17pb.RequestEve
 		if err != nil {
 			return fmt.Errorf("marketing plugin: sending %d events to Brevo: %w", len(events), err)
 		}
+		// Refused or accepted, none is to be sent again. Every one is
+		// recorded, whatever happens to another: stopping at the first
+		// failed record left the rest of the chunk — accepted by Brevo —
+		// to be sent again by the redelivery. A failed one is tried again at
+		// once; one that still fails is the only one the redelivery resends.
+		var failed error
 		for i, p := range chunk {
 			if reason, refused := res.Failed[i]; refused {
 				log.Printf("marketing plugin: Brevo refused event %s (record %s): %s", p.event.EventName, p.id, reason)
 			}
-			// Refused or accepted, it is not to be sent again.
-			if err := t.recordSent(ctx, p.id); err != nil {
-				return err
+			var err error
+			for attempt := 0; attempt < recordSentAttempts; attempt++ {
+				if err = t.recordSent(ctx, p.id); err == nil {
+					break
+				}
+			}
+			if err != nil && failed == nil {
+				failed = err
 			}
 		}
 		chunk = chunk[:0]
-		return nil
+		return failed
 	}
 	size := 0
 	for _, p := range todo {
@@ -120,6 +168,10 @@ func (t *brevoTool) sendEvents(ctx context.Context, selected []*w17pb.RequestEve
 	}
 	return flush()
 }
+
+// recordSentAttempts is how often recording one sent record is tried before
+// it is left for the redelivery (which then sends it again).
+const recordSentAttempts = 3
 
 // recordSent remembers a record as sent; one a concurrent replica recorded
 // first is the same outcome.
@@ -151,7 +203,7 @@ func eventName(method string) string {
 // eventFor is the Brevo event a record becomes, keyed by the user's id;
 // false for a record of nobody (marketing records are signed-in only, so
 // this is defensive).
-func eventFor(meta *w17pb.RequestEventMeta, consentAttr string) (brevo.Event, bool) {
+func eventFor(meta *w17pb.RequestEventMeta) (brevo.Event, bool) {
 	user := meta.GetUserId()
 	if user == "" {
 		return brevo.Event{}, false
@@ -185,16 +237,17 @@ func eventFor(meta *w17pb.RequestEventMeta, consentAttr string) (brevo.Event, bo
 	}
 	if c := meta.GetClient(); c != nil {
 		for k, v := range c.GetUtm() {
-			props["utm_"+eventNameRe.ReplaceAllString(k, "_")] = v
+			props["utm_"+cut(eventNameRe.ReplaceAllString(k, "_"), maxUTMValue)] = cut(v, maxUTMValue)
 		}
-		if r := c.GetReferrer(); r != "" {
+		if r := referrerOf(c.GetReferrer()); r != "" {
 			props["referrer"] = r
 		}
 	}
-	contact := map[string]any{}
-	if meta.MarketingConsent != nil {
-		contact[consentAttr] = meta.GetMarketingConsent()
-	}
+	// Nothing goes to the contact (ContactProperties): the consent attribute
+	// comes only from the Contact row, dated, by the consent handler. The
+	// record's consent is the request's snapshot (its authentication, cached
+	// for minutes), and a record delivered after the user's decision — a
+	// backlog, a redelivery, a replay — would move the attribute back.
 	ev := brevo.Event{
 		EventName:       eventName(meta.GetMethod()),
 		Identifiers:     brevo.Identifiers{ExtID: user},
@@ -203,10 +256,35 @@ func eventFor(meta *w17pb.RequestEventMeta, consentAttr string) (brevo.Event, bo
 	if st := meta.GetStart(); st != nil {
 		ev.EventDate = st.AsTime().UTC().Format(time.RFC3339Nano)
 	}
-	if len(contact) > 0 {
-		ev.ContactProperties = contact
-	}
 	return ev, true
+}
+
+// maxUTMValue bounds a UTM parameter's name and value on the event: a
+// campaign label, not a place for whatever a link carries.
+const maxUTMValue = 200
+
+// maxReferrer bounds the referrer on the event.
+const maxReferrer = 500
+
+// referrerOf is the referrer as the event carries it: its scheme, host and
+// path, without user info, query string or fragment — those can carry an
+// address, a token, a document's name, which a personalised link would ship
+// into the marketing tool with every request. "" for one that is no
+// absolute URL.
+func referrerOf(r string) string {
+	u, err := url.Parse(r)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return cut((&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String(), maxReferrer)
+}
+
+// cut is s cut to at most n runes.
+func cut(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	return string([]rune(s)[:n])
 }
 
 // approxSize estimates an event's share of a batch body.

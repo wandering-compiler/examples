@@ -259,6 +259,8 @@ func (*UpdateRelayResp) Descriptor() ([]byte, []int) {
 	return file_mutations_relay_mutation_proto_rawDescGZIP(), []int{3}
 }
 
+// DeleteRelay ENDS the relay; the name is kept so callers and the admin
+// page's delete stay as they were. See RelayMutation.DeleteRelay.
 type DeleteRelayReq struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -547,18 +549,18 @@ const file_mutations_relay_mutation_proto_rawDesc = "" +
 	"\x14RecordRelayFailedReq\x12\x16\n" +
 	"\x02id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x02id\x12\x1c\n" +
 	"\x05error\x18\x02 \x01(\tB\x06\xca\xf3\x18\x02\b\x02R\x05error\"\x17\n" +
-	"\x15RecordRelayFailedResp2\xeb\a\n" +
+	"\x15RecordRelayFailedResp2\xea\b\n" +
 	"\rRelayMutation\x12\xd7\x01\n" +
 	"\vCreateRelay\x12#.w17.contrib.cluster.CreateRelayReq\x1a$.w17.contrib.cluster.CreateRelayResp\"}\xf2\xf3\x18yBw\n" +
-	"\x04main\x12oINSERT INTO @module.Relay SET name = :name, url = :url, cert_fingerprint = :cert_fingerprint RETURNING id AS id\x12\xe9\x01\n" +
-	"\vUpdateRelay\x12#.w17.contrib.cluster.UpdateRelayReq\x1a$.w17.contrib.cluster.UpdateRelayResp\"\x8e\x01\xf2\xf3\x18\x89\x01B\x86\x01\n" +
-	"\x04main\x12~UPDATE @module.Relay SET name = :name, url = :url,     cert_fingerprint = :cert_fingerprint, enabled = :enabled WHERE id = :id\x12\x90\x01\n" +
-	"\vDeleteRelay\x12#.w17.contrib.cluster.DeleteRelayReq\x1a$.w17.contrib.cluster.DeleteRelayResp\"6\xf2\xf3\x182B0\n" +
-	"\x04main\x12(DELETE FROM @module.Relay WHERE id = :id\x12\xc8\x01\n" +
-	"\x12RecordRelayReached\x12*.w17.contrib.cluster.RecordRelayReachedReq\x1a+.w17.contrib.cluster.RecordRelayReachedResp\"Y\xf2\xf3\x18UBS\n" +
-	"\x04main\x12KUPDATE @module.Relay SET last_seen_at = :at, last_error = '' WHERE id = :id\x12\xb5\x01\n" +
-	"\x11RecordRelayFailed\x12).w17.contrib.cluster.RecordRelayFailedReq\x1a*.w17.contrib.cluster.RecordRelayFailedResp\"I\xf2\xf3\x18EBC\n" +
-	"\x04main\x12;UPDATE @module.Relay SET last_error = :error WHERE id = :idB\xd1\x01\n" +
+	"\x04main\x12oINSERT INTO @module.Relay SET name = :name, url = :url, cert_fingerprint = :cert_fingerprint RETURNING id AS id\x12\x81\x02\n" +
+	"\vUpdateRelay\x12#.w17.contrib.cluster.UpdateRelayReq\x1a$.w17.contrib.cluster.UpdateRelayResp\"\xa6\x01\xf2\xf3\x18\xa1\x01B\x9e\x01\n" +
+	"\x04main\x12\x95\x01UPDATE @module.Relay SET name = :name, url = :url,     cert_fingerprint = :cert_fingerprint, enabled = :enabled WHERE id = :id AND removed_at IS NULL\x12\xc9\x01\n" +
+	"\vDeleteRelay\x12#.w17.contrib.cluster.DeleteRelayReq\x1a$.w17.contrib.cluster.DeleteRelayResp\"o\xf2\xf3\x18kBi\n" +
+	"\x04main\x12aUPDATE @module.Relay SET removed_at = NOW(), ended_key = id WHERE id = :id AND removed_at IS NULL\x12\xdf\x01\n" +
+	"\x12RecordRelayReached\x12*.w17.contrib.cluster.RecordRelayReachedReq\x1a+.w17.contrib.cluster.RecordRelayReachedResp\"p\xf2\xf3\x18lBj\n" +
+	"\x04main\x12bUPDATE @module.Relay SET last_seen_at = :at, last_error = '' WHERE id = :id AND removed_at IS NULL\x12\xcc\x01\n" +
+	"\x11RecordRelayFailed\x12).w17.contrib.cluster.RecordRelayFailedReq\x1a*.w17.contrib.cluster.RecordRelayFailedResp\"`\xf2\xf3\x18\\BZ\n" +
+	"\x04main\x12RUPDATE @module.Relay SET last_error = :error WHERE id = :id AND removed_at IS NULLB\xd1\x01\n" +
 	"\x17com.w17.contrib.clusterB\x12RelayMutationProtoP\x01Z4github.com/wandering-compiler/plugins/cluster/gen/pb\xa2\x02\x03WCC\xaa\x02\x13W17.Contrib.Cluster\xca\x02\x13W17\\Contrib\\Cluster\xe2\x02\x1fW17\\Contrib\\Cluster\\GPBMetadata\xea\x02\x15W17::Contrib::Clusterb\x06proto3"
 
 var (
@@ -630,4 +632,4 @@ func file_mutations_relay_mutation_proto_init() {
 	file_mutations_relay_mutation_proto_depIdxs = nil
 }
 
-// emit-sha256: 65faeb6ad5bb489a054bfbb7f59223eb640901f77f16c9b5227b4fb2b22f56cb
+// emit-sha256: 8cf46ebc20591321857d6fdad46f3706c092d260f8516f619461582e1bafb0d9

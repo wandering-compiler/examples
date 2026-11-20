@@ -162,6 +162,7 @@ type AuthMutationClient interface {
 	// was revoked after :not_revoked_after (see the request): the sign-in
 	// then gets its session but no trust.
 	TrustDevice(ctx context.Context, in *TrustDeviceReq, opts ...grpc.CallOption) (*TrustDeviceResp, error)
+	//
 	// The "approved" op ends, in the same statement set, the CLI sessions the
 	// device APPROVED (cli_login: UserToken.approved_by_device_id) — bound to
 	// the CLI's own key, so the first op does not match them. Without it, a
@@ -203,12 +204,12 @@ type AuthMutationClient interface {
 	// DeleteRole — retire a role (the admin Roles page's `delete`). Nothing is
 	// deleted, in one transaction:
 	//
-	//	grants  every live grant of the role is revoked (revoked_at, ended_key),
-	//	        so no reader counts it — it used to be the caller's job to
-	//	        clean them up, and a grant left behind kept granting through
-	//	        GetUserPermissions;
-	//	main    the role is stamped deleted_at, and ended_key takes its id,
-	//	        which frees its name for a new role. preset_key is KEPT.
+	//   grants  every live grant of the role is revoked (revoked_at, ended_key),
+	//           so no reader counts it — it used to be the caller's job to
+	//           clean them up, and a grant left behind kept granting through
+	//           GetUserPermissions;
+	//   main    the role is stamped deleted_at, and ended_key takes its id,
+	//           which frees its name for a new role. preset_key is KEPT.
 	//
 	// A PRESET role (preset_key set, seeded from the project's
 	// `(w17.acl_roles)` declarations) may be deleted too — the seed never
@@ -245,7 +246,7 @@ type AuthMutationClient interface {
 	// the other, and the second one's guard sees the first.
 	DeleteRole(ctx context.Context, in *DeleteRoleReq, opts ...grpc.CallOption) (*DeleteRoleResp, error)
 	// AssignRoleToUser — INSERT UserRole linking a user to a
-	// role. A live duplicate (same user, role and org, ended_key ”) is refused
+	// role. A live duplicate (same user, role and org, ended_key '') is refused
 	// by the unique index with AlreadyExists; a REVOKED grant does not block it
 	// (its ended_key is its own id), so a grant revoked earlier is given again
 	// as a new row and the revoked one stays as history. A deleted (or
@@ -639,6 +640,7 @@ type AuthMutationServer interface {
 	// was revoked after :not_revoked_after (see the request): the sign-in
 	// then gets its session but no trust.
 	TrustDevice(context.Context, *TrustDeviceReq) (*TrustDeviceResp, error)
+	//
 	// The "approved" op ends, in the same statement set, the CLI sessions the
 	// device APPROVED (cli_login: UserToken.approved_by_device_id) — bound to
 	// the CLI's own key, so the first op does not match them. Without it, a
@@ -680,12 +682,12 @@ type AuthMutationServer interface {
 	// DeleteRole — retire a role (the admin Roles page's `delete`). Nothing is
 	// deleted, in one transaction:
 	//
-	//	grants  every live grant of the role is revoked (revoked_at, ended_key),
-	//	        so no reader counts it — it used to be the caller's job to
-	//	        clean them up, and a grant left behind kept granting through
-	//	        GetUserPermissions;
-	//	main    the role is stamped deleted_at, and ended_key takes its id,
-	//	        which frees its name for a new role. preset_key is KEPT.
+	//   grants  every live grant of the role is revoked (revoked_at, ended_key),
+	//           so no reader counts it — it used to be the caller's job to
+	//           clean them up, and a grant left behind kept granting through
+	//           GetUserPermissions;
+	//   main    the role is stamped deleted_at, and ended_key takes its id,
+	//           which frees its name for a new role. preset_key is KEPT.
 	//
 	// A PRESET role (preset_key set, seeded from the project's
 	// `(w17.acl_roles)` declarations) may be deleted too — the seed never
@@ -722,7 +724,7 @@ type AuthMutationServer interface {
 	// the other, and the second one's guard sees the first.
 	DeleteRole(context.Context, *DeleteRoleReq) (*DeleteRoleResp, error)
 	// AssignRoleToUser — INSERT UserRole linking a user to a
-	// role. A live duplicate (same user, role and org, ended_key ”) is refused
+	// role. A live duplicate (same user, role and org, ended_key '') is refused
 	// by the unique index with AlreadyExists; a REVOKED grant does not block it
 	// (its ended_key is its own id), so a grant revoked earlier is given again
 	// as a new row and the revoked one stays as history. A deleted (or
@@ -1383,4 +1385,4 @@ var AuthMutation_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "mutations/auth_mutation.proto",
 }
 
-// emit-sha256: c87611317202446e3583ddfcb17913b8b8446144760425adb805d3ef129f2a0b
+// emit-sha256: 227d0f14e51de8c5ae44c707448335d7f369df86be3a8574dd751effff9d0cf2

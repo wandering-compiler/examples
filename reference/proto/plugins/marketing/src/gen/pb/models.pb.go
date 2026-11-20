@@ -117,10 +117,14 @@ type Contact struct {
 	// and a late event of the user writes nothing to the tool.
 	ErasedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=erased_at,json=erasedAt,proto3" json:"erased_at,omitempty"`
 	// sent_blacklisted — the emailBlacklisted the plugin last wrote to the
-	// tool, or found there. FALSE until it writes one: before this column the
-	// plugin left every contact subscribed. A contact the tool blacklists while
-	// this says FALSE is one the person unsubscribed in the tool, and the
-	// plugin never subscribes it again on that decision.
+	// tool, or found there. A row the plugin creates starts TRUE (EnsureContact,
+	// SetContactEmail): a contact it has not subscribed is blacklisted — by its
+	// own writes, or by the tool, which creates the contact of an event
+	// blacklisted. The column's default is FALSE for the rows that existed
+	// before it: the plugin then left every contact subscribed. A contact the
+	// tool blacklists while this says FALSE — the plugin subscribed it — is one
+	// the person unsubscribed in the tool, and the plugin never subscribes it
+	// again on that decision.
 	SentBlacklisted bool `protobuf:"varint,7,opt,name=sent_blacklisted,json=sentBlacklisted,proto3" json:"sent_blacklisted,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -454,4 +458,4 @@ func file_types_models_proto_init() {
 	file_types_models_proto_depIdxs = nil
 }
 
-// emit-sha256: 78a2887cd74033e7ece99c5cd438f2b8bbc5b40102eb80c4e4937e342560a7dc
+// emit-sha256: 4fa4a7fd11e17c8dfe4b0e1cab6d85a16d31702760407d11f9f06a89a4777bec

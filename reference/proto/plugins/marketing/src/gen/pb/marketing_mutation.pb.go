@@ -1027,16 +1027,16 @@ const file_mutations_marketing_mutation_proto_rawDesc = "" +
 	"\x11ActivityMovedResp\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId:\x14\xfa\xf4\x18\x10brevo_attributes\"I\n" +
 	"\x10EraseActivityReq\x12\x1f\n" +
-	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId:\x14\xfa\xf4\x18\x10brevo_attributes2\xfa\x1e\n" +
+	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId:\x14\xfa\xf4\x18\x10brevo_attributes2\xb0\x1f\n" +
 	"\x11MarketingMutation\x12\xb8\x01\n" +
 	"\x0fRecordSentEvent\x12).w17.contrib.marketing.RecordSentEventReq\x1a*.w17.contrib.marketing.RecordSentEventResp\"N\xf2\xf3\x18AB?\n" +
 	"\x04main\x127INSERT INTO @module.SentEvent SET id = :id RETURNING id\x8a\xf5\x18\x05brevo\x12\xcb\x01\n" +
 	"\x16ForgetSentEventsBefore\x120.w17.contrib.marketing.ForgetSentEventsBeforeReq\x1a1.w17.contrib.marketing.ForgetSentEventsBeforeResp\"L\xf2\xf3\x18?B=\n" +
-	"\x04main\x125DELETE FROM @module.SentEvent WHERE sent_at < :before\x8a\xf5\x18\x05brevo\x12\xf4\x01\n" +
-	"\x0fSetContactEmail\x12).w17.contrib.marketing.SetContactEmailReq\x1a'.w17.contrib.marketing.ContactWriteResp\"\x8c\x01\xf2\xf3\x18\x7fB}\n" +
-	"\x04main\x12uUPSERT INTO @module.Contact SET user_id = :user_id, email = :email ON CONFLICT (user_id) DO UPDATE SET email = :email\x8a\xf5\x18\x05brevo\x12\xcd\x01\n" +
-	"\rEnsureContact\x12'.w17.contrib.marketing.EnsureContactReq\x1a'.w17.contrib.marketing.ContactWriteResp\"j\xf2\xf3\x18]B[\n" +
-	"\x04main\x12SUPSERT INTO @module.Contact SET user_id = :user_id ON CONFLICT (user_id) DO NOTHING\x8a\xf5\x18\x05brevo\x12\xaf\x02\n" +
+	"\x04main\x125DELETE FROM @module.SentEvent WHERE sent_at < :before\x8a\xf5\x18\x05brevo\x12\x90\x02\n" +
+	"\x0fSetContactEmail\x12).w17.contrib.marketing.SetContactEmailReq\x1a'.w17.contrib.marketing.ContactWriteResp\"\xa8\x01\xf2\xf3\x18\x9a\x01B\x97\x01\n" +
+	"\x04main\x12\x8e\x01UPSERT INTO @module.Contact SET user_id = :user_id, email = :email, sent_blacklisted = TRUE ON CONFLICT (user_id) DO UPDATE SET email = :email\x8a\xf5\x18\x05brevo\x12\xe7\x01\n" +
+	"\rEnsureContact\x12'.w17.contrib.marketing.EnsureContactReq\x1a'.w17.contrib.marketing.ContactWriteResp\"\x83\x01\xf2\xf3\x18vBt\n" +
+	"\x04main\x12lUPSERT INTO @module.Contact SET user_id = :user_id, sent_blacklisted = TRUE ON CONFLICT (user_id) DO NOTHING\x8a\xf5\x18\x05brevo\x12\xaf\x02\n" +
 	"\x11SetContactConsent\x12+.w17.contrib.marketing.SetContactConsentReq\x1a).w17.contrib.marketing.ContactUpdatedResp\"\xc1\x01\xf2\xf3\x18\xb3\x01B\xb0\x01\n" +
 	"\x04main\x12\xa7\x01UPDATE @module.Contact SET consent = :consent, consent_at = :consent_at WHERE user_id = :user_id AND (consent_at IS NULL OR consent_at < :consent_at) RETURNING user_id\x8a\xf5\x18\x05brevo\x12\xbe\x02\n" +
 	"\x16SetContactUnsubscribed\x120.w17.contrib.marketing.SetContactUnsubscribedReq\x1a).w17.contrib.marketing.ContactUpdatedResp\"\xc6\x01\xf2\xf3\x18\xb8\x01B\xb5\x01\n" +
@@ -1165,4 +1165,4 @@ func file_mutations_marketing_mutation_proto_init() {
 	file_mutations_marketing_mutation_proto_depIdxs = nil
 }
 
-// emit-sha256: 70d0299fe624ca1af5548bc3b9477584c7f65fc010060d778614a1a8f98fe6fb
+// emit-sha256: c9d89f12e8fcfd4b505902bd5dfcfa07338c86a8d56579e0cc1a2a4894757046

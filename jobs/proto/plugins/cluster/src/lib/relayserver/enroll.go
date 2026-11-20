@@ -82,6 +82,16 @@ func (e *Enrollment) Enroll(_ context.Context, req *workerpb.EnrollReq) (*worker
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "relay: "+err.Error())
 	}
+	// Fail closed while the relay knows no ban set (restarted without a saved
+	// one, no control plane has called yet): every key reads as admitted on
+	// an empty set, a banned one included, and a certificate issued now would
+	// outlive the moment the set arrives by weeks. Unavailable, before the
+	// code is spent, so the worker retries with the same code.
+	if !e.Workers.HoldsBanSet() {
+		return nil, refusal.New(codes.Unavailable, refusal.BanSetUnknown,
+			"relay: not enrolling workers yet — this relay has not received the ban set since it started; "+
+				BanSetSource+"; retry shortly")
+	}
 	if !e.Workers.Admitted(id) {
 		return nil, refusal.New(codes.PermissionDenied, refusal.WorkerBanned,
 			"relay: the key in this request ("+id+") is banned — enrol with a new key")
@@ -134,7 +144,8 @@ func (e *Enrollment) Renew(ctx context.Context, req *workerpb.RenewReq) (*worker
 	// (disabled, or cut off), may be missing a ban.
 	if !e.Workers.HoldsBanSet() {
 		return nil, refusal.New(codes.Unavailable, refusal.BanSetUnknown,
-			"relay: cannot renew yet — this relay has not received the ban set since it started; retry shortly")
+			"relay: cannot renew yet — this relay has not received the ban set since it started; "+
+				BanSetSource+"; retry shortly")
 	}
 	if !e.Workers.Admitted(id) {
 		return nil, refusal.New(codes.PermissionDenied, refusal.WorkerBanned,
@@ -143,7 +154,7 @@ func (e *Enrollment) Renew(ctx context.Context, req *workerpb.RenewReq) (*worker
 	if at, ok := e.Workers.LastDelivered(); !ok || e.now().Sub(at) > e.maxBanSetAge() {
 		return nil, refusal.New(codes.Unavailable, refusal.BanSetStale,
 			"relay: cannot renew now — no control plane has delivered the ban set within "+
-				e.maxBanSetAge().String()+"; retry later")
+				e.maxBanSetAge().String()+"; "+BanSetSource+"; retry later")
 	}
 	csr, err := identity.ParseCSR(req.GetCsr())
 	if err != nil {

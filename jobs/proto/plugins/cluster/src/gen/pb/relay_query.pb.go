@@ -28,8 +28,10 @@ const (
 type ListRelaysReq struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Narrow to the relays scheduling would actually consider. The backoffice
-	// list leaves it false and shows everything, including the disabled ones —
-	// a registry that hides rows is a registry an operator cannot audit.
+	// list leaves it false and shows every LIVE relay, including the disabled
+	// ones — a registry that hides rows is a registry an operator cannot audit.
+	// An ended relay (DeleteRelay) is listed by neither: it is no longer
+	// registered.
 	EnabledOnly   bool `protobuf:"varint,1,opt,name=enabled_only,json=enabledOnly,proto3" json:"enabled_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -170,14 +172,14 @@ const file_queries_relay_query_proto_rawDesc = "" +
 	"\x0eListRelaysResp\x122\n" +
 	"\x06relays\x18\x01 \x03(\v2\x1a.w17.contrib.cluster.RelayR\x06relays\"%\n" +
 	"\vGetRelayReq\x12\x16\n" +
-	"\x02id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x02id2\xc0\x06\n" +
+	"\x02id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x02id2\xfc\a\n" +
 	"\n" +
-	"RelayQuery\x12\xb6\x03\n" +
+	"RelayQuery\x12\x95\x04\n" +
 	"\n" +
-	"ListRelays\x12\".w17.contrib.cluster.ListRelaysReq\x1a#.w17.contrib.cluster.ListRelaysResp\"\xde\x02\xf2\xf3\x18\xd9\x02B\xd6\x02\n" +
-	"\x04main\x12\xcd\x02SELECT r.id AS id,        r.name AS name,        r.url AS url,        r.cert_fingerprint AS cert_fingerprint,        r.enabled AS enabled,        r.created_at AS created_at,        r.last_seen_at AS last_seen_at,        r.last_error AS last_error FROM @module.Relay r WHERE (:enabled_only = false OR r.enabled = true) ORDER BY r.name\x12\xf8\x02\n" +
-	"\bGetRelay\x12 .w17.contrib.cluster.GetRelayReq\x1a\x1a.w17.contrib.cluster.Relay\"\xad\x02\xf2\xf3\x18\xa8\x02B\xa5\x02\n" +
-	"\x04main\x12\x9c\x02SELECT r.id AS id,        r.name AS name,        r.url AS url,        r.cert_fingerprint AS cert_fingerprint,        r.enabled AS enabled,        r.created_at AS created_at,        r.last_seen_at AS last_seen_at,        r.last_error AS last_error FROM @module.Relay r WHERE r.id = :idB\xce\x01\n" +
+	"ListRelays\x12\".w17.contrib.cluster.ListRelaysReq\x1a#.w17.contrib.cluster.ListRelaysResp\"\xbd\x03\xf2\xf3\x18\xb8\x03B\xb5\x03\n" +
+	"\x04main\x12\xac\x03SELECT r.id AS id,        r.name AS name,        r.url AS url,        r.cert_fingerprint AS cert_fingerprint,        r.enabled AS enabled,        r.created_at AS created_at,        r.last_seen_at AS last_seen_at,        r.last_error AS last_error,        r.removed_at AS removed_at,        r.ended_key AS ended_key FROM @module.Relay r WHERE r.removed_at IS NULL   AND (:enabled_only = false OR r.enabled = true) ORDER BY r.name\x12\xd5\x03\n" +
+	"\bGetRelay\x12 .w17.contrib.cluster.GetRelayReq\x1a\x1a.w17.contrib.cluster.Relay\"\x8a\x03\xf2\xf3\x18\x85\x03B\x82\x03\n" +
+	"\x04main\x12\xf9\x02SELECT r.id AS id,        r.name AS name,        r.url AS url,        r.cert_fingerprint AS cert_fingerprint,        r.enabled AS enabled,        r.created_at AS created_at,        r.last_seen_at AS last_seen_at,        r.last_error AS last_error,        r.removed_at AS removed_at,        r.ended_key AS ended_key FROM @module.Relay r WHERE r.id = :id AND r.removed_at IS NULLB\xce\x01\n" +
 	"\x17com.w17.contrib.clusterB\x0fRelayQueryProtoP\x01Z4github.com/wandering-compiler/plugins/cluster/gen/pb\xa2\x02\x03WCC\xaa\x02\x13W17.Contrib.Cluster\xca\x02\x13W17\\Contrib\\Cluster\xe2\x02\x1fW17\\Contrib\\Cluster\\GPBMetadata\xea\x02\x15W17::Contrib::Clusterb\x06proto3"
 
 var (
@@ -237,4 +239,4 @@ func file_queries_relay_query_proto_init() {
 	file_queries_relay_query_proto_depIdxs = nil
 }
 
-// emit-sha256: d36ba90af98d7cffa323099de6935ca02227d8a0654b4bf4e59c10af13cc84b1
+// emit-sha256: 6913ec75d48e3733798085e905d54bfd0b8bc5bfb26eb93c77ac083e07bb695a

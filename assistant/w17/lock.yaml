@@ -34,27 +34,27 @@ org_id: 01a08faa-bba7-7f3c-bc4b-962c69e23b74
 org_slug: wandering-compiler
 plugins:
     - git:
-        commit: 8521cfff2befb88b50982771e22086eb42b4f5c8
-        digest: d47d92809553ab84fab3b01ae768e855d220c4ebcd70ec3d5ecf256a0ace52b7
-        ref: 8521cfff2befb88b50982771e22086eb42b4f5c8
+        commit: 021b2301f9d8439817b3a86ab20c0d04fe01decf
+        digest: 1198a6a74b60dd5e11ebe1f39bdbaca5fd06eb8074b032b91b0834f200e8b960
+        ref: agent/v0.1.0
         repo: https://github.com/wandering-compiler/plugins
       name: agent
       source: git
-      version: 0.1.0-rc.5
+      version: 0.1.0
     - git:
-        commit: 190e9e7a4fb73623d9e050294fe3f90d96569a26
-        digest: f00a0d13f0333643a7a995263483f212fe48ac5b19cf324f6b99aac212d798bb
-        ref: auth/v0.1.0-rc.60
+        commit: 47321d160d821741fde09a7cd2aba6b78f51c072
+        digest: 60aa1afa521d844b649b27a50af50d74203e39b31ac3aacad77ac3729df7cea7
+        ref: auth/v0.1.0
         repo: https://github.com/wandering-compiler/plugins
       name: auth
       source: git
-      version: 0.1.0-rc.60
+      version: 0.1.0
 project: examples-assistant
 project_id: 69eff853-3d53-4330-bd4d-9764220f4153
-sdk_version: v0.1.0-rc.89
+sdk_version: v0.1.0
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 85fbafa3a0cd62aeb06ae9bbd9444f752f2897c2bfff732c6c19c5dfc480293536cdf1c87b7953b30cbe02090b24598f131fa21023c3c3b32dcb25b32fe8b701
+    body: 6d0b71c684f7691486016233013c88c76d948d314d081d9c52dcd7b0b1f4fba3b6a405a2b72f6eacb717c2a805841b959bfcd38c46663465ec803e79f2f09a0d
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

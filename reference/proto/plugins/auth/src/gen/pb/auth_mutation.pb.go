@@ -5662,7 +5662,7 @@ type SetOrgSignUpPolicyRowReq struct {
 	Open  bool                   `protobuf:"varint,3,opt,name=open,proto3" json:"open,omitempty"`
 	Role  string                 `protobuf:"bytes,4,opt,name=role,proto3" json:"role,omitempty"`
 	SetBy string                 `protobuf:"bytes,5,opt,name=set_by,json=setBy,proto3" json:"set_by,omitempty"`
-	// See OrgSignUpPolicy.role_snapshot (” on a closed policy).
+	// See OrgSignUpPolicy.role_snapshot ('' on a closed policy).
 	RoleSnapshot  string `protobuf:"bytes,7,opt,name=role_snapshot,json=roleSnapshot,proto3" json:"role_snapshot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -7260,4 +7260,4 @@ func file_mutations_auth_mutation_proto_init() {
 	file_mutations_auth_mutation_proto_depIdxs = nil
 }
 
-// emit-sha256: 790205ead30078922d3c8880cb07bf94e05a4ef8bbf3072138b2f20ff6d43984
+// emit-sha256: daaac20caf31d1c20255dc71adab356e552f4aa6f675bdc730c08ae1d35e4fcc

@@ -35,10 +35,10 @@ org_slug: test
 plugins: []
 project: examples-business-python
 project_id: 907d028b-e1c9-4aa8-b040-3d9d8c91830c
-sdk_version: v0.1.0-rc.89
+sdk_version: v0.1.0
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 6eb0c896c8dc07b1a72e71c308a9cb8587dfe412007a039fcf9a43161dfe20c39deeba4edb6c4c4124064d784a61dbe53c10c92be5f3b9f91caebba5b9024908
+    body: 8eede993d35a83f9c0d595b5881c7807b89f559c3b3fdeac2f2e9a34d4173d075e0db3d0ec3ce1c4ba436275f9f1676f269953d81a65f7b10f87f51fbce9eb0d
     key_id: ed25519:d1f1f31adf965af1
 w17_url: localhost:13444

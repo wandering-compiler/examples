@@ -69,11 +69,20 @@ var (
 	// ErrOwnerQueueFull refuses a new waiter whose owner already holds
 	// MaxQueuePerOwner places in the queue. Other owners still queue.
 	ErrOwnerQueueFull = errors.New("relaycore: this caller already holds its share of the queue")
+	// ErrEngineMismatch refuses to redeem a ticket for another engine than
+	// the one its reservation was taken for. The ticket is NOT spent: the
+	// caller named the wrong engine, and the place is still the reservation's.
+	ErrEngineMismatch = errors.New("relaycore: the call names another engine than its reservation")
 )
 
 // reservation is one place in the queue, and later the slot it was granted.
 type reservation struct {
 	id string
+
+	// engine is what the work needs the worker to run (ReserveEngine), or
+	// empty for work that binds none. Carried to the ticket so the proxy can
+	// hold the call to it.
+	engine string
 
 	// owner is whom Reserve took the place for. A poll or cancel naming any
 	// other owner is answered as if the id were unknown (see Poll). Empty for a
@@ -131,7 +140,23 @@ type Pool struct {
 	tickets map[string]*time.Timer
 	// byTicket finds the reservation a ticket belongs to, so redeeming or
 	// expiring it also retires the reservation.
-	byTicket     map[string]*reservation
+	byTicket map[string]*reservation
+	// ticketEngine is the engine an outstanding ticket was granted for, kept
+	// beside the ticket rather than read off its reservation: a reservation is
+	// forgotten when its grant is first returned, the ticket outlives it.
+	ticketEngine map[string]string
+
+	// Per-engine capacity (SetEngineCapacity). Nil engineCap means none was
+	// ever reported, and engines are not counted: the pool is one queue, as
+	// before workers announced engines. Otherwise a reservation for engine E
+	// is granted only while the slots held for E stay under what the workers
+	// running E can take — anyCap (workers naming no engine, which run
+	// anything) plus engineCap[E]. A reservation for an engine that is full
+	// waits while later ones for other engines go ahead of it: one queue per
+	// engine, in arrival order within each.
+	engineCap    map[string]int
+	anyCap       int
+	engineInUse  map[string]int
 	reservations map[string]*reservation
 	queue        []*reservation
 	maxQueue     int
@@ -233,6 +258,8 @@ func New(o Options) (*Pool, error) {
 		newID:        o.NewID,
 		tickets:      map[string]*time.Timer{},
 		byTicket:     map[string]*reservation{},
+		ticketEngine: map[string]string{},
+		engineInUse:  map[string]int{},
 		reservations: map[string]*reservation{},
 	}
 	if p.pollTimeout == 0 {
@@ -265,12 +292,20 @@ func randomID() string {
 // or Cancel naming the same owner reaches it. The id alone is not enough to
 // collect the grant, so one that leaked is not a credential on its own.
 func (p *Pool) Reserve(owner string) (Reservation, error) {
+	return p.ReserveEngine(owner, "")
+}
+
+// ReserveEngine is Reserve for work that needs the worker to run engine. The
+// grant's ticket then redeems only for a call naming the same engine, or none
+// (ClaimEngine). The pool itself does not queue per engine: which workers
+// carry it is the caller's to check before reserving.
+func (p *Pool) ReserveEngine(owner, engine string) (Reservation, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.draining {
 		return Reservation{}, ErrDraining
 	}
-	r, err := p.enqueueLocked(owner)
+	r, err := p.enqueueLocked(owner, engine)
 	if err != nil {
 		return Reservation{}, err
 	}
@@ -385,7 +420,7 @@ func (p *Pool) WaitFor(ctx context.Context, owner string, onPosition func(int) e
 		p.mu.Unlock()
 		return Grant{}, ErrDraining
 	}
-	r, err := p.enqueueLocked(owner)
+	r, err := p.enqueueLocked(owner, "")
 	p.mu.Unlock()
 	if err != nil {
 		return Grant{}, err
@@ -426,7 +461,7 @@ func (p *Pool) WaitFor(ctx context.Context, owner string, onPosition func(int) e
 	}
 }
 
-func (p *Pool) enqueueLocked(owner string) (*reservation, error) {
+func (p *Pool) enqueueLocked(owner, engine string) (*reservation, error) {
 	if len(p.queue) >= p.maxQueue {
 		return nil, ErrQueueFull
 	}
@@ -438,7 +473,7 @@ func (p *Pool) enqueueLocked(owner string) (*reservation, error) {
 	if owner != "" && p.queuedBy[owner] >= p.maxPerOwner {
 		return nil, ErrOwnerQueueFull
 	}
-	r := &reservation{id: p.newID(), owner: owner, changed: make(chan struct{}, 1)}
+	r := &reservation{id: p.newID(), owner: owner, engine: engine, changed: make(chan struct{}, 1)}
 	p.reservations[r.id] = r
 	p.queue = append(p.queue, r)
 	p.countQueuedLocked(r, 1)
@@ -458,10 +493,17 @@ func (p *Pool) countQueuedLocked(r *reservation, delta int) {
 	}
 }
 
+// positionLocked is r's place in ITS queue: the places ahead of it that it
+// waits behind. With engines counted, a place for one engine does not wait
+// behind places for another, so those are not counted.
 func (p *Pool) positionLocked(r *reservation) int {
-	for i, q := range p.queue {
+	ahead := 0
+	for _, q := range p.queue {
 		if q == r {
-			return i + 1
+			return ahead + 1
+		}
+		if p.engineCap == nil || r.engine == "" || q.engine == "" || q.engine == r.engine {
+			ahead++
 		}
 	}
 	return 0
@@ -480,21 +522,60 @@ func poke(r *reservation) {
 // because all three move somebody. Pokes never block: a listener that has not
 // consumed the last one reads the newest state when it does.
 func (p *Pool) notifyLocked() {
-	for i, q := range p.queue {
-		if pos := i + 1; q.lastPos != pos {
+	for _, q := range p.queue {
+		if pos := p.positionLocked(q); q.lastPos != pos {
 			q.lastPos = pos
 			poke(q)
 		}
 	}
 }
 
-// promoteLocked hands slots to the head of the queue while capacity allows.
+// engineRoomLocked: may one more slot be held for engine? Work that binds no
+// engine runs anywhere; so does every engine while no per-engine capacity was
+// ever reported.
+func (p *Pool) engineRoomLocked(engine string) bool {
+	if engine == "" || p.engineCap == nil {
+		return true
+	}
+	return p.engineInUse[engine] < p.anyCap+p.engineCap[engine]
+}
+
+// nextGrantableLocked is the first queued reservation whose engine has room:
+// the head of the queue, unless its engine is full — then the next one for
+// an engine that is not. -1 when none is.
+func (p *Pool) nextGrantableLocked() int {
+	for i, r := range p.queue {
+		if p.engineRoomLocked(r.engine) {
+			return i
+		}
+	}
+	return -1
+}
+
+func (p *Pool) holdEngineLocked(engine string, delta int) {
+	if engine == "" {
+		return
+	}
+	if n := p.engineInUse[engine] + delta; n > 0 {
+		p.engineInUse[engine] = n
+	} else {
+		delete(p.engineInUse, engine)
+	}
+}
+
+// promoteLocked hands slots to the queue, in arrival order per engine, while
+// capacity allows.
 func (p *Pool) promoteLocked() {
 	for p.inUse < p.capacity && len(p.queue) > 0 {
-		r := p.queue[0]
-		p.queue = p.queue[1:]
+		i := p.nextGrantableLocked()
+		if i < 0 {
+			break
+		}
+		r := p.queue[i]
+		p.queue = append(p.queue[:i], p.queue[i+1:]...)
 		p.countQueuedLocked(r, -1)
 		p.inUse++
+		p.holdEngineLocked(r.engine, 1)
 		ticket := p.newID()
 		r.grant = &Grant{Ticket: ticket}
 		// Reserved, with NO claim window yet: the window starts when the
@@ -503,6 +584,9 @@ func (p *Pool) promoteLocked() {
 		// comes for it.
 		p.tickets[ticket] = nil
 		p.byTicket[ticket] = r
+		if r.engine != "" {
+			p.ticketEngine[ticket] = r.engine
+		}
 		poke(r)
 	}
 	p.notifyLocked()
@@ -576,6 +660,24 @@ func (p *Pool) SetCapacity(n int) {
 	p.promoteLocked()
 }
 
+// SetEngineCapacity reports, per engine, what the attached ready workers that
+// run it can take: any is the slots of workers that name no engine (they run
+// every one), byEngine the slots of workers that name each engine. Called on
+// every change to the fleet, beside SetCapacity, and it promotes at once.
+// Like SetCapacity, shrinking below what is held revokes nothing.
+func (p *Pool) SetEngineCapacity(any int, byEngine map[string]int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.anyCap = max(any, 0)
+	p.engineCap = make(map[string]int, len(byEngine))
+	for e, n := range byEngine {
+		if e != "" && n > 0 {
+			p.engineCap[e] = n
+		}
+	}
+	p.promoteLocked()
+}
+
 func (p *Pool) expire(ticket string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -589,35 +691,58 @@ func (p *Pool) expire(ticket string) {
 // held by the caller's work. Single use: the ticket is forgotten here, so a
 // replay finds nothing — and the reservation it came from is finished.
 func (p *Pool) Claim(ticket string) error {
+	_, err := p.ClaimEngine(ticket, "")
+	return err
+}
+
+// ClaimEngine is Claim for a call that names the engine it expects (empty:
+// it names none). It returns the engine the ticket was granted for, empty for
+// a reservation that bound none.
+//
+// A call naming ANOTHER engine than the ticket's is refused with
+// ErrEngineMismatch and the ticket stays unspent. A call naming none is let
+// through: a client from before engines sends no name, and the worker it
+// reaches runs the reservation's engine anyway.
+func (p *Pool) ClaimEngine(ticket, engine string) (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	t, ok := p.tickets[ticket]
 	if !ok {
-		return ErrNoSuchTicket
+		return "", ErrNoSuchTicket
 	}
 	if t == nil {
 		// Never returned to anyone, so nobody can be holding it legitimately.
 		// Unreachable for a ticket of 32 random bytes; refused rather than
 		// assumed.
-		return ErrNoSuchTicket
+		return "", ErrNoSuchTicket
+	}
+	bound := p.ticketEngine[ticket]
+	if engine != "" && bound != "" && engine != bound {
+		return "", ErrEngineMismatch
 	}
 	t.Stop()
 	delete(p.tickets, ticket)
+	delete(p.ticketEngine, ticket)
 	if r, ok := p.byTicket[ticket]; ok {
 		p.forgetLocked(r)
 	}
 	// inUse is NOT decremented: the slot moves from "reserved" to "running".
 	// It comes back through Done.
-	return nil
+	return bound, nil
 }
 
-// Done returns a slot held by running work.
-func (p *Pool) Done() {
+// Done returns a slot held by running work that bound no engine.
+func (p *Pool) Done() { p.DoneEngine("") }
+
+// DoneEngine returns a slot held by running work for engine — the engine
+// ClaimEngine returned for its ticket.
+func (p *Pool) DoneEngine(engine string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.inUse > 0 {
 		p.inUse--
 	}
+	p.holdEngineLocked(engine, -1)
 	p.promoteLocked()
 }
 
@@ -630,7 +755,9 @@ func (p *Pool) releaseLocked(ticket string) {
 	if t != nil {
 		t.Stop()
 	}
+	p.holdEngineLocked(p.ticketEngine[ticket], -1)
 	delete(p.tickets, ticket)
+	delete(p.ticketEngine, ticket)
 	if p.inUse > 0 {
 		p.inUse--
 	}

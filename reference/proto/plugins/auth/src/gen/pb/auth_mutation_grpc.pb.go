@@ -236,6 +236,7 @@ type AuthMutationClient interface {
 	// was revoked after :not_revoked_after (see the request): the sign-in
 	// then gets its session but no trust.
 	TrustDevice(ctx context.Context, in *TrustDeviceReq, opts ...grpc.CallOption) (*TrustDeviceResp, error)
+	//
 	// The "approved" op ends, in the same statement set, the CLI sessions the
 	// device APPROVED (cli_login: UserToken.approved_by_device_id) — bound to
 	// the CLI's own key, so the first op does not match them. Without it, a
@@ -277,12 +278,12 @@ type AuthMutationClient interface {
 	// DeleteRole — retire a role (the admin Roles page's `delete`). Nothing is
 	// deleted, in one transaction:
 	//
-	//	grants  every live grant of the role is revoked (revoked_at, ended_key),
-	//	        so no reader counts it — it used to be the caller's job to
-	//	        clean them up, and a grant left behind kept granting through
-	//	        GetUserPermissions;
-	//	main    the role is stamped deleted_at, and ended_key takes its id,
-	//	        which frees its name for a new role. preset_key is KEPT.
+	//   grants  every live grant of the role is revoked (revoked_at, ended_key),
+	//           so no reader counts it — it used to be the caller's job to
+	//           clean them up, and a grant left behind kept granting through
+	//           GetUserPermissions;
+	//   main    the role is stamped deleted_at, and ended_key takes its id,
+	//           which frees its name for a new role. preset_key is KEPT.
 	//
 	// A PRESET role (preset_key set, seeded from the project's
 	// `(w17.acl_roles)` declarations) may be deleted too — the seed never
@@ -319,7 +320,7 @@ type AuthMutationClient interface {
 	// the other, and the second one's guard sees the first.
 	DeleteRole(ctx context.Context, in *DeleteRoleReq, opts ...grpc.CallOption) (*DeleteRoleResp, error)
 	// AssignRoleToUser — INSERT UserRole linking a user to a
-	// role. A live duplicate (same user, role and org, ended_key ”) is refused
+	// role. A live duplicate (same user, role and org, ended_key '') is refused
 	// by the unique index with AlreadyExists; a REVOKED grant does not block it
 	// (its ended_key is its own id), so a grant revoked earlier is given again
 	// as a new row and the revoked one stays as history. A deleted (or
@@ -372,7 +373,7 @@ type AuthMutationClient interface {
 	// directly.
 	CreateOrganization(ctx context.Context, in *CreateOrganizationReq, opts ...grpc.CallOption) (*CreateOrganizationResp, error)
 	// AddOrgMembership — INSERT OrgMembership linking a user to an org
-	// with a role. A live duplicate (same user and org, ended_key ”) is
+	// with a role. A live duplicate (same user and org, ended_key '') is
 	// refused by the unique index with AlreadyExists; a REMOVED membership does
 	// not block it, so a removed member can be added again (a new row). Emits OrgMembershipAdded (fires for
 	// the creator's membership + every later invite accept). Mirrors
@@ -384,12 +385,12 @@ type AuthMutationClient interface {
 	// DeleteOrganization — the admin Organizations page delete. Nothing is
 	// deleted, in one transaction:
 	//
-	//	memberships  every live membership of the org is removed (removed_at,
-	//	             ended_key);
-	//	grants       every live grant scoped to the org is revoked, for the
-	//	             reason MarkOrgMembershipRemoved gives;
-	//	main         the org is stamped deleted_at, and ended_key takes its id,
-	//	             which frees its slug for a new organization.
+	//   memberships  every live membership of the org is removed (removed_at,
+	//                ended_key);
+	//   grants       every live grant scoped to the org is revoked, for the
+	//                reason MarkOrgMembershipRemoved gives;
+	//   main         the org is stamped deleted_at, and ended_key takes its id,
+	//                which frees its slug for a new organization.
 	//
 	// Every organization reader reads live rows only, so the org disappears
 	// from every list and lookup and cannot be selected. Its invitations are not touched here — org_invite is a feature
@@ -1146,6 +1147,7 @@ type AuthMutationServer interface {
 	// was revoked after :not_revoked_after (see the request): the sign-in
 	// then gets its session but no trust.
 	TrustDevice(context.Context, *TrustDeviceReq) (*TrustDeviceResp, error)
+	//
 	// The "approved" op ends, in the same statement set, the CLI sessions the
 	// device APPROVED (cli_login: UserToken.approved_by_device_id) — bound to
 	// the CLI's own key, so the first op does not match them. Without it, a
@@ -1187,12 +1189,12 @@ type AuthMutationServer interface {
 	// DeleteRole — retire a role (the admin Roles page's `delete`). Nothing is
 	// deleted, in one transaction:
 	//
-	//	grants  every live grant of the role is revoked (revoked_at, ended_key),
-	//	        so no reader counts it — it used to be the caller's job to
-	//	        clean them up, and a grant left behind kept granting through
-	//	        GetUserPermissions;
-	//	main    the role is stamped deleted_at, and ended_key takes its id,
-	//	        which frees its name for a new role. preset_key is KEPT.
+	//   grants  every live grant of the role is revoked (revoked_at, ended_key),
+	//           so no reader counts it — it used to be the caller's job to
+	//           clean them up, and a grant left behind kept granting through
+	//           GetUserPermissions;
+	//   main    the role is stamped deleted_at, and ended_key takes its id,
+	//           which frees its name for a new role. preset_key is KEPT.
 	//
 	// A PRESET role (preset_key set, seeded from the project's
 	// `(w17.acl_roles)` declarations) may be deleted too — the seed never
@@ -1229,7 +1231,7 @@ type AuthMutationServer interface {
 	// the other, and the second one's guard sees the first.
 	DeleteRole(context.Context, *DeleteRoleReq) (*DeleteRoleResp, error)
 	// AssignRoleToUser — INSERT UserRole linking a user to a
-	// role. A live duplicate (same user, role and org, ended_key ”) is refused
+	// role. A live duplicate (same user, role and org, ended_key '') is refused
 	// by the unique index with AlreadyExists; a REVOKED grant does not block it
 	// (its ended_key is its own id), so a grant revoked earlier is given again
 	// as a new row and the revoked one stays as history. A deleted (or
@@ -1282,7 +1284,7 @@ type AuthMutationServer interface {
 	// directly.
 	CreateOrganization(context.Context, *CreateOrganizationReq) (*CreateOrganizationResp, error)
 	// AddOrgMembership — INSERT OrgMembership linking a user to an org
-	// with a role. A live duplicate (same user and org, ended_key ”) is
+	// with a role. A live duplicate (same user and org, ended_key '') is
 	// refused by the unique index with AlreadyExists; a REMOVED membership does
 	// not block it, so a removed member can be added again (a new row). Emits OrgMembershipAdded (fires for
 	// the creator's membership + every later invite accept). Mirrors
@@ -1294,12 +1296,12 @@ type AuthMutationServer interface {
 	// DeleteOrganization — the admin Organizations page delete. Nothing is
 	// deleted, in one transaction:
 	//
-	//	memberships  every live membership of the org is removed (removed_at,
-	//	             ended_key);
-	//	grants       every live grant scoped to the org is revoked, for the
-	//	             reason MarkOrgMembershipRemoved gives;
-	//	main         the org is stamped deleted_at, and ended_key takes its id,
-	//	             which frees its slug for a new organization.
+	//   memberships  every live membership of the org is removed (removed_at,
+	//                ended_key);
+	//   grants       every live grant scoped to the org is revoked, for the
+	//                reason MarkOrgMembershipRemoved gives;
+	//   main         the org is stamped deleted_at, and ended_key takes its id,
+	//                which frees its slug for a new organization.
 	//
 	// Every organization reader reads live rows only, so the org disappears
 	// from every list and lookup and cannot be selected. Its invitations are not touched here — org_invite is a feature
@@ -2729,4 +2731,4 @@ var AuthMutation_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "mutations/auth_mutation.proto",
 }
 
-// emit-sha256: 68753d8c2303541e0c58155bec51f99a87fd71282492a39a25d4f6415b662881
+// emit-sha256: d2fdfa2c6c5ed1d6a939756926c6a39281f0ec94e81a2794cb2717d271212ead

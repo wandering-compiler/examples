@@ -24,6 +24,13 @@ import (
 // and a value the caller supplies must not look like one.
 const TicketHeader = "w17-cluster-ticket"
 
+// EngineHeader names the engine a call expects (ReserveTaskReq.engine). The
+// proxy refuses a call naming another engine than its reservation's; a call
+// without it is let through. Either way the caller's value never reaches the
+// worker: the relay forwards the RESERVATION's engine under this key (none
+// for a reservation that bound none), and the worker routes on that.
+const EngineHeader = "w17-cluster-engine"
+
 // Backends is the set of workers currently attached to this relay.
 //
 // A worker holds ONE tunnel connection and HTTP/2 multiplexes every call over
@@ -47,6 +54,7 @@ type Backends struct {
 	// when its last call ends, or at the end of its grace (see ExpireAt).
 	retired  map[string][]*backend
 	profiles map[string]workerProfile // fingerprint → what the worker said
+	engines  map[string]engineSet     // fingerprint → the engines it runs
 	order    []string                 // rotation cursor over conns
 	next     int
 
@@ -64,6 +72,9 @@ type Backends struct {
 	// this to the pool, so a worker attaching promotes whoever is queued
 	// instead of making them wait for the next arrival.
 	onCapacity func(int)
+	// onEngineCapacity is told the per-engine capacity alongside (see
+	// engineCapacityLocked); nil when nothing listens.
+	onEngineCapacity func(any int, byEngine map[string]int)
 
 	// expiryGrace is how long work already running on a tunnel whose
 	// certificate expired may go on before the tunnel is closed under it
@@ -100,12 +111,72 @@ type workerProfile struct {
 	gen   uint64
 }
 
+// engineSet is what one attachment said it runs (AttachReq.engines). Empty
+// means it named none: a worker from before engines, which takes any work.
+type engineSet struct {
+	gen     uint64
+	engines map[string]bool
+}
+
 func NewBackends() *Backends {
 	return &Backends{
 		conns:    map[string]*backend{},
 		retired:  map[string][]*backend{},
 		profiles: map[string]workerProfile{},
+		engines:  map[string]engineSet{},
 	}
+}
+
+// SetEngines records the engines an attachment announced. Like SetProfile, a
+// write from a superseded attachment is dropped; ClearProfile forgets it.
+func (b *Backends) SetEngines(fingerprint string, gen uint64, engines []string) {
+	b.mu.Lock()
+	if cur, ok := b.engines[fingerprint]; ok && cur.gen > gen {
+		b.mu.Unlock()
+		return
+	}
+	set := engineSet{gen: gen, engines: map[string]bool{}}
+	for _, e := range engines {
+		if e != "" {
+			set.engines[e] = true
+		}
+	}
+	b.engines[fingerprint] = set
+	// The per-engine split changed even when the total did not.
+	publish := b.publishLocked()
+	b.mu.Unlock()
+	publish()
+}
+
+// carriesLocked: does the worker run engine? Work that names no engine runs
+// anywhere, and so does a worker that named none.
+func (b *Backends) carriesLocked(fingerprint, engine string) bool {
+	if engine == "" {
+		return true
+	}
+	set, ok := b.engines[fingerprint]
+	if !ok || len(set.engines) == 0 {
+		return true
+	}
+	return set.engines[engine]
+}
+
+// Carries reports whether a reservation for engine can be placed here: some
+// attached worker runs it. A relay with nobody attached answers true — the
+// reservation queues for whoever attaches, as every reservation does — so
+// only a fleet that is present and runs other engines turns it away.
+func (b *Backends) Carries(engine string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if engine == "" || len(b.profiles) == 0 {
+		return true
+	}
+	for fp := range b.profiles {
+		if b.carriesLocked(fp, engine) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewAttachment issues the generation one attach stream writes under.
@@ -126,6 +197,41 @@ func (b *Backends) OnCapacityChange(f func(int)) {
 	if f != nil {
 		f(n)
 	}
+}
+
+// OnEngineCapacityChange registers the sink for per-engine capacity (the
+// pool's SetEngineCapacity) and reports the current value once.
+func (b *Backends) OnEngineCapacityChange(f func(any int, byEngine map[string]int)) {
+	b.mu.Lock()
+	b.onEngineCapacity = f
+	anyN, by := b.engineCapacityLocked()
+	b.mu.Unlock()
+	if f != nil {
+		f(anyN, by)
+	}
+}
+
+// engineCapacityLocked splits capacityLocked by engine: the slots of ready
+// workers that named no engine (they run any), and per engine the slots of
+// ready workers that named it. A worker naming two engines counts for both —
+// the pool's total still caps what it holds at once.
+func (b *Backends) engineCapacityLocked() (int, map[string]int) {
+	anyN, by := 0, map[string]int{}
+	for fp := range b.conns {
+		pr, ok := b.profiles[fp]
+		if !ok || !pr.ready {
+			continue
+		}
+		set, ok := b.engines[fp]
+		if !ok || len(set.engines) == 0 {
+			anyN += int(pr.slots)
+			continue
+		}
+		for e := range set.engines {
+			by[e] += int(pr.slots)
+		}
+	}
+	return anyN, by
 }
 
 // capacityLocked sums what the attached, ready workers can take.
@@ -218,7 +324,7 @@ func (b *Backends) dropRetiredLocked(fingerprint string, be *backend) {
 // capacity 0 with a ready worker attached, and nothing queued ever promoted.
 // Serialised and re-read, the last publish always carries the current total.
 func (b *Backends) publishLocked() func() {
-	if b.onCapacity == nil {
+	if b.onCapacity == nil && b.onEngineCapacity == nil {
 		return func() {}
 	}
 	return func() {
@@ -226,8 +332,17 @@ func (b *Backends) publishLocked() func() {
 		defer b.pubMu.Unlock()
 		b.mu.Lock()
 		n, f := b.capacityLocked(), b.onCapacity
+		anyN, by := b.engineCapacityLocked()
+		fe := b.onEngineCapacity
 		b.mu.Unlock()
-		f(n)
+		// Per engine first: a total that grows promotes at once, and the
+		// engine split must already be there to say for whom.
+		if fe != nil {
+			fe(anyN, by)
+		}
+		if f != nil {
+			f(n)
+		}
 	}
 }
 
@@ -263,6 +378,9 @@ func (b *Backends) ClearProfile(fingerprint string, gen uint64) {
 	// beats the old stream's unwind has its brand-new profile deleted by the
 	// dying one, and a healthy worker drops out of the capacity sum until it
 	// happens to send another status.
+	if cur, ok := b.engines[fingerprint]; ok && cur.gen == gen {
+		delete(b.engines, fingerprint)
+	}
 	if cur, ok := b.profiles[fingerprint]; !ok || cur.gen != gen {
 		b.mu.Unlock()
 		return
@@ -611,6 +729,11 @@ func (b *Backends) busyLocked(fingerprint string) int {
 // Draining and unhealthy workers are skipped: they keep their tunnel so the
 // work already travelling over it can finish, and they take no more.
 func (b *Backends) take(admitted func(string) bool) (*grpc.ClientConn, string, uint64, error) {
+	return b.takeFor(admitted, "")
+}
+
+// takeFor is take among the workers that run engine (carriesLocked).
+func (b *Backends) takeFor(admitted func(string) bool, engine string) (*grpc.ClientConn, string, uint64, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if len(b.order) == 0 {
@@ -627,6 +750,9 @@ func (b *Backends) take(admitted func(string) bool) (*grpc.ClientConn, string, u
 			continue
 		}
 		if admitted != nil && !admitted(fp) {
+			continue
+		}
+		if !b.carriesLocked(fp, engine) {
 			continue
 		}
 		if free := int(pr.slots) - b.busyLocked(fp); free > bestFree {
@@ -663,7 +789,20 @@ func TicketPicker(pool *relaycore.Pool, backends *Backends, workers *workeradmit
 			return tunnel.Backend{}, refusal.New(codes.Unauthenticated, refusal.TicketMissing,
 				"relay: no "+TicketHeader+" — ask the control plane to schedule a task and send the ticket it grants")
 		}
-		if err := pool.Claim(vals[0]); err != nil {
+		// The engine the caller expects, if it names one (the first value;
+		// every value is dropped below). The relay checks it against the
+		// reservation and then forwards the reservation's engine in its place:
+		// the worker routes on the relay's word, never the caller's.
+		named := ""
+		if ev := md.Get(EngineHeader); len(ev) > 0 {
+			named = ev[0]
+		}
+		engine, err := pool.ClaimEngine(vals[0], named)
+		if errors.Is(err, relaycore.ErrEngineMismatch) {
+			return tunnel.Backend{}, refusal.New(codes.FailedPrecondition, refusal.EngineMismatch,
+				"relay: the call names engine "+named+", which is not the engine its reservation was taken for — place the run again")
+		}
+		if err != nil {
 			// Deliberately does not distinguish expired from spent from
 			// invented: see relaycore.ErrNoSuchTicket.
 			return tunnel.Backend{}, refusal.New(codes.PermissionDenied, refusal.TicketNotRedeemable,
@@ -674,11 +813,11 @@ func TicketPicker(pool *relaycore.Pool, backends *Backends, workers *workeradmit
 		if workers != nil {
 			admitted = workers.Admitted
 		}
-		conn, fp, gen, err := backends.take(admitted)
+		conn, fp, gen, err := backends.takeFor(admitted, engine)
 		if err != nil {
 			// The slot was claimed and there is nobody to run the work, so it
 			// goes back immediately rather than waiting out the call.
-			pool.Done()
+			pool.DoneEngine(engine)
 			return tunnel.Backend{}, refusal.New(codes.Unavailable, refusal.NoWorker,
 				"relay: the ticket was valid but no admitted worker is attached right now")
 		}
@@ -686,8 +825,22 @@ func TicketPicker(pool *relaycore.Pool, backends *Backends, workers *workeradmit
 		// CONNECTION from here, and a leak would shrink the pool silently
 		// until a restart.
 		var once sync.Once
+		// The engine header the worker routes on is the relay's word, not the
+		// caller's: the caller's value is dropped and the reservation's engine
+		// sent in its place. So a caller cannot pick an engine the control
+		// plane did not bind (a reservation that bound none forwards none), and
+		// a client from before engines, which sends no header, still reaches
+		// the right engine on a worker that runs several.
+		var set map[string]string
+		if engine != "" {
+			set = map[string]string{EngineHeader: engine}
+		}
 		return tunnel.Backend{
 			Conn: conn,
+			// Spent here; the worker has no use for the ticket, and a header
+			// the relay consumed is not the caller's to hand on.
+			Consumed: []string{TicketHeader, EngineHeader},
+			Set:      set,
 			Release: func() {
 				once.Do(func() {
 					// Both books, exactly once: the pool's slot AND the
@@ -695,7 +848,7 @@ func TicketPicker(pool *relaycore.Pool, backends *Backends, workers *workeradmit
 					// looking permanently busy to take(), so it would stop
 					// being chosen while being perfectly idle.
 					backends.release(fp, gen)
-					pool.Done()
+					pool.DoneEngine(engine)
 				})
 			},
 		}, nil

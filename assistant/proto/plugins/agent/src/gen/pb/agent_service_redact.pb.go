@@ -15,6 +15,9 @@ func init() {
 		"w17.contrib.agent.CompleteResp":           {},
 		"w17.contrib.agent.CompleteEvent":          {},
 		"w17.contrib.agent.TextDelta":              {},
+		"w17.contrib.agent.TextFilterReq":          {},
+		"w17.contrib.agent.TextFilterResp":         {},
+		"w17.contrib.agent.FinalText":              {},
 		"w17.contrib.agent.Finished":               {},
 		"w17.contrib.agent.ToolSpec":               {},
 		"w17.contrib.agent.Limits":                 {},
@@ -27,4 +30,4 @@ func init() {
 	})
 }
 
-// emit-sha256: add4f060d26ae80a0b67ff3100a7928c32c50c012725a732efa1d4b27ede6ff5
+// emit-sha256: f46e17afb1768f6331b1eb52798a5375bb12fb8778d3c5ed4c9cccbbdd16dad2

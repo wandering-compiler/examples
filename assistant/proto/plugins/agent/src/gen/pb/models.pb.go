@@ -256,10 +256,10 @@ type ModelSpec struct {
 	//
 	// Three values, three meanings:
 	//
-	//	> 0   this many tokens
-	//	= 0   the deployment's configured default
-	//	< 0   NO CAP — the budget field is omitted entirely and the provider's
-	//	      own default applies
+	//   > 0   this many tokens
+	//   = 0   the deployment's configured default
+	//   < 0   NO CAP — the budget field is omitted entirely and the provider's
+	//         own default applies
 	//
 	// The negative case exists because a caller whose answer is large and
 	// variable — fifty records in one reply — would otherwise have to guess a
@@ -608,4 +608,4 @@ func file_types_models_proto_init() {
 	file_types_models_proto_depIdxs = nil
 }
 
-// emit-sha256: f038b20b49a1734b0918cc4549a9e5e1ebaa9f4ca354edae02f503ee019adcec
+// emit-sha256: 28256a213ab673d6040d10089a54b40a40d01ffaf1169dd7d6b264d2573c0576
