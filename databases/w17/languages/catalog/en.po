@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-11-11 22:50+0000\n"
+"POT-Creation-Date: 2026-11-21 11:14+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -138,6 +138,12 @@ msgstr "must be one of: {choices}"
 
 msgid "must fit precision {precision} scale {scale}"
 msgstr "must fit precision {precision} scale {scale}"
+
+msgid "must have at least {min} items (got {got})"
+msgstr "must have at least {min} items (got {got})"
+
+msgid "must have at most {max} items (got {got})"
+msgstr "must have at most {max} items (got {got})"
 
 msgid "referenced record does not exist"
 msgstr "referenced record does not exist"

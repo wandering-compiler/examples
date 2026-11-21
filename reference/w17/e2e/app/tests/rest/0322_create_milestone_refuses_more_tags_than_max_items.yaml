@@ -1,0 +1,39 @@
+# `(w17.field).max_items` — a list longer than its bound is refused at the
+# request, with the field named and the item count in the message, before
+# any SQL runs. 21 tags against `max_items: 20`: the smallest list that
+# crosses the bound, so an off-by-one in the check (`>=` for `>`) or a
+# bound applied to each tag's length instead of the count fails here.
+method: tasks.MilestoneMutation.CreateMilestone
+pre:
+    - auth/auth.yaml
+input:
+    name: too many tags
+    weight: 3
+    tags:
+        - t0
+        - t1
+        - t2
+        - t3
+        - t4
+        - t5
+        - t6
+        - t7
+        - t8
+        - t9
+        - t10
+        - t11
+        - t12
+        - t13
+        - t14
+        - t15
+        - t16
+        - t17
+        - t18
+        - t19
+        - t20
+expect_error:
+    code: INVALID_ARGUMENT
+    details:
+        - field: tags
+          code: MAX_ITEMS_VIOLATION
+          message: {matcher: regex, pattern: "must have at most 20 items \\(got 21\\)"}

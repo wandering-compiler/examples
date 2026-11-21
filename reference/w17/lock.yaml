@@ -74,7 +74,7 @@ plugins:
     - git: null
       name: auth
       source: local
-      version: 0.1.0
+      version: 0.1.1
     - git:
         commit: fe2dbd3c7c52486d54d5e6cee76bbe9c2553b88b
         digest: c3c8f24409b190b67384db78b40f0fc996039c7e6be8b1a18048a86d35b6c74c
@@ -85,10 +85,10 @@ plugins:
       version: 0.1.0
 project: examples-reference
 project_id: dceefc0e-edfb-477a-a230-ed461733de9a
-sdk_version: v0.1.0
+sdk_version: v0.1.1
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 0d3f23ab74d4e825469a4d239d829149aacb3efb554d921f821ea4c5e7ba2d74494c0e3f685cec0bb5c77aea1b9d0e2d04b54c7da1a5f24e5a498d0ef3bc680b
+    body: 55dfe7ed12967c4630e295b57286fa3a918ed577395c706188c3b49cf782f36832ef177c3abc30d36ee5432344aa5cd082449ca9a8e15acddcf646101fa86e08
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
