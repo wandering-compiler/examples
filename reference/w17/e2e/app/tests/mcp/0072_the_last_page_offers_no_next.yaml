@@ -1,0 +1,11 @@
+# The short last page ends the walk: one row left, and no next_cursor — an
+# agent following next_cursor stops here instead of calling for an empty page.
+method: tasks.TaskQuery.ListTasksPagedWithCategory
+input:
+    limit: 2
+    cursor: ${mcp_tasks.third_cursor}
+expect:
+    items: {matcher: count, op: '==', value: 1}
+    items.0.id: {matcher: eq, value: "700001"}
+    paging.next_cursor: {matcher: empty}
+    paging.previous_cursor: {matcher: not_empty}

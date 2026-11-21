@@ -10,7 +10,7 @@ require (
 )
 
 require (
-	github.com/wandering-compiler/sdk/go v0.1.1 // indirect
+	github.com/wandering-compiler/sdk/go v0.1.2 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect

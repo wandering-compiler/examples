@@ -1,0 +1,13 @@
+# next_cursor, passed back as `cursor`, resumes after the last row of 0070:
+# the next two, not the first two again. Same session (no `pre`), because the
+# cursor is signed for the caller that minted it — 0073 is the other caller.
+method: tasks.TaskQuery.ListTasksPagedWithCategory
+input:
+    limit: 2
+    cursor: ${mcp_tasks.next_cursor}
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    items.0.id: {matcher: eq, value: "700003"}
+    items.1.id: {matcher: eq, value: "700002"}
+    paging.previous_cursor: {matcher: not_empty}
+    paging.next_cursor: {capture: mcp_tasks.third_cursor, match: {matcher: not_empty}}
