@@ -1,0 +1,13 @@
+# A cursor carries the request it was minted from, so it is the minting
+# caller's alone: a fresh session presenting 0070's cursor is refused rather
+# than served that caller's page. (The detail naming `cursor` is asserted in
+# the SDK, TestCallPaged_ACursorOfAnotherCallerIsRefused: the MCP caller of
+# this runner reads a refusal's code only.)
+method: tasks.TaskQuery.ListTasksPagedWithCategory
+pre:
+    - auth/auth.yaml
+input:
+    limit: 2
+    cursor: ${mcp_tasks.next_cursor}
+expect_error:
+    code: INVALID_ARGUMENT

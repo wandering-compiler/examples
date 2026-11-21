@@ -1,0 +1,17 @@
+# A paged method over MCP answers ONE page, at the requested size, with the
+# envelope that says there are more: the seeded five tasks, newest first, two
+# at a time. Before paging reached the MCP tools this answered the first page
+# of the storage default as if it were the whole list, with no cursor and no
+# total to tell an agent otherwise.
+method: tasks.TaskQuery.ListTasksPagedWithCategory
+pre:
+    - auth/auth.yaml
+input:
+    limit: 2
+expect:
+    items: {matcher: count, op: '==', value: 2}
+    items.0.id: {matcher: eq, value: "700005"}
+    items.1.id: {matcher: eq, value: "700004"}
+    paging.limit: {matcher: num, op: '==', value: 2}
+    paging.total: {matcher: eq, value: "5"}
+    paging.next_cursor: {capture: mcp_tasks.next_cursor, match: {matcher: not_empty}}

@@ -101,6 +101,16 @@ option (w17.mcp_api) = {
       description_override: "Look up one session by id together with the user it belongs to."
     },
     {
+      // A PAGED method (its REST endpoint is `paged`, so the storage query
+      // runs a keyset WHERE and a LIMIT for every caller). The tool takes
+      // `cursor` / `limit` beside the request's fields and answers one page
+      // with its paging envelope — without them an agent got the first page
+      // and read it as the whole list. mcp/0070–0073 walk it: a page, the
+      // next one by cursor, the last one offering no next, and a cursor
+      // another caller presents refused.
+      ref: "tasks.TaskQuery.ListTasksPagedWithCategory"
+    },
+    {
       // No overrides at all — this entry is the CONTROL. Its name is
       // derived (`get_user`) and its description comes from the source,
       // where `(w17.mcp_description)` replaces the leading comment. So
