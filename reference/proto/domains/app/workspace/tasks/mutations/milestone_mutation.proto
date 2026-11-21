@@ -120,7 +120,11 @@ message UpdateMilestoneResp {
 }
 
 message MarkMilestonesReviewedReq {
-  repeated int64 ids = 1;
+  // The selection of a bulk action goes straight into `IN (:ids)`: without
+  // a bound, the message size limit is all that stops one call from naming
+  // half a million rows. At least one, because marking nothing reviewed is
+  // a mistake to refuse rather than a no-op to answer.
+  repeated int64 ids = 1 [(w17.field) = { min_items: 1, max_items: 500 }];
   string note         = 2 [(w17.field) = { type: CHAR, max_len: 64 }];
 }
 // Status-only, per the AdminAction contract: v1 shows success or
@@ -162,7 +166,8 @@ message CreateMilestoneReq {
   // asserted in the suite, alongside one that sends both — without
   // that pair the empty case could pass because the columns are
   // ignored rather than because they are written.
-  repeated string tags = 3;
+  // At most 20: a list a caller fills is bounded like a string's length.
+  repeated string tags = 3 [(w17.field) = { max_items: 20 }];
   bytes attachment = 4;
 }
 

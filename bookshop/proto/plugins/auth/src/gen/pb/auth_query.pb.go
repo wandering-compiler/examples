@@ -1781,7 +1781,7 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\x17ListUserSignInEventsReq\x12\x1f\n" +
 	"\auser_id\x18\x01 \x01(\tB\x06\xca\xf3\x18\x02\b\x03R\x06userId:\x18\xfa\xf4\x18\x14authenticate_turnkey\"k\n" +
 	"\x18ListUserSignInEventsResp\x125\n" +
-	"\x06events\x18\x01 \x03(\v2\x1d.w17.contrib.auth.SignInEventR\x06events:\x18\xfa\xf4\x18\x14authenticate_turnkey2\x8dP\n" +
+	"\x06events\x18\x01 \x03(\v2\x1d.w17.contrib.auth.SignInEventR\x06events:\x18\xfa\xf4\x18\x14authenticate_turnkey2\xd4P\n" +
 	"\tAuthQuery\x12\x8c\b\n" +
 	"\x0eGetUserByEmail\x12#.w17.contrib.auth.GetUserByEmailReq\x1a$.w17.contrib.auth.GetUserByEmailResp\"\xae\a\xf2\xf3\x18\xa9\aB\xa6\a\n" +
 	"\x04main\x12\x9d\aSELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        u.created_at AS user.created_at,        ?feature(service_account) u.kind AS user.kind,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u WHERE u.email = :email\x12\xe4\t\n" +
@@ -1800,10 +1800,10 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\x11GetUserRoleGrants\x12&.w17.contrib.auth.GetUserRoleGrantsReq\x1a'.w17.contrib.auth.GetUserRoleGrantsResp\"\xad\x03\xf2\xf3\x18\xa0\x03B\x9d\x03\n" +
 	"\x04main\x12\x94\x03SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.UserRole ur JOIN @module.Role r ON r.id = ur.role_id LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL WHERE ur.user_id = :user_id AND ur.revoked_at IS NULL AND r.deleted_at IS NULL GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x04rbac\x12\xa9\x03\n" +
 	"\x0eListRoleGrants\x12#.w17.contrib.auth.ListRoleGrantsReq\x1a$.w17.contrib.auth.ListRoleGrantsResp\"\xcb\x02\xf2\xf3\x18\xbe\x02B\xbb\x02\n" +
-	"\x04main\x12\xb2\x02SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.Role r LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL WHERE r.deleted_at IS NULL GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x04rbac\x12\x93\x01\n" +
+	"\x04main\x12\xb2\x02SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.Role r LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL WHERE r.deleted_at IS NULL GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x04rbac\x12\xda\x01\n" +
 	"\n" +
-	"CountUsers\x12\x1f.w17.contrib.auth.CountUsersReq\x1a .w17.contrib.auth.CountUsersResp\"B\xf2\xf3\x186B4\n" +
-	"\x04main\x12,SELECT COUNT(*) AS count FROM @module.User u\x8a\xf5\x18\x04rbac\x12\xf1\x01\n" +
+	"CountUsers\x12\x1f.w17.contrib.auth.CountUsersReq\x1a .w17.contrib.auth.CountUsersResp\"\x88\x01\xf2\xf3\x18|Bz\n" +
+	"\x04main\x12rSELECT COUNT(*) AS count, ?feature(service_account) COUNT(*) FILTER (WHERE u.kind = 1) AS bots FROM @module.User u\x8a\xf5\x18\x04rbac\x12\xf1\x01\n" +
 	"\x11GetFirstUserRoles\x12&.w17.contrib.auth.GetFirstUserRolesReq\x1a'.w17.contrib.auth.GetFirstUserRolesResp\"\x8a\x01\xf2\xf3\x18~B|\n" +
 	"\x04main\x12tSELECT ROWS_TO_ARRAY(r.id) AS role_ids FROM @module.Role r WHERE r.assign_first_user = TRUE AND r.deleted_at IS NULL\x8a\xf5\x18\x04rbac\x12\xe8\x01\n" +
 	"\x0fGetDefaultRoles\x12$.w17.contrib.auth.GetDefaultRolesReq\x1a%.w17.contrib.auth.GetDefaultRolesResp\"\x87\x01\xf2\xf3\x18{By\n" +
@@ -1958,4 +1958,4 @@ func file_queries_auth_query_proto_init() {
 	file_queries_auth_query_proto_depIdxs = nil
 }
 
-// emit-sha256: 1f9aa505c7b8e834fced0bbd34c3bd02e670e9355ab77689f76cd02aa5c63566
+// emit-sha256: e9a7e68bee9a896e0e98a1c7ca616b67baba06ef2b32e363026a2e5a34a8d03b

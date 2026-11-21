@@ -6749,7 +6749,7 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x121\n" +
 	"\x06set_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x05setAt\x12#\n" +
 	"\rrole_snapshot\x18\x06 \x01(\tR\froleSnapshot:\x0e\xfa\xf4\x18\n" +
-	"org_signup2\xcd\xe3\x01\n" +
+	"org_signup2\x94\xe4\x01\n" +
 	"\tAuthQuery\x12\x8c\b\n" +
 	"\x0eGetUserByEmail\x12#.w17.contrib.auth.GetUserByEmailReq\x1a$.w17.contrib.auth.GetUserByEmailResp\"\xae\a\xf2\xf3\x18\xa9\aB\xa6\a\n" +
 	"\x04main\x12\x9d\aSELECT u.id AS user.id,        u.email AS user.email,        u.password_hash AS user.password_hash,        u.created_at AS user.created_at,        ?feature(service_account) u.kind AS user.kind,        ?feature(user_admin) u.disabled_at AS user.disabled_at,        ?feature(user_admin) u.erased_at AS user.erased_at,        ?feature(email_verification) u.email_verified_at AS user.email_verified_at,        ?feature(email_verification) u.email_proof AS user.email_proof,        u.device_trust_revoked_at AS user.device_trust_revoked_at,        ?feature(marketing_consent) u.marketing_consent AS user.marketing_consent,        ?feature(marketing_consent) u.marketing_consent_at AS user.marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS user.allowed_cidrs,        u.sign_in_failures AS user.sign_in_failures,        u.sign_in_window_at AS user.sign_in_window_at FROM @module.User u WHERE u.email = :email\x12\xe4\t\n" +
@@ -6768,10 +6768,10 @@ const file_queries_auth_query_proto_rawDesc = "" +
 	"\x11GetUserRoleGrants\x12&.w17.contrib.auth.GetUserRoleGrantsReq\x1a'.w17.contrib.auth.GetUserRoleGrantsResp\"\xad\x03\xf2\xf3\x18\xa0\x03B\x9d\x03\n" +
 	"\x04main\x12\x94\x03SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.UserRole ur JOIN @module.Role r ON r.id = ur.role_id LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL WHERE ur.user_id = :user_id AND ur.revoked_at IS NULL AND r.deleted_at IS NULL GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x04rbac\x12\xa9\x03\n" +
 	"\x0eListRoleGrants\x12#.w17.contrib.auth.ListRoleGrantsReq\x1a$.w17.contrib.auth.ListRoleGrantsResp\"\xcb\x02\xf2\xf3\x18\xbe\x02B\xbb\x02\n" +
-	"\x04main\x12\xb2\x02SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.Role r LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL WHERE r.deleted_at IS NULL GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x04rbac\x12\x93\x01\n" +
+	"\x04main\x12\xb2\x02SELECT r.id AS role_id,        ROWS_TO_ARRAY(rp.permission_id) AS permission_ids,        r.all_permissions AS all_permissions FROM @module.Role r LEFT JOIN @module.RolePermission rp ON rp.role_id = r.id AND rp.removed_at IS NULL WHERE r.deleted_at IS NULL GROUP BY r.id, r.all_permissions ORDER BY r.id ASC\x8a\xf5\x18\x04rbac\x12\xda\x01\n" +
 	"\n" +
-	"CountUsers\x12\x1f.w17.contrib.auth.CountUsersReq\x1a .w17.contrib.auth.CountUsersResp\"B\xf2\xf3\x186B4\n" +
-	"\x04main\x12,SELECT COUNT(*) AS count FROM @module.User u\x8a\xf5\x18\x04rbac\x12\xd1\b\n" +
+	"CountUsers\x12\x1f.w17.contrib.auth.CountUsersReq\x1a .w17.contrib.auth.CountUsersResp\"\x88\x01\xf2\xf3\x18|Bz\n" +
+	"\x04main\x12rSELECT COUNT(*) AS count, ?feature(service_account) COUNT(*) FILTER (WHERE u.kind = 1) AS bots FROM @module.User u\x8a\xf5\x18\x04rbac\x12\xd1\b\n" +
 	"\x15ListOrgMemberAccounts\x12*.w17.contrib.auth.ListOrgMemberAccountsReq\x1a+.w17.contrib.auth.ListOrgMemberAccountsResp\"\xde\a\xf2\xf3\x18\xc7\aB\xc4\a\n" +
 	"\x04main\x12\xbb\aSELECT u.id AS id, u.email AS email,        ?feature(service_account) u.kind AS kind,        ?feature(user_admin) u.disabled_at AS disabled_at,        u.created_at AS created_at,        u.password_hash AS password_hash,        ?feature(email_verification) u.email_verified_at AS email_verified_at,        ?feature(email_verification) u.email_proof AS email_proof,        u.device_trust_revoked_at AS device_trust_revoked_at,        ?feature(user_admin) u.erased_at AS erased_at,        ?feature(marketing_consent) u.marketing_consent AS marketing_consent,        ?feature(marketing_consent) u.marketing_consent_at AS marketing_consent_at,        ?feature(bot_token_guard) u.allowed_cidrs AS allowed_cidrs,        u.sign_in_failures AS sign_in_failures,        u.sign_in_window_at AS sign_in_window_at FROM @module.User u JOIN @module.OrgMembership m ON m.user_id = u.id AND m.org_id = :org_id AND m.removed_at IS NULL ORDER BY u.created_at DESC, u.id DESC\x8a\xf5\x18\x0eorg_membership\x12\x9c\x02\n" +
 	"\fGetOrgMember\x12!.w17.contrib.auth.GetOrgMemberReq\x1a\".w17.contrib.auth.GetOrgMemberResp\"\xc4\x01\xf2\xf3\x18\xad\x01B\xaa\x01\n" +
@@ -7225,4 +7225,4 @@ func file_queries_auth_query_proto_init() {
 	file_queries_auth_query_proto_depIdxs = nil
 }
 
-// emit-sha256: fbf8281f53d9de5ac9873a31f82d256dfe58541bc0ce7482c0b2dce83eed38ad
+// emit-sha256: 42b36e7ea02d7fed15ea8763ec91aa0f153ce0d02abe9d51c69796585eae2e69
