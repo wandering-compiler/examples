@@ -35,10 +35,10 @@ plugins:
       version: 0.1.1
 project: examples-bookshop
 project_id: 1b17ac89-ad36-42b1-912c-8f87457fddd7
-sdk_version: v0.1.1
+sdk_version: v0.1.2
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 0b0a66f66c719c3521ca8cb59dcaa60b32a19ea157903b9bde1a534a03cf0e5582c95a71a12586d11cf6c7f18489a4adbe117d699da6150f84e6976fbfc79807
+    body: e85aa25f41ddbb65991860997de552f311aa91f76b4664d3211938a6b505319baf6c83ec6c709b1195c9401fe364087f26c538de7704a93ff40a99075ba6b20e
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

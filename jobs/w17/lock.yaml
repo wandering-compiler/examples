@@ -42,19 +42,19 @@ plugins:
       source: git
       version: 0.1.1
     - git:
-        commit: 2fd32c0f1bbf51d176780113bb97e9b51074d0a4
-        digest: 36bcc8a2f3e85c626a36302b5afe8ed703e817665eddb13cdb6d07c64a13c4b9
-        ref: cluster/v0.1.0
+        commit: f9263742857a9a12b45378ab093aeec446188160
+        digest: 4f9fb1e144badba9d829524d83e4121a2bbb32a77ef886dc670ad3c147c86430
+        ref: cluster/v0.1.1
         repo: https://github.com/wandering-compiler/plugins
       name: cluster
       source: git
-      version: 0.1.0
+      version: 0.1.1
 project: examples-jobs
 project_id: 0e9d85e2-b985-4fea-9297-e721e9d2e520
-sdk_version: v0.1.1
+sdk_version: v0.1.2
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 32ef1b4f32311c75aa4ebe202a3855ed915172b2f81cb6bfab4b9e0e4390d4c491c078b2bf812379649b1f665e336926a91b25b78fd24fb283443a9ca16b0b03
+    body: b789cd5fe7841e1c0c94797c9a1b845764d40dceec88dcc6cf04ff711277fab0f55eb08169c66e795e8546fbf6355a4db7bdb2858adf15e97bf8075f5f8c3f0a
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051
