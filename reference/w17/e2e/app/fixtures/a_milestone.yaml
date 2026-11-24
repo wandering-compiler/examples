@@ -1,0 +1,10 @@
+# Creates a milestone and captures its id, so the delete tests act on a row
+# of their own and leave the seeded ones alone.
+method: tasks.MilestoneMutation.CreateMilestone
+pre:
+    - auth/auth.yaml
+input:
+    name: to be deleted
+    weight: 3
+expect:
+    id: {capture: milestone.id}

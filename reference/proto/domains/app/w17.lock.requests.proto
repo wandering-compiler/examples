@@ -37,7 +37,7 @@ import "domains/app/workspace/users/queries/user_query.proto";
 import "w17/request_events.proto";
 import "w17/lock.proto";
 
-option (w17.lock_checksum) = "2ad1fa50bb05262e72a9cb9b1b4d430245fcba47ff5c9c2ca2490a1c292b76e6";
+option (w17.lock_checksum) = "2600592547d32281636129ecbdf9f3bb55c299d0ac281b3ebe0c88c8d8785171";
 
 // RequestEvent is one record.
 message RequestEvent {
@@ -204,6 +204,7 @@ message RequestEvent {
     .e2e.app.users.ListFlightsReq request_users_list_flights_req = 184;
     .e2e.app.tasks.AskAboutTasksReq request_tasks_ask_about_tasks_req = 185;
     .e2e.app.auth.GetHostOrgReq request_auth_get_host_org_req = 186;
+    .e2e.app.tasks.DeleteMilestoneReq request_tasks_delete_milestone_req = 187;
   }
 
   oneof response {

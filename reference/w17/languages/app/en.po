@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-11-21 11:14+0000\n"
+"POT-Creation-Date: 2026-11-24 10:51+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -351,6 +351,9 @@ msgstr "Tasks · Comment · View"
 
 msgid "Tasks · Milestone Mutation · Create Milestone"
 msgstr "Tasks · Milestone Mutation · Create Milestone"
+
+msgid "Tasks · Milestone Mutation · Delete Milestone"
+msgstr "Tasks · Milestone Mutation · Delete Milestone"
 
 msgid "Tasks · Milestone Mutation · Mark Milestones Reviewed"
 msgstr "Tasks · Milestone Mutation · Mark Milestones Reviewed"
