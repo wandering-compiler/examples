@@ -1,0 +1,9 @@
+# What 0324 deleted is gone: reading it back answers NOT_FOUND, so the
+# delete removed the row rather than only answering its id.
+method: tasks.TaskQuery.GetMilestone
+pre:
+    - auth/auth.yaml
+input:
+    id: ${milestone.id}
+expect_error:
+    code: NOT_FOUND

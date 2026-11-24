@@ -1,0 +1,6 @@
+# The build reads web/ and the generated client beside it, nothing else.
+*
+!web
+!w17/web-client
+web/node_modules
+web/dist

@@ -26,6 +26,7 @@ examples.
 - **Queries and mutations** in DQL: joins, prefetch, aggregates with
   `GROUP BY`, correlated subqueries, `FOR UPDATE` locks, write guards, and
   transactions across several statements.
+- **A frontend** shipped as a container: `web/`, built into a static image and deployed beside the services (see The frontend below).
 - **Surfaces:** a REST API (`rest.proto`) with cursor paging, multipart
   uploads, server-sent events and WebSocket streams; an MCP server
   (`mcp.proto`); and an admin (`admin.proto`) with an ACL.
@@ -57,6 +58,32 @@ generated storage tier over gRPC, using the clients codegen writes into
 points the gateway at it. Everything else under `w17/services/` and
 `srcgo/gen/` is generated and not committed.
 
+## The frontend
+
+`web/` is the project's web frontend: a static app (Vite, TypeScript) on the generated
+client in `w17/web-client/`. It is part of the project like the services, and it ships
+the same way, as a container. Nothing about it runs on the host.
+
+| Where | What |
+|---|---|
+| `web/Dockerfile` | Builds the bundle with Node, then serves the static files with nginx. The image never runs a dev server. The API address is a build argument, `VITE_API_URL`, because a static bundle cannot read it at run time. |
+| `compose.reference.yaml` | The `web` service, on `localhost:${WEB_HOST_PORT:-3000}`, built against the local gateway. The gateway takes that origin in `APP_GATEWAY_CORS_ORIGINS`. |
+| `w17/infra.yaml` | The `web` workload: built from `web/Dockerfile` with `VITE_API_URL: ${surfaces.app-api.url}`, which is each environment's own API address, and published on `www.<domain>`. It switches blue/green with the generated bundles. |
+
+It was registered with:
+
+```sh
+w17ctl infra workload add web --build-context . --dockerfile web/Dockerfile \
+  --build-arg 'VITE_API_URL=${surfaces.app-api.url}' --port 8080 --health-http / --route-host www
+```
+
+The frontend lives on its own host, so a deployed gateway must accept it as an origin.
+That value belongs to the environment and is set once per environment:
+
+```sh
+w17ctl secrets set --env prod --plain app-gateway APP_GATEWAY_CORS_ORIGINS=https://www.example.test
+```
+
 ## Run it
 
 ```sh
@@ -64,6 +91,7 @@ w17ctl codegen
 w17ctl test
 ```
 
-`w17ctl test` brings the stack up from `compose.yaml` and runs the suite in
+`docker compose up -d` runs the whole project, the frontend included, on
+`http://localhost:3000`. `w17ctl test` brings the stack up from `compose.yaml` and runs the suite in
 `w17/e2e/app/` against the REST, MCP and admin surfaces. Seed rows for the
 suite are in `w17/e2e/app/fixtures/` and `fixtures/app/`.

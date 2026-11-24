@@ -1,0 +1,13 @@
+# DeleteMilestone removes the row it names and answers its id. It is the
+# delete `w17ctl pentest --writes` pairs with CreateMilestone, so the write
+# probes clean up after themselves on a live stack.
+#
+# POSITION: after 0323, and on a milestone of its own (fixtures/
+# a_milestone.yaml), so the rows the list cases count are untouched.
+method: tasks.MilestoneMutation.DeleteMilestone
+pre:
+    - fixtures/a_milestone.yaml
+input:
+    id: ${milestone.id}
+expect:
+    id: ${milestone.id}

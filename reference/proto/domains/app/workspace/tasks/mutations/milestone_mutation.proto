@@ -76,6 +76,20 @@ service MilestoneMutation {
     };
   }
 
+  // DeleteMilestone — the delete beside CreateMilestone, both storage
+  // methods of one model. `w17ctl pentest --writes` creates a row with the
+  // one and removes it with the other, so its write probes run against a
+  // live stack and leave nothing behind; without a delete for the model it
+  // skips them.
+  rpc DeleteMilestone(DeleteMilestoneReq) returns (DeleteMilestoneResp) {
+    option (w17.db.method) = {
+      ops: {
+        name: "main",
+        dql: "DELETE FROM tasks.Milestone WHERE id = :id RETURNING id"
+      }
+    };
+  }
+
   // MarkMilestonesReviewed — the bulk action behind
   // `(w17.AdminPage).actions`. The wire contract is fixed: the request
   // must carry `repeated string ids`, matched BY NAME, and the response
@@ -116,6 +130,13 @@ message UpdateMilestoneReq {
   int32  weight      = 4 [(w17.field) = { type: SMALL_INTEGER, gt: 0, lt: 10 }];
 }
 message UpdateMilestoneResp {
+  int64 id = 1;
+}
+
+message DeleteMilestoneReq {
+  int64 id = 1;
+}
+message DeleteMilestoneResp {
   int64 id = 1;
 }
 

@@ -467,6 +467,7 @@ option (w17.rest_api) = {
         // gets back, not about what the emitter wrote down.
         { ref: "tasks.MilestoneMutation.CreateMilestone",    method: POST, path: "/milestones" },
         { ref: "tasks.TaskQuery.GetMilestone",               method: GET,  path: "/milestones/{id}" },
+        { ref: "tasks.MilestoneMutation.DeleteMilestone",    method: DELETE, path: "/milestones/{id}" },
 
         // Cursor-paged listing. `paged: { enabled: true }`
         // opts the gateway into base64 cursor handling: it
