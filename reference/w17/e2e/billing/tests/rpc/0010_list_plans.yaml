@@ -1,0 +1,12 @@
+# Edit, then REGENERATE before running: the suite executes the BAKED
+# copy of this file (scenarios_gen_test.go), not the file itself.
+# `w17ctl codegen` && `w17ctl test` — skip the regen and the run
+# silently asserts the previous expectations and passes.
+#
+# billing's gRPC surface, the same query its REST case calls. The catalogue
+# is empty in the test stack, so the answer holds no plans: proto3 omits an
+# empty list, and `count` reads an absent one as empty.
+method: core.SubscriptionQuery.ListPlans
+input: {}
+expect:
+    plans: {matcher: count, op: '==', value: 0}
