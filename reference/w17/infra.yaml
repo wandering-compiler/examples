@@ -21,3 +21,17 @@ environments:
     database:
       backup: {alert: none}
 ci: {provider: github, registry: ghcr}
+workloads:
+  # The frontend (web/): a container like every other part of the project,
+  # built from its Dockerfile and published on www.<domain>. The API address
+  # is baked into the static bundle at build time, per environment. The
+  # gateway takes that host as a CORS origin (README, "The frontend").
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_API_URL: ${surfaces.app-api.url}
+    port: 8080
+    health: {http: /}
+    route: {host: www}

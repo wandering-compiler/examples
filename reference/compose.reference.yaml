@@ -65,6 +65,10 @@ services:
   # app-business:50051.)
   app-gateway:
     environment:
+      # The frontend (the `web` service below) is another origin, so the
+      # gateway answers its preflight. The deployed environments set the same
+      # key to their own `www` host (README, "The frontend").
+      APP_GATEWAY_CORS_ORIGINS: http://localhost:${WEB_HOST_PORT:-3000}
       APP_GATEWAY_STORAGE_BACKEND_ADDR: app-storage:50051
       APP_GATEWAY_BUSINESS_BACKEND_ADDR: app-business:50051
       # The `app-uploads` store is a bucket here, not a directory: the root is
@@ -91,3 +95,17 @@ services:
       interval: 2s
       timeout: 5s
       retries: 30
+
+  # The frontend (web/): the built bundle served by nginx, as the deploy runs
+  # it (the `web` workload in w17/infra.yaml). The API address is baked in at
+  # build time; here it is the gateway's published port.
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:${APP_GATEWAY_HOST_PORT:-8080}
+    ports:
+      - "${W17_BIND_HOST:-0.0.0.0}:${WEB_HOST_PORT:-3000}:8080"
+    depends_on:
+      app-gateway: { condition: service_started }
