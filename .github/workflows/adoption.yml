@@ -22,7 +22,7 @@ on:
         type: string
         default: ""
       w17ctl_version:
-        description: w17ctl release to run (empty = the newest, prereleases included)
+        description: w17ctl release to run (empty = both the newest stable release and the newest prerelease)
         type: string
         default: ''
       skip_transports:
@@ -171,13 +171,21 @@ jobs:
   # the run's length rather than the sum of all of them.
   example:
     needs: [list, modules]
-    name: ${{ matrix.example }}
+    name: ${{ matrix.example }} (w17ctl ${{ matrix.w17ctl }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         example: ${{ fromJSON(needs.list.outputs.examples) }}
+        # Every w17ctl an adopter can have: the newest stable release (what
+        # install.sh and `w17ctl update` give) AND the newest prerelease.
+        # A runner comes from the engine the project's pin selects, not from
+        # w17ctl, so a newer client must keep working with an older engine.
+        # Running only the prerelease let w17ctl v0.2.0-rc.2 break `w17ctl
+        # test` for v0.1 projects while every check stayed green. A version
+        # given as an input runs alone.
+        w17ctl: ${{ fromJSON(inputs.w17ctl_version != '' && format('["{0}"]', inputs.w17ctl_version) || '["stable","pre"]') }}
     env:
       W17_TOKEN: ${{ secrets.W17_TOKEN }}
       # A runner's checkout has no branch, and `w17ctl test` syncs the schema
@@ -209,8 +217,12 @@ jobs:
           GH_API_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$HOME/bin"
-          v="${{ inputs.w17ctl_version }}"
-          if [ -n "$v" ]; then sel=(--version "$v"); else sel=(--pre); fi
+          v="${{ matrix.w17ctl }}"
+          case "$v" in
+            stable) sel=() ;;
+            pre) sel=(--pre) ;;
+            *) sel=(--version "$v") ;;
+          esac
           # --pre lists releases through the GitHub API, which refuses an
           # unauthenticated runner once the shared address is over its
           # hourly limit (403). This curl adds the job's token to API calls
