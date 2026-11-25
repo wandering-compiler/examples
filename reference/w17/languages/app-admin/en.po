@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-11-11 22:45+0000\n"
+"POT-Creation-Date: 2026-11-25 08:09+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -267,6 +267,9 @@ msgstr "Something went wrong"
 
 msgid "Start over"
 msgstr "Start over"
+
+msgid "Switch admin"
+msgstr "Switch admin"
 
 msgid "System theme"
 msgstr "System theme"
