@@ -1,6 +1,6 @@
 admin_languages: []
 admin_wire: CLIENT_WIRE_UNSPECIFIED
-codegen_version: v0.2
+codegen_version: ""
 connections:
     - default: true
       name: catalog-postgres
@@ -35,10 +35,10 @@ plugins:
       version: 0.1.1
 project: examples-bookshop
 project_id: 1b17ac89-ad36-42b1-912c-8f87457fddd7
-sdk_version: v0.2.0
+sdk_version: v0.1.2
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 3dee94606494e5079e404c0319d62c177eb63cb059d6ef6320ade21a7f0c4701aa556b3749ff37f9c02cd643998251a83830f7ca781e081a5ba468226ff58a08
+    body: e85aa25f41ddbb65991860997de552f311aa91f76b4664d3211938a6b505319baf6c83ec6c709b1195c9401fe364087f26c538de7704a93ff40a99075ba6b20e
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

@@ -5,17 +5,17 @@ go 1.27.0
 require (
 	github.com/lib/pq v1.12.3
 	github.com/wandering-compiler/examples/assistant/w17/stubs v0.0.0
-	github.com/wandering-compiler/sdk/go v0.2.0
+	github.com/wandering-compiler/sdk/go v0.1.2
 	google.golang.org/grpc v1.83.2
-	google.golang.org/protobuf v1.36.12
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
 	github.com/go-jose/go-jose/v4 v4.1.9 // indirect
 	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
 )
 
 // The generated pb stubs: `w17ctl codegen` writes them, they are not committed.
