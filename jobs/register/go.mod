@@ -4,16 +4,16 @@ go 1.27.0
 
 require (
 	github.com/wandering-compiler/examples/jobs/w17/stubs v0.0.0
-	github.com/wandering-compiler/sdk/go v0.1.2
+	github.com/wandering-compiler/sdk/go v0.2.0
 	google.golang.org/grpc v1.83.2
 )
 
 require (
 	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 )
 
 // The generated pb stubs: `w17ctl codegen` writes them, they are not committed.

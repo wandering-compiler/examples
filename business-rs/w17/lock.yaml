@@ -1,6 +1,6 @@
 admin_languages: []
 admin_wire: CLIENT_WIRE_UNSPECIFIED
-codegen_version: ""
+codegen_version: v0.2
 connections:
     - default: true
       name: notes-postgres
@@ -35,10 +35,10 @@ org_slug: test
 plugins: []
 project: examples-business-rs
 project_id: ef646f38-3220-442f-8b8e-2ca6bd443448
-sdk_version: v0.1.2
+sdk_version: v0.2.0
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 3f9fb6d8f87821feaae424375baf1ee2ac38ca51df272cc91cacd91bb8302c3b28dc4b252734df2340939a331b83288348105722397194b27d159109b9608a00
+    body: 2ca5f7457b11b74d86d0d08de9b92ef609ea041eefb20510d75abc8ac2d2402dac7b6344ec816a35d393a0f2ae578cc6502bad1526fd1b9e8e9357d39f772d0e
     key_id: ed25519:d1f1f31adf965af1
 w17_url: localhost:13444
