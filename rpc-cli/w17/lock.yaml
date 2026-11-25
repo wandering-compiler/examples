@@ -1,6 +1,6 @@
 admin_languages: []
 admin_wire: CLIENT_WIRE_UNSPECIFIED
-codegen_version: v0.2
+codegen_version: ""
 connections:
     - default: true
       name: ops-postgres
@@ -32,10 +32,10 @@ org_slug: wandering-compiler
 plugins: []
 project: examples-rpc-cli
 project_id: 2634d995-9103-44d3-90e4-d312721f21b0
-sdk_version: v0.2.0
+sdk_version: v0.1.2
 secrets: null
 signature:
     alg: ed25519/v1
-    body: f5a58a6aa2220488ab1ccb09c7c067114a6bcde737410153f95d0c228e910053884abf8b918ec9602bbbd9181f0c6e221c44abd59765a720b37a004a5fcaff0f
+    body: 39793a97a4ebf7d18adef1626e6e41c0854984cc0d705a96bc2f6e43863bd79c1524e072d5b6ffb4aee2c17d7cafe4dd2b763856556b56596f0236d67e1e5106
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

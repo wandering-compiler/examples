@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: w17\n"
-"POT-Creation-Date: 2026-11-25 08:09+0000\n"
+"POT-Creation-Date: 2026-11-21 11:14+0000\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -132,9 +132,6 @@ msgstr "Setting up an authenticator at sign-in is not available here."
 
 msgid "Sign in to do this. An API token cannot create credentials."
 msgstr ""
-
-msgid "Signing in is temporarily unavailable. Please try again shortly."
-msgstr "Signing in is temporarily unavailable. Please try again shortly."
 
 msgid "Signing in with the provider did not complete. Please start again."
 msgstr ""
@@ -334,14 +331,8 @@ msgstr "This request needs a solved captcha."
 msgid "This role is held across the whole platform, not in one organization."
 msgstr "This role is held across the whole platform, not in one organization."
 
-msgid "This service is not available in your location."
-msgstr "This service is not available in your location."
-
 msgid "This sign-in request has expired or was already answered. Start again from the application."
 msgstr "This sign-in request has expired or was already answered. Start again from the application."
-
-msgid "This site is not allowed to use this server."
-msgstr "This site is not allowed to use this server."
 
 msgid "This team holds a role with permissions you do not have, so you cannot change its members or delete it."
 msgstr "This team holds a role with permissions you do not have, so you cannot change its members or delete it."

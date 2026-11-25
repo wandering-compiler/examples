@@ -1,6 +1,6 @@
 admin_languages: []
 admin_wire: CLIENT_WIRE_UNSPECIFIED
-codegen_version: v0.2
+codegen_version: ""
 connections:
     - default: true
       name: assistant-postgres
@@ -51,10 +51,10 @@ plugins:
       version: 0.1.1
 project: examples-assistant
 project_id: 69eff853-3d53-4330-bd4d-9764220f4153
-sdk_version: v0.2.0
+sdk_version: v0.1.2
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 2a370614cdf979d43d74ca8d6cd2fb9ada817a57e8d179a2f895a90407bf0ebb185c32a6171438ea78ae3815a7fffd85d383ad769fcc5d52f3de84affdf10f07
+    body: 7197a5bd7c2d3c8dddc0787db345de4d2e90a85b652c739a5ffc437481848520f5532cb3768567ca84986d495787c5fc68a7af3c4d51dbd01d6c301764202903
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

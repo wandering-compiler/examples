@@ -6,15 +6,15 @@ require (
 	github.com/wandering-compiler/examples/jobs v0.0.0
 	github.com/wandering-compiler/plugins/cluster v0.0.0
 	google.golang.org/grpc v1.83.2
-	google.golang.org/protobuf v1.36.12
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
-	github.com/wandering-compiler/sdk/go v0.2.0 // indirect
+	github.com/wandering-compiler/sdk/go v0.1.2 // indirect
 	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
 )
 
 // The contract shared with the Jobs service, and the cluster plugin's worker
