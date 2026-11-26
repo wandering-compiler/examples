@@ -6,11 +6,11 @@ require (
 	github.com/wandering-compiler/examples/jobs v0.0.0
 	github.com/wandering-compiler/plugins/cluster v0.0.0
 	google.golang.org/grpc v1.83.2
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
-	github.com/wandering-compiler/sdk/go v0.1.2 // indirect
+	github.com/wandering-compiler/sdk/go v0.1.3 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect

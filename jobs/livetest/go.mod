@@ -5,10 +5,10 @@ go 1.27.0
 require (
 	github.com/wandering-compiler/examples/jobs v0.0.0
 	github.com/wandering-compiler/examples/jobs/w17/stubs v0.0.0
-	github.com/wandering-compiler/sdk/go v0.1.2
+	github.com/wandering-compiler/sdk/go v0.1.3
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d
 	google.golang.org/grpc v1.83.2
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
