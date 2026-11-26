@@ -53,10 +53,10 @@ plugins:
       version: 0.1.1
 project: examples-single-binary
 project_id: d1ef82a1-ffe4-4220-af2e-2bdeb3c99889
-sdk_version: v0.1.2
+sdk_version: v0.1.3
 secrets: null
 signature:
     alg: ed25519/v1
-    body: 9baf7fa6c8c5ad75d73c80e9b2cb86310d31942b4b82d5e36cd3f5404d2c6820f222198f2e566d1aeb228363e63e2a60e4f37597025669af942f19de6f69f403
+    body: d6764482dbf2b564e78433da68f921d2bf42be335570281e75c6637e686967870b879e19d48ed9448308c1c78557360c794e29549519df35f15a2a6a885ef608
     key_id: ed25519:d1f1f31adf965af1
 w17_url: grpcs://api.w17.app:50051

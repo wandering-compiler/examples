@@ -5,9 +5,9 @@ go 1.27.0
 require (
 	github.com/lib/pq v1.12.3
 	github.com/wandering-compiler/examples/assistant/w17/stubs v0.0.0
-	github.com/wandering-compiler/sdk/go v0.1.2
+	github.com/wandering-compiler/sdk/go v0.1.3
 	google.golang.org/grpc v1.83.2
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
