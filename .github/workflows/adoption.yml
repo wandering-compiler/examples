@@ -447,6 +447,15 @@ jobs:
           # No suite at all (rpc-cli) is no transport; ls exits 2 then, and
           # the step's bash -e -o pipefail would stop on it.
           present=$( { ls -d w17/e2e/*/tests/*/ 2>/dev/null || true; } | xargs -rn1 basename | sort -u | tr '\n' ' ')
+          # A suite directory is not a transport the runner can drive: a
+          # runner from an engine before the RPC surface (v0.1.x) carries the
+          # rpc scenarios on disk but no rpc_gen_test.go to run them, and
+          # w17ctl test refuses `--transport` naming rpc then (it would
+          # otherwise pass having tested no RPC). Ask the runner, as w17ctl
+          # does.
+          if ! { find w17 -path '*/e2erunner/rpc_gen_test.go' 2>/dev/null || true; } | grep -q .; then
+            present=$(echo " $present " | sed 's/ rpc / /; s/^ *//; s/ *$//')
+          fi
           keep=""
           for t in $present; do
             case ",$skip," in *",$t,"*) ;; *) keep="$keep${keep:+,}$t" ;; esac
