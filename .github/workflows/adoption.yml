@@ -324,6 +324,22 @@ jobs:
               -v "$PWD:/w" -w /w/srcgo golang:1.27 \
               go mod edit -require="github.com/wandering-compiler/sdk/go@${{ needs.modules.outputs.sdk_version }}"
           fi
+          # A Rust business tier names its SDK crates by tag in Cargo.toml,
+          # and its image holds Cargo.lock to the tag of the SDK it builds
+          # (rs/<version> for a release). So the SDK under review moves them
+          # too when it is a release; a pseudo-version builds from its commit,
+          # which the image does not hold Cargo.lock to. Without this an exact
+          # tag (the SDK's CI at a tagged commit, the nightly when SDK main
+          # sits on one) refused business-rs with "set tag = rs/<version>".
+          v="${{ needs.modules.outputs.sdk_version }}"
+          if [[ "$v" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] && [ -d business ]; then
+            grep -rl --include=Cargo.toml 'github.com/wandering-compiler/sdk' business | while read -r toml; do
+              sed -i -E 's#(github\.com/wandering-compiler/sdk", tag = ")rs/[^"]+#\1rs/'"$v"'#' "$toml"
+              docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
+                -v "$PWD/$(dirname "$toml"):/w" -w /w rust:1-bookworm \
+                cargo update -p w17-business -p w17-business-build
+            done
+          fi
           # A project with no hand-written module requiring sdk/go (billing,
           # bookshop, databases, rpc-cli) has nothing for the edit above to
           # raise: codegen wrote its generated modules at the lock's pin and
